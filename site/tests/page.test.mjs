@@ -220,6 +220,8 @@ assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
   assert.equal(sega.byId.keys.textContent, 'движение — стрелки · A — S · B — X · C — Z · Start — Enter')
   assert.equal(sega.byId.license.href, 'licenses/miniplanets/LICENSE.txt')
   assert.equal(sega.byId.screen.style.display, 'none', 'экран Денди спрятан')
+  assert.ok(sega.byId.stage.children.some((c) => c.id === 'sega-player'), 'эмулятор — внутри области игры, а не поверх полосы')
+  for (const id of ['sound', 'restart', 'best']) assert.equal(sega.byId[id].style.display, 'none', `${id}: кнопка Денди спрятана`)
   // Подменённый файл Sega до эмулятора не доходит
   const rom = catalog.games.miniplanets.rom.url
   const bad = await makePage(new Map(), { search: '?game=miniplanets', net: { override: { [rom]: (b) => Buffer.concat([b.subarray(0, 300), Buffer.from([1]), b.subarray(301)]) } } })

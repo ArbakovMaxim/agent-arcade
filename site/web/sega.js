@@ -30,15 +30,21 @@
     document.getElementById('license').href = licenseFile ? licenseFile.url : game.license.source
     document.getElementById('source').href = sourceFile ? sourceFile.url : game.license.source
 
-    // Вместо экрана Денди — место для эмулятора Sega
+    // Вместо экрана Денди — место для эмулятора Sega внутри области игры: EmulatorJS растягивает свой
+    // контейнер на всего родителя, поэтому в конце страницы он закрыл бы нижнюю полосу
     const screen = document.getElementById('screen')
     if (screen) screen.style.display = 'none'
     const player = document.createElement('div')
     player.id = 'sega-player'
-    player.style.width = 'min(100vw, calc((100vh - 40px) * 4 / 3))'
-    player.style.height = 'calc(100vh - 40px)'
-    player.style.margin = '0 auto'
-    document.body.appendChild(player)
+    player.style.width = '100%'
+    player.style.height = '100%'
+    const stage = document.getElementById('stage')
+    ;(stage || document.body).appendChild(player)
+    // Звук и «Сначала» в полосе — для Денди; у EmulatorJS свои: громкость и перезапуск на его панели
+    for (const id of ['sound', 'restart', 'best']) {
+      const el = document.getElementById(id)
+      if (el) el.style.display = 'none'
+    }
 
     overlay(game.title, 'Загружаю игру…')
     try {
