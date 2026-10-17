@@ -643,7 +643,7 @@ test('VS Code: клавиатура — поле над строкой ввод�
 
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
   const field = await band.find({ key: 'arcade-keys-band' })
-  expect(field).toMatchObject({ type: 'Input', props: { label: '🎮', value: '', autoFocus: true } })
+  expect(field).toMatchObject({ type: 'Input', props: { label: '🎮', autoFocus: true } })
   expect(field.props.placeholder).toBe('кликни — и игра слушает клавиатуру: W A S D, K J, Enter')
 
   // Enter — Start: заставка уходит
@@ -651,15 +651,20 @@ test('VS Code: клавиатура — поле над строкой ввод�
   await band.input({ key: 'arcade-keys-band', text: '', kind: 'submit' })
   await clock.advance(2000)
   expect((await ui.find({ type: 'Svg' })).props.source === first).toBe(false)
-  // Ещё два Start русской буквой «т» — в саму игру. Поле каждый кадр пустое, поэтому приходит по одной букве
+  // Набор идёт поверх того «пустого» значения, которое строка показывает сейчас
+  const type = async (char: string) => {
+    const empty = (await band.find({ key: 'arcade-keys-band' })).props.value ?? ''
+    await band.input({ key: 'arcade-keys-band', text: empty + char, kind: 'change' })
+  }
+  // Ещё два Start русской буквой «т» — в саму игру
   for (let i = 0; i < 2; i++) {
-    await band.input({ key: 'arcade-keys-band', text: 'т', kind: 'change' })
+    await type('т')
     await clock.advance(2000)
   }
   // Автоповтор «d»: буква раз в 33 мс держит «вправо», прицел едет
   const before = (await ui.find({ type: 'Svg' })).props.source
   for (let i = 0; i < 30; i++) {
-    await band.input({ key: 'arcade-keys-band', text: 'd', kind: 'change' })
+    await type('d')
     await clock.advance(33)
   }
   expect((await ui.find({ type: 'Svg' })).props.source === before).toBe(false)
@@ -667,20 +672,42 @@ test('VS Code: клавиатура — поле над строкой ввод�
   await ui.unmount()
 })
 
-test('VS Code: стирание и набор между кадрами не ломают ввод, поле снова пустое', async ($, on) => {
+test('VS Code: строка 🎮 стирается после каждой буквы, стирание и незнакомые буквы — не нажатия', async ($, on) => {
   stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   await go(ui, 'arcade-game-thwaite')
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
-  await band.input({ key: 'arcade-keys-band', text: '', kind: 'change' }) // Backspace в пустом поле
-  await band.input({ key: 'arcade-keys-band', text: 'x', kind: 'change' }) // две буквы до перерисовки
-  await band.input({ key: 'arcade-keys-band', text: 'xn', kind: 'change' })
-  await band.input({ key: 'arcade-keys-band', text: 'x', kind: 'change' }) // стёрли последнюю
-  expect((await band.find({ key: 'arcade-keys-band' })).props.value).toBe('')
-  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  const value = async () => (await band.find({ key: 'arcade-keys-band' })).props.value
+  expect(await value()).toBe('')
+  // Буква — нажатие, и строка получает другое «пустое» значение: VS Code перезапишет поле
+  await band.input({ key: 'arcade-keys-band', text: 'd', kind: 'change' })
+  expect(await value()).toBe('\u200b')
+  // Следующая буква набирается поверх него — и строка снова пустая
+  await band.input({ key: 'arcade-keys-band', text: '\u200bd', kind: 'change' })
+  expect(await value()).toBe('')
+  // Стирание — не нажатие: строка не сбрасывается
+  await band.input({ key: 'arcade-keys-band', text: 'd', kind: 'change' })
+  await band.input({ key: 'arcade-keys-band', text: '', kind: 'change' })
+  expect(await value()).toBe('\u200b')
+  // Незнакомая буква не запускает переназначение клавиш
+  await band.input({ key: 'arcade-keys-band', text: '\u200bx', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: /Не узнаю клавишу/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /Нажми клавишу для/ })).toBeUndefined()
   await band.unmount()
   await ui.unmount()
+})
+
+test('VS Code на Windows: «Играть» в вопросе открывает игру в панели, а не окно', async ($, on) => {
+  const { clock, launches, opened } = stubs(on, { env: WINDOWS })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(21_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  await band.press({ key: 'arcade-play' })
+  expect(launches.length).toBe(0)
+  expect(opened.length).toBe(1)
+  await band.unmount()
 })
 
 test('полоса над вводом с полем для клавиш — только в VS Code и только пока идёт игра', async ($, on) => {

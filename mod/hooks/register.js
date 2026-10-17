@@ -103,7 +103,9 @@ let catalog = bundledCatalog() // каталог: с сайта, из сохра
 let platform = null // windows | mac | linux; null — пока не знаем, окно браузера не предлагаем
 let remoteSurface = null // панель с игрой нарисована в Desktop или VS Code — кадры идут перерисовкой, а не blit
 let holdTicks = {} // поле ввода VS Code: кнопка Денди → сколько шагов ещё держать
-let bandLength = 0 // VS Code: длина текста в поле над вводом с прошлой отрисовки — новые буквы считаются нажатиями, стирание нет
+let bandLength = 0 // VS Code: длина текста в строке 🎮 — новые буквы считаются нажатиями, стирание нет
+let bandToken = '' // VS Code: «пустое» значение строки 🎮; чередуется '' и невидимый символ, чтобы VS Code заметил сброс
+let bandResetWanted = false // VS Code: после нажатия стереть набранное при следующей отрисовке
 let bandId = null // VS Code: requestId полосы над вводом — чтобы попробовать поставить фокус в поле при старте игры
 let bandFocusWanted = false // VS Code: игра только что открылась — попробовать один раз
 
@@ -223,14 +225,21 @@ function releaseAll() {
   holdTicks = {}
 }
 
-// Текст поля над вводом в VS Code → новая последняя буква как нажатие. Поле рисуется пустым каждый кадр,
-// поэтому текст в нём — только то, что набрано с прошлой отрисовки; стирание (текст стал короче) не нажатие.
+// Текст строки 🎮 в VS Code → новая последняя буква как нажатие. Стирание (текст стал короче) — не нажатие.
+// После нажатия строка стирается: при следующей отрисовке ей дают другое «пустое» значение.
 function typedFrom(value) {
   const text = value ?? ''
   const grew = text.length > bandLength
   bandLength = text.length
   if (!grew) return false
-  return typeKey(Array.from(text).at(-1).toLowerCase())
+  bandResetWanted = true
+  return bandKey(Array.from(text).at(-1).toLowerCase())
+}
+
+// Буква из строки 🎮: знакомая — нажатие с удержанием; незнакомую пропускаем — переназначение клавиш тут только мешает
+function bandKey(char) {
+  if (!actionOf(char)) return false
+  return typeKey(char)
 }
 
 // Enter в поле над вводом — Start
@@ -673,7 +682,12 @@ export function register(on) {
     if (!askVisible && e.surface === 'vscode' && paneOpen && nesView()) {
       const { Box, Input } = $.ui.resolve(e)
       bandId = e.requestId
-      bandLength = 0 // поле рисуется пустым: набор начинается заново
+      if (bandResetWanted) {
+        // Значение меняется — VS Code перезаписывает поле, и набранное исчезает
+        bandResetWanted = false
+        bandToken = bandToken === '' ? '\u200b' : ''
+        bandLength = bandToken.length
+      }
       if (bandFocusWanted) {
         bandFocusWanted = false
         // Если полоса уже держит клавиатуру, ставим фокус в поле; если нет — VS Code откажет, и хватит одного клика
@@ -692,7 +706,7 @@ export function register(on) {
             key: 'arcade-keys-band',
             label: '🎮',
             placeholder: 'кликни — и игра слушает клавиатуру: W A S D, K J, Enter',
-            value: '',
+            value: bandToken,
             autoFocus: true,
             onInput: async (value) => {
               const save = typedFrom(value)
@@ -723,7 +737,7 @@ export function register(on) {
           hotkey: '1',
           plain: true,
           onPress: async () => {
-            if (windowMode() && webGame(lastGame)) {
+            if (opensWindow(e.surface) && webGame(lastGame)) {
               asked = true
               askVisible = false
               const command = windowCommand(lastGame)
