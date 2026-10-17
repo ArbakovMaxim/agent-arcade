@@ -103,9 +103,9 @@ let catalog = bundledCatalog() // каталог: с сайта, из сохра
 let platform = null // windows | mac | linux; null — пока не знаем, окно браузера не предлагаем
 let remoteSurface = null // панель с игрой нарисована в Desktop или VS Code — кадры идут перерисовкой, а не blit
 let holdTicks = {} // поле ввода VS Code: кнопка Денди → сколько шагов ещё держать
-let bandLength = 0 // VS Code: длина текста в поле над вводом — новые буквы считаются нажатиями, стирание нет
-let bandClear = false // VS Code: в следующий раз нарисовать поле пустым, чтобы не копилась длинная строка
-const BAND_CLEAR_AT = 40 // столько букв в поле — и оно очищается
+let bandLength = 0 // VS Code: длина текста в поле над вводом с прошлой отрисовки — новые буквы считаются нажатиями, стирание нет
+let bandId = null // VS Code: requestId полосы над вводом — чтобы попробовать поставить фокус в поле при старте игры
+let bandFocusWanted = false // VS Code: игра только что открылась — попробовать один раз
 
 function consoles() {
   return catalog.consoles
@@ -223,12 +223,12 @@ function releaseAll() {
   holdTicks = {}
 }
 
-// Текст поля над вводом в VS Code → новая последняя буква как нажатие. Стирание (текст стал короче) не нажатие.
+// Текст поля над вводом в VS Code → новая последняя буква как нажатие. Поле рисуется пустым каждый кадр,
+// поэтому текст в нём — только то, что набрано с прошлой отрисовки; стирание (текст стал короче) не нажатие.
 function typedFrom(value) {
   const text = value ?? ''
   const grew = text.length > bandLength
   bandLength = text.length
-  if (text.length >= BAND_CLEAR_AT) bandClear = true
   if (!grew) return false
   return typeKey(Array.from(text).at(-1).toLowerCase())
 }
@@ -320,6 +320,7 @@ function readInput(data) {
 // Открывает игру в панели; romBase64 — сам ROM для игр Денди (встроенный, из кеша или скачанный)
 function launch(id, romBase64) {
   releaseAll()
+  bandFocusWanted = true
   view = id
   lastGame = id
   notice = ''
@@ -670,20 +671,29 @@ export function register(on) {
     // VS Code: пока в панели идёт игра, клавиатура — в поле над строкой ввода. Саму панель VS Code
     // не делает фокусом, а поле в колонке чата получает клавиши. Что рисуют в полосе другие моды, остаётся ниже.
     if (!askVisible && e.surface === 'vscode' && paneOpen && nesView()) {
-      const { Box, Text, Input } = $.ui.resolve(e)
-      const clear = bandClear
-      bandClear = false
-      if (clear) bandLength = 0
+      const { Box, Input } = $.ui.resolve(e)
+      bandId = e.requestId
+      bandLength = 0 // поле рисуется пустым: набор начинается заново
+      if (bandFocusWanted) {
+        bandFocusWanted = false
+        // Если полоса уже держит клавиатуру, ставим фокус в поле; если нет — VS Code откажет, и хватит одного клика
+        $.clock.after(50, async () => {
+          try {
+            await $.ui.focus({ requestId: bandId, key: 'arcade-keys-band' })
+          } catch {
+            // отказ — обычное дело: клавиатуру отдаёт человек
+          }
+        })
+      }
       const ours = Box({
         flexDirection: 'row',
-        columnGap: 1,
         children: [
-          Text({ dimColor: true, children: ['Arcade:'] }),
           Input({
             key: 'arcade-keys-band',
-            label: 'клавиши для игры',
-            placeholder: 'кликни сюда и жми W A S D, K J, Enter',
-            ...(clear ? { value: '' } : {}),
+            label: '🎮',
+            placeholder: 'кликни — и игра слушает клавиатуру: W A S D, K J, Enter',
+            value: '',
+            autoFocus: true,
             onInput: async (value) => {
               const save = typedFrom(value)
               $.ui.invalidate('ui.render')
@@ -691,7 +701,6 @@ export function register(on) {
             },
             onSubmit: () => {
               pressStart()
-              bandClear = true
               $.ui.invalidate('ui.render')
             },
           }),

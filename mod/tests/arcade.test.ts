@@ -643,27 +643,23 @@ test('VS Code: клавиатура — поле над строкой ввод�
 
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
   const field = await band.find({ key: 'arcade-keys-band' })
-  expect(field).toMatchObject({ type: 'Input', props: { label: 'клавиши для игры' } })
-  expect(field.props.value).toBeUndefined()
+  expect(field).toMatchObject({ type: 'Input', props: { label: '🎮', value: '', autoFocus: true } })
+  expect(field.props.placeholder).toBe('кликни — и игра слушает клавиатуру: W A S D, K J, Enter')
 
   // Enter — Start: заставка уходит
   const first = (await ui.find({ type: 'Svg' })).props.source
   await band.input({ key: 'arcade-keys-band', text: '', kind: 'submit' })
   await clock.advance(2000)
   expect((await ui.find({ type: 'Svg' })).props.source === first).toBe(false)
-  // Ещё два Start русской буквой «т» — в саму игру
-  let text = ''
-  for (const ch of ['т', 'т']) {
-    text += ch
-    await band.input({ key: 'arcade-keys-band', text, kind: 'change' })
+  // Ещё два Start русской буквой «т» — в саму игру. Поле каждый кадр пустое, поэтому приходит по одной букве
+  for (let i = 0; i < 2; i++) {
+    await band.input({ key: 'arcade-keys-band', text: 'т', kind: 'change' })
     await clock.advance(2000)
   }
   // Автоповтор «d»: буква раз в 33 мс держит «вправо», прицел едет
   const before = (await ui.find({ type: 'Svg' })).props.source
   for (let i = 0; i < 30; i++) {
-    text += 'd'
-    if (text.length > 39) text = 'd' // поле очищается само, дальше набор идёт заново
-    await band.input({ key: 'arcade-keys-band', text, kind: 'change' })
+    await band.input({ key: 'arcade-keys-band', text: 'd', kind: 'change' })
     await clock.advance(33)
   }
   expect((await ui.find({ type: 'Svg' })).props.source === before).toBe(false)
@@ -671,18 +667,18 @@ test('VS Code: клавиатура — поле над строкой ввод�
   await ui.unmount()
 })
 
-test('VS Code: стирание в поле — не нажатие, длинный текст очищается', async ($, on) => {
+test('VS Code: стирание и набор между кадрами не ломают ввод, поле снова пустое', async ($, on) => {
   stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   await go(ui, 'arcade-game-thwaite')
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
-  await band.input({ key: 'arcade-keys-band', text: 'x'.repeat(39), kind: 'change' })
-  expect((await band.find({ key: 'arcade-keys-band' })).props.value).toBeUndefined()
-  await band.input({ key: 'arcade-keys-band', text: 'x'.repeat(40), kind: 'change' })
-  expect((await band.find({ key: 'arcade-keys-band' })).props.value).toBe('') // один раз пустым — текст стёрт
-  await band.input({ key: 'arcade-keys-band', text: 'w', kind: 'change' })
-  expect((await band.find({ key: 'arcade-keys-band' })).props.value).toBeUndefined() // дальше снова набор
+  await band.input({ key: 'arcade-keys-band', text: '', kind: 'change' }) // Backspace в пустом поле
+  await band.input({ key: 'arcade-keys-band', text: 'x', kind: 'change' }) // две буквы до перерисовки
+  await band.input({ key: 'arcade-keys-band', text: 'xn', kind: 'change' })
+  await band.input({ key: 'arcade-keys-band', text: 'x', kind: 'change' }) // стёрли последнюю
+  expect((await band.find({ key: 'arcade-keys-band' })).props.value).toBe('')
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
   await band.unmount()
   await ui.unmount()
 })
