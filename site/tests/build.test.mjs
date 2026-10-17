@@ -26,15 +26,21 @@ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf
 for (const [id, game] of Object.entries(catalog.games)) {
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
-  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.nes$/, id)
+  const ext = path.extname(romPath)
+  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin)$/, id)
   assert.equal(game.rom.sha256, sha256(rom), `${id}: хеш`)
-  assert.equal(game.rom.url, `files/${game.rom.sha256}.nes`)
+  assert.equal(game.rom.url, `files/${game.rom.sha256}${ext}`)
   assert.equal(game.rom.size, rom.length)
   assert.deepEqual(fs.readFileSync(path.join(out, game.rom.url)), rom, `${id}: файл лежит по хешу`)
   assert.equal(fs.readFileSync(path.join(out, game.rom.base64), 'utf8'), rom.toString('base64'), `${id}: копия для мода`)
-  assert.equal(rom.subarray(0, 4).toString('latin1'), 'NES\x1a', `${id}: это ROM Денди`)
-  const mapper = (rom[6] >> 4) | (rom[7] & 0xf0)
-  assert.ok([0, 1, 2, 3, 4, 7, 66].includes(mapper), `${id}: маппер ${mapper} JSNES поддерживает`)
+  if (game.console === 'nes') {
+    assert.equal(rom.subarray(0, 4).toString('latin1'), 'NES\x1a', `${id}: это ROM Денди`)
+    const mapper = (rom[6] >> 4) | (rom[7] & 0xf0)
+    assert.ok([0, 1, 2, 3, 4, 7, 66].includes(mapper), `${id}: маппер ${mapper} JSNES поддерживает`)
+  } else {
+    assert.equal(game.console, 'sega', `${id}: приставка`)
+    assert.equal(rom.subarray(0x100, 0x104).toString('latin1'), 'SEGA', `${id}: это ROM Mega Drive`)
+  }
   assert.ok(game.license.files.some((f) => /license|notice/i.test(f.name)), `${id}: условия распространения рядом с игрой`)
   assert.match(game.license.source, /^https?:\/\//, `${id}: ссылка на источник`)
   for (const f of game.license.files) assert.ok(fs.existsSync(path.join(out, f.url)), `${id}: ${f.url}`)
@@ -79,3 +85,23 @@ assert.throws(broken((d) => { delete d.games[2].license.source }), /игра rfk
 assert.throws(broken((d) => { d.games[0].id = 'Thwaite!' }), /неправильный id "Thwaite!"/)
 assert.throws(broken((d) => { d.games[0].license.files.push('games/thwaite/нет.txt') }), /нет файла лицензии/)
 console.log('сборка: все проверки прошли')
+
+// Эмулятор Sega: EmulatorJS и ядро Genesis Plus GX на нашем сайте, без проверки обновлений через чужой CDN
+{
+  const dir = temp('sega')
+  const built = build({ root: ROOT, out: dir })
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break'])
+  assert.equal(built.consoles.find((c) => c.id === 'sega').soon, undefined, 'у Sega больше нет пометки «скоро»')
+  assert.equal(built.consoles.find((c) => c.id === 'sega').noncommercial, true, 'ядро Genesis Plus GX — некоммерческое, это видно в каталоге')
+  for (const f of ['emulatorjs/loader.js', 'emulatorjs/emulator.css', 'emulatorjs/src/emulator.js', 'emulatorjs/cores/genesis_plus_gx-wasm.data', 'emulatorjs/cores/reports/genesis_plus_gx.json', 'emulatorjs/localization/ru-RU.json', 'sega.js']) {
+    assert.ok(fs.existsSync(path.join(dir, f)), f)
+  }
+  const emulator = fs.readFileSync(path.join(dir, 'emulatorjs', 'src', 'emulator.js'), 'utf8')
+  assert.match(emulator, /checkForUpdates\(\) \{\n {8}return \/\/ Arcade: без запроса к cdn\.emulatorjs\.org/)
+  for (const f of ['EmulatorJS-LICENSE.txt', 'Genesis-Plus-GX-LICENSE.txt', 'NOTICE.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses', 'emulatorjs', f)), f)
+  assert.ok(!fs.existsSync(path.join(dir, 'emulatorjs', 'licenses')), 'лицензии — в licenses/, а не рядом с эмулятором')
+}
+// Игра не той приставки — ошибка сборки, а не у пользователей
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'miniplanets').console = 'nes' }), /игра miniplanets: это не ROM Денди/)
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sega' }), /игра thwaite: это не ROM Sega Mega Drive/)
+console.log('Sega: все проверки прошли')

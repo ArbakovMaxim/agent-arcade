@@ -36,6 +36,25 @@ function copy(from, to) {
   fs.copyFileSync(from, to)
 }
 
+// Эмулятор Sega (EmulatorJS + ядро Genesis Plus GX) → dist/emulatorjs/, лицензии → dist/licenses/emulatorjs/.
+// Одна правка: без проверки обновлений, чтобы страница не обращалась к cdn.emulatorjs.org.
+function copyEmulatorJS(from, out) {
+  const walk = (dir, rel = '') => {
+    for (const entry of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+      const relPath = path.join(rel, entry.name)
+      if (entry.isDirectory()) walk(dir, relPath)
+      else if (rel.split(path.sep)[0] === 'licenses') copy(path.join(dir, relPath), path.join(out, 'licenses', 'emulatorjs', entry.name))
+      else copy(path.join(dir, relPath), path.join(out, 'emulatorjs', relPath))
+    }
+  }
+  walk(from)
+  const emulator = path.join(out, 'emulatorjs', 'src', 'emulator.js')
+  const code = fs.readFileSync(emulator, 'utf8')
+  const marker = '    checkForUpdates() {\n'
+  if (code.split(marker).length !== 2) throw new Error('EmulatorJS: не нашёл checkForUpdates — проверь версию эмулятора')
+  fs.writeFileSync(emulator, code.replace(marker, `${marker}        return // Arcade: без запроса к cdn.emulatorjs.org\n`))
+}
+
 export function build({ root, out, now = new Date() }) {
   const content = path.join(root, 'content')
   const source = JSON.parse(fs.readFileSync(path.join(content, 'catalog.json'), 'utf8'))
@@ -67,6 +86,11 @@ export function build({ root, out, now = new Date() }) {
     if (!fs.existsSync(romPath)) fail(`${where}: нет файла ${g.rom}`)
     const bytes = fs.readFileSync(romPath)
     if (bytes.length > MAX_FILE) fail(`${where}: файл больше 25 МиБ — для Pages нужен R2`)
+    // Файл должен быть игрой своей приставки: Денди — заголовок iNES, Mega Drive — метка SEGA в заголовке картриджа
+    if (g.console === 'nes' && bytes.subarray(0, 4).toString('latin1') !== 'NES\x1a') fail(`${where}: это не ROM Денди (нет заголовка iNES)`)
+    if (g.console === 'sega' && !['SEGA'].includes(bytes.subarray(0x100, 0x104).toString('latin1')) && bytes.subarray(0x101, 0x105).toString('latin1') !== 'SEGA') {
+      fail(`${where}: это не ROM Sega Mega Drive (нет метки SEGA в заголовке)`)
+    }
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     const ext = path.extname(g.rom) || '.bin'
     const url = `files/${sha256}${ext}`
@@ -103,6 +127,7 @@ export function build({ root, out, now = new Date() }) {
   // Окно Arcade и лицензии сторонних библиотек
   for (const file of fs.readdirSync(path.join(root, 'web'))) copy(path.join(root, 'web', file), path.join(out, file))
   copy(path.join(root, 'third_party', 'jsnes', 'LICENSE.txt'), path.join(out, 'licenses', 'jsnes', 'LICENSE.txt'))
+  copyEmulatorJS(path.join(root, 'vendor', 'emulatorjs'), out)
   fs.writeFileSync(path.join(out, '_headers'), HEADERS)
   // Wrangler читает _headers как правила, но не выкладывает его как обычный файл
   fs.writeFileSync(path.join(out, '.assetsignore'), '_headers\n')

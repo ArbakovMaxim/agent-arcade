@@ -4,6 +4,7 @@
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { bundledCatalog, bundledRom, pageUrl, parseCatalog, restoreCatalog, siteUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, parseDetection, windowBounds } from './browsers.js'
+import { MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
@@ -71,6 +72,9 @@ const IME_CHARS = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
 let status = 'idle' // idle | working | permission | done
 let turnStartedAt = 0
 let windowOpenedAt = 0 // когда в последний раз открылось окно игры в браузере: оттуда Claude Code не видно
+let mine = [] // свои игры: { id, console, title, sha256 }; сами файлы — копии в папке данных
+let dataDir = null // ~/.claude/arcade/roms — переживает обновления плагина; null, пока не узнали домашнюю папку
+let sep = '/'
 let osNotify = true // системные уведомления «агент закончил» и «ждёт разрешения», пока играешь в окне
 let asked = false // в этом ходе на вопрос уже ответили
 let askVisible = false
@@ -118,7 +122,23 @@ function consoles() {
 
 // Игры каталога и проверка клавиш; note — строка под названием в меню
 function games() {
-  return [...catalog.games.map((g) => ({ ...g, note: `${g.genre} — ${g.about}`, web: true })), FIELD]
+  return [
+    ...catalog.games.map((g) => ({ ...g, note: `${g.genre} — ${g.about}`, web: true })),
+    ...mine.map((m) => ({
+      id: m.id,
+      console: m.console,
+      title: m.title,
+      note: `${m.console === 'nes' ? 'Денди' : 'Sega Mega Drive'} — твой файл, хранится только у тебя`,
+      rom: { sha256: m.sha256, mine: true },
+      web: false, // в окне браузера свои игры — следующим шагом
+      mine: true,
+    })),
+    FIELD,
+  ]
+}
+
+function mineFile(sha256) {
+  return `${dataDir}${sep}${sha256}.b64`
 }
 
 function gameById(id) {
@@ -266,7 +286,8 @@ function usableKey(key) {
 
 function toLibrary() {
   releaseAll()
-  menu = gameById(view)?.console ?? 'settings' // в список той же приставки
+  const g = gameById(view)
+  menu = g?.mine ? 'mine' : g?.console ?? 'settings' // в список, откуда игру открыли
   view = 'library'
   mode = 'play'
   notice = ''
@@ -457,7 +478,7 @@ function plural(n, one, few, many) {
 }
 
 function consoleNote(c) {
-  const count = games().filter((g) => g.console === c.id).length
+  const count = games().filter((g) => g.console === c.id && !g.mine).length
   return count ? `${count} ${plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
@@ -468,6 +489,7 @@ function settingsNote() {
 
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
+  if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu)
   return c ? `Arcade · ${c.title}` : 'Arcade'
 }
@@ -488,11 +510,53 @@ function first(id) {
   return keymap[id].find((k) => !ARROWS.includes(k)) ?? keymap[id][0] ?? '?'
 }
 
+// Добавить свою игру: путь → сообщение для меню. Копия файла — в папку данных, запись — в «Мои игры».
+// Файл никуда не отправляется. Вызывают команда /arcade-add и поле «Добавить файл» в меню.
+async function addMine($, rawPath) {
+  const path = cleanPath(rawPath)
+  let message
+  if (!path) {
+    message = 'Укажи путь к файлу: /arcade-add C:\\Games\\game.nes — или перетащи файл в терминал после команды.'
+  } else if (!dataDir) {
+    message = 'Не нашёл домашнюю папку, некуда сохранить копию игры.'
+  } else {
+    try {
+      const stat = await $.fs.stat(path).catch(() => null)
+      if (!stat) throw new Error(`файл не найден: ${path}`)
+      if (stat.kind !== 'file') throw new Error('это не файл')
+      if (stat.size > MINE_MAX_BYTES) throw new Error('файл больше 4 МБ — такие игры пока не поддерживаются')
+      const { base64 } = await $.fs.read(path, { as: 'bytes' })
+      const bytes = Uint8Array.fromBase64(base64)
+      const info = identifyRom(bytes)
+      if (info.error) throw new Error(info.error)
+      const sha = await sha256Hex(bytes)
+      const title = titleFromPath(path)
+      if (mine.some((m) => m.sha256 === sha)) {
+        message = `«${title}» уже есть в «Моих играх».`
+      } else {
+        await $.fs.write(mineFile(sha), base64)
+        mine = [...mine, { id: mineId(sha), console: info.console, title, sha256: sha }]
+        await $.store.set('mine', mine)
+        message = `Добавлено: ${title} (${info.console === 'nes' ? 'Денди' : 'Sega Mega Drive'}).`
+      }
+    } catch (err) {
+      message = `Не получилось добавить: ${err?.message ?? err}`
+    }
+  }
+  return message
+}
+
 export function register(on) {
   on('session.start', async ($, e, next) => {
     try {
       keymap = restoreKeymap(await $.store.get('keys'))
       osNotify = (await $.store.get('notify')) !== false
+      mine = restoreMine(await $.store.get('mine'))
+      const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
+      if (home) {
+        sep = home.includes('\\') ? '\\' : '/'
+        dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(sep)
+      }
       catalog = restoreCatalog(await $.store.get('catalog')) ?? catalog
       const savedGame = await $.store.get('lastGame')
       if (games().some((g) => g.id === savedGame)) lastGame = savedGame
@@ -548,6 +612,12 @@ export function register(on) {
       }
       await $.command.register({ name: 'arcade', description: 'Открыть Arcade', immediate: true })
       await $.command.register({ name: 'arcade-keys', description: 'Arcade: назначить клавиши заново', immediate: true })
+      await $.command.register({
+        name: 'arcade-add',
+        description: 'Arcade: добавить свою игру — файл ROM Денди или Sega',
+        argumentHint: 'путь к файлу .nes, .md или .bin',
+        immediate: true,
+      })
       // Раз в секунду: проверить порог вопроса и обновить счётчик секунд
       $.clock.every(1000, async () => {
         const now = await $.clock.now()
@@ -696,6 +766,18 @@ export function register(on) {
     return {}
   })
 
+  // /arcade-add путь: копия файла — в папку данных, запись — в «Мои игры». Файл никуда не отправляется.
+  on('command.run', { command: 'arcade-add' }, async ($, e) => {
+    const message = await addMine($, e.args)
+    libraryNotice = message
+    if (view !== 'library') toLibrary()
+    menu = 'mine'
+    markPaneOpen()
+    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: PANE_COLUMNS, rows: PANE_ROWS })
+    $.ui.invalidate('ui.render')
+    return {}
+  })
+
   on('command.run', { command: 'arcade-keys' }, async ($) => {
     if (view === 'library') launch('field')
     startAssign('Назначаем управление заново.')
@@ -819,7 +901,7 @@ export function register(on) {
   // после клика по экрану, в любой раскладке.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE) return next(e)
-    const { Box, Text, Raster, Image, Button, Client, Svg } = $.ui.resolve(e)
+    const { Box, Text, Raster, Image, Button, Client, Svg, Input } = $.ui.resolve(e)
     const now = await $.clock.now()
     const terminal = e.surface === 'terminal'
     const game = gameById(view)
@@ -839,6 +921,12 @@ export function register(on) {
       // ROM для игры в панели: встроенный, из кеша мода или скачанный с сайта — всегда сверяется с хешем каталога
       const obtainRom = async (g) => {
         const sha = g.rom.sha256
+        if (g.rom.mine) {
+          const text = await $.fs.read(mineFile(sha)).catch(() => '')
+          if (await verifyRom(text, sha)) return text.trim()
+          libraryNotice = `Файл игры «${g.title}» не найден — добавь его снова: /arcade-add путь к файлу`
+          return null
+        }
         const bundled = bundledRom(sha)
         if (bundled) return bundled
         const cached = await $.store.get(`rom:${sha}`)
@@ -868,8 +956,17 @@ export function register(on) {
           label: g.title,
           ...(focus ? { autoFocus: true } : {}),
           onPress: async () => {
+            // Sega идёт только в окне браузера (EmulatorJS на сайте): в панели её показать нечем
+            const sega = g.console === 'sega'
+            if (sega && (g.mine || !platform || e.surface === 'desktop')) {
+              libraryNotice = g.mine
+                ? 'Свои игры Sega будут открываться в окне браузера — это следующий шаг.'
+                : 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.'
+              $.ui.invalidate('ui.render')
+              return
+            }
             lastGame = g.id
-            if (opensWindow(e.surface) && g.web) {
+            if ((opensWindow(e.surface) || sega) && g.web) {
               libraryNotice = 'Открываю окно…'
               $.ui.invalidate('ui.render')
               const command = windowCommand(g.id)
@@ -973,9 +1070,48 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
+      } else if (menu === 'mine') {
+        // Свои игры: файлы человека. Arcade их не раздаёт — копия лежит только у него, в ~/.claude/arcade
+        const remove = (m) =>
+          Button({
+            key: `arcade-mine-remove-${m.id}`,
+            label: 'Удалить',
+            onPress: async () => {
+              mine = mine.filter((x) => x.id !== m.id)
+              await $.store.set('mine', mine)
+              await $.fs.write(mineFile(m.sha256), '').catch(() => {}) // удалять файлы мод не умеет — стираем содержимое
+              libraryNotice = `Удалено: ${m.title}.`
+              $.ui.invalidate('ui.render')
+            },
+          })
+        items = [
+          back,
+          gap,
+          ...(mine.length
+            ? mine.flatMap((m, i) => {
+                const g = gameById(m.id)
+                return [Box({ flexDirection: 'row', columnGap: 2, children: [gameButton(g, i === 0), remove(m)] }), dim(`  ${g.note}`)]
+              })
+            : [Text({ children: ['Пока пусто. Добавь файл игры для Денди (.nes) или Sega Mega Drive (.md, .bin).'] })]),
+          gap,
+          Input({
+            key: 'arcade-mine-path',
+            label: 'Добавить файл',
+            placeholder: 'путь к .nes, .md или .bin',
+            onSubmit: async (value) => {
+              libraryNotice = await addMine($, value)
+              $.ui.invalidate('ui.render')
+            },
+          }),
+          dim('  или командой /arcade-add путь — в терминал файл можно просто перетащить после команды'),
+          dim('  Файл остаётся у тебя: мод хранит копию в ~/.claude/arcade и никуда её не отправляет.'),
+          dim('  Подключай только файлы, на которые у тебя есть права.'),
+          ...noticeLines,
+          ...hint,
+        ]
       } else if (menu !== 'main') {
         const c = consoles().find((x) => x.id === menu) ?? consoles()[0]
-        const list = games().filter((g) => g.console === c.id)
+        const list = games().filter((g) => g.console === c.id && !g.mine)
         const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
         items = [
           back,
@@ -1021,6 +1157,13 @@ export function register(on) {
                 dim('  все игры и статистика в окне браузера'),
               ]
             : []),
+          Button({
+            key: 'arcade-menu-mine',
+            label: 'Мои игры',
+            ...(menuFrom === 'mine' ? { autoFocus: true } : {}),
+            onPress: open('mine'),
+          }),
+          dim(`  ${mine.length ? `${mine.length} ${plural(mine.length, 'игра', 'игры', 'игр')}` : 'добавь свой файл ROM'}`),
           Button({
             key: 'arcade-menu-settings',
             label: 'Настройки',

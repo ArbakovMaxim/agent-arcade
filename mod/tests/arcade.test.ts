@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
+import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
@@ -68,7 +69,30 @@ async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '' }: any = {}) {
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {} }: any = {}) {
+  // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
+  const disk = new Map<string, any>(Object.entries(onDisk))
+  // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
+  // Поэтому сравниваем пути без ОС: прямые слеши, без буквы диска — и по окончанию пути
+  const norm = (p: string) => String(p).replace(/\\/g, '/').replace(/\/+/g, '/').replace(/^[A-Za-z]:/, '')
+  const lookup = (path: string) => disk.get(path) ?? [...disk.entries()].find(([k]) => norm(path).endsWith(norm(k)))?.[1]
+  const diskFile = (path: string) => disk.get(path) ?? [...disk.entries()].find(([k]) => norm(k).endsWith(norm(path)))?.[1]
+  on('fs.stat', ($: any, e: any) => {
+    const v = lookup(e.path)
+    if (v === undefined) return { deny: `ENOENT: ${e.path}` }
+    const size = v instanceof Uint8Array ? v.length : typeof v === 'string' ? v.length : v.size
+    return { value: { kind: 'file', size, mtimeMs: 0, isLink: false } }
+  })
+  on('fs.read', ($: any, e: any) => {
+    const v = lookup(e.path)
+    if (v === undefined) return { deny: `ENOENT: ${e.path}` }
+    if (e.as === 'bytes') return { value: { base64: (v instanceof Uint8Array ? v : new TextEncoder().encode(String(v))).toBase64() } }
+    return { value: v instanceof Uint8Array ? new TextDecoder().decode(v) : String(v) }
+  })
+  on('fs.write', ($: any, e: any) => {
+    disk.set(e.path, e.text)
+    return { value: undefined }
+  })
   const saved = new Map<string, unknown>(Object.entries(stored))
   const fetches: string[] = []
   const notifies: any[] = []
@@ -135,7 +159,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('classic.PostToolUse', () => ({}))
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches, notifies }
+  return { saved, opened, blits, clock, launches, toasts, fetches, notifies, disk, diskFile }
 }
 
 async function start($: any) {
@@ -871,4 +895,156 @@ test('Linux и macOS: уведомление через notify-send и osascript
   expect(win.argv.at(-1)).toBe(encodePowerShell(NOTIFY_SCRIPT_TEXT))
   expect(win.env.ARCADE_TEXT).toBe('Агент «закончил»') // текст — через переменную, кавычки не ломают команду
   expect(NOTIFY_SCRIPT_TEXT).toMatch(/ShowBalloonTip/)
+})
+
+// Своя игра для тестов: изменённый Thwaite (не совпадает с играми каталога) и картридж Sega
+async function myNesRom() {
+  const rom = await probeRom()
+  return { ...rom, bytes: Uint8Array.fromBase64(rom.base64) }
+}
+function mySegaRom() {
+  const bytes = new Uint8Array(0x400)
+  bytes.set(new TextEncoder().encode('SEGA MEGA DRIVE '), 0x100)
+  return bytes
+}
+
+test('свои игры: /arcade-add с путём в кавычках — копия в ~/.claude/arcade, игра в «Моих играх» и идёт в панели', HEAVY, async ($, on) => {
+  const rom = await myNesRom()
+  const { clock, saved, diskFile, blits } = stubs(on, { env: { HOME: '/home/max' }, disk: { '/home/max/Игры/My_Game.nes': rom.bytes } })
+  await start($)
+  await $.command.run({ command: 'arcade-add', args: '"/home/max/Игры/My_Game.nes"' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · мои игры' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Добавлено: My Game (Денди).' })).toBeDefined()
+  const id = `mine-${rom.sha.slice(0, 12)}`
+  expect(await ui.find({ key: `arcade-game-${id}` })).toMatchObject({ props: { label: 'My Game' } })
+  expect(diskFile(`/home/max/.claude/arcade/roms/${rom.sha}.b64`)).toBe(rom.base64)
+  expect(saved.get('mine')).toEqual([{ id, console: 'nes', title: 'My Game', sha256: rom.sha }])
+  // Каталог Денди — без своих игр, они в «Моих играх»
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ type: 'Text', text: '  1 игра' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  3 игры' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-nes' })
+  expect(await ui.find({ key: `arcade-game-${id}` })).toBeUndefined()
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-mine' })
+  await ui.press({ key: `arcade-game-${id}` })
+  expect(await ui.find({ type: 'Text', text: /Arcade · My Game/ })).toBeDefined()
+  await clock.advance(500)
+  expect(blits.length > 0).toBe(true)
+  await tap(ui, 'backspace') // из своей игры — обратно в «Мои игры»
+  expect(await ui.find({ type: 'Text', text: 'Arcade · мои игры' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('свои игры: понятные ошибки — нет пути, нет файла, больше 4 МБ, не игра, маппер, повтор', async ($, on) => {
+  const rom = await myNesRom()
+  const mapper6 = rom.bytes.slice()
+  mapper6[6] = (mapper6[6] & 0x0f) | 0x60
+  const { disk } = stubs(on, {
+    env: { HOME: '/home/max' },
+    disk: { '/g/a.nes': rom.bytes, '/g/big.bin': { size: 5_000_000 }, '/g/notes.txt': 'просто текст', '/g/m6.nes': mapper6 },
+  })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const add = async (args: string) => {
+    await $.command.run({ command: 'arcade-add', args })
+    return (await ui.find({ type: 'Text', text: /^(Добавлено|Не получилось|Укажи|«)/ }))?.children?.join?.('') ?? (await ui.drawn())
+  }
+  await $.command.run({ command: 'arcade-add', args: '   ' })
+  expect(await ui.find({ type: 'Text', text: /^Укажи путь к файлу/ })).toBeDefined()
+  await $.command.run({ command: 'arcade-add', args: '/g/nope.nes' })
+  expect(await ui.find({ type: 'Text', text: 'Не получилось добавить: файл не найден: /g/nope.nes' })).toBeDefined()
+  await $.command.run({ command: 'arcade-add', args: '/g/big.bin' })
+  expect(await ui.find({ type: 'Text', text: 'Не получилось добавить: файл больше 4 МБ — такие игры пока не поддерживаются' })).toBeDefined()
+  await $.command.run({ command: 'arcade-add', args: '/g/notes.txt' })
+  expect(await ui.find({ type: 'Text', text: /не похоже на игру для Денди/ })).toBeDefined()
+  await $.command.run({ command: 'arcade-add', args: '/g/m6.nes' })
+  expect(await ui.find({ type: 'Text', text: /маппером 6 наш эмулятор Денди пока не поддерживает/ })).toBeDefined()
+  await $.command.run({ command: 'arcade-add', args: '/g/a.nes' })
+  await $.command.run({ command: 'arcade-add', args: '/g/a.nes' })
+  expect(await ui.find({ type: 'Text', text: '«a» уже есть в «Моих играх».' })).toBeDefined()
+  expect([...disk.keys()].filter((k) => k.endsWith('.b64')).length).toBe(1)
+  void add
+  await ui.unmount()
+})
+
+test('свои игры: Sega узнаётся, в панели — честное сообщение; удаление стирает копию', async ($, on) => {
+  const { diskFile, saved } = stubs(on, { env: { HOME: '/home/max' }, disk: { '/g/Sonic Clone.md': mySegaRom() } })
+  await start($)
+  await $.command.run({ command: 'arcade-add', args: '/g/Sonic Clone.md' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Добавлено: Sonic Clone (Sega Mega Drive).' })).toBeDefined()
+  const [entry] = saved.get('mine') as any[]
+  expect(entry.console).toBe('sega')
+  await ui.press({ key: `arcade-game-${entry.id}` })
+  expect(await ui.find({ type: 'Text', text: /Свои игры Sega будут открываться в окне браузера/ })).toBeDefined()
+  await ui.press({ key: `arcade-mine-remove-${entry.id}` })
+  expect(saved.get('mine')).toEqual([])
+  expect(diskFile(`/home/max/.claude/arcade/roms/${entry.sha256}.b64`)).toBe('')
+  expect(await ui.find({ type: 'Text', text: /^Пока пусто/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('свои игры на Windows: папка данных в профиле, поле «Добавить файл» в меню вызывает ту же команду', async ($, on) => {
+  const rom = await myNesRom()
+  const { diskFile } = stubs(on, { env: { ...WINDOWS, USERPROFILE: 'C:\\Users\\Иван' }, disk: { 'D:\\Игры\\Моя игра.nes': rom.bytes } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-mine' })
+  expect(await ui.find({ type: 'Text', text: /^Пока пусто/ })).toBeDefined()
+  await ui.input({ key: 'arcade-mine-path', text: '"D:\\Игры\\Моя игра.nes"', kind: 'submit' })
+  expect(await ui.find({ type: 'Text', text: 'Добавлено: Моя игра (Денди).' })).toBeDefined()
+  expect(diskFile(`C:\\Users\\Иван\\.claude\\arcade\\roms\\${rom.sha}.b64`)).toBe(rom.base64) // папка данных — в профиле
+  await ui.unmount()
+})
+
+test('mine.js: путь, тип файла, название и проверка сохранённого списка', async () => {
+  expect(cleanPath('  "C:\\Игры\\a b.nes"  ')).toBe('C:\\Игры\\a b.nes')
+  expect(cleanPath("'/home/x/a.nes'")).toBe('/home/x/a.nes')
+  expect(cleanPath(undefined)).toBe('')
+  expect(titleFromPath('C:\\Games\\Super_Game_(USA).nes')).toBe('Super Game (USA)')
+  expect(titleFromPath('/x/.nes')).toBe('Моя игра')
+  expect(identifyRom(new Uint8Array(10)).error).toMatch(/не похоже/)
+  expect(identifyRom(mySegaRom())).toEqual({ console: 'sega' })
+  const rom = await myNesRom()
+  expect(identifyRom(rom.bytes)).toEqual({ console: 'nes', mapper: 0 })
+  expect(restoreMine([{ id: 'mine-0123456789ab', console: 'nes', title: 'A', sha256: 'a'.repeat(64) }, { id: 'evil', console: 'nes', sha256: 'b'.repeat(64) }, null, 5])).toEqual([
+    { id: 'mine-0123456789ab', console: 'nes', title: 'A', sha256: 'a'.repeat(64) },
+  ])
+  expect(restoreMine('мусор')).toEqual([])
+})
+
+// Игра Sega в каталоге сайта: идёт только в окне браузера (EmulatorJS на сайте)
+function segaCatalog() {
+  const sha = 'c'.repeat(64)
+  return siteCatalog({ miniplanets: { console: 'sega', title: 'Miniplanets', genre: 'платформер', about: 'планеты', keys: '…', rom: { url: `files/${sha}.bin`, base64: `files/${sha}.bin.b64`, sha256: sha, size: 1 } } })
+}
+
+test('Sega из каталога: в VS Code на Windows открывается окном, хотя по умолчанию там панель', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: segaCatalog() })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'arcade-menu-sega' })
+  expect(await ui.find({ key: 'arcade-game-miniplanets' })).toMatchObject({ props: { label: 'Miniplanets' } })
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=miniplanets`)
+  await ui.unmount()
+})
+
+test('Sega из каталога: в Desktop и без определённой ОС — понятное сообщение вместо окна', async ($, on) => {
+  const { clock, launches } = stubs(on, { site: segaCatalog() })
+  await start($)
+  await clock.advance(200)
+  for (const surface of ['desktop', 'terminal']) {
+    const ui = await $.ui.mount({ ...PANE, surface })
+    await go(ui, 'arcade-menu-sega')
+    await ui.press({ key: 'arcade-game-miniplanets' })
+    expect(await ui.find({ type: 'Text', text: 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
+    await ui.press({ key: 'arcade-back' })
+    await ui.unmount()
+  }
+  expect(launches.length).toBe(0)
 })

@@ -13,6 +13,12 @@
     document.getElementById('overlay').classList.add('shown')
     return
   }
-  if (id) window.ArcadeGame.start(catalog, id)
+  if (id && catalog.games && catalog.games[id] && catalog.games[id].console === 'sega') {
+    // Игры Sega идут в EmulatorJS: его обвязка подгружается, только когда нужна
+    const script = document.createElement('script')
+    script.src = 'sega.js'
+    script.onload = () => window.ArcadeSega.start(catalog, id)
+    document.body.appendChild(script)
+  } else if (id) window.ArcadeGame.start(catalog, id)
   else window.ArcadeLibrary.start(catalog)
 })()

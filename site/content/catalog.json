@@ -12,7 +12,8 @@
       "section": "games",
       "title": "Sega",
       "about": "Mega Drive",
-      "soon": "Готовим эмулятор Mega Drive и подбираем свободные игры."
+      "emulator": "EmulatorJS (GPL-3.0) + Genesis Plus GX",
+      "noncommercial": true
     }
   ],
   "games": [
@@ -550,6 +551,82 @@
         "files": [
           "games/sliding-blaster/LICENSE.txt",
           "games/sliding-blaster/sliding-blaster-fc60d79-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "miniplanets",
+      "console": "sega",
+      "title": "Miniplanets",
+      "genre": "платформер",
+      "about": "Прыгай по крошечным круглым планетам, чтобы спасти детей Киши и вернуть порядок в систему Планелаго.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/miniplanets/miniplanets.bin",
+      "license": {
+        "name": "zlib",
+        "author": "Javier Degirolmo (Sik)",
+        "source": "https://github.com/sikthehedgehog/miniplanets",
+        "commit": "0ac9c395289cc5d0837c96d45e61a27300e8eebc",
+        "files": [
+          "games/miniplanets/LICENSE.txt",
+          "games/miniplanets/miniplanets-0ac9c39-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "dragons-castle",
+      "console": "sega",
+      "title": "Dragon's Castle",
+      "genre": "платформер",
+      "about": "Юная ведьма Мерлина пробирается в замок, чтобы прогнать дракона и вернуть покой в город. Прототип.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/dragons-castle/dragons-castle.bin",
+      "license": {
+        "name": "zlib",
+        "author": "Javier Degirolmo (Sik)",
+        "source": "https://github.com/sikthehedgehog/dragon",
+        "commit": "72ef51b648ee1e5bd1a7e9c6731b95f16cce7f28",
+        "files": [
+          "games/dragons-castle/LICENSE.txt",
+          "games/dragons-castle/dragons-castle-72ef51b-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "kleleatoms",
+      "console": "sega",
+      "title": "KłełeAtoms",
+      "genre": "стратегия",
+      "about": "Захватывай клетки поля цепными реакциями атомов. До четырёх игроков, есть компьютерные соперники трёх уровней.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/kleleatoms/kleleatoms.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Nightwolf-47",
+        "source": "https://github.com/Nightwolf-47/KleleAtoms-MD",
+        "commit": "53f2344636c65b66ae0033e5345fa5502ebb0a21",
+        "files": [
+          "games/kleleatoms/LICENSE.txt",
+          "games/kleleatoms/kleleatoms-53f2344-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "lunch-break",
+      "console": "sega",
+      "title": "Lunch Break",
+      "genre": "приключение",
+      "about": "Поговори со всеми коллегами в офисе и не попадайся на глаза начальнику.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/lunch-break/lunch-break.bin",
+      "license": {
+        "name": "GPL-3.0",
+        "author": "Good Praxis",
+        "source": "https://github.com/GoodPraxis/lunch-break",
+        "commit": "cd9c5696f144a8ab6c9f7d8175392659f0ad1c57",
+        "files": [
+          "games/lunch-break/LICENSE.txt",
+          "games/lunch-break/lunch-break-cd9c569-src.tar.gz"
         ]
       }
     }

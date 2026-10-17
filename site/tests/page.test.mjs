@@ -36,7 +36,7 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   const raf = []
   const audioNodes = []
   const handlers = {}
-  const page = { draws: 0, focused: null, navigated: null }
+  const page = { draws: 0, focused: null, navigated: null, appended: [], onScript: null }
   function element(tag) {
     const node = {
       tagName: tag, className: '', textContent: '', href: '', tabIndex: 0, style: {}, dataset: {}, children: [],
@@ -46,6 +46,7 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
       blur() {},
       focus() { page.focused = node },
       append(...kids) { for (const k of kids) node.children.push(typeof k === 'string' ? { textContent: k, children: [] } : k) },
+      appendChild(kid) { node.children.push(kid); page.appended.push(kid); if (kid.tagName === 'script' && page.onScript) page.onScript(kid); return kid },
       replaceChildren() { node.children = [] },
       querySelectorAll(selector) {
         const cls = selector.replace(/^\./, '')
@@ -82,6 +83,13 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   }
   ctx.window = ctx
   vm.createContext(ctx)
+  // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
+  page.onScript = (script) => {
+    if (script.src === 'sega.js') {
+      vm.runInContext(fs.readFileSync(path.join(DIST, 'sega.js'), 'utf8'), ctx, { filename: 'sega.js' })
+      setTimeout(() => script.onload && script.onload(), 0)
+    }
+  }
   for (const file of ['jsnes.js', 'stats.js', 'library.js', 'game.js', 'boot.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
   }
@@ -90,7 +98,8 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
     const hint = byId['overlay-hint']?.textContent ?? ''
     const library = byId.library?.children?.length ?? 0
     const overlayShown = byId.overlay?.classList.contains('shown')
-    return library > 0 || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
+    const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
+    return library > 0 || segaStarted || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
   assert.ok(settled(), 'окно так и не загрузилось')
@@ -120,11 +129,12 @@ assert.ok(Object.keys(catalog.games).length >= 12)
   assert.equal(lib.ctx.document.title, 'Arcade')
   const library = lib.byId.library
   let cards = library.querySelectorAll('.card')
-  assert.deepEqual(cards.map((c) => c.dataset.game), Object.keys(catalog.games))
+  const nesIds = Object.keys(catalog.games).filter((id) => catalog.games[id].console === 'nes')
+  assert.deepEqual(cards.map((c) => c.dataset.game), nesIds)
   assert.match(textOf(cards[0]), /Thwaite.*аркада.*ещё не играли/)
   assert.equal(lib.focused, cards[0])
   lib.fire('keydown', { code: 'ArrowRight' })
-  assert.match(textOf(library), /Готовим эмулятор Mega Drive/)
+  assert.deepEqual(library.querySelectorAll('.card').map((c) => c.dataset.game), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break'])
   lib.fire('keydown', { code: 'ArrowLeft' })
   lib.fire('keydown', { code: 'ArrowDown' })
   lib.fire('keydown', { code: 'Enter' })
@@ -187,7 +197,7 @@ assert.match(again.byId['overlay-hint'].textContent, /Продолжаем с м
 }
 
 // --- Все игры каталога запускаются в окне ---------------------------------------------------------------------------
-for (const id of Object.keys(catalog.games).filter((g) => g !== 'thwaite')) {
+for (const id of Object.keys(catalog.games).filter((g) => g !== 'thwaite' && catalog.games[g].console === 'nes')) {
   const other = await makePage(new Map(), { search: `?game=${id}` })
   other.fire('keydown', { code: 'Enter' })
   const drawn = other.draws
@@ -196,4 +206,24 @@ for (const id of Object.keys(catalog.games).filter((g) => g !== 'thwaite')) {
 }
 const unknown = await makePage(new Map(), { search: '?game=nope' })
 assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
+// --- Sega: страница скачивает игру, сверяет хеш и запускает EmulatorJS с нашего сайта ----------------------------
+{
+  const sega = await makePage(new Map(), { search: '?game=miniplanets' })
+  assert.equal(sega.ctx.document.title, 'Miniplanets · Arcade')
+  assert.ok(sega.appended.some((s) => s.src === 'sega.js'), 'обвязка Sega подгружена')
+  assert.ok(sega.appended.some((s) => s.src === 'emulatorjs/loader.js'), 'загрузчик эмулятора подключён')
+  assert.equal(sega.ctx.EJS_core, 'segaMD')
+  assert.equal(sega.ctx.EJS_gameUrl, catalog.games.miniplanets.rom.url)
+  assert.equal(sega.ctx.EJS_pathtodata, 'emulatorjs/')
+  assert.equal(sega.ctx.EJS_language, 'ru-RU')
+  assert.equal(sega.ctx.EJS_player, '#sega-player')
+  assert.equal(sega.byId.keys.textContent, 'движение — стрелки · A — S · B — X · C — Z · Start — Enter')
+  assert.equal(sega.byId.license.href, 'licenses/miniplanets/LICENSE.txt')
+  assert.equal(sega.byId.screen.style.display, 'none', 'экран Денди спрятан')
+  // Подменённый файл Sega до эмулятора не доходит
+  const rom = catalog.games.miniplanets.rom.url
+  const bad = await makePage(new Map(), { search: '?game=miniplanets', net: { override: { [rom]: (b) => Buffer.concat([b.subarray(0, 300), Buffer.from([1]), b.subarray(301)]) } } })
+  assert.match(bad.byId['overlay-hint'].textContent, /хеш не совпал/)
+  assert.ok(!bad.appended.some((s) => s.src === 'emulatorjs/loader.js'))
+}
 console.log('окно: все проверки прошли')
