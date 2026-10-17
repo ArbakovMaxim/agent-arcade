@@ -43,6 +43,7 @@ for (const f of ['index.html', 'boot.js', 'library.js', 'game.js', 'stats.js', '
 const headers = fs.readFileSync(path.join(out, '_headers'), 'utf8')
 assert.match(headers, /\/files\/\*\n  Cache-Control: public, max-age=31536000, immutable/)
 assert.match(headers, /\/catalog\.json\n  Cache-Control: public, max-age=60/)
+assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers\n')
 
 // Повторная сборка даёт те же файлы (кроме времени сборки)
 const again = build({ root: ROOT, out: temp('again'), now: new Date('2026-10-17T12:00:00Z') })

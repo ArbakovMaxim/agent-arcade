@@ -103,6 +103,8 @@ export function build({ root, out, now = new Date() }) {
   for (const file of fs.readdirSync(path.join(root, 'web'))) copy(path.join(root, 'web', file), path.join(out, file))
   copy(path.join(root, 'third_party', 'jsnes', 'LICENSE.txt'), path.join(out, 'licenses', 'jsnes', 'LICENSE.txt'))
   fs.writeFileSync(path.join(out, '_headers'), HEADERS)
+  // Wrangler читает _headers как правила, но не выкладывает его как обычный файл
+  fs.writeFileSync(path.join(out, '.assetsignore'), '_headers\n')
   return catalog
 }
 

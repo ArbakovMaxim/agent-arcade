@@ -1,6 +1,6 @@
 # Arcade — сайт с каталогом игр
 
-Сайт, который открывает мод Arcade для Claude Code: окно с библиотекой и играми, каталог и файлы игр. Только статика — ни базы, ни бэкенда. Хостинг — Cloudflare Pages.
+Сайт, который открывает мод Arcade для Claude Code: окно с библиотекой и играми, каталог и файлы игр. Только статика — ни базы, ни бэкенда. Хостинг — Cloudflare Workers (статика без кода).
 
 ## Как устроено
 
@@ -29,17 +29,17 @@ build.mjs              собирает сайт в dist/
 
 Брать можно только игры со свободной лицензией, которая разрешает распространение.
 
-## Развернуть на Cloudflare Pages
+## Развернуть на Cloudflare
 
-1. Создай репозиторий на GitHub и запушь в него эту папку.
-2. В панели Cloudflare: Workers & Pages → Create → вкладка Pages → Connect to Git → выбери репозиторий.
-3. Настройки сборки:
-   - Project name: `agent-arcade` (из него получится адрес `agent-arcade.pages.dev`);
-   - Production branch: `main`;
-   - Framework preset: None;
+Сайт — Worker без кода, только статика: `wrangler.jsonc` говорит Cloudflare выкладывать папку `dist/`.
+
+1. В панели Cloudflare: Compute → Workers & Pages → Create application → Connect GitHub → выбери репозиторий.
+2. Настройки:
+   - Project name: `agent-arcade`;
    - Build command: `node build.mjs`;
-   - Build output directory: `dist`.
-4. Save and Deploy. Дальше каждый пуш в `main` выкладывает сайт заново.
+   - Deploy command: `npx wrangler deploy`;
+   - Root directory (Path): `site`, если сайт лежит в подпапке репозитория.
+3. Deploy. Дальше каждый пуш в `main` выкладывает сайт заново. Адрес — `agent-arcade.<поддомен аккаунта>.workers.dev`.
 
 ## Проверить
 

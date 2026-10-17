@@ -1,0 +1,9 @@
+// Сайт Arcade на Cloudflare Workers: без кода Worker, только статика из dist/.
+// dist/ собирает node build.mjs; правила кеширования — в dist/_headers.
+{
+  "name": "agent-arcade",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}
