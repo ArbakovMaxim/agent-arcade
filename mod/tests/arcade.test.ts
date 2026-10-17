@@ -138,6 +138,9 @@ async function start($: any) {
   await $.command.run({ command: 'arcade', args: '' })
 }
 
+// Тесты, которые гоняют эмулятор: на медленной машине они идут в 2–3 раза дольше обычного лимита в 5 с
+const HEAVY = { timeoutMs: 30_000 }
+
 // Где в меню живёт кнопка: игры Денди — в «Денди», проверка клавиш и выбор окна и графики — в «Настройках»
 const MENU_OF: Record<string, string> = {
   'arcade-game-thwaite': 'nes',
@@ -260,7 +263,7 @@ test('незнакомая раскладка: назначение всех в�
   await ui.unmount()
 })
 
-test('Thwaite в терминале с картинками: настоящие пиксели, PNG 30 раз в секунду', async ($, on) => {
+test('Thwaite в терминале с картинками: настоящие пиксели, PNG 30 раз в секунду', HEAVY, async ($, on) => {
   const { saved, blits, clock } = stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -297,7 +300,7 @@ test('Thwaite в терминале с картинками: настоящие 
   await ui.unmount()
 })
 
-test('Thwaite в терминале без картинок: через полсекунды сам переходит на символы', async ($, on) => {
+test('Thwaite в терминале без картинок: через полсекунды сам переходит на символы', HEAVY, async ($, on) => {
   const { blits, clock } = stubs(on, { images: false })
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -354,7 +357,7 @@ test('подсказка «Кликни сюда» видна до клика и
   await ui.unmount()
 })
 
-test('через 20 секунд работы агента появляется вопрос, «Играть» открывает панель', async ($, on) => {
+test('через 20 секунд работы агента появляется вопрос, «Играть» открывает панель', HEAVY, async ($, on) => {
   const { opened, clock } = stubs(on)
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await $.turn.start({ turnId: 't1' })
@@ -496,7 +499,7 @@ test('browsers.js: разбор ответа, размер окна, адрес 
   expect(launchCommand({ kind: 'default' }, 'file:///x', null, '').env).toEqual({ ARCADE_URL: 'file:///x' })
 })
 
-test('Concentration Room и robotfindskitten идут в панели, у каждой своя игра в эмуляторе', async ($, on) => {
+test('Concentration Room и robotfindskitten идут в панели, у каждой своя игра в эмуляторе', HEAVY, async ($, on) => {
   const { blits, clock } = stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -553,7 +556,7 @@ test('сайт недоступен: меню из сохранённой коп
   await ui.unmount()
 })
 
-test('без сайта и без копии — три игры из запаса мода, и они играются', async ($, on) => {
+test('без сайта и без копии — три игры из запаса мода, и они играются', HEAVY, async ($, on) => {
   const { clock, blits } = stubs(on, { site: null })
   await start($)
   await clock.advance(200)
@@ -565,7 +568,7 @@ test('без сайта и без копии — три игры из запас
   await ui.unmount()
 })
 
-test('игры нет в моде: скачивается с сайта, сверяется с хешем, кешируется', async ($, on) => {
+test('игры нет в моде: скачивается с сайта, сверяется с хешем, кешируется', HEAVY, async ($, on) => {
   const rom = await probeRom()
   const { clock, saved, fetches, blits } = stubs(on, {
     site: siteCatalog({ probe: siteGame('Проба', rom.sha) }),
@@ -607,7 +610,7 @@ test('файл не совпал с хешем — игра не запуска�
   await ui.unmount()
 })
 
-test('Desktop: экран Денди — PNG внутри Svg, клавиши — через Client', async ($, on) => {
+test('Desktop: экран Денди — PNG внутри Svg, клавиши — через Client', HEAVY, async ($, on) => {
   const { clock } = stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -626,22 +629,37 @@ test('Desktop: экран Денди — PNG внутри Svg, клавиши �
   await ui.unmount()
 })
 
-test('VS Code: экран картинкой, клавиши в поле «Управление», кнопки мышью', async ($, on) => {
+test('VS Code: экран картинкой, клавиатура — горячие клавиши кнопок, удержание без дрожания', HEAVY, async ($, on) => {
   const { clock } = stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   await go(ui, 'arcade-game-thwaite')
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-control' })).toMatchObject({ type: 'Input' })
+  expect(await ui.find({ type: 'Input' })).toBeUndefined() // поле ввода сбрасывалось бы каждую перерисовку
   expect(await ui.find({ key: 'arcade-input' })).toBeUndefined()
+  const hotkeys = Object.fromEntries(
+    await Promise.all(['left', 'up', 'down', 'right', 'b', 'a', 'start', 'select'].map(async (id) => [id, (await ui.find({ key: `arcade-pad-${id}` })).props.hotkey])),
+  )
+  expect(hotkeys).toEqual({ left: 'a', up: 'w', down: 's', right: 'd', b: 'j', a: 'k', start: 'n', select: 'm' })
+  expect(await ui.find({ type: 'Text', text: 'W A S D — движение · J — B · K — A · N — Start · M — Select' })).toBeDefined()
+
   const first = (await ui.find({ type: 'Svg' })).props.source
-  await ui.input({ key: 'arcade-control', text: 'n', kind: 'change' }) // Start из поля ввода
+  await ui.press({ key: 'arcade-pad-start' }) // N: Start — заставка уходит
   await clock.advance(3000)
   const second = (await ui.find({ type: 'Svg' })).props.source
   expect(second === first).toBe(false)
-  await ui.press({ key: 'arcade-pad-start' }) // и кнопкой мышью
-  await clock.advance(1000)
-  expect((await ui.find({ type: 'Svg' })).props.source === second).toBe(false)
+  // В саму игру: ещё два Start (титульный экран, выбор режима)
+  for (let i = 0; i < 2; i++) {
+    await ui.press({ key: 'arcade-pad-start' })
+    await clock.advance(2000)
+  }
+  // Автоповтор: нажатия раз в 33 мс держат «вправо» — прицел едет, экран меняется
+  const before = (await ui.find({ type: 'Svg' })).props.source
+  for (let i = 0; i < 30; i++) {
+    await ui.press({ key: 'arcade-pad-right' })
+    await clock.advance(33)
+  }
+  expect((await ui.find({ type: 'Svg' })).props.source === before).toBe(false)
   expect(await ui.find({ key: 'arcade-pad-left' })).toMatchObject({ props: { label: '←' } })
   await ui.unmount()
 })

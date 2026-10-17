@@ -700,7 +700,7 @@ export function register(on) {
   // после клика по экрану, в любой раскладке.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE) return next(e)
-    const { Box, Text, Raster, Image, Button, Client, Svg, Input } = $.ui.resolve(e)
+    const { Box, Text, Raster, Image, Button, Client, Svg } = $.ui.resolve(e)
     const now = await $.clock.now()
     const terminal = e.surface === 'terminal'
     const game = gameById(view)
@@ -958,43 +958,40 @@ export function register(on) {
           ],
         })
       }
-      // В VS Code Client пока нет: клавиши — в поле «Управление», кнопки — мышью
-      const pad = (id, label) =>
+      // В VS Code Client пока нет. Клавиши — горячие клавиши экранных кнопок: они работают, пока панель в фокусе.
+      // Поле ввода не годится: панель перерисовывается 30 раз в секунду, и поле каждый раз сбрасывается.
+      // Зажатая клавиша повторяет нажатия — кнопка держится, пока идут повторы, и не отпускается между ними.
+      const pad = (id, label, hotkey) =>
         Button({
           key: `arcade-pad-${id}`,
           label,
+          hotkey,
           onPress: () => {
-            taps.add(id)
-            holdTicks[id] = HOLD_TICKS_FIRST
+            if (!holdTicks[id]) taps.add(id)
+            holdTicks[id] = holdTicks[id] ? HOLD_TICKS_REPEAT : HOLD_TICKS_FIRST
           },
         })
       return Box({
         flexDirection: 'column',
         children: [
           header,
-          message ?? Text({ dimColor: true, children: ['Кликни в поле «Управление» и жми клавиши · или кнопки мышью'] }),
+          message ?? Text({ dimColor: true, children: ['Кликни по панели и жми клавиши (латинская раскладка) · или кнопки мышью'] }),
           picture,
-          Input({
-            key: 'arcade-control',
-            label: 'Управление',
-            placeholder: 'кликни сюда и жми клавиши',
-            value: '',
-            onInput: async (value) => {
-              if (!value) return
-              const save = typeKey(Array.from(value).at(-1).toLowerCase())
-              $.ui.invalidate('ui.render')
-              if (save) await $.store.set('keys', keymap)
-            },
-            onSubmit: () => {
-              $.ui.invalidate('ui.render')
-            },
-          }),
           Box({
             flexDirection: 'row',
             columnGap: 1,
-            children: [pad('left', '←'), pad('up', '↑'), pad('down', '↓'), pad('right', '→'), pad('b', 'B'), pad('a', 'A'), pad('start', 'Start'), pad('select', 'Select')],
+            children: [
+              pad('left', '←', 'a'),
+              pad('up', '↑', 'w'),
+              pad('down', '↓', 's'),
+              pad('right', '→', 'd'),
+              pad('b', 'B', 'j'),
+              pad('a', 'A', 'k'),
+              pad('start', 'Start', 'n'),
+              pad('select', 'Select', 'm'),
+            ],
           }),
-          Text({ dimColor: true, children: [legend] }),
+          Text({ dimColor: true, children: ['W A S D — движение · J — B · K — A · N — Start · M — Select'] }),
           libraryButton,
         ],
       })
