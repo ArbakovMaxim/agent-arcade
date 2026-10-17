@@ -1,19 +1,28 @@
-// Библиотека в окне браузера: вкладки приставок и карточки игр со статистикой.
-// Показывается, когда в адресе нет ?game=…; карточка ведёт в игру, игра — обратно сюда.
+// Библиотека в окне браузера: вкладки приставок, карточки игр со статистикой и «Мои игры» — свои файлы,
+// которые хранятся только в этом браузере (mine.js). Карточка ведёт в игру (?game=… или ?mine=…).
 // Каталог приходит с сервера (boot.js).
 ;(function () {
   'use strict'
 
-  function start(catalog) {
+  const NOTES = {
+    nes: 'Свой файл .nes откроется только на этом устройстве и не отправится на сервер.',
+    sega: 'Свой файл .md или .bin откроется только на этом устройстве и не отправится на сервер.',
+    psx: 'Свой диск .chd, .pbp, .iso или .zip с .cue и .bin откроется только на этом устройстве. BIOS Sony не нужен.',
+  }
+
+  function start(catalog, startTab) {
   const consoles = catalog.consoles || []
   const games = catalog.games || {}
   const root = document.getElementById('library')
+  const romInput = document.getElementById('local-rom')
   document.body.classList.add('library-mode')
   document.title = 'Arcade'
 
-  let tab = localStorage.getItem('arcade:tab')
+  let tab = startTab || localStorage.getItem('arcade:tab')
   if (!consoles.some((c) => c.id === tab)) tab = consoles[0] ? consoles[0].id : null
   let index = 0 // какая карточка выбрана
+  let localError = ''
+  let mineList = [] // свои игры текущей вкладки
 
   function el(tag, className, text) {
     const node = document.createElement(tag)
@@ -33,12 +42,20 @@
     all[index].focus()
   }
 
+  async function refreshMine() {
+    mineList = window.ArcadeMine ? await window.ArcadeMine.list(tab) : []
+    render()
+  }
+
   function switchTab(id) {
     tab = id
     localStorage.setItem('arcade:tab', tab)
     index = 0
+    localError = ''
+    mineList = []
     render()
     select(0)
+    refreshMine().then(() => select(0))
   }
 
   function render() {
@@ -47,8 +64,19 @@
     const head = el('div', 'head')
     head.append(el('h1', '', 'Arcade'))
     const total = ArcadeStats.totalSeconds()
-    head.append(el('div', 'total', total ? `Всего сыграно: ${ArcadeStats.duration(total)}` : 'Пока агент работает — сыграй'))
+    const actions = el('div', 'head-actions')
+    actions.append(el('div', 'total', total ? `Всего сыграно: ${ArcadeStats.duration(total)}` : 'Пока агент работает — сыграй'))
+    const open = el('button', 'open-rom', 'Открыть свой файл')
+    open.type = 'button'
+    open.addEventListener('click', () => {
+      romInput.accept = (window.ArcadeMine && window.ArcadeMine.ACCEPT[tab]) || ''
+      romInput.click()
+    })
+    actions.append(open)
+    head.append(actions)
     root.append(head)
+
+    root.append(el('div', localError ? 'local-error' : 'local-note', localError || NOTES[tab] || ''))
 
     const tabs = el('div', 'tabs')
     for (const c of consoles) {
@@ -63,7 +91,7 @@
     const current = consoles.find((c) => c.id === tab)
     const list = el('div', 'games')
     const ids = Object.keys(games).filter((id) => games[id].console === tab)
-    if (!ids.length) list.append(el('div', 'empty', (current && current.soon) || 'Здесь пока нет игр.'))
+    if (!ids.length) list.append(el('div', 'empty', (current && (current.empty || current.soon)) || 'Здесь пока нет игр.'))
     for (const id of ids) {
       const game = games[id]
       const card = el('a', 'card')
@@ -72,6 +100,26 @@
       const top = el('div', 'card-top')
       top.append(el('span', 'title', game.title), el('span', 'genre', game.genre))
       card.append(top, el('div', 'about', game.about), el('div', 'stats', ArcadeStats.summary(id, game.score)))
+      list.append(card)
+    }
+    if (mineList.length) list.append(el('div', 'mine-head', 'Мои игры — только в этом браузере'))
+    for (const m of mineList) {
+      const card = el('a', 'card mine')
+      card.href = `?mine=${encodeURIComponent(m.id)}`
+      card.dataset.mine = m.id
+      const top = el('div', 'card-top')
+      top.append(el('span', 'title', m.title), el('span', 'genre', 'свой файл'))
+      const remove = el('button', 'remove', '✕')
+      remove.type = 'button'
+      remove.title = 'Удалить из этого браузера'
+      remove.addEventListener('click', async (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        await window.ArcadeMine.remove(m.id)
+        await refreshMine()
+      })
+      top.append(remove)
+      card.append(top, el('div', 'about', `${(m.size / 1024 / 1024).toFixed(1)} МБ`))
       list.append(card)
     }
     root.append(list)
@@ -87,13 +135,30 @@
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') switchTab(consoles[(at - 1 + consoles.length) % consoles.length].id)
     else if (e.code === 'Enter') {
       const card = cards()[index]
-      if (card) location.search = `?game=${encodeURIComponent(card.dataset.game)}`
+      if (card && card.dataset.mine) location.search = `?mine=${encodeURIComponent(card.dataset.mine)}`
+      else if (card) location.search = `?game=${encodeURIComponent(card.dataset.game)}`
     } else return
     e.preventDefault()
   })
 
+  romInput.addEventListener('change', async () => {
+    const file = romInput.files && romInput.files[0]
+    romInput.value = ''
+    if (!file) return
+    try {
+      const entry = await window.ArcadeMine.add(file, tab)
+      history.replaceState(null, '', `?mine=${encodeURIComponent(entry.id)}`)
+      root.replaceChildren()
+      await window.ArcadePlayMine(entry)
+    } catch (err) {
+      localError = err && err.message ? err.message : 'Не удалось открыть файл.'
+      render()
+    }
+  })
+
   render()
   select(0)
+  refreshMine().then(() => select(0))
   }
 
   window.ArcadeLibrary = { start }

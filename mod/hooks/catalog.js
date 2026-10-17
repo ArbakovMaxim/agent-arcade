@@ -49,7 +49,12 @@ export function parseCatalog(text) {
   if (!data || !Array.isArray(data.consoles) || !data.games || typeof data.games !== 'object') return null
   const consoles = data.consoles
     .filter((c) => c && ID.test(c.id ?? '') && typeof c.title === 'string' && c.title)
-    .map((c) => ({ id: c.id, title: c.title, ...(typeof c.soon === 'string' ? { soon: c.soon } : {}) }))
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      ...(typeof c.soon === 'string' ? { soon: c.soon } : {}),
+      ...(typeof c.empty === 'string' ? { empty: c.empty.slice(0, 200) } : {}),
+    }))
   const ids = new Set(consoles.map((c) => c.id))
   const games = []
   for (const [id, g] of Object.entries(data.games)) {
@@ -82,6 +87,16 @@ export function siteUrl(path) {
 // Страница игры на сайте или библиотека, если игра не указана
 export function pageUrl(gameId) {
   return gameId ? `${SITE}/?game=${encodeURIComponent(gameId)}` : `${SITE}/`
+}
+
+// Окно со своей игрой из «Моих игр»: страница найдёт её в браузере или один раз попросит выбрать файл и сверит хеш
+export function minePageUrl(m) {
+  return `${SITE}/?mine=${encodeURIComponent(m.id)}&console=${encodeURIComponent(m.console)}&sha=${m.sha256}&title=${encodeURIComponent(m.title)}`
+}
+
+// Окно на вкладке приставки (например, PlayStation — свои диски добавляются там)
+export function tabPageUrl(consoleId) {
+  return `${SITE}/?tab=${encodeURIComponent(consoleId)}`
 }
 
 // Проверяет скачанную игру: base64 → байты → SHA-256 совпадает с каталогом

@@ -14,6 +14,14 @@
       "about": "Mega Drive",
       "emulator": "EmulatorJS (GPL-3.0) + Genesis Plus GX",
       "noncommercial": true
+    },
+    {
+      "id": "psx",
+      "section": "games",
+      "title": "PlayStation",
+      "about": "PlayStation 1",
+      "emulator": "EmulatorJS (GPL-3.0) + PCSX ReARMed (GPL-2.0)",
+      "empty": "Свободных игр для PlayStation пока нет. Открой свой диск — кнопка «Открыть свой файл» сверху. BIOS Sony не нужен."
     }
   ],
   "games": [

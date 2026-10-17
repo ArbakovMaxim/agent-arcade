@@ -39,11 +39,12 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   const page = { draws: 0, focused: null, navigated: null, appended: [], onScript: null }
   function element(tag) {
     const node = {
-      tagName: tag, className: '', textContent: '', href: '', tabIndex: 0, style: {}, dataset: {}, children: [],
+      tagName: tag, className: '', textContent: '', href: '', tabIndex: 0, style: {}, dataset: {}, children: [], files: [], value: '',
       clientWidth: 900, clientHeight: 800, listeners: {},
       classList: { set: new Set(), add(c) { this.set.add(c) }, remove(c) { this.set.delete(c) }, contains(c) { return this.set.has(c) } },
       addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
       blur() {},
+      click() { for (const f of this.listeners.click ?? []) f({}) },
       focus() { page.focused = node },
       append(...kids) { for (const k of kids) node.children.push(typeof k === 'string' ? { textContent: k, children: [] } : k) },
       appendChild(kid) { node.children.push(kid); page.appended.push(kid); if (kid.tagName === 'script' && page.onScript) page.onScript(kid); return kid },
@@ -62,7 +63,8 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   const byId = {}
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v } },
-    URLSearchParams, console, crypto: webcrypto,
+    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder,
+    history: { replaceState: (s, title, url) => { page.replaced = url } },
     fetch: network(net),
     performance: { now: () => now },
     requestAnimationFrame: (cb) => raf.push(cb),
@@ -85,12 +87,12 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (script.src === 'sega.js') {
-      vm.runInContext(fs.readFileSync(path.join(DIST, 'sega.js'), 'utf8'), ctx, { filename: 'sega.js' })
+    if (script.src === 'ejs.js') {
+      vm.runInContext(fs.readFileSync(path.join(DIST, 'ejs.js'), 'utf8'), ctx, { filename: 'ejs.js' })
       setTimeout(() => script.onload && script.onload(), 0)
     }
   }
-  for (const file of ['jsnes.js', 'stats.js', 'library.js', 'game.js', 'boot.js']) {
+  for (const file of ['jsnes.js', 'stats.js', 'mine.js', 'library.js', 'game.js', 'boot.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
   }
   // Ждём, пока каталог и игра скачаются и проверятся: проверка хеша в Node идёт в другом потоке
@@ -127,6 +129,7 @@ assert.ok(Object.keys(catalog.games).length >= 12)
   const storage = new Map()
   const lib = await makePage(storage, { search: '' })
   assert.equal(lib.ctx.document.title, 'Arcade')
+  assert.match(textOf(lib.byId.library), /Открыть свой файл.*не отправится на сервер/)
   const library = lib.byId.library
   let cards = library.querySelectorAll('.card')
   const nesIds = Object.keys(catalog.games).filter((id) => catalog.games[id].console === 'nes')
@@ -210,7 +213,7 @@ assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
 {
   const sega = await makePage(new Map(), { search: '?game=miniplanets' })
   assert.equal(sega.ctx.document.title, 'Miniplanets · Arcade')
-  assert.ok(sega.appended.some((s) => s.src === 'sega.js'), 'обвязка Sega подгружена')
+  assert.ok(sega.appended.some((s) => s.src === 'ejs.js'), 'обвязка EmulatorJS подгружена')
   assert.ok(sega.appended.some((s) => s.src === 'emulatorjs/loader.js'), 'загрузчик эмулятора подключён')
   assert.equal(sega.ctx.EJS_core, 'segaMD')
   assert.equal(sega.ctx.EJS_gameUrl, catalog.games.miniplanets.rom.url)
@@ -228,4 +231,92 @@ assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
   assert.match(bad.byId['overlay-hint'].textContent, /хеш не совпал/)
   assert.ok(!bad.appended.some((s) => s.src === 'emulatorjs/loader.js'))
 }
+
+// --- Пользовательский ROM: читается локально, получает отдельное сохранение и не требует лицензии на странице ---
+{
+  const local = await makePage(new Map(), { search: '' })
+  const romUrl = JSON.stringify(catalog.games.thwaite.rom.url)
+  await vm.runInContext(`(async () => {
+    const response = await fetch(${romUrl})
+    await ArcadeGame.startLocal(new Uint8Array(await response.arrayBuffer()), 'Моя игра.nes')
+  })()`, local.ctx)
+  assert.equal(local.ctx.document.title, 'Моя игра · Arcade')
+  assert.equal(local.byId.credit.textContent, 'локальный ROM')
+  assert.equal(local.byId.license.style.display, 'none')
+  assert.equal(local.byId.source.style.display, 'none')
+  await assert.rejects(
+    vm.runInContext(`ArcadeGame.startLocal(new Uint8Array([1, 2, 3]), 'не-rom.bin')`, local.ctx),
+    /нет заголовка iNES/,
+  )
+}
+// --- Свои игры для всех приставок: файл остаётся в браузере, Sega и PlayStation идут в EmulatorJS ----------------
+const until = async (check) => { for (let i = 0; i < 500 && !check(); i++) await new Promise((r) => setTimeout(r, 2)) }
+const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'games', 'miniplanets', 'miniplanets.bin')))
+{
+  // Вкладка PlayStation из адреса: игр в каталоге нет, есть подсказка и кнопка своего файла с форматами дисков
+  const psx = await makePage(new Map(), { search: '?tab=psx' })
+  const text = textOf(psx.byId.library)
+  assert.match(text, /Свободных игр для PlayStation пока нет/)
+  assert.match(text, /BIOS Sony не нужен/)
+  const open = psx.byId.library.querySelectorAll('.open-rom')[0]
+  assert.equal(open.textContent, 'Открыть свой файл')
+  open.click()
+  assert.equal(psx.byId['local-rom'].accept, '.chd,.pbp,.iso,.cue,.bin,.img,.zip,.7z,.m3u')
+
+  // Свой диск PlayStation: выбор файла во вкладке → «Мои игры» → EmulatorJS с ядром psx из blob: этого браузера
+  const input = psx.byId['local-rom']
+  input.files = [new File([new Uint8Array(4096)], 'Моя_игра.chd', { lastModified: 1 })]
+  await input.listeners.change[0]()
+  await until(() => psx.ctx.EJS_core)
+  assert.equal(psx.ctx.EJS_core, 'psx')
+  assert.match(psx.ctx.EJS_gameUrl, /^blob:/)
+  assert.equal(psx.ctx.document.title, 'Моя игра · Arcade')
+  assert.equal(psx.byId.credit.textContent, 'свой файл — хранится только в этом браузере')
+  assert.equal(psx.byId.license.style.display, 'none')
+  assert.match(psx.replaced, /^\?mine=psx-[0-9a-f]{12}$/)
+  // Не образ диска — понятная ошибка
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(8)], 'notes.txt'), 'psx')`, psx.ctx), /нужен образ диска/)
+}
+{
+  // Свой файл Sega: проверка заголовка, id по хешу — как в моде, игра идёт в EmulatorJS; в библиотеке — «Мои игры»
+  const lib = await makePage(new Map(), { search: '' })
+  lib.ctx.__bytes = segaBytes
+  const id = await vm.runInContext(`(async () => (await ArcadeMine.add(new File([__bytes], 'My_Sega_Game.md'), 'sega')).id)()`, lib.ctx)
+  assert.match(id, /^mine-[0-9a-f]{12}$/)
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(1024)], 'x.md'), 'sega')`, lib.ctx), /нет метки SEGA/)
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([__bytes], 'x.nes'), 'nes')`, lib.ctx), /нет заголовка iNES/)
+  lib.fire('keydown', { code: 'ArrowRight' }) // на вкладку Sega — там «Мои игры»
+  await until(() => lib.byId.library.querySelectorAll('.mine').length > 0)
+  const mine = lib.byId.library.querySelectorAll('.mine')
+  assert.equal(mine.length, 1)
+  assert.equal(mine[0].dataset.mine, id)
+  assert.match(textOf(lib.byId.library), /Мои игры — только в этом браузере/)
+  await vm.runInContext(`(async () => ArcadePlayMine(await ArcadeMine.get(${JSON.stringify(id)})))()`, lib.ctx)
+  await until(() => lib.ctx.EJS_core)
+  assert.equal(lib.ctx.EJS_core, 'segaMD')
+  assert.match(lib.ctx.EJS_gameUrl, /^blob:/)
+  assert.equal(lib.ctx.document.title, 'My Sega Game · Arcade')
+}
+{
+  // Мод просит свою игру Sega, которой в браузере ещё нет: выбрать файл один раз, хеш сверяется
+  const sha = Array.from(new Uint8Array(await webcrypto.subtle.digest('SHA-256', segaBytes)), (b) => b.toString(16).padStart(2, '0')).join('')
+  const ask = await makePage(new Map(), { search: `?mine=mine-${sha.slice(0, 12)}&console=sega&sha=${sha}&title=${encodeURIComponent('Моя Sega')}` })
+  assert.equal(ask.byId['overlay-title'].textContent, 'Выбери файл «Моя Sega»')
+  assert.equal(ask.byId['local-rom'].accept, '.md,.bin,.gen,.smd')
+  // Чужой файл — отказ
+  const input = ask.byId['local-rom']
+  input.files = [new File([new Uint8Array(1024)], 'другой.md')]
+  await input.listeners.change[0]()
+  assert.match(ask.byId['overlay-hint'].textContent, /нет метки SEGA/)
+  // Тот самый файл — игра запускается
+  input.files = [new File([segaBytes], 'Моя Sega.md')]
+  await input.listeners.change[0]()
+  await until(() => ask.ctx.EJS_core)
+  assert.equal(ask.ctx.EJS_core, 'segaMD')
+  assert.equal(ask.replaced, `?mine=mine-${sha.slice(0, 12)}`)
+  // Без подсказки от мода и без файла в браузере — понятное сообщение
+  const lost = await makePage(new Map(), { search: '?mine=mine-000000000000' })
+  assert.equal(lost.byId['overlay-title'].textContent, 'Игра не найдена')
+}
+
 console.log('окно: все проверки прошли')

@@ -15,7 +15,7 @@
     return bytes
   }
 
-  async function start(catalog, id) {
+  async function start(catalog, id, localRom) {
 
   const WIDTH = 256
   const HEIGHT = 240
@@ -65,19 +65,29 @@
     showOverlay('Игра не найдена', `В этой сборке нет игры «${id}».`)
     return
   }
+  document.body.classList.remove('library-mode')
   document.title = `${game.title} · Arcade`
   document.getElementById('keys').textContent = game.keys
   document.getElementById('credit').textContent = game.credit
   const licenseFiles = (game.license && game.license.files) || []
   const licenseFile = licenseFiles.find((f) => /license/i.test(f.name))
   const sourceFile = licenseFiles.find((f) => /\.tar\.gz$|\.zip$/i.test(f.name))
-  document.getElementById('license').href = licenseFile ? licenseFile.url : game.license.source
-  document.getElementById('source').href = sourceFile ? sourceFile.url : game.license.source
+  const licenseLink = document.getElementById('license')
+  const sourceLink = document.getElementById('source')
+  if (localRom) {
+    licenseLink.style.display = 'none'
+    sourceLink.style.display = 'none'
+  } else {
+    licenseLink.style.display = ''
+    sourceLink.style.display = ''
+    licenseLink.href = licenseFile ? licenseFile.url : game.license.source
+    sourceLink.href = sourceFile ? sourceFile.url : game.license.source
+  }
 
   showOverlay(game.title, 'Загружаю игру…')
   let romBytes
   try {
-    romBytes = await loadFile(game.rom)
+    romBytes = localRom ? localRom.bytes : await loadFile(game.rom)
   } catch (err) {
     showOverlay('Не удалось загрузить игру', `${err.message}. Проверь интернет и открой окно ещё раз.`)
     return
@@ -118,7 +128,12 @@
     },
     sampleRate: audio ? audio.sampleRate : 44100,
   })
-  nes.loadROM(romBytes)
+  try {
+    nes.loadROM(romBytes)
+  } catch (err) {
+    showOverlay('Не удалось открыть ROM', `${err.message || 'эмулятор не распознал файл'}.`)
+    return
+  }
 
   if (audio) {
     const node = audio.createScriptProcessor(1024, 1, 2)
@@ -354,5 +369,28 @@
   requestAnimationFrame(loop)
   }
 
-  window.ArcadeGame = { start }
+  async function startLocal(bytes, fileName) {
+    if (!(bytes instanceof Uint8Array)) throw new Error('Не удалось прочитать файл.')
+    if (bytes.length < 16 || bytes[0] !== 0x4e || bytes[1] !== 0x45 || bytes[2] !== 0x53 || bytes[3] !== 0x1a) {
+      throw new Error('Это не ROM для NES: в файле нет заголовка iNES.')
+    }
+    if (bytes.length > 16 * 1024 * 1024) throw new Error('ROM больше 16 МБ — такой файл не поддерживается.')
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+    const hash = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
+    const cleanName = String(fileName || 'Свой ROM').replace(/\.nes$/i, '').trim() || 'Свой ROM'
+    const id = `local-${hash.slice(0, 16)}`
+    const catalog = {
+      games: {
+        [id]: {
+          title: cleanName,
+          keys: 'Стрелки/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift',
+          credit: 'локальный ROM',
+          license: { files: [], source: '#' },
+        },
+      },
+    }
+    await start(catalog, id, { bytes })
+  }
+
+  window.ArcadeGame = { start, startLocal }
 })()

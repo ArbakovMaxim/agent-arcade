@@ -956,7 +956,7 @@ test('свои игры: понятные ошибки — нет пути, не
   await $.command.run({ command: 'arcade-add', args: '/g/nope.nes' })
   expect(await ui.find({ type: 'Text', text: 'Не получилось добавить: файл не найден: /g/nope.nes' })).toBeDefined()
   await $.command.run({ command: 'arcade-add', args: '/g/big.bin' })
-  expect(await ui.find({ type: 'Text', text: 'Не получилось добавить: файл больше 4 МБ — такие игры пока не поддерживаются' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Не получилось добавить: файл больше 4 МБ\. Здесь добавляются игры Денди и Sega, а диски PlayStation — в окне Arcade/ })).toBeDefined()
   await $.command.run({ command: 'arcade-add', args: '/g/notes.txt' })
   expect(await ui.find({ type: 'Text', text: /не похоже на игру для Денди/ })).toBeDefined()
   await $.command.run({ command: 'arcade-add', args: '/g/m6.nes' })
@@ -978,7 +978,7 @@ test('свои игры: Sega узнаётся, в панели — честно
   const [entry] = saved.get('mine') as any[]
   expect(entry.console).toBe('sega')
   await ui.press({ key: `arcade-game-${entry.id}` })
-  expect(await ui.find({ type: 'Text', text: /Свои игры Sega будут открываться в окне браузера/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined() // ОС не определена
   await ui.press({ key: `arcade-mine-remove-${entry.id}` })
   expect(saved.get('mine')).toEqual([])
   expect(diskFile(`/home/max/.claude/arcade/roms/${entry.sha256}.b64`)).toBe('')
@@ -1047,4 +1047,40 @@ test('Sega из каталога: в Desktop и без определённой 
     await ui.unmount()
   }
   expect(launches.length).toBe(0)
+})
+
+test('свои игры в окне: Sega из «Моих игр» на Windows открывается окном с адресом ?mine=…&sha=…', async ($, on) => {
+  const bytes = mySegaRom()
+  const { clock, launches, saved } = stubs(on, { env: { ...WINDOWS, USERPROFILE: 'C:\\Users\\Иван' }, disk: { 'D:\\Игры\\Sonic Clone.md': bytes } })
+  await start($)
+  await clock.advance(200)
+  await $.command.run({ command: 'arcade-add', args: 'D:\\Игры\\Sonic Clone.md' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  const [entry] = saved.get('mine') as any[]
+  await ui.press({ key: `arcade-game-${entry.id}` })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?mine=${entry.id}&console=sega&sha=${entry.sha256}&title=Sonic%20Clone`)
+  await ui.unmount()
+})
+
+test('PlayStation в меню мода: подсказка из каталога и кнопка «Открыть PlayStation в окне»', async ($, on) => {
+  const withPsx = JSON.parse(siteCatalog())
+  withPsx.consoles.push({ id: 'psx', title: 'PlayStation', empty: 'Свободных игр для PlayStation пока нет. Открой свой диск.' })
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-psx' })
+  expect(await ui.find({ type: 'Text', text: 'Свободных игр для PlayStation пока нет. Открой свой диск.' })).toBeDefined()
+  await ui.press({ key: 'arcade-open-tab-psx' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?tab=psx`)
+  expect(await ui.find({ type: 'Text', text: 'Окно Arcade открыто на вкладке PlayStation.' })).toBeDefined()
+  await ui.unmount()
+  // В Desktop окна нет — честная подсказка вместо кнопки
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(desk, 'arcade-menu-psx')
+  expect(await desk.find({ key: 'arcade-open-tab-psx' })).toBeUndefined()
+  expect(await desk.find({ type: 'Text', text: 'PlayStation идёт в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
+  await desk.unmount()
 })

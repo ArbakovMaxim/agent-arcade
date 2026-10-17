@@ -2,7 +2,7 @@
 // Правило мода: каждый обработчик событий Claude Code только наблюдает и всегда возвращает next(e).
 // Требования проверки модов: обработчик в on(...) — сама функция, а $ всегда пишется как $.ui.open(...) и т. п.
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
-import { bundledCatalog, bundledRom, pageUrl, parseCatalog, restoreCatalog, siteUrl, verifyRom } from './catalog.js'
+import { bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, parseDetection, windowBounds } from './browsers.js'
 import { MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 
@@ -130,7 +130,7 @@ function games() {
       title: m.title,
       note: `${m.console === 'nes' ? 'Денди' : 'Sega Mega Drive'} — твой файл, хранится только у тебя`,
       rom: { sha256: m.sha256, mine: true },
-      web: false, // в окне браузера свои игры — следующим шагом
+      web: true, // в окне: страница найдёт файл в браузере или один раз попросит его выбрать
       mine: true,
     })),
     FIELD,
@@ -424,8 +424,14 @@ function windowTarget() {
 
 // Команда, которая открывает окно с игрой (или с библиотекой, если id нет) на сайте Arcade.
 // На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
+function windowUrl(id) {
+  if (typeof id === 'string' && id.startsWith('tab:')) return tabPageUrl(id.slice(4))
+  const m = mine.find((x) => x.id === id)
+  return m ? minePageUrl(m) : pageUrl(id)
+}
+
 function windowCommand(id) {
-  const url = pageUrl(id)
+  const url = windowUrl(id)
   if (platform === 'mac') return { argv: ['open', url], env: {} }
   if (platform === 'linux') return { argv: ['xdg-open', url], env: {} }
   return launchCommand(windowTarget(), url, windowBounds(detection?.screen ?? null), profileRoot)
@@ -524,7 +530,9 @@ async function addMine($, rawPath) {
       const stat = await $.fs.stat(path).catch(() => null)
       if (!stat) throw new Error(`файл не найден: ${path}`)
       if (stat.kind !== 'file') throw new Error('это не файл')
-      if (stat.size > MINE_MAX_BYTES) throw new Error('файл больше 4 МБ — такие игры пока не поддерживаются')
+      if (stat.size > MINE_MAX_BYTES) {
+        throw new Error('файл больше 4 МБ. Здесь добавляются игры Денди и Sega, а диски PlayStation — в окне Arcade: меню PlayStation → «Открыть в окне»')
+      }
       const { base64 } = await $.fs.read(path, { as: 'bytes' })
       const bytes = Uint8Array.fromBase64(base64)
       const info = identifyRom(bytes)
@@ -958,10 +966,8 @@ export function register(on) {
           onPress: async () => {
             // Sega идёт только в окне браузера (EmulatorJS на сайте): в панели её показать нечем
             const sega = g.console === 'sega'
-            if (sega && (g.mine || !platform || e.surface === 'desktop')) {
-              libraryNotice = g.mine
-                ? 'Свои игры Sega будут открываться в окне браузера — это следующий шаг.'
-                : 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.'
+            if (sega && (!platform || e.surface === 'desktop')) {
+              libraryNotice = 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.'
               $.ui.invalidate('ui.render')
               return
             }
@@ -1118,7 +1124,31 @@ export function register(on) {
           gap,
           ...(list.length
             ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
-            : [Text({ children: [c.soon ?? 'Здесь пока нет игр.'] })]),
+            : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
+          // PlayStation идёт только в окне браузера: свои диски добавляются там, кнопкой «Открыть свой файл»
+          ...(c.id === 'psx'
+            ? platform && e.surface !== 'desktop'
+              ? [
+                  gap,
+                  Button({
+                    key: 'arcade-open-tab-psx',
+                    label: 'Открыть PlayStation в окне',
+                    autoFocus: !list.length,
+                    onPress: async () => {
+                      const command = windowCommand('tab:psx')
+                      try {
+                        const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                        libraryNotice = result?.exitCode === 0 ? 'Окно Arcade открыто на вкладке PlayStation.' : launchNotice(result, null)
+                        if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+                      } catch (err) {
+                        libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+                      }
+                      $.ui.invalidate('ui.render')
+                    },
+                  }),
+                ]
+              : [gap, dim('PlayStation идёт в окне браузера, а здесь его открыть нельзя.')]
+            : []),
           ...(list.length ? [gap, dim(`Игры открываются ${opensWindow(e.surface) ? whereText() : 'здесь, в панели'}.`)] : []),
           ...noticeLines,
           ...hint,

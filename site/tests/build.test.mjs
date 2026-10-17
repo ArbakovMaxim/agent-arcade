@@ -16,7 +16,7 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'psx'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
 assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
@@ -93,12 +93,17 @@ console.log('сборка: все проверки прошли')
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break'])
   assert.equal(built.consoles.find((c) => c.id === 'sega').soon, undefined, 'у Sega больше нет пометки «скоро»')
   assert.equal(built.consoles.find((c) => c.id === 'sega').noncommercial, true, 'ядро Genesis Plus GX — некоммерческое, это видно в каталоге')
-  for (const f of ['emulatorjs/loader.js', 'emulatorjs/emulator.css', 'emulatorjs/src/emulator.js', 'emulatorjs/cores/genesis_plus_gx-wasm.data', 'emulatorjs/cores/reports/genesis_plus_gx.json', 'emulatorjs/localization/ru-RU.json', 'sega.js']) {
+  for (const f of ['emulatorjs/loader.js', 'emulatorjs/emulator.css', 'emulatorjs/src/emulator.js', 'emulatorjs/cores/genesis_plus_gx-wasm.data', 'emulatorjs/cores/reports/genesis_plus_gx.json', 'emulatorjs/cores/pcsx_rearmed-wasm.data', 'emulatorjs/cores/reports/pcsx_rearmed.json', 'emulatorjs/localization/ru-RU.json', 'ejs.js', 'mine.js']) {
     assert.ok(fs.existsSync(path.join(dir, f)), f)
   }
   const emulator = fs.readFileSync(path.join(dir, 'emulatorjs', 'src', 'emulator.js'), 'utf8')
   assert.match(emulator, /checkForUpdates\(\) \{\n {8}return \/\/ Arcade: без запроса к cdn\.emulatorjs\.org/)
-  for (const f of ['EmulatorJS-LICENSE.txt', 'Genesis-Plus-GX-LICENSE.txt', 'NOTICE.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses', 'emulatorjs', f)), f)
+  for (const f of ['EmulatorJS-LICENSE.txt', 'Genesis-Plus-GX-LICENSE.txt', 'PCSX-ReARMed-COPYING.txt', 'NOTICE.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses', 'emulatorjs', f)), f)
+  // PlayStation: приставка есть, своих игр в каталоге нет — подсказка про свой диск
+  const psx = built.consoles.find((c) => c.id === 'psx')
+  assert.equal(psx.title, 'PlayStation')
+  assert.match(psx.empty, /Открой свой диск/)
+  assert.equal(Object.values(built.games).filter((g) => g.console === 'psx').length, 0)
   assert.ok(!fs.existsSync(path.join(dir, 'emulatorjs', 'licenses')), 'лицензии — в licenses/, а не рядом с эмулятором')
 }
 // Игра не той приставки — ошибка сборки, а не у пользователей

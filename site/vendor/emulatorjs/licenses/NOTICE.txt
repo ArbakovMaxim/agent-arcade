@@ -9,3 +9,8 @@ EmulatorJS 4.2.3 — © Ethan O'Brien и участники, GNU General Public 
 (пакет npm @emulatorjs/core-genesis_plus_gx@4.2.3), без изменений.
 Лицензия ядра некоммерческая (Genesis-Plus-GX-LICENSE.txt): его нельзя продавать и использовать
 в коммерческом продукте. Исходники: https://github.com/EmulatorJS/Genesis-Plus-GX
+
+Ядро PCSX ReARMed для PlayStation — © авторы PCSX, PCSX-Reloaded и PCSX ReARMed, сборка EmulatorJS 4.2.3
+(пакет npm @emulatorjs/core-pcsx_rearmed@4.2.3), без изменений. Лицензия — GNU General Public License v2.0
+(PCSX-ReARMed-COPYING.txt). Исходники: https://github.com/EmulatorJS/pcsx_rearmed
+Ядро содержит свою открытую замену BIOS (HLE): BIOS Sony Arcade не распространяет и не требует.
