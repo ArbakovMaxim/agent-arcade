@@ -76,6 +76,23 @@ if ($env:ARCADE_BROWSER) {
 }
 `
 
+// Системное уведомление Windows: значок в трее показывает всплывающее сообщение и звук. Текст — через переменные
+// окружения, чтобы кириллица и кавычки не ломали команду. Процесс живёт несколько секунд, пока уведомление на экране.
+const NOTIFY_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$icon = New-Object System.Windows.Forms.NotifyIcon
+$icon.Icon = [System.Drawing.SystemIcons]::Information
+$icon.BalloonTipTitle = $env:ARCADE_TITLE
+$icon.BalloonTipText = $env:ARCADE_TEXT
+$icon.Visible = $true
+$icon.ShowBalloonTip(6000)
+[System.Media.SystemSounds]::Asterisk.Play()
+Start-Sleep -Seconds 7
+$icon.Dispose()
+`
+
 // PowerShell принимает скрипт в -EncodedCommand как base64 от UTF-16LE: никаких кавычек и переводов строк в командной строке
 export function encodePowerShell(script) {
   const bytes = new Uint8Array(script.length * 2)
@@ -92,6 +109,20 @@ function powershell(script) {
 }
 
 export const DETECT_ARGV = powershell(DETECT_SCRIPT)
+export const NOTIFY_SCRIPT_TEXT = NOTIFY_SCRIPT
+
+// Команда системного уведомления: пока человек играет в окне браузера, Claude Code ему не видно
+export function notifyCommand(platform, title, text) {
+  if (platform === 'windows') return { argv: powershell(NOTIFY_SCRIPT), env: { ARCADE_TITLE: title, ARCADE_TEXT: text } }
+  if (platform === 'mac') {
+    return {
+      argv: ['osascript', '-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"', '-e', 'end run', title, text],
+      env: {},
+    }
+  }
+  if (platform === 'linux') return { argv: ['notify-send', '--app-name=Claude Code', title, text], env: {} }
+  return null
+}
 export const DETECT_SCRIPT_TEXT = DETECT_SCRIPT
 export const LAUNCH_SCRIPT_TEXT = LAUNCH_SCRIPT
 

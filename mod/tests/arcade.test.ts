@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { encodePowerShell, launchCommand, parseDetection, windowBounds } from '../hooks/browsers.js'
+import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 
@@ -71,6 +71,7 @@ async function probeRom() {
 function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '' }: any = {}) {
   const saved = new Map<string, unknown>(Object.entries(stored))
   const fetches: string[] = []
+  const notifies: any[] = []
   const opened: string[] = []
   const blits: any[] = []
   const launches: any[] = []
@@ -79,6 +80,10 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   mock.env(on, env)
   on('process.run', ($: any, e: any) => {
     if (e.argv[0] === 'uname') return { value: { exitCode: 0, stdout: `${uname}\n`, stderr: '' } }
+    if (e.init?.env?.ARCADE_TEXT || e.argv[0] === 'notify-send' || e.argv[0] === 'osascript') {
+      notifies.push({ argv: e.argv, env: e.init?.env ?? {} })
+      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    }
     if (e.argv[0] === 'open' || e.argv[0] === 'xdg-open') {
       launches.push({ argv: e.argv, env: e.init?.env ?? {} })
       return { value: { exitCode: 0, stdout: '', stderr: '' } }
@@ -130,7 +135,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('classic.PostToolUse', () => ({}))
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches }
+  return { saved, opened, blits, clock, launches, toasts, fetches, notifies }
 }
 
 async function start($: any) {
@@ -149,6 +154,7 @@ const MENU_OF: Record<string, string> = {
   'arcade-game-field': 'settings',
   'arcade-opener': 'settings',
   'arcade-graphics': 'settings',
+  'arcade-notify': 'settings',
 }
 
 // Дойти по меню до кнопки и нажать её
@@ -776,4 +782,80 @@ test('Desktop: окна браузера нет вовсе — только иг
   expect(launches.length).toBe(0)
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
   await ui.unmount()
+})
+
+// Играешь в окне браузера → агент долго работал → закончил: системное уведомление
+async function playInWindowThenTurn($: any, clock: any, ui: any, workMs: number) {
+  await go(ui, 'arcade-game-thwaite')
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(workMs)
+  await $.turn.complete({ turnId: 't1' })
+  await clock.advance(50)
+}
+
+test('Windows: играешь в окне — агент закончил долгий ход — системное уведомление со звуком', async ($, on) => {
+  const { clock, launches, notifies } = stubs(on, { env: WINDOWS })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await playInWindowThenTurn($, clock, ui, 25_000)
+  expect(launches.length).toBe(1)
+  expect(notifies.length).toBe(1)
+  expect(notifies[0].argv[0]).toBe('powershell.exe')
+  expect(notifies[0].env).toEqual({ ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент закончил — можно возвращаться' })
+  await ui.unmount()
+})
+
+test('уведомлений нет: короткий ход, без окна игры или выключены в настройках', async ($, on) => {
+  const { clock, notifies, saved } = stubs(on, { env: WINDOWS })
+  await start($)
+  await clock.advance(200)
+  // Без окна: ход долгий, но игры в браузере не было
+  await $.turn.start({ turnId: 't0' })
+  await clock.advance(25_000)
+  await $.turn.complete({ turnId: 't0' })
+  await clock.advance(50)
+  expect(notifies.length).toBe(0)
+  // Короткий ход: агент ответил быстро — человек ещё смотрит в Claude Code
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await playInWindowThenTurn($, clock, ui, 5_000)
+  expect(notifies.length).toBe(0)
+  // Выключены в настройках
+  await go(ui, 'arcade-notify')
+  expect(await ui.find({ key: 'arcade-notify' })).toMatchObject({ props: { label: 'Уведомления, пока играешь в окне: нет' } })
+  expect(saved.get('notify')).toBe(false)
+  await playInWindowThenTurn($, clock, ui, 25_000)
+  expect(notifies.length).toBe(0)
+  await ui.unmount()
+})
+
+test('запрос разрешения, пока играешь в окне, — уведомление сразу', async ($, on) => {
+  const { clock, notifies } = stubs(on, { env: WINDOWS })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(ui, 'arcade-game-thwaite')
+  await $.turn.start({ turnId: 't1' })
+  await $.classic.PermissionRequest({ tool_name: 'Write', tool_input: { file_path: 'notes.txt' } })
+  await clock.advance(50)
+  expect(notifies.map((n) => n.env.ARCADE_TEXT)).toEqual(['Агент ждёт разрешения'])
+  await ui.unmount()
+})
+
+test('Linux и macOS: уведомление через notify-send и osascript', async ($, on) => {
+  const { clock, notifies } = stubs(on, { uname: 'Linux' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await playInWindowThenTurn($, clock, ui, 25_000)
+  expect(notifies[0].argv).toEqual(['notify-send', '--app-name=Claude Code', 'Claude Code', 'Агент закончил — можно возвращаться'])
+  await ui.unmount()
+  expect(notifyCommand('mac', 'Claude Code', 'Агент закончил').argv).toEqual([
+    'osascript', '-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv) sound name "Glass"', '-e', 'end run', 'Claude Code', 'Агент закончил',
+  ])
+  expect(notifyCommand(null, 'x', 'y')).toBe(null)
+  const win = notifyCommand('windows', 'Claude Code', 'Агент «закончил»')
+  expect(win.argv.at(-1)).toBe(encodePowerShell(NOTIFY_SCRIPT_TEXT))
+  expect(win.env.ARCADE_TEXT).toBe('Агент «закончил»') // текст — через переменную, кавычки не ломают команду
+  expect(NOTIFY_SCRIPT_TEXT).toMatch(/ShowBalloonTip/)
 })

@@ -3,7 +3,7 @@
 // Требования проверки модов: обработчик в on(...) — сама функция, а $ всегда пишется как $.ui.open(...) и т. п.
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { bundledCatalog, bundledRom, pageUrl, parseCatalog, restoreCatalog, siteUrl, verifyRom } from './catalog.js'
-import { DETECT_ARGV, launchCommand, parseDetection, windowBounds } from './browsers.js'
+import { DETECT_ARGV, launchCommand, notifyCommand, parseDetection, windowBounds } from './browsers.js'
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
@@ -29,6 +29,7 @@ const DEFAULT_COLOR = 0x01000000
 const FLOOR_COLOR = 0x555555
 const PLAYER_COLOR = 0x2e7d32
 
+const NOTIFY_WINDOW_MS = 30 * 60_000 // уведомлять, если окно игры открывали за последние полчаса
 const LAUNCH_TIMEOUT_MS = 20_000 // сколько ждать PowerShell, который ищет браузеры или открывает окно
 
 const ROM_CACHE_LIMIT = 8 // сколько скачанных игр держать в хранилище мода (у него предел 4 МиБ на всё)
@@ -69,6 +70,8 @@ const IME_CHARS = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
 // Состояние живёт в модуле и сбрасывается при перезагрузке кода; клавиши и последняя игра хранятся в $.store
 let status = 'idle' // idle | working | permission | done
 let turnStartedAt = 0
+let windowOpenedAt = 0 // когда в последний раз открылось окно игры в браузере: оттуда Claude Code не видно
+let osNotify = true // системные уведомления «агент закончил» и «ждёт разрешения», пока играешь в окне
 let asked = false // в этом ходе на вопрос уже ответили
 let askVisible = false
 let paneOpen = false
@@ -489,6 +492,7 @@ export function register(on) {
   on('session.start', async ($, e, next) => {
     try {
       keymap = restoreKeymap(await $.store.get('keys'))
+      osNotify = (await $.store.get('notify')) !== false
       catalog = restoreCatalog(await $.store.get('catalog')) ?? catalog
       const savedGame = await $.store.get('lastGame')
       if (games().some((g) => g.id === savedGame)) lastGame = savedGame
@@ -608,6 +612,19 @@ export function register(on) {
       status = 'permission'
       askVisible = false
       log(`запрос разрешения: ${e.tool_name ?? 'инструмент'}`)
+      const now = await $.clock.now()
+      const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS
+        ? notifyCommand(platform, 'Claude Code', 'Агент ждёт разрешения')
+        : null
+      if (command) {
+        $.clock.after(0, async () => {
+          try {
+            await $.process.run(command.argv, { env: command.env, timeoutMs: 15_000 })
+          } catch (err) {
+            log(`уведомление не показалось: ${err?.message ?? err}`)
+          }
+        })
+      }
       $.ui.invalidate('ui.render')
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
@@ -634,6 +651,20 @@ export function register(on) {
       askVisible = false
       log('агент закончил ход')
       if (paneOpen) await $.ui.toast('Агент закончил — Esc, чтобы вернуться')
+      // Играешь в окне браузера — Claude Code не видно: системное уведомление, если ход был долгим
+      const now = await $.clock.now()
+      const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS && now - turnStartedAt >= ASK_AFTER_MS
+        ? notifyCommand(platform, 'Claude Code', 'Агент закончил — можно возвращаться')
+        : null
+      if (command) {
+        $.clock.after(0, async () => {
+          try {
+            await $.process.run(command.argv, { env: command.env, timeoutMs: 15_000 })
+          } catch (err) {
+            log(`уведомление не показалось: ${err?.message ?? err}`)
+          }
+        })
+      }
       $.ui.invalidate('ui.render')
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
@@ -744,6 +775,7 @@ export function register(on) {
               try {
                 const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                 libraryNotice = launchNotice(result, lastGame)
+                if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
               } catch (err) {
                 libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
               }
@@ -832,6 +864,7 @@ export function register(on) {
               try {
                 const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                 libraryNotice = launchNotice(result, g.id)
+                if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
               } catch (err) {
                 libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
               }
@@ -908,6 +941,20 @@ export function register(on) {
                 }),
                 dim('  пиксели — в терминалах с картинками (kitty, Ghostty, Rio), символы — везде'),
               ]),
+          ...(platform
+            ? [
+                Button({
+                  key: 'arcade-notify',
+                  label: `Уведомления, пока играешь в окне: ${osNotify ? 'да' : 'нет'}`,
+                  onPress: async () => {
+                    osNotify = !osNotify
+                    $.ui.invalidate('ui.render')
+                    await $.store.set('notify', osNotify)
+                  },
+                }),
+                dim('  системное уведомление со звуком, когда агент закончил или ждёт разрешения'),
+              ]
+            : []),
           gameButton(field, false),
           dim(`  ${field.note}`),
           dim('  /arcade-keys — назначить клавиши заново'),
@@ -952,6 +999,7 @@ export function register(on) {
                     try {
                       const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                       libraryNotice = launchNotice(result, null)
+                      if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
                     } catch (err) {
                       libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
                     }
