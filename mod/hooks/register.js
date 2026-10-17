@@ -103,6 +103,7 @@ let catalog = bundledCatalog() // каталог: с сайта, из сохра
 let platform = null // windows | mac | linux; null — пока не знаем, окно браузера не предлагаем
 let remoteSurface = null // панель с игрой нарисована в Desktop или VS Code — кадры идут перерисовкой, а не blit
 let holdTicks = {} // поле ввода VS Code: кнопка Денди → сколько шагов ещё держать
+let keyDebug = { focus: '—', last: '—' } // VS Code: куда ушёл фокус и откуда пришло последнее нажатие — чтобы понять, какой ввод работает
 
 function consoles() {
   return catalog.consoles
@@ -218,6 +219,14 @@ function releaseAll() {
   taps = new Set()
   heldKeys = []
   holdTicks = {}
+}
+
+// Текст из поля ввода VS Code → последняя буква как нажатие; where — какое это поле, для диагностики
+function typedFrom(value, where) {
+  if (!value) return false
+  const char = Array.from(value).at(-1).toLowerCase()
+  keyDebug.last = `${char} — ${where}`
+  return typeKey(char)
 }
 
 // Клавиша из поля ввода VS Code: нажатие плюс удержание, пока идёт автоповтор
@@ -621,6 +630,11 @@ export function register(on) {
   })
 
   // Сообщения от экрана игры (hooks/input.js): нажатия и зажатые клавиши
+  on('ui.focus', async ($, e, next) => {
+    if (e.requestId === PANE || e.component === 'AbovePrompt') keyDebug.focus = `${e.component === 'Pane' ? 'панель' : 'над вводом'}: ${e.element ?? 'нет'}`
+    return next(e)
+  })
+
   on('ui.message', async ($, e) => {
     if (e.element !== INPUT) return {}
     const { save, redraw } = readInput(e.data)
@@ -648,6 +662,31 @@ export function register(on) {
   // Полоса над полем ввода: «1» — играть, «2» — не сейчас (цифра в пустом поле ввода и пауза).
   // Пока вопрос виден, полоса занята целиком: то, что рисуют там другие моды, скрыто.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // VS Code: пока в панели идёт игра, над строкой ввода — поле для клавиш. В нём нет картинки,
+    // поэтому от кадра к кадру полоса не меняется, и фокус в поле может сохраниться.
+    if (!askVisible && e.surface === 'vscode' && paneOpen && nesView()) {
+      const { Box, Text, Input } = $.ui.resolve(e)
+      return Box({
+        flexDirection: 'row',
+        columnGap: 1,
+        children: [
+          Text({ dimColor: true, children: ['Arcade:'] }),
+          Input({
+            key: 'arcade-keys-band',
+            label: 'клавиши для игры',
+            placeholder: 'кликни сюда и жми W A S D, K J, N',
+            onInput: async (value) => {
+              const save = typedFrom(value, 'поле над вводом')
+              $.ui.invalidate('ui.render')
+              if (save) await $.store.set('keys', keymap)
+            },
+            onSubmit: () => {
+              $.ui.invalidate('ui.render')
+            },
+          }),
+        ],
+      })
+    }
     if (!askVisible) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
     const now = await $.clock.now()
@@ -700,7 +739,7 @@ export function register(on) {
   // после клика по экрану, в любой раскладке.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE) return next(e)
-    const { Box, Text, Raster, Image, Button, Client, Svg } = $.ui.resolve(e)
+    const { Box, Text, Raster, Image, Button, Client, Svg, Input } = $.ui.resolve(e)
     const now = await $.clock.now()
     const terminal = e.surface === 'terminal'
     const game = gameById(view)
@@ -969,29 +1008,46 @@ export function register(on) {
           onPress: () => {
             if (!holdTicks[id]) taps.add(id)
             holdTicks[id] = holdTicks[id] ? HOLD_TICKS_REPEAT : HOLD_TICKS_FIRST
+            keyDebug.last = `${label} — кнопка`
+            $.ui.invalidate('ui.render')
           },
         })
       return Box({
         flexDirection: 'column',
         children: [
           header,
-          message ?? Text({ dimColor: true, children: ['Кликни по панели и жми клавиши (латинская раскладка) · или кнопки мышью'] }),
+          message ?? Text({ dimColor: true, children: ['Проверяем, как VS Code передаёт клавиши: попробуй по очереди три способа ниже'] }),
           picture,
           Box({
             flexDirection: 'row',
             columnGap: 1,
             children: [
-              pad('left', '←', 'a'),
-              pad('up', '↑', 'w'),
-              pad('down', '↓', 's'),
-              pad('right', '→', 'd'),
-              pad('b', 'B', 'j'),
-              pad('a', 'A', 'k'),
-              pad('start', 'Start', 'n'),
-              pad('select', 'Select', 'm'),
+              pad('left', '← (A)', 'a'),
+              pad('up', '↑ (W)', 'w'),
+              pad('down', '↓ (S)', 's'),
+              pad('right', '→ (D)', 'd'),
+              pad('b', 'B (J)', 'j'),
+              pad('a', 'A (K)', 'k'),
+              pad('start', 'Start (N)', 'n'),
+              pad('select', 'Select (M)', 'm'),
             ],
           }),
-          Text({ dimColor: true, children: ['W A S D — движение · J — B · K — A · N — Start · M — Select'] }),
+          Text({ dimColor: true, children: ['В скобках — клавиша на клавиатуре, латинская раскладка.'] }),
+          Text({ dimColor: true, children: ['1) кликни по панели и жми клавиши · 2) кликни в поле «Клавиши» ниже · 3) кликни в поле над строкой ввода Claude'] }),
+          Input({
+            key: 'arcade-keys-pane',
+            label: 'Клавиши',
+            placeholder: 'кликни сюда и жми W A S D, K J, N',
+            onInput: async (value) => {
+              const save = typedFrom(value, 'поле в панели')
+              $.ui.invalidate('ui.render')
+              if (save) await $.store.set('keys', keymap)
+            },
+            onSubmit: () => {
+              $.ui.invalidate('ui.render')
+            },
+          }),
+          Text({ color: 'cyan', children: [`Проверка ввода: панель в фокусе — ${e.props.isFocused ? 'да' : 'нет'} · фокус: ${keyDebug.focus} · последнее нажатие: ${keyDebug.last}`] }),
           libraryButton,
         ],
       })

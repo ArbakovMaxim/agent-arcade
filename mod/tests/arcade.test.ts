@@ -629,38 +629,54 @@ test('Desktop: экран Денди — PNG внутри Svg, клавиши �
   await ui.unmount()
 })
 
-test('VS Code: экран картинкой, клавиатура — горячие клавиши кнопок, удержание без дрожания', HEAVY, async ($, on) => {
+test('VS Code: экран картинкой и три способа ввода с диагностикой', HEAVY, async ($, on) => {
   const { clock } = stubs(on)
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
   await go(ui, 'arcade-game-thwaite')
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
-  expect(await ui.find({ type: 'Input' })).toBeUndefined() // поле ввода сбрасывалось бы каждую перерисовку
   expect(await ui.find({ key: 'arcade-input' })).toBeUndefined()
-  const hotkeys = Object.fromEntries(
-    await Promise.all(['left', 'up', 'down', 'right', 'b', 'a', 'start', 'select'].map(async (id) => [id, (await ui.find({ key: `arcade-pad-${id}` })).props.hotkey])),
+  // 1) горячие клавиши на кнопках, клавиша — в подписи
+  const pads = Object.fromEntries(
+    await Promise.all(['left', 'up', 'down', 'right', 'b', 'a', 'start', 'select'].map(async (id) => {
+      const b = await ui.find({ key: `arcade-pad-${id}` })
+      return [id, `${b.props.label} ${b.props.hotkey}`]
+    })),
   )
-  expect(hotkeys).toEqual({ left: 'a', up: 'w', down: 's', right: 'd', b: 'j', a: 'k', start: 'n', select: 'm' })
-  expect(await ui.find({ type: 'Text', text: 'W A S D — движение · J — B · K — A · N — Start · M — Select' })).toBeDefined()
-
+  expect(pads).toEqual({ left: '← (A) a', up: '↑ (W) w', down: '↓ (S) s', right: '→ (D) d', b: 'B (J) j', a: 'A (K) k', start: 'Start (N) n', select: 'Select (M) m' })
+  // 2) поле в панели — без value, чтобы перерисовка его не сбрасывала
+  const field = await ui.find({ key: 'arcade-keys-pane' })
+  expect(field).toMatchObject({ type: 'Input', props: { label: 'Клавиши' } })
+  expect(field.props.value).toBeUndefined()
   const first = (await ui.find({ type: 'Svg' })).props.source
-  await ui.press({ key: 'arcade-pad-start' }) // N: Start — заставка уходит
-  await clock.advance(3000)
-  const second = (await ui.find({ type: 'Svg' })).props.source
-  expect(second === first).toBe(false)
-  // В саму игру: ещё два Start (титульный экран, выбор режима)
-  for (let i = 0; i < 2; i++) {
-    await ui.press({ key: 'arcade-pad-start' })
-    await clock.advance(2000)
-  }
-  // Автоповтор: нажатия раз в 33 мс держат «вправо» — прицел едет, экран меняется
-  const before = (await ui.find({ type: 'Svg' })).props.source
-  for (let i = 0; i < 30; i++) {
-    await ui.press({ key: 'arcade-pad-right' })
-    await clock.advance(33)
-  }
-  expect((await ui.find({ type: 'Svg' })).props.source === before).toBe(false)
-  expect(await ui.find({ key: 'arcade-pad-left' })).toMatchObject({ props: { label: '←' } })
+  await ui.input({ key: 'arcade-keys-pane', text: 'n', kind: 'change' })
+  await clock.advance(2000)
+  expect((await ui.find({ type: 'Svg' })).props.source === first).toBe(false)
+  expect(await ui.find({ type: 'Text', text: /последнее нажатие: n — поле в панели/ })).toBeDefined()
+  // кнопка мышью — тоже видна в диагностике
+  await ui.press({ key: 'arcade-pad-start' })
+  expect(await ui.find({ type: 'Text', text: /последнее нажатие: Start \(N\) — кнопка/ })).toBeDefined()
+  // 3) поле над строкой ввода Claude, пока игра открыта в VS Code
+  const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  const bandField = await band.find({ key: 'arcade-keys-band' })
+  expect(bandField).toMatchObject({ type: 'Input' })
+  expect(bandField.props.value).toBeUndefined()
+  await band.input({ key: 'arcade-keys-band', text: 'nd', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: /последнее нажатие: d — поле над вводом/ })).toBeDefined()
+  await band.unmount()
+  await ui.unmount()
+})
+
+test('полоса над вводом с полем для клавиш — только в VS Code и только пока идёт игра', async ($, on) => {
+  stubs(on)
+  await start($)
+  const terminalBand = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await terminalBand.find({ key: 'arcade-keys-band' })).toBeUndefined()
+  await terminalBand.unmount()
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  const before = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await before.find({ key: 'arcade-keys-band' })).toBeUndefined() // в библиотеке поля нет
+  await before.unmount()
   await ui.unmount()
 })
 
