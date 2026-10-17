@@ -29,16 +29,28 @@
 - `third_party/` — лицензии JSNES и игр, исходники игр.
 - `tests/arcade.test.ts` — тесты, которые запускает сам Claude Code.
 
-## Запуск
+## Установка
 
-Нужен Claude Code 2.1.287 или новее.
+В любом Claude Code — в терминале, в расширении для VS Code или в Desktop — одна команда:
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+Она подключает маркетплейс из этого репозитория и ставит мод сразу для всех сессий и приложений. Нужен Claude Code 2.1.275 или новее. Меню открывается командой `/arcade` или ответом `1` на вопрос «сыграть?», который появляется, когда агент работает дольше 20 секунд.
+
+Обновить мод: `/plugin marketplace update agent-arcade`. Удалить: `/plugin uninstall arcade@agent-arcade`.
+
+## Разработка
+
+Чтобы запустить мод прямо из папки, без установки:
 
 ```bash
 claude plugin validate ./mod
 claude --plugin-dir ./mod
 ```
 
-В VS Code и Desktop флаг не передать — мод подключается через `env` в `~/.claude/settings.json` (на Windows — `%USERPROFILE%\.claude\settings.json`), пути через `;`:
+В VS Code и Desktop флаг не передать — для разработки там путь задаётся через `env` в `~/.claude/settings.json` (пути через `;` на Windows):
 
 ```json
 {
@@ -48,9 +60,7 @@ claude --plugin-dir ./mod
 }
 ```
 
-Тогда мод загружается во всех сессиях, и `--plugin-dir` в терминале уже не нужен.
-
-Меню открывается командой `/arcade` или ответом `1` на вопрос «сыграть?», который появляется, когда агент работает дольше 20 секунд.
+Не ставь мод одновременно и из маркетплейса, и через `--plugin-dir` или `CLAUDE_CODE_PLUGIN_DIRS` — он загрузится дважды.
 
 ## Каталог и игры
 

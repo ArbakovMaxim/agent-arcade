@@ -25,3 +25,13 @@ claude --plugin-dir ./mod
 ## Лицензии
 
 У каждой игры своя лицензия. Тексты лицензий и исходники лежат рядом с игрой.
+
+## Установить мод
+
+В любом Claude Code (терминал, VS Code, Desktop):
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+Маркетплейс — файл `.claude-plugin/marketplace.json` в корне этого репозитория, он указывает на мод в `mod/`.

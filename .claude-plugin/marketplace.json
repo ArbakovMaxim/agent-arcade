@@ -1,0 +1,14 @@
+{
+  "name": "agent-arcade",
+  "description": "Arcade: игры, пока агент Claude Code работает",
+  "owner": {
+    "name": "Max"
+  },
+  "plugins": [
+    {
+      "name": "arcade",
+      "source": "./mod",
+      "description": "Игры Денди, пока агент работает: в окне браузера или прямо в панели Claude Code"
+    }
+  ]
+}
