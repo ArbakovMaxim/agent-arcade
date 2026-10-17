@@ -658,23 +658,23 @@
       }
     },
     {
-      "id": "voxide",
+      "id": "hello-pong",
       "console": "psx",
-      "title": "VoXide",
-      "genre": "песочница",
-      "about": "Выживание и стройка в мире из кубиков, в духе Minecraft, — сделано для настоящей PlayStation. Код GPL, ресурсы CC0, музыка CC BY 4.0.",
+      "title": "Hello Pong",
+      "genre": "аркада",
+      "about": "Понг для PlayStation: против компьютера или вдвоём, можно стиками DualShock.",
       "keys": "движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
-      "rom": "games/voxide/voxide.zip",
+      "rom": "games/hello-pong/hello-pong.zip",
       "license": {
-        "name": "GPL-2.0-or-later",
-        "author": "EBonura (Bonnie Studios)",
-        "source": "https://github.com/EBonura/voxide",
-        "commit": "ac392709c20ddd688d85881807921edb262b29ac",
+        "name": "MIT",
+        "author": "@marconvcm",
+        "source": "https://github.com/marconvcm/ps1_dev",
+        "commit": "dec2f3f0b3d8312cc645e8ab23f43c67ffb1ccdb",
         "files": [
-          "games/voxide/LICENSE.txt",
-          "games/voxide/CREDITS.md",
-          "games/voxide/voxide-ac39270-src.tar.gz",
-          "games/voxide/psoxide-sdk-b5365b1-src.tar.gz"
+          "games/hello-pong/LICENSE.txt",
+          "games/hello-pong/NOTICE.txt",
+          "games/hello-pong/PSn00bSDK-LICENSE.txt",
+          "games/hello-pong/hello-pong-dec2f3f-src.tar.gz"
         ]
       }
     }

@@ -1,0 +1,6 @@
+Hello Pong — шаблон и демо-игра для PlayStation, © 2024 @marconvcm, лицензия MIT (LICENSE.txt).
+Исходники: https://github.com/marconvcm/ps1_dev, коммит dec2f3f0b3d8312cc645e8ab23f43c67ffb1ccdb (архив рядом, без папки other/ с руководствами).
+
+Диск собран в Arcade из этого коммита: PSn00bSDK 0.24 для Linux (mipsel-none-elf-gcc 12.3.0, mkpsxiso),
+CMake с toolchain-файлом SDK, режим Release. В игру входят библиотеки PSn00bSDK — Mozilla Public License 2.0
+(PSn00bSDK-LICENSE.txt). Исходники PSn00bSDK 0.24: https://github.com/Lameguy64/PSn00bSDK/tree/v0.24

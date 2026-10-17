@@ -75,6 +75,10 @@
     return String(name || '').replace(/\.[^.]+$/, '').replace(/_+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'Моя игра'
   }
 
+  const isArchive = (b) => {
+    const head = String.fromCharCode(...b.subarray(0, 6))
+    return head.startsWith('PK\x03\x04') || head.startsWith('7z\xbc\xaf\x27\x1c') || head.startsWith('Rar!')
+  }
   const isNes = (b) => b.length >= 16 && b[0] === 0x4e && b[1] === 0x45 && b[2] === 0x53 && b[3] === 0x1a
   const label = (b, at) => String.fromCharCode(...b.subarray(at, at + 4))
   const isSega = (b) => b.length >= 0x200 && (label(b, 0x100) === 'SEGA' || label(b, 0x101) === 'SEGA')
@@ -87,6 +91,7 @@
     if (consoleId === 'nes' || consoleId === 'sega') {
       if (file.size > MAX_SMALL) throw new Error('Файл больше 16 МБ — для Денди и Sega это не игра.')
       const bytes = new Uint8Array(await file.arrayBuffer())
+      if (isArchive(bytes)) throw new Error('Это архив. Распакуй его и выбери сам файл игры: .nes, .md или .bin.')
       if (consoleId === 'nes' && !isNes(bytes)) throw new Error('Это не игра для Денди: в файле нет заголовка iNES.')
       if (consoleId === 'sega' && !isSega(bytes)) throw new Error('Это не игра для Sega Mega Drive: в заголовке нет метки SEGA.')
       sha = await sha256(bytes)

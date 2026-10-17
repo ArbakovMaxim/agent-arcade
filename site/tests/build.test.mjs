@@ -93,13 +93,10 @@ console.log('сборка: все проверки прошли')
   const dir = temp('sega')
   const built = build({ root: ROOT, out: dir })
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break', '5stars'])
-  // PlayStation: VoXide — диск в .zip; копии base64 для мода нет — Sega и PlayStation идут только в окне
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['voxide'])
-  assert.match(built.games.voxide.rom.url, /^files\/[0-9a-f]{64}\.zip$/)
-  assert.ok(!fs.existsSync(path.join(dir, `${built.games.voxide.rom.url}.b64`)), 'у PlayStation нет копии base64')
+  // Копия base64 — только у Денди: Sega и PlayStation идут в окне. VoXide пока не в каталоге: игра не видит геймпад в PCSX ReARMed
   assert.ok(!fs.existsSync(path.join(dir, `${built.games.miniplanets.rom.url}.b64`)), 'у Sega нет копии base64')
   assert.ok(fs.existsSync(path.join(dir, `${built.games.thwaite.rom.url}.b64`)), 'у Денди копия base64 есть')
-  assert.deepEqual(built.games.voxide.license.files.map((f) => f.name), ['LICENSE.txt', 'CREDITS.md', 'voxide-ac39270-src.tar.gz', 'psoxide-sdk-b5365b1-src.tar.gz'])
+  assert.equal(built.games.voxide, undefined)
   assert.equal(built.consoles.find((c) => c.id === 'sega').soon, undefined, 'у Sega больше нет пометки «скоро»')
   assert.equal(built.consoles.find((c) => c.id === 'sega').noncommercial, true, 'ядро Genesis Plus GX — некоммерческое, это видно в каталоге')
   for (const f of ['emulatorjs/loader.js', 'emulatorjs/emulator.css', 'emulatorjs/src/emulator.js', 'emulatorjs/cores/genesis_plus_gx-wasm.data', 'emulatorjs/cores/reports/genesis_plus_gx.json', 'emulatorjs/cores/pcsx_rearmed-wasm.data', 'emulatorjs/cores/reports/pcsx_rearmed.json', 'emulatorjs/localization/ru-RU.json', 'ejs.js', 'mine.js']) {
@@ -112,7 +109,11 @@ console.log('сборка: все проверки прошли')
   const psx = built.consoles.find((c) => c.id === 'psx')
   assert.equal(psx.title, 'PlayStation')
   assert.match(psx.empty, /Открой свой диск/)
-  assert.equal(Object.values(built.games).filter((g) => g.console === 'psx').length, 1) // VoXide
+  // Hello Pong — диск в .zip, собран в Arcade из исходников (MIT + PSn00bSDK под MPL-2.0)
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['hello-pong'])
+  assert.match(built.games['hello-pong'].rom.url, /^files\/[0-9a-f]{64}\.zip$/)
+  assert.ok(!fs.existsSync(path.join(dir, `${built.games['hello-pong'].rom.url}.b64`)), 'у PlayStation нет копии base64')
+  assert.deepEqual(built.games['hello-pong'].license.files.map((f) => f.name), ['LICENSE.txt', 'NOTICE.txt', 'PSn00bSDK-LICENSE.txt', 'hello-pong-dec2f3f-src.tar.gz'])
   assert.ok(!fs.existsSync(path.join(dir, 'emulatorjs', 'licenses')), 'лицензии — в licenses/, а не рядом с эмулятором')
 }
 // Игра не той приставки — ошибка сборки, а не у пользователей

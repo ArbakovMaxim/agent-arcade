@@ -1007,6 +1007,8 @@ test('mine.js: путь, тип файла, название и проверка
   expect(titleFromPath('C:\\Games\\Super_Game_(USA).nes')).toBe('Super Game (USA)')
   expect(titleFromPath('/x/.nes')).toBe('Моя игра')
   expect(identifyRom(new Uint8Array(10)).error).toMatch(/не похоже/)
+  expect(identifyRom(new Uint8Array([0x50, 0x4b, 3, 4, 20, 0, 0, 0, 0, 0])).error).toBe('это архив. Распакуй его и укажи путь к самому файлу игры: .nes, .md или .bin')
+  expect(identifyRom(new TextEncoder().encode('Rar!\x1a\x07\x00 ……')).error).toMatch(/^это архив/)
   expect(identifyRom(mySegaRom())).toEqual({ console: 'sega' })
   const rom = await myNesRom()
   expect(identifyRom(rom.bytes)).toEqual({ console: 'nes', mapper: 0 })

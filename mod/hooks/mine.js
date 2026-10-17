@@ -21,6 +21,10 @@ export function cleanPath(args) {
 
 // Что за файл: Денди (заголовок iNES) или Sega Mega Drive (метка SEGA в заголовке картриджа по адресу $100)
 export function identifyRom(bytes) {
+  const head = String.fromCharCode(...bytes.subarray(0, 6))
+  if (head.startsWith('PK\x03\x04') || head.startsWith('7z\xbc\xaf\x27\x1c') || head.startsWith('Rar!')) {
+    return { error: 'это архив. Распакуй его и укажи путь к самому файлу игры: .nes, .md или .bin' }
+  }
   if (bytes.length >= 16 && bytes[0] === 0x4e && bytes[1] === 0x45 && bytes[2] === 0x53 && bytes[3] === 0x1a) {
     const mapper = (bytes[6] >> 4) | (bytes[7] & 0xf0)
     if (!NES_MAPPERS.has(mapper)) return { error: `картридж с маппером ${mapper} наш эмулятор Денди пока не поддерживает` }

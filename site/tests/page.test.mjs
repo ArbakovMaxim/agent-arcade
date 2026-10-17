@@ -253,10 +253,10 @@ assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
 const until = async (check) => { for (let i = 0; i < 500 && !check(); i++) await new Promise((r) => setTimeout(r, 2)) }
 const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'games', 'miniplanets', 'miniplanets.bin')))
 {
-  // Вкладка PlayStation из адреса: VoXide из каталога и кнопка своего файла с форматами дисков
+  // Вкладка PlayStation из адреса: Hello Pong из каталога и кнопка своего файла с форматами дисков
   const psx = await makePage(new Map(), { search: '?tab=psx' })
   const text = textOf(psx.byId.library)
-  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['voxide'])
+  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hello-pong'])
   assert.match(text, /BIOS Sony не нужен/)
   const open = psx.byId.library.querySelectorAll('.open-rom')[0]
   assert.equal(open.textContent, 'Открыть свой файл')
@@ -285,6 +285,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(id, /^mine-[0-9a-f]{12}$/)
   await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(1024)], 'x.md'), 'sega')`, lib.ctx), /нет метки SEGA/)
   await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([__bytes], 'x.nes'), 'nes')`, lib.ctx), /нет заголовка iNES/)
+  // Архив вместо игры — прямой ответ: распакуй и выбери сам файл
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array([0x50, 0x4b, 3, 4, 20, 0, 0, 0])], 'game.zip'), 'sega')`, lib.ctx), /Это архив\. Распакуй его/)
   lib.fire('keydown', { code: 'ArrowRight' }) // на вкладку Sega — там «Мои игры»
   await until(() => lib.byId.library.querySelectorAll('.mine').length > 0)
   const mine = lib.byId.library.querySelectorAll('.mine')
