@@ -31,7 +31,7 @@ function network({ override = {}, down = false } = {}) {
   }
 }
 
-async function makePage(storage, { search = '?game=thwaite', pads = [], net = {} } = {}) {
+async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [], net = {} } = {}) {
   let now = 0
   const raf = []
   const audioNodes = []
@@ -62,7 +62,7 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   }
   const byId = {}
   const ctx = {
-    location: { get search() { return search }, set search(v) { page.navigated = v } },
+    location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
     URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder,
     history: { replaceState: (s, title, url) => { page.replaced = url } },
     fetch: network(net),
@@ -273,7 +273,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(psx.ctx.document.title, 'Моя игра · Arcade')
   assert.equal(psx.byId.credit.textContent, 'свой файл — хранится только в этом браузере')
   assert.equal(psx.byId.license.style.display, 'none')
-  assert.match(psx.replaced, /^\?mine=psx-[0-9a-f]{12}$/)
+  assert.match(psx.replaced, /^#mine=psx-[0-9a-f]{12}$/)
   // Не образ диска — понятная ошибка
   await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(8)], 'notes.txt'), 'psx')`, psx.ctx), /нужен образ диска/)
 }
@@ -300,7 +300,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
 {
   // Мод просит свою игру Sega, которой в браузере ещё нет: выбрать файл один раз, хеш сверяется
   const sha = Array.from(new Uint8Array(await webcrypto.subtle.digest('SHA-256', segaBytes)), (b) => b.toString(16).padStart(2, '0')).join('')
-  const ask = await makePage(new Map(), { search: `?mine=mine-${sha.slice(0, 12)}&console=sega&sha=${sha}&title=${encodeURIComponent('Моя Sega')}` })
+  // Всё про свою игру — после #: на сервер не уходит
+  const ask = await makePage(new Map(), { search: '', hash: `#mine=mine-${sha.slice(0, 12)}&console=sega&sha=${sha}&title=${encodeURIComponent('Моя Sega')}` })
   assert.equal(ask.byId['overlay-title'].textContent, 'Выбери файл «Моя Sega»')
   assert.equal(ask.byId['local-rom'].accept, '.md,.bin,.gen,.smd')
   // Чужой файл — отказ
@@ -313,9 +314,9 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   await input.listeners.change[0]()
   await until(() => ask.ctx.EJS_core)
   assert.equal(ask.ctx.EJS_core, 'segaMD')
-  assert.equal(ask.replaced, `?mine=mine-${sha.slice(0, 12)}`)
+  assert.equal(ask.replaced, `#mine=mine-${sha.slice(0, 12)}`)
   // Без подсказки от мода и без файла в браузере — понятное сообщение
-  const lost = await makePage(new Map(), { search: '?mine=mine-000000000000' })
+  const lost = await makePage(new Map(), { search: '', hash: '#mine=mine-000000000000' })
   assert.equal(lost.byId['overlay-title'].textContent, 'Игра не найдена')
 }
 

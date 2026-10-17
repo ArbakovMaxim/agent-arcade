@@ -1,5 +1,5 @@
 // Библиотека в окне браузера: вкладки приставок, карточки игр со статистикой и «Мои игры» — свои файлы,
-// которые хранятся только в этом браузере (mine.js). Карточка ведёт в игру (?game=… или ?mine=…).
+// которые хранятся только в этом браузере (mine.js). Карточка ведёт в игру (?game=… или #mine=…).
 // Каталог приходит с сервера (boot.js).
 ;(function () {
   'use strict'
@@ -105,7 +105,7 @@
     if (mineList.length) list.append(el('div', 'mine-head', 'Мои игры — только в этом браузере'))
     for (const m of mineList) {
       const card = el('a', 'card mine')
-      card.href = `?mine=${encodeURIComponent(m.id)}`
+      card.href = `#mine=${encodeURIComponent(m.id)}`
       card.dataset.mine = m.id
       const top = el('div', 'card-top')
       top.append(el('span', 'title', m.title), el('span', 'genre', 'свой файл'))
@@ -135,7 +135,7 @@
     else if (e.code === 'ArrowLeft' || e.code === 'KeyA') switchTab(consoles[(at - 1 + consoles.length) % consoles.length].id)
     else if (e.code === 'Enter') {
       const card = cards()[index]
-      if (card && card.dataset.mine) location.search = `?mine=${encodeURIComponent(card.dataset.mine)}`
+      if (card && card.dataset.mine) location.hash = `mine=${encodeURIComponent(card.dataset.mine)}`
       else if (card) location.search = `?game=${encodeURIComponent(card.dataset.game)}`
     } else return
     e.preventDefault()
@@ -147,7 +147,7 @@
     if (!file) return
     try {
       const entry = await window.ArcadeMine.add(file, tab)
-      history.replaceState(null, '', `?mine=${encodeURIComponent(entry.id)}`)
+      history.replaceState(null, '', `#mine=${encodeURIComponent(entry.id)}`)
       root.replaceChildren()
       await window.ArcadePlayMine(entry)
     } catch (err) {

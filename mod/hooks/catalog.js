@@ -89,9 +89,10 @@ export function pageUrl(gameId) {
   return gameId ? `${SITE}/?game=${encodeURIComponent(gameId)}` : `${SITE}/`
 }
 
-// Окно со своей игрой из «Моих игр»: страница найдёт её в браузере или один раз попросит выбрать файл и сверит хеш
+// Окно со своей игрой из «Моих игр»: страница найдёт её в браузере или один раз попросит выбрать файл и сверит хеш.
+// Всё про свою игру — после #: эту часть адреса браузер не отправляет на сервер, хеш и название не попадут в логи.
 export function minePageUrl(m) {
-  return `${SITE}/?mine=${encodeURIComponent(m.id)}&console=${encodeURIComponent(m.console)}&sha=${m.sha256}&title=${encodeURIComponent(m.title)}`
+  return `${SITE}/#mine=${encodeURIComponent(m.id)}&console=${encodeURIComponent(m.console)}&sha=${m.sha256}&title=${encodeURIComponent(m.title)}`
 }
 
 // Окно на вкладке приставки (например, PlayStation — свои диски добавляются там)

@@ -1049,7 +1049,7 @@ test('Sega из каталога: в Desktop и без определённой 
   expect(launches.length).toBe(0)
 })
 
-test('свои игры в окне: Sega из «Моих игр» на Windows открывается окном с адресом ?mine=…&sha=…', async ($, on) => {
+test('свои игры в окне: Sega из «Моих игр» на Windows открывается окном с адресом #mine=…&sha=… (не уходит на сервер)', async ($, on) => {
   const bytes = mySegaRom()
   const { clock, launches, saved } = stubs(on, { env: { ...WINDOWS, USERPROFILE: 'C:\\Users\\Иван' }, disk: { 'D:\\Игры\\Sonic Clone.md': bytes } })
   await start($)
@@ -1059,7 +1059,7 @@ test('свои игры в окне: Sega из «Моих игр» на Windows 
   const [entry] = saved.get('mine') as any[]
   await ui.press({ key: `arcade-game-${entry.id}` })
   expect(launches.length).toBe(1)
-  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?mine=${entry.id}&console=sega&sha=${entry.sha256}&title=Sonic%20Clone`)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/#mine=${entry.id}&console=sega&sha=${entry.sha256}&title=Sonic%20Clone`)
   await ui.unmount()
 })
 
