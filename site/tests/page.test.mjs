@@ -39,11 +39,12 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
   const page = { draws: 0, focused: null, navigated: null }
   function element(tag) {
     const node = {
-      tagName: tag, className: '', textContent: '', href: '', tabIndex: 0, style: {}, dataset: {}, children: [],
+      tagName: tag, className: '', textContent: '', href: '', tabIndex: 0, style: {}, dataset: {}, children: [], files: [], value: '',
       clientWidth: 900, clientHeight: 800, listeners: {},
       classList: { set: new Set(), add(c) { this.set.add(c) }, remove(c) { this.set.delete(c) }, contains(c) { return this.set.has(c) } },
       addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
       blur() {},
+      click() { for (const f of this.listeners.click ?? []) f({}) },
       focus() { page.focused = node },
       append(...kids) { for (const k of kids) node.children.push(typeof k === 'string' ? { textContent: k, children: [] } : k) },
       replaceChildren() { node.children = [] },
@@ -118,6 +119,7 @@ assert.ok(Object.keys(catalog.games).length >= 12)
   const storage = new Map()
   const lib = await makePage(storage, { search: '' })
   assert.equal(lib.ctx.document.title, 'Arcade')
+  assert.match(textOf(lib.byId.library), /Открыть свой ROM.*не отправится на сервер/)
   const library = lib.byId.library
   let cards = library.querySelectorAll('.card')
   assert.deepEqual(cards.map((c) => c.dataset.game), Object.keys(catalog.games))
@@ -196,4 +198,22 @@ for (const id of Object.keys(catalog.games).filter((g) => g !== 'thwaite')) {
 }
 const unknown = await makePage(new Map(), { search: '?game=nope' })
 assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
+
+// --- Пользовательский ROM: читается локально, получает отдельное сохранение и не требует лицензии на странице ---
+{
+  const local = await makePage(new Map(), { search: '' })
+  const romUrl = JSON.stringify(catalog.games.thwaite.rom.url)
+  await vm.runInContext(`(async () => {
+    const response = await fetch(${romUrl})
+    await ArcadeGame.startLocal(new Uint8Array(await response.arrayBuffer()), 'Моя игра.nes')
+  })()`, local.ctx)
+  assert.equal(local.ctx.document.title, 'Моя игра · Arcade')
+  assert.equal(local.byId.credit.textContent, 'локальный ROM')
+  assert.equal(local.byId.license.style.display, 'none')
+  assert.equal(local.byId.source.style.display, 'none')
+  await assert.rejects(
+    vm.runInContext(`ArcadeGame.startLocal(new Uint8Array([1, 2, 3]), 'не-rom.bin')`, local.ctx),
+    /нет заголовка iNES/,
+  )
+}
 console.log('окно: все проверки прошли')

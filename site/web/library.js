@@ -8,12 +8,14 @@
   const consoles = catalog.consoles || []
   const games = catalog.games || {}
   const root = document.getElementById('library')
+  const romInput = document.getElementById('local-rom')
   document.body.classList.add('library-mode')
   document.title = 'Arcade'
 
   let tab = localStorage.getItem('arcade:tab')
   if (!consoles.some((c) => c.id === tab)) tab = consoles[0] ? consoles[0].id : null
   let index = 0 // какая карточка выбрана
+  let localError = ''
 
   function el(tag, className, text) {
     const node = document.createElement(tag)
@@ -47,8 +49,16 @@
     const head = el('div', 'head')
     head.append(el('h1', '', 'Arcade'))
     const total = ArcadeStats.totalSeconds()
-    head.append(el('div', 'total', total ? `Всего сыграно: ${ArcadeStats.duration(total)}` : 'Пока агент работает — сыграй'))
+    const actions = el('div', 'head-actions')
+    actions.append(el('div', 'total', total ? `Всего сыграно: ${ArcadeStats.duration(total)}` : 'Пока агент работает — сыграй'))
+    const open = el('button', 'open-rom', 'Открыть свой ROM')
+    open.type = 'button'
+    open.addEventListener('click', () => romInput.click())
+    actions.append(open)
+    head.append(actions)
     root.append(head)
+
+    root.append(el('div', localError ? 'local-error' : 'local-note', localError || 'Файл .nes откроется только на этом устройстве и не отправится на сервер.'))
 
     const tabs = el('div', 'tabs')
     for (const c of consoles) {
@@ -90,6 +100,18 @@
       if (card) location.search = `?game=${encodeURIComponent(card.dataset.game)}`
     } else return
     e.preventDefault()
+  })
+
+  romInput.addEventListener('change', async () => {
+    const file = romInput.files && romInput.files[0]
+    romInput.value = ''
+    if (!file) return
+    try {
+      await window.ArcadeGame.startLocal(new Uint8Array(await file.arrayBuffer()), file.name)
+    } catch (err) {
+      localError = err && err.message ? err.message : 'Не удалось открыть ROM.'
+      render()
+    }
   })
 
   render()

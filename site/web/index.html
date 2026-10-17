@@ -29,8 +29,14 @@
   body.library-mode #library { display: block; }
   body.library-mode #stage, body.library-mode #overlay, body.library-mode #bar { display: none; }
   #library .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  #library .head-actions { display: flex; align-items: center; gap: 10px; }
   #library h1 { margin: 0; font-size: 22px; color: #fff; }
   #library .total { color: #9a9aa3; }
+  #library .open-rom { background: #2f3a52; color: #fff; border: 1px solid #4a5c85; border-radius: 6px;
+    padding: 6px 12px; font: inherit; cursor: pointer; }
+  #library .open-rom:hover, #library .open-rom:focus { background: #3a4968; }
+  #library .local-note { margin: -4px 0 14px; color: #9a9aa3; font-size: 12px; }
+  #library .local-error { margin: -4px 0 14px; color: #ef8c8c; font-size: 12px; }
   #library .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
   #library .tab { background: #1c1c20; color: #c9c9d1; border: 1px solid #2c2c32; border-radius: 6px; padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer; }
   #library .tab.active { background: #2f3a52; border-color: #4a5c85; color: #fff; }
@@ -48,6 +54,7 @@
 </style>
 </head>
 <body>
+<input id="local-rom" type="file" accept=".nes,application/octet-stream" hidden>
 <div id="stage"><canvas id="screen" width="256" height="240"></canvas></div>
 <div id="overlay"><div id="overlay-title"></div><div id="overlay-hint"></div></div>
 <div id="library"></div>
