@@ -677,6 +677,120 @@
           "games/hello-pong/hello-pong-dec2f3f-src.tar.gz"
         ]
       }
+    },
+    {
+      "id": "tank-battle",
+      "console": "sega",
+      "title": "Tank Battle",
+      "genre": "экшен",
+      "about": "Танковые бои с видом сверху: против компьютера или вдвоём до пяти побед. Каждый раунд — новая арена.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/tank-battle/tank-battle.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Luis Montes (monteslu)",
+        "source": "https://github.com/monteslu/retro-homebrew-games",
+        "commit": "eb7dc3044f9d2f76047f3b3573971bf86575ca52",
+        "files": [
+          "games/tank-battle/LICENSE.txt",
+          "games/tank-battle/tank-battle-eb7dc30-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "battle-4tris",
+      "console": "sega",
+      "title": "Battle 4Tris",
+      "genre": "головоломка",
+      "about": "Падающие блоки: один против растущей скорости или дуэль вдвоём, где твои линии летят сопернику.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/battle-4tris/battle-4tris.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Luis Montes (monteslu)",
+        "source": "https://github.com/monteslu/retro-homebrew-games",
+        "commit": "eb7dc3044f9d2f76047f3b3573971bf86575ca52",
+        "files": [
+          "games/battle-4tris/LICENSE.txt",
+          "games/battle-4tris/battle-4tris-eb7dc30-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "pong",
+      "console": "sega",
+      "title": "Pong",
+      "genre": "аркада",
+      "about": "Классический Понг для Mega Drive — одному или вдвоём.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/pong/pong.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Luis Montes (monteslu)",
+        "source": "https://github.com/monteslu/retro-homebrew-games",
+        "commit": "eb7dc3044f9d2f76047f3b3573971bf86575ca52",
+        "files": [
+          "games/pong/LICENSE.txt",
+          "games/pong/pong-eb7dc30-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "snake-arena",
+      "console": "sega",
+      "title": "Snake Arena",
+      "genre": "аркада",
+      "about": "Змейка: собирай еду и расти, а вдвоём — соревнуйтесь, кто дольше продержится.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/snake-arena/snake-arena.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Luis Montes (monteslu)",
+        "source": "https://github.com/monteslu/retro-homebrew-games",
+        "commit": "eb7dc3044f9d2f76047f3b3573971bf86575ca52",
+        "files": [
+          "games/snake-arena/LICENSE.txt",
+          "games/snake-arena/snake-arena-eb7dc30-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "space-shooter",
+      "console": "sega",
+      "title": "Space Shooter",
+      "genre": "шутер",
+      "about": "Вертикальный космический шутер, можно пройти вдвоём.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/space-shooter/space-shooter.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Luis Montes (monteslu)",
+        "source": "https://github.com/monteslu/retro-homebrew-games",
+        "commit": "eb7dc3044f9d2f76047f3b3573971bf86575ca52",
+        "files": [
+          "games/space-shooter/LICENSE.txt",
+          "games/space-shooter/space-shooter-eb7dc30-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "breakout",
+      "console": "sega",
+      "title": "Breakout",
+      "genre": "аркада",
+      "about": "Разбивай стены кирпичей мячом и платформой.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/breakout/breakout.bin",
+      "license": {
+        "name": "MIT",
+        "author": "Luis Montes (monteslu)",
+        "source": "https://github.com/monteslu/retro-homebrew-games",
+        "commit": "eb7dc3044f9d2f76047f3b3573971bf86575ca52",
+        "files": [
+          "games/breakout/LICENSE.txt",
+          "games/breakout/breakout-eb7dc30-src.tar.gz"
+        ]
+      }
     }
   ]
 }

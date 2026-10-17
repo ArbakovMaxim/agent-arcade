@@ -92,7 +92,7 @@ console.log('сборка: все проверки прошли')
 {
   const dir = temp('sega')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break', '5stars'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break', '5stars', 'tank-battle', 'battle-4tris', 'pong', 'snake-arena', 'space-shooter', 'breakout'])
   // Копия base64 — только у Денди: Sega и PlayStation идут в окне. VoXide пока не в каталоге: игра не видит геймпад в PCSX ReARMed
   assert.ok(!fs.existsSync(path.join(dir, `${built.games.miniplanets.rom.url}.b64`)), 'у Sega нет копии base64')
   assert.ok(fs.existsSync(path.join(dir, `${built.games.thwaite.rom.url}.b64`)), 'у Денди копия base64 есть')

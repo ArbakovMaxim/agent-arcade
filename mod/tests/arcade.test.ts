@@ -1088,26 +1088,26 @@ test('PlayStation в меню мода: подсказка из каталога
   await desk.unmount()
 })
 
-test('PlayStation из каталога: VoXide в терминале на Windows открывается окном ?game=voxide', async ($, on) => {
+test('PlayStation из каталога: игра в терминале на Windows открывается окном ?game=…', async ($, on) => {
   const withPsx = JSON.parse(siteCatalog())
   withPsx.consoles.push({ id: 'psx', title: 'PlayStation' })
   const sha = 'd'.repeat(64)
-  withPsx.games.voxide = { console: 'psx', title: 'VoXide', genre: 'песочница', about: 'кубики', keys: '…', rom: { url: `files/${sha}.zip`, base64: `files/${sha}.zip.b64`, sha256: sha, size: 1 } }
+  withPsx.games['psx-demo'] = { console: 'psx', title: 'PSX Demo', genre: 'аркада', about: 'проверка', keys: '…', rom: { url: `files/${sha}.zip`, base64: `files/${sha}.zip.b64`, sha256: sha, size: 1 } }
   const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'arcade-menu-psx' })
-  expect(await ui.find({ key: 'arcade-game-voxide' })).toMatchObject({ props: { label: 'VoXide' } })
+  expect(await ui.find({ key: 'arcade-game-psx-demo' })).toMatchObject({ props: { label: 'PSX Demo' } })
   expect(await ui.find({ key: 'arcade-open-tab-psx' })).toBeDefined() // и кнопка для своих дисков
-  await ui.press({ key: 'arcade-game-voxide' })
+  await ui.press({ key: 'arcade-game-psx-demo' })
   expect(launches.length).toBe(1)
-  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=voxide`)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=psx-demo`)
   await ui.unmount()
   // В Desktop окна нет — понятное сообщение
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await go(desk, 'arcade-menu-psx')
-  await desk.press({ key: 'arcade-game-voxide' })
+  await desk.press({ key: 'arcade-game-psx-demo' })
   expect(await desk.find({ type: 'Text', text: 'Игры PlayStation идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
   await desk.unmount()
 })
