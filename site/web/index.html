@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arcade</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0d0d0f; color: #d8d8dc; overflow: hidden;
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: fixed; inset: 0 0 28px 0; display: flex; align-items: center; justify-content: center; }
+  canvas { background: #000; image-rendering: pixelated; image-rendering: crisp-edges; }
+  #overlay { position: fixed; inset: 0 0 28px 0; display: none; flex-direction: column; gap: 6px;
+    align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.62); text-align: center; cursor: pointer; }
+  #overlay.shown { display: flex; }
+  #overlay-title { font-size: 22px; font-weight: 600; color: #fff; }
+  #overlay-hint { font-size: 14px; color: #c9c9d1; }
+  #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 28px; display: flex; align-items: center; gap: 12px;
+    padding: 0 10px; background: #161619; color: #9a9aa3; font-size: 12px; white-space: nowrap; overflow: hidden; }
+  #bar .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+  #bar button { background: #26262b; color: #d8d8dc; border: 1px solid #34343a; border-radius: 4px;
+    font: inherit; padding: 2px 8px; cursor: pointer; }
+  #bar button:hover, #bar a:hover { background: #303036; }
+  #bar a { color: #d8d8dc; text-decoration: none; background: #26262b; border: 1px solid #34343a; border-radius: 4px; padding: 2px 8px; }
+  #best { color: #e8c96a; }
+
+  /* Библиотека: показывается, когда в адресе нет ?game=… */
+  #library { display: none; max-width: 760px; margin: 0 auto; padding: 22px 20px; height: 100%; box-sizing: border-box; overflow-y: auto; }
+  body.library-mode #library { display: block; }
+  body.library-mode #stage, body.library-mode #overlay, body.library-mode #bar { display: none; }
+  #library .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  #library h1 { margin: 0; font-size: 22px; color: #fff; }
+  #library .total { color: #9a9aa3; }
+  #library .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  #library .tab { background: #1c1c20; color: #c9c9d1; border: 1px solid #2c2c32; border-radius: 6px; padding: 6px 14px; font: inherit; font-size: 14px; cursor: pointer; }
+  #library .tab.active { background: #2f3a52; border-color: #4a5c85; color: #fff; }
+  #library .soon { margin-left: 6px; font-size: 11px; color: #9a9aa3; }
+  #library .games { display: flex; flex-direction: column; gap: 8px; }
+  #library .card { display: block; padding: 12px 14px; background: #17171b; border: 1px solid #26262c; border-radius: 8px; color: inherit; text-decoration: none; outline: none; }
+  #library .card:hover, #library .card:focus { border-color: #5b78b8; background: #1b2130; }
+  #library .card-top { display: flex; align-items: baseline; gap: 10px; }
+  #library .title { font-size: 16px; color: #fff; font-weight: 600; }
+  #library .genre { font-size: 12px; color: #9a9aa3; }
+  #library .about { margin-top: 4px; color: #c9c9d1; }
+  #library .stats { margin-top: 6px; font-size: 12px; color: #e8c96a; }
+  #library .empty { padding: 18px; color: #9a9aa3; background: #17171b; border: 1px dashed #2c2c32; border-radius: 8px; }
+  #library .hint { margin-top: 14px; font-size: 12px; color: #6f6f78; }
+</style>
+</head>
+<body>
+<div id="stage"><canvas id="screen" width="256" height="240"></canvas></div>
+<div id="overlay"><div id="overlay-title"></div><div id="overlay-hint"></div></div>
+<div id="library"></div>
+<div id="bar">
+  <a id="to-library" href="?" tabindex="-1">← Библиотека</a>
+  <span id="keys" class="grow"></span>
+  <span id="best"></span>
+  <span id="credit"></span>
+  <a id="license" href="#" target="_blank" rel="noopener" tabindex="-1">лицензия</a>
+  <a id="source" href="#" target="_blank" rel="noopener" tabindex="-1">исходники</a>
+  <button id="sound" tabindex="-1"></button>
+  <button id="restart" tabindex="-1">Сначала</button>
+</div>
+<script src="jsnes.js"></script>
+<script src="stats.js"></script>
+<script src="library.js"></script>
+<script src="game.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>
