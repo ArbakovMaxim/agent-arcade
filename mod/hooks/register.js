@@ -757,41 +757,53 @@ export function register(on) {
     if (!askVisible) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
     const now = await $.clock.now()
+    const canWindow = platform !== null && e.surface !== 'desktop' && webGame(lastGame)
     return Box({
       flexDirection: 'row',
       columnGap: 2,
       children: [
         Text({ children: [`Агент работает ${workedSeconds(now)} с — сыграть?`] }),
+        // «Здесь» — панель Claude Code: в VS Code и Desktop картинкой, в терминале символами или пикселями.
+        // «В окне» — браузер; его нет в Desktop (там мод не запускает программы) и пока ОС не определена.
         Button({
           key: 'arcade-play',
-          label: 'Играть',
+          label: canWindow ? 'Здесь' : 'Играть',
           hotkey: '1',
           plain: true,
           onPress: async () => {
-            if (opensWindow(e.surface) && webGame(lastGame)) {
-              asked = true
-              askVisible = false
-              const command = windowCommand(lastGame)
-              try {
-                const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                libraryNotice = launchNotice(result, lastGame)
-                if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
-              } catch (err) {
-                libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
-              }
-              $.ui.invalidate('ui.render')
-              await $.ui.toast(libraryNotice)
-              return
-            }
             markPaneOpen()
             await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: PANE_COLUMNS, rows: PANE_ROWS })
             $.ui.invalidate('ui.render')
           },
         }),
+        ...(canWindow
+          ? [
+              Button({
+                key: 'arcade-play-window',
+                label: 'В окне',
+                hotkey: '2',
+                plain: true,
+                onPress: async () => {
+                  asked = true
+                  askVisible = false
+                  const command = windowCommand(lastGame)
+                  try {
+                    const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                    libraryNotice = launchNotice(result, lastGame)
+                    if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+                  } catch (err) {
+                    libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+                  }
+                  $.ui.invalidate('ui.render')
+                  await $.ui.toast(libraryNotice)
+                },
+              }),
+            ]
+          : []),
         Button({
           key: 'arcade-later',
           label: 'Не сейчас',
-          hotkey: '2',
+          hotkey: canWindow ? '3' : '2',
           plain: true,
           onPress: () => {
             asked = true

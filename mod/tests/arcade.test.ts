@@ -370,6 +370,10 @@ test('через 20 секунд работы агента появляется 
   await clock.advance(21_000)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await band.find({ type: 'Text', text: /сыграть\?/ })).toBeDefined()
+  // ОС не определена — окна браузера нет, кнопка одна
+  expect(await band.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Играть', hotkey: '1' } })
+  expect(await band.find({ key: 'arcade-play-window' })).toBeUndefined()
+  expect(await band.find({ key: 'arcade-later' })).toMatchObject({ props: { hotkey: '2' } })
   await band.press({ key: 'arcade-play' })
   expect(opened).toEqual(['arcade'])
   await band.unmount()
@@ -444,13 +448,21 @@ test('Windows: выбор по кругу — Chrome, Firefox, панель — 
   await ui.unmount()
 })
 
-test('Windows: «Играть» в вопросе открывает окно, а не панель', async ($, on) => {
+test('Windows: в вопросе выбор — «Здесь» (1), «В окне» (2), «Не сейчас» (3); «В окне» открывает браузер', async ($, on) => {
   const { clock, launches, opened, toasts } = stubs(on, { env: WINDOWS })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await $.turn.start({ turnId: 't1' })
   await clock.advance(21_000)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  await band.press({ key: 'arcade-play' })
+  expect(await band.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Здесь', hotkey: '1' } })
+  expect(await band.find({ key: 'arcade-play-window' })).toMatchObject({ props: { label: 'В окне', hotkey: '2' } })
+  expect(await band.find({ key: 'arcade-later' })).toMatchObject({ props: { label: 'Не сейчас', hotkey: '3' } })
+  // В Desktop окна браузера нет — там одна кнопка
+  const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await desktop.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Играть' } })
+  expect(await desktop.find({ key: 'arcade-play-window' })).toBeUndefined()
+  await desktop.unmount()
+  await band.press({ key: 'arcade-play-window' })
   expect(launches.length).toBe(1)
   expect(opened).toEqual([])
   expect(toasts.at(-1)).toMatch(/Thwaite открыт в Google Chrome/)
@@ -704,12 +716,13 @@ test('VS Code: строка 🎮 стирается после каждой бу
   await ui.unmount()
 })
 
-test('VS Code на Windows: «Играть» в вопросе открывает игру в панели, а не окно', async ($, on) => {
+test('VS Code на Windows: «Здесь» в вопросе открывает игру в панели, «В окне» тоже предложено', async ($, on) => {
   const { clock, launches, opened } = stubs(on, { env: WINDOWS })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await $.turn.start({ turnId: 't1' })
   await clock.advance(21_000)
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
+  expect(await band.find({ key: 'arcade-play-window' })).toBeDefined()
   await band.press({ key: 'arcade-play' })
   expect(launches.length).toBe(0)
   expect(opened.length).toBe(1)
