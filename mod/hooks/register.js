@@ -158,8 +158,19 @@ function workedSeconds(now) {
   return Math.max(0, Math.round((now - turnStartedAt) / 1000))
 }
 
+// Сколько работает агент — по-человечески: «48 с», «2 мин 14 с», «1 ч 5 мин»
+export function workedText(seconds) {
+  const s = Math.max(0, Math.floor(seconds))
+  if (s < 60) return `${s} с`
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return m ? `${h} ч ${m} мин` : `${h} ч`
+  const rest = s % 60
+  return rest ? `${m} мин ${rest} с` : `${m} мин`
+}
+
 function statusText(now) {
-  if (status === 'working') return `Агент работает ${workedSeconds(now)} с`
+  if (status === 'working') return `Агент работает ${workedText(workedSeconds(now))}`
   if (status === 'permission') return 'Агент ждёт разрешения — Esc, чтобы ответить'
   if (status === 'done') return 'Агент закончил — Esc, чтобы вернуться'
   return 'Агент свободен'
@@ -852,7 +863,7 @@ export function register(on) {
       flexDirection: 'row',
       columnGap: 2,
       children: [
-        Text({ children: [`Агент работает ${workedSeconds(now)} с — сыграть?`] }),
+        Text({ children: [`Агент работает ${workedText(workedSeconds(now))} — сыграть?`] }),
         // «Здесь» — панель Claude Code: в VS Code и Desktop картинкой, в терминале символами или пикселями.
         // «В окне» — браузер; его нет в Desktop (там мод не запускает программы) и пока ОС не определена.
         Button({
@@ -964,10 +975,10 @@ export function register(on) {
           label: g.title,
           ...(focus ? { autoFocus: true } : {}),
           onPress: async () => {
-            // Sega идёт только в окне браузера (EmulatorJS на сайте): в панели её показать нечем
-            const sega = g.console === 'sega'
+            // Sega и PlayStation идут только в окне браузера (EmulatorJS на сайте): в панели их показать нечем
+            const sega = g.console === 'sega' || g.console === 'psx'
             if (sega && (!platform || e.surface === 'desktop')) {
-              libraryNotice = 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.'
+              libraryNotice = `Игры ${g.console === 'psx' ? 'PlayStation' : 'Sega'} идут в окне браузера, а здесь его открыть нельзя.`
               $.ui.invalidate('ui.render')
               return
             }
@@ -1133,7 +1144,7 @@ export function register(on) {
                   Button({
                     key: 'arcade-open-tab-psx',
                     label: 'Открыть PlayStation в окне',
-                    autoFocus: !list.length,
+                    ...(!list.length ? { autoFocus: true } : {}),
                     onPress: async () => {
                       const command = windowCommand('tab:psx')
                       try {

@@ -91,11 +91,16 @@ export function build({ root, out, now = new Date() }) {
     if (g.console === 'sega' && !['SEGA'].includes(bytes.subarray(0x100, 0x104).toString('latin1')) && bytes.subarray(0x101, 0x105).toString('latin1') !== 'SEGA') {
       fail(`${where}: это не ROM Sega Mega Drive (нет метки SEGA в заголовке)`)
     }
+    // PlayStation — диск в .zip, внутри .cue и .bin: эмулятор распакует его сам
+    if (g.console === 'psx' && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.cue')))) {
+      fail(`${where}: диск PlayStation должен быть .zip, где лежат .cue и .bin`)
+    }
     const sha256 = createHash('sha256').update(bytes).digest('hex')
     const ext = path.extname(g.rom) || '.bin'
     const url = `files/${sha256}${ext}`
     copy(romPath, path.join(out, url))
-    fs.writeFileSync(path.join(out, `${url}.b64`), bytes.toString('base64'))
+    // Копия в base64 нужна только моду для игры Денди в панели; Sega и PlayStation идут в окне браузера
+    if (g.console === 'nes') fs.writeFileSync(path.join(out, `${url}.b64`), bytes.toString('base64'))
 
     const licenseFiles = (license.files ?? []).map((file) => {
       const from = path.join(content, file)

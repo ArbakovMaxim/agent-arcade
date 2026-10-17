@@ -137,7 +137,7 @@ assert.ok(Object.keys(catalog.games).length >= 12)
   assert.match(textOf(cards[0]), /Thwaite.*аркада.*ещё не играли/)
   assert.equal(lib.focused, cards[0])
   lib.fire('keydown', { code: 'ArrowRight' })
-  assert.deepEqual(library.querySelectorAll('.card').map((c) => c.dataset.game), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break'])
+  assert.deepEqual(library.querySelectorAll('.card').map((c) => c.dataset.game), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break', '5stars'])
   lib.fire('keydown', { code: 'ArrowLeft' })
   lib.fire('keydown', { code: 'ArrowDown' })
   lib.fire('keydown', { code: 'Enter' })
@@ -253,10 +253,10 @@ assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
 const until = async (check) => { for (let i = 0; i < 500 && !check(); i++) await new Promise((r) => setTimeout(r, 2)) }
 const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'games', 'miniplanets', 'miniplanets.bin')))
 {
-  // Вкладка PlayStation из адреса: игр в каталоге нет, есть подсказка и кнопка своего файла с форматами дисков
+  // Вкладка PlayStation из адреса: VoXide из каталога и кнопка своего файла с форматами дисков
   const psx = await makePage(new Map(), { search: '?tab=psx' })
   const text = textOf(psx.byId.library)
-  assert.match(text, /Свободных игр для PlayStation пока нет/)
+  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['voxide'])
   assert.match(text, /BIOS Sony не нужен/)
   const open = psx.byId.library.querySelectorAll('.open-rom')[0]
   assert.equal(open.textContent, 'Открыть свой файл')

@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
+import { workedText } from '../hooks/register.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
@@ -1083,4 +1084,44 @@ test('PlayStation в меню мода: подсказка из каталога
   expect(await desk.find({ key: 'arcade-open-tab-psx' })).toBeUndefined()
   expect(await desk.find({ type: 'Text', text: 'PlayStation идёт в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
   await desk.unmount()
+})
+
+test('PlayStation из каталога: VoXide в терминале на Windows открывается окном ?game=voxide', async ($, on) => {
+  const withPsx = JSON.parse(siteCatalog())
+  withPsx.consoles.push({ id: 'psx', title: 'PlayStation' })
+  const sha = 'd'.repeat(64)
+  withPsx.games.voxide = { console: 'psx', title: 'VoXide', genre: 'песочница', about: 'кубики', keys: '…', rom: { url: `files/${sha}.zip`, base64: `files/${sha}.zip.b64`, sha256: sha, size: 1 } }
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-psx' })
+  expect(await ui.find({ key: 'arcade-game-voxide' })).toMatchObject({ props: { label: 'VoXide' } })
+  expect(await ui.find({ key: 'arcade-open-tab-psx' })).toBeDefined() // и кнопка для своих дисков
+  await ui.press({ key: 'arcade-game-voxide' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=voxide`)
+  await ui.unmount()
+  // В Desktop окна нет — понятное сообщение
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(desk, 'arcade-menu-psx')
+  await desk.press({ key: 'arcade-game-voxide' })
+  expect(await desk.find({ type: 'Text', text: 'Игры PlayStation идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
+  await desk.unmount()
+})
+
+test('время работы агента — секунды, минуты и часы: в вопросе и в шапке панели', async ($, on) => {
+  expect([0, 48, 59, 60, 134, 600, 3599, 3600, 3900, 7260].map(workedText)).toEqual([
+    '0 с', '48 с', '59 с', '1 мин', '2 мин 14 с', '10 мин', '59 мин 59 с', '1 ч', '1 ч 5 мин', '2 ч 1 мин',
+  ])
+  const { clock } = stubs(on)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' }) // без панели: иначе вопроса не будет
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(134_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: 'Агент работает 2 мин 14 с — сыграть?' })).toBeDefined()
+  await band.unmount()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Агент работает 2 мин 14 с' })).toBeDefined()
+  await ui.unmount()
 })

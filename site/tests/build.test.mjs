@@ -27,19 +27,21 @@ for (const [id, game] of Object.entries(catalog.games)) {
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
-  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin)$/, id)
+  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin|zip)$/, id)
   assert.equal(game.rom.sha256, sha256(rom), `${id}: хеш`)
   assert.equal(game.rom.url, `files/${game.rom.sha256}${ext}`)
   assert.equal(game.rom.size, rom.length)
   assert.deepEqual(fs.readFileSync(path.join(out, game.rom.url)), rom, `${id}: файл лежит по хешу`)
-  assert.equal(fs.readFileSync(path.join(out, game.rom.base64), 'utf8'), rom.toString('base64'), `${id}: копия для мода`)
+  if (game.console === 'nes') assert.equal(fs.readFileSync(path.join(out, game.rom.base64), 'utf8'), rom.toString('base64'), `${id}: копия для мода`)
   if (game.console === 'nes') {
     assert.equal(rom.subarray(0, 4).toString('latin1'), 'NES\x1a', `${id}: это ROM Денди`)
     const mapper = (rom[6] >> 4) | (rom[7] & 0xf0)
     assert.ok([0, 1, 2, 3, 4, 7, 66].includes(mapper), `${id}: маппер ${mapper} JSNES поддерживает`)
-  } else {
-    assert.equal(game.console, 'sega', `${id}: приставка`)
+  } else if (game.console === 'sega') {
     assert.equal(rom.subarray(0x100, 0x104).toString('latin1'), 'SEGA', `${id}: это ROM Mega Drive`)
+  } else {
+    assert.equal(game.console, 'psx', `${id}: приставка`)
+    assert.equal(rom.subarray(0, 4).toString('latin1'), 'PK\x03\x04', `${id}: диск PlayStation в .zip`)
   }
   assert.ok(game.license.files.some((f) => /license|notice/i.test(f.name)), `${id}: условия распространения рядом с игрой`)
   assert.match(game.license.source, /^https?:\/\//, `${id}: ссылка на источник`)
@@ -90,7 +92,14 @@ console.log('сборка: все проверки прошли')
 {
   const dir = temp('sega')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sega'), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break', '5stars'])
+  // PlayStation: VoXide — диск в .zip; копии base64 для мода нет — Sega и PlayStation идут только в окне
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['voxide'])
+  assert.match(built.games.voxide.rom.url, /^files\/[0-9a-f]{64}\.zip$/)
+  assert.ok(!fs.existsSync(path.join(dir, `${built.games.voxide.rom.url}.b64`)), 'у PlayStation нет копии base64')
+  assert.ok(!fs.existsSync(path.join(dir, `${built.games.miniplanets.rom.url}.b64`)), 'у Sega нет копии base64')
+  assert.ok(fs.existsSync(path.join(dir, `${built.games.thwaite.rom.url}.b64`)), 'у Денди копия base64 есть')
+  assert.deepEqual(built.games.voxide.license.files.map((f) => f.name), ['LICENSE.txt', 'CREDITS.md', 'voxide-ac39270-src.tar.gz', 'psoxide-sdk-b5365b1-src.tar.gz'])
   assert.equal(built.consoles.find((c) => c.id === 'sega').soon, undefined, 'у Sega больше нет пометки «скоро»')
   assert.equal(built.consoles.find((c) => c.id === 'sega').noncommercial, true, 'ядро Genesis Plus GX — некоммерческое, это видно в каталоге')
   for (const f of ['emulatorjs/loader.js', 'emulatorjs/emulator.css', 'emulatorjs/src/emulator.js', 'emulatorjs/cores/genesis_plus_gx-wasm.data', 'emulatorjs/cores/reports/genesis_plus_gx.json', 'emulatorjs/cores/pcsx_rearmed-wasm.data', 'emulatorjs/cores/reports/pcsx_rearmed.json', 'emulatorjs/localization/ru-RU.json', 'ejs.js', 'mine.js']) {
@@ -103,10 +112,11 @@ console.log('сборка: все проверки прошли')
   const psx = built.consoles.find((c) => c.id === 'psx')
   assert.equal(psx.title, 'PlayStation')
   assert.match(psx.empty, /Открой свой диск/)
-  assert.equal(Object.values(built.games).filter((g) => g.console === 'psx').length, 0)
+  assert.equal(Object.values(built.games).filter((g) => g.console === 'psx').length, 1) // VoXide
   assert.ok(!fs.existsSync(path.join(dir, 'emulatorjs', 'licenses')), 'лицензии — в licenses/, а не рядом с эмулятором')
 }
 // Игра не той приставки — ошибка сборки, а не у пользователей
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'miniplanets').console = 'nes' }), /игра miniplanets: это не ROM Денди/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sega' }), /игра thwaite: это не ROM Sega Mega Drive/)
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'psx' }), /игра thwaite: диск PlayStation должен быть \.zip/)
 console.log('Sega: все проверки прошли')

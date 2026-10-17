@@ -637,6 +637,46 @@
           "games/lunch-break/lunch-break-cd9c569-src.tar.gz"
         ]
       }
+    },
+    {
+      "id": "5stars",
+      "console": "sega",
+      "title": "5 Stars",
+      "genre": "шутер",
+      "about": "Минималистичный космический шутер на одном экране от автора Miniplanets.",
+      "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
+      "rom": "games/5stars/5stars.bin",
+      "license": {
+        "name": "GPL-3.0",
+        "author": "Javier Degirolmo (Sik)",
+        "source": "https://github.com/sikthehedgehog/5stars",
+        "commit": "3379a1fbba025336b8bd0a405956f3a1d46871a3",
+        "files": [
+          "games/5stars/LICENSE.txt",
+          "games/5stars/5stars-3379a1f-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "voxide",
+      "console": "psx",
+      "title": "VoXide",
+      "genre": "песочница",
+      "about": "Выживание и стройка в мире из кубиков, в духе Minecraft, — сделано для настоящей PlayStation. Код GPL, ресурсы CC0, музыка CC BY 4.0.",
+      "keys": "движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
+      "rom": "games/voxide/voxide.zip",
+      "license": {
+        "name": "GPL-2.0-or-later",
+        "author": "EBonura (Bonnie Studios)",
+        "source": "https://github.com/EBonura/voxide",
+        "commit": "ac392709c20ddd688d85881807921edb262b29ac",
+        "files": [
+          "games/voxide/LICENSE.txt",
+          "games/voxide/CREDITS.md",
+          "games/voxide/voxide-ac39270-src.tar.gz",
+          "games/voxide/psoxide-sdk-b5365b1-src.tar.gz"
+        ]
+      }
     }
   ]
 }
