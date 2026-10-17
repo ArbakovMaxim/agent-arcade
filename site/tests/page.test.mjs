@@ -111,6 +111,7 @@ async function makePage(storage, { search = '?game=thwaite', pads = [], net = {}
 const textOf = (node) => (node.textContent || '') + (node.children || []).map(textOf).join('')
 const stats = (storage) => JSON.parse(storage.get('arcade:stats') ?? '{}')
 const catalog = JSON.parse(fs.readFileSync(path.join(DIST, 'catalog.json'), 'utf8'))
+assert.ok(Object.keys(catalog.games).length >= 12)
 
 // --- Библиотека из каталога с сервера ---------------------------------------------------------------
 {
@@ -119,7 +120,7 @@ const catalog = JSON.parse(fs.readFileSync(path.join(DIST, 'catalog.json'), 'utf
   assert.equal(lib.ctx.document.title, 'Arcade')
   const library = lib.byId.library
   let cards = library.querySelectorAll('.card')
-  assert.deepEqual(cards.map((c) => c.dataset.game), ['thwaite', 'croom', 'rfk'])
+  assert.deepEqual(cards.map((c) => c.dataset.game), Object.keys(catalog.games))
   assert.match(textOf(cards[0]), /Thwaite.*аркада.*ещё не играли/)
   assert.equal(lib.focused, cards[0])
   lib.fire('keydown', { code: 'ArrowRight' })
@@ -185,8 +186,8 @@ assert.match(again.byId['overlay-hint'].textContent, /Продолжаем с м
   assert.ok(stats(recordStorage).thwaite.best > 0)
 }
 
-// --- Другие игры Денди запускаются ----------------------------------------------------------------------------------
-for (const id of ['croom', 'rfk']) {
+// --- Все игры каталога запускаются в окне ---------------------------------------------------------------------------
+for (const id of Object.keys(catalog.games).filter((g) => g !== 'thwaite')) {
   const other = await makePage(new Map(), { search: `?game=${id}` })
   other.fire('keydown', { code: 'Enter' })
   const drawn = other.draws

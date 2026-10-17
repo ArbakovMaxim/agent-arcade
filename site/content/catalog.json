@@ -1,7 +1,19 @@
 {
   "consoles": [
-    { "id": "nes", "section": "games", "title": "Денди", "about": "Nintendo Entertainment System", "emulator": "jsnes" },
-    { "id": "sega", "section": "games", "title": "Sega", "about": "Mega Drive", "soon": "Готовим эмулятор Mega Drive и подбираем свободные игры." }
+    {
+      "id": "nes",
+      "section": "games",
+      "title": "Денди",
+      "about": "Nintendo Entertainment System",
+      "emulator": "jsnes"
+    },
+    {
+      "id": "sega",
+      "section": "games",
+      "title": "Sega",
+      "about": "Mega Drive",
+      "soon": "Готовим эмулятор Mega Drive и подбираем свободные игры."
+    }
   ],
   "games": [
     {
@@ -12,13 +24,28 @@
       "about": "Ракеты падают на город — сбивай их фейерверками, пока дома целы.",
       "keys": "прицел — стрелки или WASD · огонь — Z X или J K · Start — Enter",
       "rom": "games/thwaite/thwaite.nes",
-      "score": { "label": "рекорд", "parts": [["0x3d9", 10000], ["0x3da", 100]] },
+      "score": {
+        "label": "рекорд",
+        "parts": [
+          [
+            "0x3d9",
+            10000
+          ],
+          [
+            "0x3da",
+            100
+          ]
+        ]
+      },
       "license": {
         "name": "GPL-3.0-or-later",
         "author": "Damian Yerrick",
         "source": "https://github.com/pinobatch/thwaite-nes",
         "commit": "00e36745188bc165990f60eed6b093c3ce6ad0e3",
-        "files": ["games/thwaite/LICENSE.txt", "games/thwaite/thwaite-nes-00e3674-src.tar.gz"]
+        "files": [
+          "games/thwaite/LICENSE.txt",
+          "games/thwaite/thwaite-nes-00e3674-src.tar.gz"
+        ]
       }
     },
     {
@@ -34,7 +61,10 @@
         "author": "Damian Yerrick",
         "source": "https://github.com/pinobatch/croom-nes",
         "commit": "ed19c3c07ca389b70cf2e0dd2ce0320df28d511d",
-        "files": ["games/croom/LICENSE.txt", "games/croom/croom-nes-ed19c3c-src.tar.gz"]
+        "files": [
+          "games/croom/LICENSE.txt",
+          "games/croom/croom-nes-ed19c3c-src.tar.gz"
+        ]
       }
     },
     {
@@ -45,13 +75,482 @@
       "about": "Робот ищет котёнка среди странных предметов. Ни врагов, ни таймера.",
       "keys": "ходить — стрелки или WASD · Start — Enter",
       "rom": "games/rfk/robotfindskitten.nes",
-      "score": { "label": "котят найдено", "parts": [["0xde", 1]] },
+      "score": {
+        "label": "котят найдено",
+        "parts": [
+          [
+            "0xde",
+            1
+          ]
+        ]
+      },
       "license": {
         "name": "zlib",
         "author": "Damian Yerrick, Leonard Richardson",
         "source": "https://github.com/pinobatch/rfk-nes",
         "commit": "b9764cefd54aca09018e0a8f120f6c538668d76b",
-        "files": ["games/rfk/LICENSE.txt", "games/rfk/rfk-nes-b9764ce-src.tar.gz"]
+        "files": [
+          "games/rfk/LICENSE.txt",
+          "games/rfk/rfk-nes-b9764ce-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "dabg",
+      "console": "nes",
+      "title": "Double Action Blaster Guys",
+      "genre": "платформер",
+      "about": "Аркадный платформер на двоих: 52 уровня, больше 25 видов врагов и встроенный редактор уровней.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/dabg/dabg.nes",
+      "license": {
+        "name": "zlib",
+        "author": "NovaSquirrel",
+        "source": "https://github.com/NovaSquirrel/DABG",
+        "commit": "5ecc60b6af3f726851bfeb1c2555388c5953e0c0",
+        "files": [
+          "games/dabg/LICENSE.txt",
+          "games/dabg/dabg-5ecc60b-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "nova",
+      "console": "nes",
+      "title": "Nova the Squirrel",
+      "genre": "платформер",
+      "about": "Белка Нова попадает в незнакомый мир и копирует способности врагов. Платформер с головоломками.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/nova/nova.nes",
+      "noncommercial": true,
+      "license": {
+        "name": "GPL-3.0 (код), CC BY-NC-SA 4.0 (графика и уровни)",
+        "author": "NovaSquirrel",
+        "source": "https://github.com/NovaSquirrel/NovaTheSquirrel",
+        "commit": "e9e79ae59b188348bd6a87117a2d5c86a34ba433",
+        "files": [
+          "games/nova/LICENSE.txt",
+          "games/nova/NOTICE.txt",
+          "games/nova/nova-e9e79ae-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "sgt-helmet",
+      "console": "nes",
+      "title": "Sgt. Helmet's Training Day",
+      "genre": "экшен",
+      "about": "Учения сержанта Хелмета: пробейся через охрану и заложи пять бомб в злой компьютер.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/sgt-helmet/sgt-helmet.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/sgt-helmet/LICENSE.txt",
+          "games/sgt-helmet/NOTICE.txt",
+          "games/sgt-helmet/sgt-helmet-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "jet-paco",
+      "console": "nes",
+      "title": "Jet Paco",
+      "genre": "приключение",
+      "about": "Космический агент Пако пробирается через вражескую базу.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/jet-paco/jet-paco.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/jet-paco/LICENSE.txt",
+          "games/jet-paco/NOTICE.txt",
+          "games/jet-paco/jet-paco-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "lala-prologue",
+      "console": "nes",
+      "title": "Lala Prologue",
+      "genre": "приключение",
+      "about": "Юная волшебница Лала ищет ключи и предметы в доме, полном чудищ. Пролог к Lala the Magical.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/lala-prologue/lala-prologue.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/lala-prologue/LICENSE.txt",
+          "games/lala-prologue/NOTICE.txt",
+          "games/lala-prologue/lala-prologue-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "cheril-perils",
+      "console": "nes",
+      "title": "Cheril Perils Classic",
+      "genre": "платформер",
+      "about": "Платформер с резонаторами: нажми кнопку — враги замрут, и их можно раздавить. Есть и классический режим.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/cheril-perils/cheril-perils.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/cheril-perils/LICENSE.txt",
+          "games/cheril-perils/NOTICE.txt",
+          "games/cheril-perils/cheril-perils-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "cadaverion",
+      "console": "nes",
+      "title": "Cadàveriön",
+      "genre": "головоломка",
+      "about": "Головоломка в духе Sokoban: двигай статуи на постаменты, чтобы открыть ворота, пока не вышло время.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/cadaverion/cadaverion.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/cadaverion/LICENSE.txt",
+          "games/cadaverion/NOTICE.txt",
+          "games/cadaverion/cadaverion-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "che-man",
+      "console": "nes",
+      "title": "Che-Man",
+      "genre": "приключение",
+      "about": "Разгроми 25 барабанщиков и отнеси 15 медальонов к тотемам. Языки: английский, немецкий и «бадахосский».",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/che-man/che-man.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/che-man/LICENSE.txt",
+          "games/che-man/NOTICE.txt",
+          "games/che-man/che-man-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "espitene",
+      "console": "nes",
+      "title": "Espitene",
+      "genre": "платформер",
+      "about": "Шуточный «Соник»: разгон, кольца разлетаются при ударе, изумруд — во втором акте каждого мира.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/espitene/espitene.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "https://github.com/mojontwins/MK1_NES",
+        "commit": "ec3fbccda9d8ca93e993568c03ba20d7d1570fb5",
+        "files": [
+          "games/espitene/LICENSE.txt",
+          "games/espitene/NOTICE.txt",
+          "games/espitene/espitene-mk1-ec3fbcc-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "f-ff",
+      "console": "nes",
+      "title": "F-FF",
+      "genre": "гонки",
+      "about": "Простые гонки с видом сверху. Select в меню включает режим на двоих с разделённым экраном.",
+      "keys": "руль — стрелки · газ — B (Z или J) · ускорение — A (X или K) · Start — Enter",
+      "rom": "games/f-ff/f-ff.nes",
+      "license": {
+        "name": "MIT",
+        "author": "Pubby",
+        "source": "http://forums.nesdev.com/viewtopic.php?f=33&t=16993",
+        "files": [
+          "games/f-ff/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "lunar-limit",
+      "console": "nes",
+      "title": "Lunar Limit",
+      "genre": "шутер",
+      "about": "Аркадный шутер в духе ранних 80-х: «Мини-Земля» и Лунная пушка против захватчиков.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/lunar-limit/lunar-limit.nes",
+      "license": {
+        "name": "MIT",
+        "author": "Pubby",
+        "source": "https://www.youtube.com/watch?v=_zgmGm-lZfE",
+        "files": [
+          "games/lunar-limit/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "ralph-4",
+      "console": "nes",
+      "title": "RALPH 4",
+      "genre": "головоломка",
+      "about": "Гном Ральф проходит 20 этажей логова злых медведей. Задел медведя — этаж заново.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/ralph-4/ralph-4.nes",
+      "license": {
+        "name": "MIT",
+        "author": "Pubby",
+        "source": "https://www.youtube.com/watch?v=zyHMiZsOfa0",
+        "files": [
+          "games/ralph-4/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "star-evil",
+      "console": "nes",
+      "title": "Star Evil",
+      "genre": "шутер",
+      "about": "Быстрый ремейк шутера Star Evil с Atari 5200.",
+      "keys": "движение — стрелки или WASD · огонь — A или B · Start — Enter",
+      "rom": "games/star-evil/star-evil.nes",
+      "license": {
+        "name": "MIT",
+        "author": "Pubby",
+        "source": "http://forums.nesdev.com/viewtopic.php?f=33&t=16993",
+        "files": [
+          "games/star-evil/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "falling",
+      "console": "nes",
+      "title": "Falling",
+      "genre": "аркада",
+      "about": "Простая аркада на ассемблере 6502 — первая игра автора, сделанная за 11 дней.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/falling/falling.nes",
+      "license": {
+        "name": "MIT",
+        "author": "tragicmuffin",
+        "source": "https://github.com/tragicmuffin/falling-nes",
+        "files": [
+          "games/falling/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "nesertbus",
+      "console": "nes",
+      "title": "NesertBus",
+      "genre": "шуточный симулятор",
+      "about": "Демейк Desert Bus: бесконечная поездка по прямой дороге, автобус всё время уводит вправо.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/nesertbus/nesertbus.nes",
+      "license": {
+        "name": "CC BY-SA 4.0",
+        "author": "Thomas Woods",
+        "source": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "files": [
+          "games/nesertbus/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "super-tilt-bro",
+      "console": "nes",
+      "title": "Super Tilt Bro",
+      "genre": "файтинг",
+      "about": "Файтинг-платформер в духе Super Smash Bros. для Денди.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/super-tilt-bro/super-tilt-bro.nes",
+      "license": {
+        "name": "WTFPL",
+        "author": "Sylvain Gadrat",
+        "source": "https://github.com/sgadrat/super-tilt-bro",
+        "files": [
+          "games/super-tilt-bro/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "sir-ababol",
+      "console": "nes",
+      "title": "Sir Ababol Remastered",
+      "genre": "платформер",
+      "about": "Юный крестоносец сэр Абабол после падения в реку выбирается из пустыни Монегрос.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/sir-ababol/sir-ababol.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "http://www.mojontwins.com/",
+        "files": [
+          "games/sir-ababol/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "wo-xiang-niao-niao",
+      "console": "nes",
+      "title": "Wo Xiang Niao Niao",
+      "genre": "платформер",
+      "about": "Лин Лин должна поймать восемь мух для Короля-лягушки — иначе он не пустит её в туалет.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/wo-xiang-niao-niao/wo-xiang-niao-niao.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "http://www.mojontwins.com/juegos_mojonos/wo-xiang-niao-niao/",
+        "files": [
+          "games/wo-xiang-niao-niao/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "yun",
+      "console": "nes",
+      "title": "Yun",
+      "genre": "платформер",
+      "about": "Вместо птенца редкой цапли из яйца вылупился красный демон с пышной причёской.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/yun/yun.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "http://www.mojontwins.com/juegos_mojonos/yun-v-5-nes/",
+        "files": [
+          "games/yun/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "lala-the-magical",
+      "console": "nes",
+      "title": "Lala the Magical",
+      "genre": "платформер",
+      "about": "Ученица волшебника Лала берёт палочку учителя и идёт за тремя Камнями силы в Небесный дворец.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/lala-the-magical/lala-the-magical.nes",
+      "license": {
+        "name": "LGPL-3.0 (движок), donationware (графика и музыка)",
+        "author": "The Mojon Twins",
+        "source": "http://www.mojontwins.com/",
+        "files": [
+          "games/lala-the-magical/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "super-uwol",
+      "console": "nes",
+      "title": "Super Uwol",
+      "genre": "платформер",
+      "about": "Уволь и супергероиня Мимейд ищут украденные деньги в запутанных подвалах Штормового дворца.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/super-uwol/super-uwol.nes",
+      "license": {
+        "name": "CC BY-NC-SA 3.0",
+        "author": "The Mojon Twins",
+        "source": "http://www.mojontwins.com/",
+        "files": [
+          "games/super-uwol/NOTICE.txt"
+        ]
+      },
+      "noncommercial": true
+    },
+    {
+      "id": "driar",
+      "console": "nes",
+      "title": "Driar",
+      "genre": "головоломка",
+      "about": "Собери все звёзды на каждом из 38 уровней. Ушёл за правый край — появился слева.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/driar/driar.nes",
+      "license": {
+        "name": "CC BY-NC 3.0",
+        "author": "Adolfsson & Eriksson",
+        "source": "https://www.youtube.com/watch?v=EuIuxivrcKU",
+        "files": [
+          "games/driar/NOTICE.txt"
+        ]
+      },
+      "noncommercial": true
+    },
+    {
+      "id": "cybercoaster",
+      "console": "nes",
+      "title": "Cybercoaster",
+      "genre": "гонки",
+      "about": "Гонка на время: три круга по трассе, следи за скоростью.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/cybercoaster/cybercoaster.nes",
+      "license": {
+        "name": "CC BY 4.0",
+        "author": "Fizzer & noby",
+        "source": "https://github.com/nesdev-org/homebrew-db",
+        "files": [
+          "games/cybercoaster/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "brickbreaker",
+      "console": "nes",
+      "title": "Brick Breaker",
+      "genre": "арканоид",
+      "about": "Разбивай кирпичи мячом на время. Участник конкурса NESdev 2016 года.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/brickbreaker/brickbreaker.nes",
+      "license": {
+        "name": "MIT",
+        "author": "Aleff Correa",
+        "source": "https://github.com/AleffCorrea/BrickBreaker",
+        "commit": "625eec4e6c7c0053720a378c91f530f6ce58bcbe",
+        "files": [
+          "games/brickbreaker/LICENSE.txt",
+          "games/brickbreaker/brickbreaker-625eec4-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "sliding-blaster",
+      "console": "nes",
+      "title": "Big City Sliding Blaster",
+      "genre": "шутер",
+      "about": "Шутер с видом сверху в духе Ballmaster: 10 уровней, игра вдвоём и редактор уровней.",
+      "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
+      "rom": "games/sliding-blaster/sliding-blaster.nes",
+      "license": {
+        "name": "zlib",
+        "author": "NovaSquirrel",
+        "source": "https://github.com/NovaSquirrel/SlidingBlaster",
+        "commit": "fc60d79e2fd1684cd4bc6a926458e9a284212b15",
+        "files": [
+          "games/sliding-blaster/LICENSE.txt",
+          "games/sliding-blaster/sliding-blaster-fc60d79-src.tar.gz"
+        ]
       }
     }
   ]

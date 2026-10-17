@@ -92,6 +92,7 @@ export function build({ root, out, now = new Date() }) {
         ? { score: { label: g.score.label, parts: g.score.parts.map(([a, weight]) => [address(a, where), weight]) } }
         : {}),
       rom: { url, base64: `${url}.b64`, sha256, size: bytes.length },
+      ...(g.noncommercial ? { noncommercial: true } : {}), // графика или уровни только для некоммерческого использования
       license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files: licenseFiles },
     }
   }

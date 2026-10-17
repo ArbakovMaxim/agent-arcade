@@ -1,0 +1,10 @@
+Nova the Squirrel © NovaSquirrel
+
+Code: GNU General Public License version 3 or later (LICENSE.txt).
+Assets (graphics, levels, etc.): Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+The game may not be sold without permission. Permission is not granted to use the character
+and design of Nova in anything else.
+
+Source: https://github.com/NovaSquirrel/NovaTheSquirrel
+Also on itch.io: https://novasquirrel.itch.io/nova-the-squirrel

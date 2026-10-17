@@ -3,6 +3,9 @@
 {
   "name": "agent-arcade",
   "compatibility_date": "2026-10-01",
+  // Адрес agent-arcade.<аккаунт>.workers.dev и пробные адреса для веток и pull request
+  "workers_dev": true,
+  "preview_urls": true,
   "assets": {
     "directory": "./dist"
   }

@@ -1,0 +1,8 @@
+Che-Man © The Mojon Twins
+
+Made with MT Engine MK1 NES (AGNES), copyleft The Mojon Twins, GNU Lesser General Public License v3 (LICENSE.txt).
+From the MK1_NES README: the games included in the examples folder are free to produce; the game
+assets (graphics, music, etc.) are donationware. If you like them, you can buy the authors a coffee:
+https://ko-fi.com/I2I0JUJ9
+
+Source: https://github.com/mojontwins/MK1_NES (examples/10_che_man, commit ec3fbccda9d8ca93e993568c03ba20d7d1570fb5)
