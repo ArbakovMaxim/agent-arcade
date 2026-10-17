@@ -118,6 +118,16 @@ function mean(colors) {
   return (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n)
 }
 
+// Кадр Денди → SVG с PNG внутри, для Desktop и VS Code: там нет Image, а Svg они рисуют как картинку.
+// PNG без сжатия занимает около 82 000 символов — в предел Svg (131 072) кадр помещается.
+export function frameToSvg(frame, width, height) {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${WIDTH} ${HEIGHT}">` +
+    `<image width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="none" style="image-rendering:pixelated" ` +
+    `href="data:image/png;base64,${frameToPng(frame)}"/></svg>`
+  )
+}
+
 // Кадр Денди → PNG с палитрой, base64, для Image. На Денди меньше 64 цветов на экране, поэтому пиксель —
 // один байт палитры, и кадр весит около 60 КБ вместо 245 КБ в RGBA. Сжатия нет: блок deflate «как есть».
 export function frameToPng(frame) {

@@ -5,7 +5,7 @@
 
 const WIDTH = 256
 const HEIGHT = 240
-const BAR = 28 // полоска с кнопками внизу страницы игры (web/index.html)
+const BAR = 28 // полоска с кнопками внизу страницы игры на сайте
 const FRAME_X = 32 // рамка окна по ширине, с запасом
 const FRAME_Y = 64 // заголовок и рамка окна по высоте, с запасом
 
@@ -130,14 +130,6 @@ export function windowBounds(screen) {
   const x = screen.x + Math.max(0, screen.width - width - 12)
   const y = screen.y + Math.max(0, Math.round((screen.height - height) / 2))
   return { width, height, x, y }
-}
-
-// Адрес страницы в папке мода: игра, или библиотека, если игра не указана
-export function gameUrl(root, gameId) {
-  const path = root.replace(/\\/g, '/').replace(/\/+$/, '')
-  const prefix = path.startsWith('/') ? 'file://' : 'file:///'
-  const page = encodeURI(`${prefix}${path}/web/index.html`)
-  return gameId ? `${page}?game=${encodeURIComponent(gameId)}` : page
 }
 
 // Команда, которая открывает окно с игрой: { argv, env }.

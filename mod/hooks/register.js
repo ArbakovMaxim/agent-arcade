@@ -1,11 +1,9 @@
 // Arcade — пробная игровая платформа в Claude Code: вопрос «сыграть?», панель с библиотекой игр и Денди.
 // Правило мода: каждый обработчик событий Claude Code только наблюдает и всегда возвращает next(e).
 // Требования проверки модов: обработчик в on(...) — сама функция, а $ всегда пишется как $.ui.open(...) и т. п.
-import { Controller, createNes, frameToPng, frameToQuadrants, screenSize } from './nes-screen.js'
-import THWAITE_ROM from './roms/thwaite.mjs'
-import CROOM_ROM from './roms/croom.mjs'
-import RFK_ROM from './roms/rfk.mjs'
-import { DETECT_ARGV, gameUrl, launchCommand, parseDetection, windowBounds } from './browsers.js'
+import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
+import { bundledCatalog, bundledRom, pageUrl, parseCatalog, restoreCatalog, siteUrl, verifyRom } from './catalog.js'
+import { DETECT_ARGV, launchCommand, parseDetection, windowBounds } from './browsers.js'
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
@@ -33,19 +31,14 @@ const PLAYER_COLOR = 0x2e7d32
 
 const LAUNCH_TIMEOUT_MS = 20_000 // сколько ждать PowerShell, который ищет браузеры или открывает окно
 
-// Меню: главное — приставки; приставка — её игры; настройки — где открывать, графика, проверка клавиш
-const CONSOLES = [
-  { id: 'nes', title: 'Денди' },
-  { id: 'sega', title: 'Sega', soon: 'Скоро: эмулятор Mega Drive и свободные игры.' },
-]
+const ROM_CACHE_LIMIT = 8 // сколько скачанных игр держать в хранилище мода (у него предел 4 МиБ на всё)
+const REMOTE_MAX_WIDTH = 768 // в Desktop и VS Code экран Денди не шире ×3
+const HOLD_TICKS_FIRST = 8 // поле ввода VS Code: кнопка держится ≈260 мс после нажатия…
+const HOLD_TICKS_REPEAT = 4 // …и ≈130 мс после каждого повтора, пока идёт автоповтор
 
-// console — в какой приставке игра; rom — игра для Денди; web — у игры есть страница для окна браузера (web/)
-const GAMES = [
-  { id: 'thwaite', console: 'nes', title: 'Thwaite', note: 'сбивай ракеты над городом. Damian Yerrick, GPL-3.0', rom: THWAITE_ROM, web: true },
-  { id: 'croom', console: 'nes', title: 'Concentration Room', note: 'найди пару. Damian Yerrick, GPL-3.0', rom: CROOM_ROM, web: true },
-  { id: 'rfk', console: 'nes', title: 'robotfindskitten', note: 'робот ищет котёнка. Damian Yerrick, zlib', rom: RFK_ROM, web: true },
-  { id: 'field', console: null, title: 'Проверка клавиш', note: 'поле: видно, что нажато и что мод считает зажатым' },
-]
+// Меню: главное — приставки; приставка — её игры; настройки — где открывать, графика, проверка клавиш.
+// Приставки и игры приходят из каталога сайта; проверка клавиш — своя, только для панели.
+const FIELD = { id: 'field', console: null, title: 'Проверка клавиш', note: 'поле: видно, что нажато и что мод считает зажатым' }
 
 // Действия и клавиши по умолчанию для частых раскладок: EN (QWERTY, QWERTZ), FR (AZERTY), RU, BY, UA, и стрелки.
 // Одна физическая клавиша в разных раскладках даёт разные буквы — все они ведут к одному действию.
@@ -101,12 +94,28 @@ let screen = null // размер экрана Денди при последн�
 let graphics = 'auto' // выбор человека, хранится в $.store
 let pixelsFailed = false // в этой сессии терминал отказался показывать картинки
 let denies = 0 // отказов показать кадр подряд
-let isWindows = false // окно браузера пока умеем открывать только на Windows
 let profileRoot = '' // папка для отдельного профиля браузера с игрой: %LOCALAPPDATA%\claude-arcade
 let detection = null // что нашёл поиск браузеров: { browsers, defaultId, screen }; null — ещё ищем
 let opener = null // где открывать игры: 'window' или 'pane'; null — по умолчанию (на Windows — окно)
 let browserChoice = 'default' // каким браузером: 'default' или id найденного
 let libraryNotice = '' // что случилось при последнем запуске окна
+let catalog = bundledCatalog() // каталог: с сайта, из сохранённой копии или запас из самого мода
+let platform = null // windows | mac | linux; null — пока не знаем, окно браузера не предлагаем
+let remoteSurface = null // панель с игрой нарисована в Desktop или VS Code — кадры идут перерисовкой, а не blit
+let holdTicks = {} // поле ввода VS Code: кнопка Денди → сколько шагов ещё держать
+
+function consoles() {
+  return catalog.consoles
+}
+
+// Игры каталога и проверка клавиш; note — строка под названием в меню
+function games() {
+  return [...catalog.games.map((g) => ({ ...g, note: `${g.genre} — ${g.about}`, web: true })), FIELD]
+}
+
+function gameById(id) {
+  return games().find((g) => g.id === id)
+}
 
 function clockTime() {
   const d = new Date()
@@ -176,6 +185,11 @@ function stepNes() {
     const action = actionOf(key)
     if (action) wanted.add(action.id)
   }
+  for (const [id, left] of Object.entries(holdTicks)) {
+    if (left > 0) wanted.add(id)
+    if (left <= 1) delete holdTicks[id]
+    else holdTicks[id] = left - 1
+  }
   for (const id of taps) {
     if (down.has(id)) {
       nes.buttonUp(1, nesButton(id))
@@ -203,6 +217,15 @@ function releaseAll() {
   down = new Set()
   taps = new Set()
   heldKeys = []
+  holdTicks = {}
+}
+
+// Клавиша из поля ввода VS Code: нажатие плюс удержание, пока идёт автоповтор
+function typeKey(key) {
+  const save = pressKey(key)
+  const action = actionOf(key)
+  if (action && nesView() && mode === 'play') holdTicks[action.id] = holdTicks[action.id] ? HOLD_TICKS_REPEAT : HOLD_TICKS_FIRST
+  return save
 }
 
 // Буквы и стрелки; Enter, Tab, пробел и цифры в играх не используются — ими отвечают Claude Code
@@ -212,7 +235,7 @@ function usableKey(key) {
 
 function toLibrary() {
   releaseAll()
-  menu = GAMES.find((g) => g.id === view)?.console ?? 'settings' // в список той же приставки
+  menu = gameById(view)?.console ?? 'settings' // в список той же приставки
   view = 'library'
   mode = 'play'
   notice = ''
@@ -275,14 +298,14 @@ function readInput(data) {
   return { save, redraw }
 }
 
-function launch(id) {
+// Открывает игру в панели; romBase64 — сам ROM для игр Денди (встроенный, из кеша или скачанный)
+function launch(id, romBase64) {
   releaseAll()
   view = id
   lastGame = id
   notice = ''
-  const game = GAMES.find((g) => g.id === id)
-  if (game?.rom && nesGame !== id) {
-    nes = createNes(game.rom, (f) => {
+  if (romBase64 && nesGame !== id) {
+    nes = createNes(romBase64, (f) => {
       frame = f
     })
     nesGame = id
@@ -292,7 +315,7 @@ function launch(id) {
 
 // Сейчас в панели игра для Денди
 function nesView() {
-  return Boolean(GAMES.find((g) => g.id === view)?.rom)
+  return Boolean(gameById(view)?.rom)
 }
 
 // Отмечает панель открытой; саму панель открывает вызывающий код через $.ui.open
@@ -323,11 +346,19 @@ function screenContent() {
 }
 
 function windowMode() {
-  return isWindows && (opener ?? 'window') === 'window'
+  return platform !== null && (opener ?? 'window') === 'window'
+}
+
+// Открывать ли игру окном браузера на этой поверхности. В терминале — по выбору в настройках (по умолчанию да).
+// В VS Code по умолчанию игра в панели, окно — только если его выбрали явно. В Desktop мод не запускает программы.
+function opensWindow(surface) {
+  if (!windowMode()) return false
+  if (surface === 'terminal') return true
+  return surface === 'vscode' && opener === 'window'
 }
 
 function webGame(id) {
-  return GAMES.find((g) => g.id === id)?.web === true
+  return gameById(id)?.web === true
 }
 
 // Чем открыть окно: выбранный браузер, браузер по умолчанию, если его узнали, или то, что открывает ссылки
@@ -338,15 +369,20 @@ function windowTarget() {
   return browser ? { kind: 'browser', browser } : { kind: 'default' }
 }
 
-function windowCommand(root, id) {
-  return launchCommand(windowTarget(), gameUrl(root, id), windowBounds(detection?.screen ?? null), profileRoot)
+// Команда, которая открывает окно с игрой (или с библиотекой, если id нет) на сайте Arcade.
+// На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
+function windowCommand(id) {
+  const url = pageUrl(id)
+  if (platform === 'mac') return { argv: ['open', url], env: {} }
+  if (platform === 'linux') return { argv: ['xdg-open', url], env: {} }
+  return launchCommand(windowTarget(), url, windowBounds(detection?.screen ?? null), profileRoot)
 }
 
 // Что сказать после попытки открыть окно
 function launchNotice(result, id) {
-  const title = id ? GAMES.find((g) => g.id === id)?.title ?? id : 'Arcade'
+  const title = id ? gameById(id)?.title ?? id : 'Arcade'
   if (result?.exitCode === 0) {
-    const target = windowTarget()
+    const target = platform === 'windows' ? windowTarget() : { kind: 'default' }
     const where = target.kind === 'browser' ? target.browser.name : 'браузере по умолчанию'
     return id
       ? `${title} открыт в ${where}. Игра стоит на паузе, пока окно не в фокусе.`
@@ -358,7 +394,7 @@ function launchNotice(result, id) {
 
 // Варианты «где открывать» по кругу: браузер по умолчанию, каждый найденный браузер, панель
 function openerOptions() {
-  const browsers = detection?.browsers ?? []
+  const browsers = platform === 'windows' ? detection?.browsers ?? [] : []
   return [
     { opener: 'window', browser: 'default' },
     ...browsers.map((b) => ({ opener: 'window', browser: b.id })),
@@ -368,6 +404,7 @@ function openerOptions() {
 
 function openerLabel() {
   if (!windowMode()) return 'Открывать: здесь, в панели'
+  if (platform !== 'windows') return 'Открывать: окно браузера по умолчанию'
   const searching = detection === null ? ' (ищу браузеры…)' : ''
   const browsers = detection?.browsers ?? []
   if (browserChoice !== 'default') {
@@ -388,7 +425,7 @@ function plural(n, one, few, many) {
 }
 
 function consoleNote(c) {
-  const count = GAMES.filter((g) => g.console === c.id).length
+  const count = games().filter((g) => g.console === c.id).length
   return count ? `${count} ${plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
@@ -399,12 +436,13 @@ function settingsNote() {
 
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
-  const c = CONSOLES.find((x) => x.id === menu)
+  const c = consoles().find((x) => x.id === menu)
   return c ? `Arcade · ${c.title}` : 'Arcade'
 }
 
 // Где откроется игра — для подсказки под списком игр
 function whereText() {
+  if (platform !== 'windows') return 'в окне браузера по умолчанию'
   const browsers = detection?.browsers ?? []
   if (browserChoice !== 'default') {
     const chosen = browsers.find((b) => b.id === browserChoice)
@@ -422,8 +460,9 @@ export function register(on) {
   on('session.start', async ($, e, next) => {
     try {
       keymap = restoreKeymap(await $.store.get('keys'))
+      catalog = restoreCatalog(await $.store.get('catalog')) ?? catalog
       const savedGame = await $.store.get('lastGame')
-      if (GAMES.some((g) => g.id === savedGame)) lastGame = savedGame
+      if (games().some((g) => g.id === savedGame)) lastGame = savedGame
       const savedGraphics = await $.store.get('graphics')
       if (GRAPHICS.includes(savedGraphics)) graphics = savedGraphics
       const savedOpener = await $.store.get('opener')
@@ -431,11 +470,38 @@ export function register(on) {
         opener = savedOpener.opener
         browserChoice = typeof savedOpener.browser === 'string' ? savedOpener.browser : 'default'
       }
-      isWindows = (await $.env.get('OS')) === 'Windows_NT'
       const localAppData = await $.env.get('LOCALAPPDATA')
       profileRoot = localAppData ? `${localAppData}\\claude-arcade` : ''
-      // Браузеры ищем в фоне: PowerShell стартует за полсекунды, сессию из-за него не держим
-      if (isWindows) {
+      if ((await $.env.get('OS')) === 'Windows_NT') platform = 'windows'
+      // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
+      $.clock.after(150, async () => {
+        try {
+          const response = await $.http.fetch(siteUrl('catalog.json'))
+          const fresh = response.ok ? parseCatalog(response.text) : null
+          if (fresh) {
+            catalog = fresh
+            await $.store.set('catalog', { consoles: fresh.consoles, games: fresh.games })
+            $.ui.invalidate('ui.render')
+          }
+        } catch (err) {
+          log(`каталог с сайта не получен: ${err?.message ?? err}`)
+        }
+      })
+      if (!platform) {
+        $.clock.after(100, async () => {
+          try {
+            const result = await $.process.run(['uname', '-s'], { timeoutMs: 5000 })
+            const name = result.stdout.trim()
+            if (name === 'Darwin') platform = 'mac'
+            if (name === 'Linux') platform = 'linux'
+            $.ui.invalidate('ui.render')
+          } catch {
+            // Нет uname — не macOS и не Linux; играем в панели
+          }
+        })
+      }
+      // Браузеры на Windows ищем в фоне: PowerShell стартует за полсекунды, сессию из-за него не держим
+      if (platform === 'windows') {
         $.clock.after(100, async () => {
           try {
             const result = await $.process.run(DETECT_ARGV, { timeoutMs: LAUNCH_TIMEOUT_MS })
@@ -457,9 +523,16 @@ export function register(on) {
         }
         if (askVisible || paneOpen) $.ui.invalidate('ui.render')
       })
-      // Игровой цикл Денди: идёт, только пока открыта панель с Thwaite
+      // Игровой цикл Денди: идёт, только пока открыта панель с игрой.
+      // В Desktop и VS Code кадр уходит перерисовкой панели (Svg), в терминале — через $.ui.blit.
       $.clock.every(TICK_MS, async () => {
-        if (!nesView() || !paneOpen || !nes || !screen) return
+        if (!nesView() || !paneOpen || !nes) return
+        if (remoteSurface) {
+          stepNes()
+          $.ui.invalidate('ui.render')
+          return
+        }
+        if (!screen) return
         stepNes()
         const pixels = pixelMode()
         let shown = false
@@ -592,7 +665,7 @@ export function register(on) {
             if (windowMode() && webGame(lastGame)) {
               asked = true
               askVisible = false
-              const command = windowCommand($.plugin.root, lastGame)
+              const command = windowCommand(lastGame)
               try {
                 const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                 libraryNotice = launchNotice(result, lastGame)
@@ -627,10 +700,11 @@ export function register(on) {
   // после клика по экрану, в любой раскладке.
   on('ui.render', { component: 'Pane' }, async ($, e, next) => {
     if (e.requestId !== PANE) return next(e)
-    const { Box, Text, Raster, Image, Button, Client } = $.ui.resolve(e)
+    const { Box, Text, Raster, Image, Button, Client, Svg, Input } = $.ui.resolve(e)
     const now = await $.clock.now()
     const terminal = e.surface === 'terminal'
-    const game = GAMES.find((g) => g.id === view)
+    const game = gameById(view)
+    remoteSurface = terminal ? null : e.surface
 
     const header = Box({
       flexDirection: 'row',
@@ -643,6 +717,31 @@ export function register(on) {
     const eventLines = (events.length ? events : ['пока ничего']).slice(0, 3).map((text) => Text({ dimColor: true, children: [text] }))
 
     if (!game) {
+      // ROM для игры в панели: встроенный, из кеша мода или скачанный с сайта — всегда сверяется с хешем каталога
+      const obtainRom = async (g) => {
+        const sha = g.rom.sha256
+        const bundled = bundledRom(sha)
+        if (bundled) return bundled
+        const cached = await $.store.get(`rom:${sha}`)
+        if (await verifyRom(cached, sha)) return cached
+        libraryNotice = `Скачиваю ${g.title}…`
+        $.ui.invalidate('ui.render')
+        try {
+          const response = await $.http.fetch(siteUrl(g.rom.base64))
+          const text = response.ok ? response.text.trim() : ''
+          if (!(await verifyRom(text, sha))) throw new Error(response.ok ? 'файл повреждён' : `сайт ответил ${response.status}`)
+          const index = await $.store.get('roms')
+          const keep = [...(Array.isArray(index) ? index : []).filter((x) => x !== sha), sha]
+          for (const old of keep.slice(0, -ROM_CACHE_LIMIT)) await $.store.delete(`rom:${old}`)
+          await $.store.set(`rom:${sha}`, text)
+          await $.store.set('roms', keep.slice(-ROM_CACHE_LIMIT))
+          libraryNotice = ''
+          return text
+        } catch (err) {
+          libraryNotice = `Не получилось скачать ${g.title}: ${err?.message ?? err}`
+          return null
+        }
+      }
       // Игра открывается в окне браузера или здесь, в панели
       const gameButton = (g, focus) =>
         Button({
@@ -651,16 +750,19 @@ export function register(on) {
           ...(focus ? { autoFocus: true } : {}),
           onPress: async () => {
             lastGame = g.id
-            if (windowMode() && g.web) {
+            if (opensWindow(e.surface) && g.web) {
               libraryNotice = 'Открываю окно…'
               $.ui.invalidate('ui.render')
-              const command = windowCommand($.plugin.root, g.id)
+              const command = windowCommand(g.id)
               try {
                 const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                 libraryNotice = launchNotice(result, g.id)
               } catch (err) {
                 libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
               }
+            } else if (g.rom) {
+              const rom = await obtainRom(g)
+              if (rom) launch(g.id, rom)
             } else {
               launch(g.id)
             }
@@ -682,11 +784,11 @@ export function register(on) {
 
       let items
       if (menu === 'settings') {
-        const field = GAMES.find((g) => g.id === 'field')
+        const field = FIELD
         items = [
           back,
           gap,
-          ...(isWindows
+          ...(platform
             ? [
                 Button({
                   key: 'arcade-opener',
@@ -706,9 +808,11 @@ export function register(on) {
                   },
                 }),
                 dim(
-                  windowMode()
-                    ? '  окно встаёт справа от терминала; пауза, пока оно не в фокусе; прогресс сохраняется'
-                    : '  символы или пиксели — зависит от терминала',
+                  !windowMode()
+                    ? '  символы или пиксели — зависит от терминала'
+                    : platform === 'windows'
+                      ? '  окно встаёт справа от терминала; пауза, пока оно не в фокусе; прогресс сохраняется'
+                      : '  игра откроется в браузере; пауза, пока окно не в фокусе; прогресс сохраняется',
                 ),
               ]
             : []),
@@ -718,7 +822,7 @@ export function register(on) {
                 Button({
                   key: 'arcade-graphics',
                   label: graphicsLabel(),
-                  ...(isWindows ? {} : { autoFocus: true }),
+                  ...(platform ? {} : { autoFocus: true }),
                   onPress: async () => {
                     graphics = GRAPHICS[(GRAPHICS.indexOf(graphics) + 1) % GRAPHICS.length]
                     pixelsFailed = false // «авто» заново проверит, умеет ли терминал картинки
@@ -736,8 +840,8 @@ export function register(on) {
           ...hint,
         ]
       } else if (menu !== 'main') {
-        const c = CONSOLES.find((x) => x.id === menu) ?? CONSOLES[0]
-        const list = GAMES.filter((g) => g.console === c.id)
+        const c = consoles().find((x) => x.id === menu) ?? consoles()[0]
+        const list = games().filter((g) => g.console === c.id)
         const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
         items = [
           back,
@@ -745,23 +849,23 @@ export function register(on) {
           ...(list.length
             ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
             : [Text({ children: [c.soon ?? 'Здесь пока нет игр.'] })]),
-          ...(windowMode() && list.length ? [gap, dim(`Игры открываются ${whereText()}.`)] : []),
+          ...(list.length ? [gap, dim(`Игры открываются ${opensWindow(e.surface) ? whereText() : 'здесь, в панели'}.`)] : []),
           ...noticeLines,
           ...hint,
         ]
       } else {
         items = [
-          ...CONSOLES.flatMap((c) => [
+          ...consoles().flatMap((c) => [
             Button({
               key: `arcade-menu-${c.id}`,
               label: c.title,
-              ...((menuFrom ?? CONSOLES[0].id) === c.id ? { autoFocus: true } : {}),
+              ...((menuFrom ?? consoles()[0]?.id) === c.id ? { autoFocus: true } : {}),
               onPress: open(c.id),
             }),
             dim(`  ${consoleNote(c)}`),
           ]),
           gap,
-          ...(windowMode()
+          ...(windowMode() && e.surface !== 'desktop'
             ? [
                 Button({
                   key: 'arcade-open-library',
@@ -769,7 +873,7 @@ export function register(on) {
                   onPress: async () => {
                     libraryNotice = 'Открываю окно…'
                     $.ui.invalidate('ui.render')
-                    const command = windowCommand($.plugin.root, null)
+                    const command = windowCommand(null)
                     try {
                       const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                       libraryNotice = launchNotice(result, null)
@@ -798,32 +902,106 @@ export function register(on) {
       return Box({ flexDirection: 'column', children: [header, gap, ...items] })
     }
 
-    if (!terminal) {
-      return Box({
-        flexDirection: 'column',
-        children: [
-          header,
-          Text({ children: ['Игры пока работают только в терминале.'] }),
-          Button({
-            key: 'arcade-library',
-            label: 'Библиотека',
-            autoFocus: true,
-            onPress: () => {
-              toLibrary()
-              $.ui.invalidate('ui.render')
-            },
-          }),
-        ],
-      })
-    }
-
-    // Подсказка, или назначение клавиш, или сообщение мода
-    const line =
+    const libraryButton = Button({
+      key: 'arcade-library',
+      label: 'Библиотека',
+      onPress: () => {
+        toLibrary()
+        $.ui.invalidate('ui.render')
+      },
+    })
+    const moves = `${first('up')} ${first('left')} ${first('down')} ${first('right')} или стрелки`
+    const legend =
+      game.id === 'thwaite'
+        ? `прицел ${moves} · огонь ${first('b')} ${first('a')} · Start ${first('start')}`
+        : `движение ${moves} · A ${first('a')} · B ${first('b')} · Start ${first('start')}`
+    // Назначение клавиш или сообщение мода; иначе — подсказка для этой поверхности
+    const message =
       mode === 'assign'
         ? Text({ color: 'yellow', children: [`${notice} Нажми клавишу для «${ACTIONS[assignStep].label}» (${assignStep + 1} из ${ACTIONS.length})`] })
         : notice
           ? Text({ color: 'yellow', children: [notice] })
-          : Text({ dimColor: true, children: ['Кликни по экрану — играть · Esc — к агенту · Backspace — библиотека'] })
+          : null
+
+    // Desktop и VS Code: кадр Денди — PNG внутри Svg, панель перерисовывается каждый шаг игры
+    if (!terminal) {
+      if (!game.rom) {
+        return Box({
+          flexDirection: 'column',
+          children: [header, Text({ children: ['Проверка клавиш работает только в терминале.'] }), libraryButton],
+        })
+      }
+      const scale = Math.max(1, Math.min(REMOTE_MAX_WIDTH / 256, Math.floor(((e.props.bodyColumns ?? 60) * 7.5) / 256)))
+      const width = 256 * scale
+      const height = 240 * scale
+      const picture = Svg({ source: frameToSvg(frame, width, height), alt: game.title, width, height })
+      // В Desktop клавиши ловит Client поверх экрана, как в терминале; в VS Code его пока нет
+      if (e.surface === 'desktop') {
+        return Box({
+          flexDirection: 'column',
+          children: [
+            header,
+            message ?? Text({ dimColor: true, children: ['Кликни по экрану — играть · Esc — к агенту · Backspace — библиотека'] }),
+            Box({
+              children: [
+                picture,
+                Box({
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  children: [Client({ key: INPUT, module: './input.js', props: { focused: e.props.isFocused }, width: '100%', height: '100%' })],
+                }),
+              ],
+            }),
+            Text({ dimColor: true, children: [legend] }),
+            libraryButton,
+          ],
+        })
+      }
+      // В VS Code Client пока нет: клавиши — в поле «Управление», кнопки — мышью
+      const pad = (id, label) =>
+        Button({
+          key: `arcade-pad-${id}`,
+          label,
+          onPress: () => {
+            taps.add(id)
+            holdTicks[id] = HOLD_TICKS_FIRST
+          },
+        })
+      return Box({
+        flexDirection: 'column',
+        children: [
+          header,
+          message ?? Text({ dimColor: true, children: ['Кликни в поле «Управление» и жми клавиши · или кнопки мышью'] }),
+          picture,
+          Input({
+            key: 'arcade-control',
+            label: 'Управление',
+            placeholder: 'кликни сюда и жми клавиши',
+            value: '',
+            onInput: async (value) => {
+              if (!value) return
+              const save = typeKey(Array.from(value).at(-1).toLowerCase())
+              $.ui.invalidate('ui.render')
+              if (save) await $.store.set('keys', keymap)
+            },
+            onSubmit: () => {
+              $.ui.invalidate('ui.render')
+            },
+          }),
+          Box({
+            flexDirection: 'row',
+            columnGap: 1,
+            children: [pad('left', '←'), pad('up', '↑'), pad('down', '↓'), pad('right', '→'), pad('b', 'B'), pad('a', 'A'), pad('start', 'Start'), pad('select', 'Select')],
+          }),
+          Text({ dimColor: true, children: [legend] }),
+          libraryButton,
+        ],
+      })
+    }
+
+    // Терминал: подсказка, или назначение клавиш, или сообщение мода
+    const line = message ?? Text({ dimColor: true, children: ['Кликни по экрану — играть · Esc — к агенту · Backspace — библиотека'] })
 
     // Экран игры и Client поверх него: клики и клавиши над экраном попадают в hooks/input.js.
     // Других кнопок в игре нет, чтобы клавиатуру у экрана ничто не перехватывало.
@@ -847,11 +1025,6 @@ export function register(on) {
       const picture = pixels
         ? Image({ key: 'arcade-screen', columns: screen.columns, rows: screen.rows, alt: `${game.title} — этот терминал не показывает картинки`, ...content })
         : Raster({ key: 'arcade-screen', columns: screen.columns, rows: screen.rows, ...content })
-      const moves = `${first('up')} ${first('left')} ${first('down')} ${first('right')} или стрелки`
-      const legend =
-        game.id === 'thwaite'
-          ? `прицел ${moves} · огонь ${first('b')} ${first('a')} · Start ${first('start')}`
-          : `движение ${moves} · A ${first('a')} · B ${first('b')} · Start ${first('start')}`
       return Box({
         flexDirection: 'column',
         children: [header, line, withInput(picture, screen.columns, screen.rows), Text({ dimColor: true, children: [legend] })],

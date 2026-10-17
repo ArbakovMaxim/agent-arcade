@@ -1,5 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { encodePowerShell, gameUrl, launchCommand, parseDetection, windowBounds } from '../hooks/browsers.js'
+import { encodePowerShell, launchCommand, parseDetection, windowBounds } from '../hooks/browsers.js'
+import { SITE, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
+import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -37,8 +39,38 @@ const DETECTED = JSON.stringify({
 })
 const WINDOWS = { OS: 'Windows_NT', LOCALAPPDATA: 'C:\\Users\\max\\AppData\\Local' }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0 }: any = {}) {
-  const saved = new Map<string, unknown>()
+// Каталог, который отдаёт сайт: три игры Денди (они же лежат в моде) и сколько угодно своих
+const SHA = {
+  thwaite: 'ee51cd9562f28195ba015d9857c6c4fc9bf67cdfb213e95f655e586b92195173',
+  croom: 'c24c1aec75242d3bc80b35c15deb705d35f4cd778b22d1cf1df8b38d8dd62726',
+  rfk: '0778e86400a536407fd94d10619208c06dd120d0f5f28ad79778690048dd0091',
+}
+function siteGame(title: string, sha: string) {
+  return { console: 'nes', title, genre: 'аркада', about: `${title} с сайта`, keys: '…', rom: { url: `files/${sha}.nes`, base64: `files/${sha}.nes.b64`, sha256: sha, size: 1 } }
+}
+function siteCatalog(extra: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    version: 1,
+    consoles: [
+      { id: 'nes', title: 'Денди' },
+      { id: 'sega', title: 'Sega', soon: 'Скоро.' },
+    ],
+    games: { thwaite: siteGame('Thwaite', SHA.thwaite), croom: siteGame('Concentration Room', SHA.croom), rfk: siteGame('robotfindskitten', SHA.rfk), ...extra },
+  })
+}
+
+// Игра, которой нет в моде: ROM Thwaite с одним изменённым байтом, её хеш и base64
+async function probeRom() {
+  const bytes = Uint8Array.from(atob(THWAITE_ROM), (c) => c.charCodeAt(0))
+  bytes[20000] ^= 0xff
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
+  const sha = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
+  return { sha, base64: bytes.toBase64() }
+}
+
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '' }: any = {}) {
+  const saved = new Map<string, unknown>(Object.entries(stored))
+  const fetches: string[] = []
   const opened: string[] = []
   const blits: any[] = []
   const launches: any[] = []
@@ -46,6 +78,11 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   const clock = mock.clock(on)
   mock.env(on, env)
   on('process.run', ($: any, e: any) => {
+    if (e.argv[0] === 'uname') return { value: { exitCode: 0, stdout: `${uname}\n`, stderr: '' } }
+    if (e.argv[0] === 'open' || e.argv[0] === 'xdg-open') {
+      launches.push({ argv: e.argv, env: e.init?.env ?? {} })
+      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    }
     if (e.init?.env?.ARCADE_URL) {
       launches.push({ argv: e.argv, env: e.init.env })
       return { value: { exitCode: launchExit, stdout: '', stderr: launchExit ? 'Start-Process : This command cannot be run.' : '' } }
@@ -57,6 +94,19 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('store.set', ($: any, e: any) => {
     saved.set(e.key, e.value)
     return { value: undefined }
+  })
+  on('store.delete', ($: any, e: any) => {
+    saved.delete(e.key)
+    return { value: undefined }
+  })
+  // Сайт Arcade: каталог и файлы игр; site: null — сайт недоступен
+  on('http.fetch', ($: any, e: any) => {
+    fetches.push(e.url)
+    if (site === null) return { deny: 'getaddrinfo ENOTFOUND agent-arcade.fefaodessa.workers.dev' }
+    if (e.url === `${SITE}/catalog.json`) return { value: { status: 200, ok: true, headers: {}, text: site } }
+    const path = e.url.slice(SITE.length + 1)
+    if (path in files) return { value: { status: 200, ok: true, headers: {}, text: files[path] } }
+    return { value: { status: 404, ok: false, headers: {}, text: 'not found' } }
   })
   on('command.register', () => ({ value: undefined }))
   on('ui.toast', ($: any, e: any) => {
@@ -80,7 +130,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('classic.PostToolUse', () => ({}))
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts }
+  return { saved, opened, blits, clock, launches, toasts, fetches }
 }
 
 async function start($: any) {
@@ -134,7 +184,7 @@ test('меню: Денди и Sega, в Денди — три игры, «Наз�
   await ui.press({ key: 'arcade-back' })
   await ui.press({ key: 'arcade-menu-sega' })
   expect(await ui.find({ type: 'Text', text: 'Arcade · Sega' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /Скоро: эмулятор Mega Drive/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Готовим эмулятор Mega Drive/ })).toBeDefined()
 
   await ui.press({ key: 'arcade-back' })
   expect(await ui.find({ key: 'arcade-menu-sega' })).toMatchObject({ props: { autoFocus: true } }) // фокус там, откуда вернулись
@@ -304,19 +354,6 @@ test('подсказка «Кликни сюда» видна до клика и
   await ui.unmount()
 })
 
-test('в Desktop игры не запускаются', async ($, on) => {
-  const { blits, clock } = stubs(on)
-  await start($)
-  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  await go(ui, 'arcade-game-thwaite')
-  expect(await ui.find({ type: 'Text', text: 'Игры пока работают только в терминале.' })).toBeDefined()
-  await clock.advance(1000)
-  expect(blits.length).toBe(0)
-  await ui.press({ key: 'arcade-library' })
-  expect(await ui.find({ key: 'arcade-game-thwaite' })).toBeDefined() // снова список игр Денди
-  await ui.unmount()
-})
-
 test('через 20 секунд работы агента появляется вопрос, «Играть» открывает панель', async ($, on) => {
   const { opened, clock } = stubs(on)
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
@@ -364,7 +401,7 @@ test('Windows: Thwaite открывается окном Chrome справа, с
   const { argv, env } = launches[0]
   expect(argv.slice(0, 6)).toEqual(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand'])
   expect(env.ARCADE_BROWSER).toBe('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe')
-  expect(env.ARCADE_URL).toMatch(/^file:\/\/.*\/web\/index\.html\?game=thwaite$/)
+  expect(env.ARCADE_URL).toBe(`${SITE}/?game=thwaite`)
   expect(env.ARCADE_ARGS).toContain(`--app="${env.ARCADE_URL}"`)
   expect(env.ARCADE_ARGS).toContain('--window-size=800,812 --window-position=1108,114')
   expect(env.ARCADE_ARGS).toContain('--user-data-dir="C:\\Users\\max\\AppData\\Local\\claude-arcade\\chrome"')
@@ -446,10 +483,9 @@ test('browsers.js: разбор ответа, размер окна, адрес 
   expect(windowBounds({ x: 0, y: 0, width: 3840, height: 2100 })).toMatchObject({ width: 1056 }) // не больше ×4
   expect(windowBounds(null)).toBe(null)
 
-  expect(gameUrl('C:\\Users\\Иван Петров\\mods\\arcade\\', 'thwaite')).toBe(
-    'file:///C:/Users/%D0%98%D0%B2%D0%B0%D0%BD%20%D0%9F%D0%B5%D1%82%D1%80%D0%BE%D0%B2/mods/arcade/web/index.html?game=thwaite',
-  )
-  expect(gameUrl('/home/max/arcade', 'thwaite')).toBe('file:///home/max/arcade/web/index.html?game=thwaite')
+  expect(pageUrl('thwaite')).toBe('https://agent-arcade.fefaodessa.workers.dev/?game=thwaite')
+  expect(pageUrl('robot kitten')).toBe('https://agent-arcade.fefaodessa.workers.dev/?game=robot%20kitten')
+  expect(pageUrl(null)).toBe('https://agent-arcade.fefaodessa.workers.dev/')
 
   const encoded = encodePowerShell('Write-Output "Привет"')
   const bytes = Uint8Array.fromBase64(encoded)
@@ -483,11 +519,184 @@ test('Windows: «Открыть Arcade» открывает окно с библ
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await go(ui, 'arcade-open-library')
-  expect(launches[0].env.ARCADE_URL).toMatch(/\/web\/index\.html$/)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/`)
   expect(await ui.find({ type: 'Text', text: 'Arcade открыт в Google Chrome: выбирай приставку и игру.' })).toBeDefined()
   await go(ui, 'arcade-game-croom')
   expect(launches[1].env.ARCADE_URL).toMatch(/\?game=croom$/)
   await go(ui, 'arcade-game-rfk')
   expect(launches[2].env.ARCADE_URL).toMatch(/\?game=rfk$/)
+  await ui.unmount()
+})
+
+test('каталог с сайта: новая игра появляется в меню, копия сохраняется', async ($, on) => {
+  const { clock, saved, fetches } = stubs(on, { site: siteCatalog({ probe: siteGame('Проба', 'a'.repeat(64)) }) })
+  await start($)
+  await clock.advance(200)
+  expect(fetches[0]).toBe(`${SITE}/catalog.json`)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '  4 игры' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-nes' })
+  expect(await ui.find({ key: 'arcade-game-probe' })).toMatchObject({ props: { label: 'Проба' } })
+  expect(await ui.find({ type: 'Text', text: '  аркада — Проба с сайта' })).toBeDefined()
+  expect((saved.get('catalog') as any).games.map((g: any) => g.id)).toEqual(['thwaite', 'croom', 'rfk', 'probe'])
+  await ui.unmount()
+})
+
+test('сайт недоступен: меню из сохранённой копии, а без неё — из запаса мода', async ($, on) => {
+  const copy = JSON.parse(siteCatalog({ probe: siteGame('Проба', 'b'.repeat(64)) }))
+  const { clock } = stubs(on, { site: null, stored: { catalog: { consoles: copy.consoles, games: Object.entries(copy.games).map(([id, g]: any) => ({ id, ...g })) } } })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-nes' })
+  expect(await ui.find({ key: 'arcade-game-probe' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('без сайта и без копии — три игры из запаса мода, и они играются', async ($, on) => {
+  const { clock, blits } = stubs(on, { site: null })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '  3 игры' })).toBeDefined()
+  await go(ui, 'arcade-game-rfk')
+  await clock.advance(500)
+  expect(blits.length > 0).toBe(true)
+  await ui.unmount()
+})
+
+test('игры нет в моде: скачивается с сайта, сверяется с хешем, кешируется', async ($, on) => {
+  const rom = await probeRom()
+  const { clock, saved, fetches, blits } = stubs(on, {
+    site: siteCatalog({ probe: siteGame('Проба', rom.sha) }),
+    files: { [`files/${rom.sha}.nes.b64`]: rom.base64 },
+  })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-nes' })
+  await ui.press({ key: 'arcade-game-probe' })
+  expect(fetches).toContain(`${SITE}/files/${rom.sha}.nes.b64`)
+  expect(saved.get(`rom:${rom.sha}`)).toBe(rom.base64)
+  expect(saved.get('roms')).toEqual([rom.sha])
+  expect(await ui.find({ type: 'Text', text: /Arcade · Проба/ })).toBeDefined()
+  await clock.advance(500)
+  expect(blits.length > 0).toBe(true)
+  // Второй раз — из кеша, без сети
+  await tap(ui, 'backspace')
+  const before = fetches.length
+  await ui.press({ key: 'arcade-game-probe' })
+  expect(fetches.length).toBe(before)
+  await ui.unmount()
+})
+
+test('файл не совпал с хешем — игра не запускается, человек видит причину', async ($, on) => {
+  const rom = await probeRom()
+  const { clock, saved } = stubs(on, {
+    site: siteCatalog({ probe: siteGame('Проба', rom.sha) }),
+    files: { [`files/${rom.sha}.nes.b64`]: THWAITE_ROM },
+  })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-nes' })
+  await ui.press({ key: 'arcade-game-probe' })
+  expect(await ui.find({ type: 'Text', text: 'Не получилось скачать Проба: файл повреждён' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Arcade · Денди' })).toBeDefined()
+  expect(saved.has(`rom:${rom.sha}`)).toBe(false)
+  await ui.unmount()
+})
+
+test('Desktop: экран Денди — PNG внутри Svg, клавиши — через Client', async ($, on) => {
+  const { clock } = stubs(on)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-game-thwaite')
+  const screen = await ui.find({ type: 'Svg' })
+  expect(screen).toMatchObject({ type: 'Svg', props: { alt: 'Thwaite' } })
+  expect(screen.props.source).toMatch(/^<svg [^>]*><image [^>]*href="data:image\/png;base64,iVBORw0KGgo/)
+  expect(screen.props.source.length < 131072).toBe(true)
+  expect(await ui.find({ key: 'arcade-input' })).toMatchObject({ type: 'Client' })
+  const first = screen.props.source
+  await tap(ui, 'n') // Start: заставка уходит
+  await clock.advance(3000)
+  expect((await ui.find({ type: 'Svg' })).props.source === first).toBe(false)
+  await ui.press({ key: 'arcade-library' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · Денди' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('VS Code: экран картинкой, клавиши в поле «Управление», кнопки мышью', async ($, on) => {
+  const { clock } = stubs(on)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await go(ui, 'arcade-game-thwaite')
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-control' })).toMatchObject({ type: 'Input' })
+  expect(await ui.find({ key: 'arcade-input' })).toBeUndefined()
+  const first = (await ui.find({ type: 'Svg' })).props.source
+  await ui.input({ key: 'arcade-control', text: 'n', kind: 'change' }) // Start из поля ввода
+  await clock.advance(3000)
+  const second = (await ui.find({ type: 'Svg' })).props.source
+  expect(second === first).toBe(false)
+  await ui.press({ key: 'arcade-pad-start' }) // и кнопкой мышью
+  await clock.advance(1000)
+  expect((await ui.find({ type: 'Svg' })).props.source === second).toBe(false)
+  expect(await ui.find({ key: 'arcade-pad-left' })).toMatchObject({ props: { label: '←' } })
+  await ui.unmount()
+})
+
+test('Linux и macOS: окно игры — браузер по умолчанию с адресом сайта', async ($, on) => {
+  const { clock, launches } = stubs(on, { uname: 'Linux' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: окно браузера по умолчанию' } })
+  await go(ui, 'arcade-game-thwaite')
+  expect(launches[0].argv).toEqual(['xdg-open', `${SITE}/?game=thwaite`])
+  expect(await ui.find({ type: 'Text', text: 'Thwaite открыт в браузере по умолчанию. Игра стоит на паузе, пока окно не в фокусе.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('catalog.js: разбор каталога сайта и проверка ROM', async () => {
+  expect(parseCatalog('мусор')).toBe(null)
+  expect(parseCatalog(JSON.stringify({ consoles: [], games: {} }))).toBe(null)
+  const parsed = parseCatalog(siteCatalog({ bad: { console: 'snes', title: 'x', genre: 'x', about: 'x', rom: { sha256: 'a'.repeat(64), base64: 'files/x' } }, worse: { console: 'nes', title: 'x', genre: 'x', about: 'x', rom: { sha256: 'нет', base64: 'files/x' } } }))
+  expect(parsed.games.map((g: any) => g.id)).toEqual(['thwaite', 'croom', 'rfk'])
+  expect(parsed.consoles[1]).toEqual({ id: 'sega', title: 'Sega', soon: 'Скоро.' })
+  expect(await verifyRom(THWAITE_ROM, SHA.thwaite)).toBe(true)
+  expect(await verifyRom(THWAITE_ROM, SHA.croom)).toBe(false)
+  expect(await verifyRom('не base64!', SHA.thwaite)).toBe(false)
+  expect(await verifyRom(undefined, SHA.thwaite)).toBe(false)
+})
+
+test('VS Code на Windows: по умолчанию игра в панели, окно — только если выбрано явно', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await ui.press({ key: 'arcade-menu-nes' })
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются здесь, в панели.' })).toBeDefined()
+  await ui.press({ key: 'arcade-game-thwaite' })
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  // Явный выбор окна в настройках — и VS Code тоже открывает окно
+  await ui.press({ key: 'arcade-library' })
+  await go(ui, 'arcade-opener') // браузер по умолчанию → Chrome
+  await go(ui, 'arcade-game-thwaite')
+  expect(launches.length).toBe(1)
+  await ui.unmount()
+})
+
+test('Desktop: окна браузера нет вовсе — только игра в панели', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ key: 'arcade-open-library' })).toBeUndefined()
+  await go(ui, 'arcade-game-thwaite')
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
   await ui.unmount()
 })
