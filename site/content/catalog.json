@@ -1,0 +1,58 @@
+{
+  "consoles": [
+    { "id": "nes", "section": "games", "title": "Денди", "about": "Nintendo Entertainment System", "emulator": "jsnes" },
+    { "id": "sega", "section": "games", "title": "Sega", "about": "Mega Drive", "soon": "Готовим эмулятор Mega Drive и подбираем свободные игры." }
+  ],
+  "games": [
+    {
+      "id": "thwaite",
+      "console": "nes",
+      "title": "Thwaite",
+      "genre": "аркада",
+      "about": "Ракеты падают на город — сбивай их фейерверками, пока дома целы.",
+      "keys": "прицел — стрелки или WASD · огонь — Z X или J K · Start — Enter",
+      "rom": "games/thwaite/thwaite.nes",
+      "score": { "label": "рекорд", "parts": [["0x3d9", 10000], ["0x3da", 100]] },
+      "license": {
+        "name": "GPL-3.0-or-later",
+        "author": "Damian Yerrick",
+        "source": "https://github.com/pinobatch/thwaite-nes",
+        "commit": "00e36745188bc165990f60eed6b093c3ce6ad0e3",
+        "files": ["games/thwaite/LICENSE.txt", "games/thwaite/thwaite-nes-00e3674-src.tar.gz"]
+      }
+    },
+    {
+      "id": "croom",
+      "console": "nes",
+      "title": "Concentration Room",
+      "genre": "найди пару",
+      "about": "Переворачивай карточки и находи пары — одному, вдвоём или против компьютера.",
+      "keys": "курсор — стрелки или WASD · открыть — X или K · Start — Enter",
+      "rom": "games/croom/croom.nes",
+      "license": {
+        "name": "GPL-3.0-or-later",
+        "author": "Damian Yerrick",
+        "source": "https://github.com/pinobatch/croom-nes",
+        "commit": "ed19c3c07ca389b70cf2e0dd2ce0320df28d511d",
+        "files": ["games/croom/LICENSE.txt", "games/croom/croom-nes-ed19c3c-src.tar.gz"]
+      }
+    },
+    {
+      "id": "rfk",
+      "console": "nes",
+      "title": "robotfindskitten",
+      "genre": "без спешки",
+      "about": "Робот ищет котёнка среди странных предметов. Ни врагов, ни таймера.",
+      "keys": "ходить — стрелки или WASD · Start — Enter",
+      "rom": "games/rfk/robotfindskitten.nes",
+      "score": { "label": "котят найдено", "parts": [["0xde", 1]] },
+      "license": {
+        "name": "zlib",
+        "author": "Damian Yerrick, Leonard Richardson",
+        "source": "https://github.com/pinobatch/rfk-nes",
+        "commit": "b9764cefd54aca09018e0a8f120f6c538668d76b",
+        "files": ["games/rfk/LICENSE.txt", "games/rfk/rfk-nes-b9764ce-src.tar.gz"]
+      }
+    }
+  ]
+}
