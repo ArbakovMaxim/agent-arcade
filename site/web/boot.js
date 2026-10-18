@@ -4,6 +4,11 @@
 // Денди идёт в JSNES (game.js), Sega и PlayStation — в EmulatorJS (ejs.js, подгружается, только когда нужен).
 ;(async function () {
   'use strict'
+  // Статичные надписи страницы — на языке окна
+  for (const id of ['to-library', 'license', 'source', 'restart']) {
+    const node = document.getElementById(id)
+    if (node) node.textContent = T(node.textContent)
+  }
   const params = new URLSearchParams(location.search)
   const id = params.get('game')
   const local = new URLSearchParams(location.hash.slice(1))
@@ -37,7 +42,7 @@
   function askForFile(consoleId, sha, title) {
     const input = document.getElementById('local-rom')
     input.accept = window.ArcadeMine.ACCEPT[consoleId] || ''
-    overlay(`Выбери файл «${title}»`, 'Кликни сюда или нажми любую клавишу. Это нужно один раз: браузер запомнит файл у себя, на сервер он не уходит.')
+    overlay(T(`Выбери файл «${title}»`), T('Кликни сюда или нажми любую клавишу. Это нужно один раз: браузер запомнит файл у себя, на сервер он не уходит.'))
     const pick = () => input.click()
     document.getElementById('overlay').addEventListener('click', pick)
     window.addEventListener('keydown', pick, { once: true })
@@ -51,7 +56,7 @@
         document.getElementById('overlay').classList.remove('shown')
         await play(entry)
       } catch (err) {
-        overlay('Не получилось', `${err.message} Кликни, чтобы выбрать другой файл.`)
+        overlay(T('Не получилось'), T(`${err.message} Кликни, чтобы выбрать другой файл.`))
       }
     })
   }
@@ -59,19 +64,19 @@
   let catalog
   try {
     const response = await fetch('catalog.json', { cache: 'no-cache' })
-    if (!response.ok) throw new Error(`сервер ответил ${response.status}`)
+    if (!response.ok) throw new Error(T(`сервер ответил ${response.status}`))
     catalog = await response.json()
   } catch (err) {
-    overlay('Нет связи с Arcade', `Не удалось получить список игр: ${err.message}`)
+    overlay(T('Нет связи с Arcade'), T(`Не удалось получить список игр: ${err.message}`))
     return
   }
 
   if (mineId) {
     const entry = await window.ArcadeMine.get(mineId)
     if (entry) await play(entry)
-    else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || 'свою игру')
-    else overlay('Игра не найдена', 'В этом браузере её нет. Вернись в библиотеку и открой файл заново.')
-  } else if (id && catalog.games && catalog.games[id] && ['sega', 'psx'].includes(catalog.games[id].console)) {
+    else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || T('свою игру'))
+    else overlay(T('Игра не найдена'), T('В этом браузере её нет. Вернись в библиотеку и открой файл заново.'))
+  } else if (id && catalog.games && catalog.games[id] && ['sega', 'sms', 'gg', 'psx'].includes(catalog.games[id].console)) {
     await loadEJS()
     window.ArcadeEJS.start(catalog, id)
   } else if (id) window.ArcadeGame.start(catalog, id)

@@ -3,6 +3,9 @@ import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, par
 import { SITE, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
 import { workedText } from '../hooks/register.js'
+import { detectLang, tr } from '../hooks/i18n.js'
+import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
+import { installMapper28, prgBank } from '../hooks/mapper28.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
@@ -97,6 +100,8 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   const saved = new Map<string, unknown>(Object.entries(stored))
   const fetches: string[] = []
   const notifies: any[] = []
+  const widths: any[] = []
+  const closed: any[] = []
   const opened: string[] = []
   const blits: any[] = []
   const launches: any[] = []
@@ -145,7 +150,12 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   })
   on('ui.open', ($: any, e: any) => {
     opened.push(e.id)
+    widths.push(e.columns)
     return { value: { isPlaced: true } }
+  })
+  on('ui.close', ($: any, e: any) => {
+    closed.push(e.id)
+    return { value: undefined }
   })
   on('ui.blit', ($: any, e: any) => {
     blits.push(e)
@@ -160,7 +170,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('classic.PostToolUse', () => ({}))
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches, notifies, disk, diskFile }
+  return { saved, opened, blits, clock, launches, toasts, fetches, notifies, disk, diskFile, widths, closed }
 }
 
 async function start($: any) {
@@ -180,6 +190,11 @@ const MENU_OF: Record<string, string> = {
   'arcade-opener': 'settings',
   'arcade-graphics': 'settings',
   'arcade-notify': 'settings',
+  'arcade-assign': 'settings',
+  'arcade-wide': 'settings',
+  'arcade-on-done': 'settings',
+  'arcade-on-permission': 'settings',
+  'arcade-lang': 'settings',
 }
 
 // Дойти по меню до кнопки и нажать её
@@ -681,7 +696,7 @@ test('VS Code: клавиатура — поле над строкой ввод�
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
   expect(await ui.find({ type: 'Input' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /Проверка ввода/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'Клавиатура — в поле «клавиши для игры» над строкой ввода Claude · кнопки — мышью' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Клавиатура — в строке 🎮 над строкой ввода Claude · кнопки — мышью' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-pad-right' })).toMatchObject({ props: { label: '→ (D)' } })
 
   const band = await $.ui.mount({ ...BAND, surface: 'vscode' })
@@ -1125,5 +1140,286 @@ test('время работы агента — секунды, минуты и �
   await band.unmount()
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: 'Агент работает 2 мин 14 с' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('назначение клавиш — кнопкой в «Настройках» терминала, а не отдельной командой /arcade-keys', async ($, on) => {
+  stubs(on)
+  await start($)
+  // В VS Code клавиши идут через строку 🎮 — проверки и назначения в «Настройках» нет
+  const vs = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await vs.press({ key: 'arcade-menu-settings' })
+  expect(await vs.find({ key: 'arcade-assign' })).toBeUndefined()
+  expect(await vs.find({ key: 'arcade-game-field' })).toBeUndefined()
+  await vs.press({ key: 'arcade-back' })
+  await vs.unmount()
+  // В терминале — проверка клавиш и кнопка «Назначить клавиши заново»
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-game-field' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-assign' })).toMatchObject({ props: { label: 'Назначить клавиши заново' } })
+  await ui.press({ key: 'arcade-assign' })
+  expect(await ui.find({ type: 'Text', text: /Arcade · Проверка клавиш/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Назначаем управление заново/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Назначить заново: «Настройки» → «Назначить клавиши заново»' })).toBeDefined()
+  await ui.unmount()
+  // Команды /arcade-keys больше нет
+  let missing = false
+  try {
+    await $.command.run({ command: 'arcade-keys', args: '' })
+  } catch {
+    missing = true
+  }
+  expect(missing).toBe(true)
+})
+
+test('во всю ширину: настройка запоминается, панель просит ширину сразу, картинка крупнее, но целиком по высоте', HEAVY, async ($, on) => {
+  const { saved, widths } = stubs(on)
+  await start($)
+  expect(widths.at(-1)).toBe(104) // обычная панель
+  const big = { ...PANE, surface: 'vscode', props: { ...PANE.props, bodyColumns: 300, scroll: { offset: 0, bodyRows: 80 } } }
+  // Обычный размер: экран Денди не шире ×3
+  let ui = await $.ui.mount(big)
+  await go(ui, 'arcade-game-thwaite')
+  expect((await ui.find({ type: 'Svg' })).props.width).toBe(768)
+  await ui.press({ key: 'arcade-library' }) // обратно в библиотеку
+  await ui.unmount()
+  // Во всю ширину
+  ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await go(ui, 'arcade-wide')
+  expect(await ui.find({ key: 'arcade-wide' })).toMatchObject({ props: { label: 'Размер панели: во всю ширину' } })
+  expect(saved.get('wide')).toBe(true)
+  expect(widths.at(-1)).toBe(400)
+  await ui.unmount()
+  ui = await $.ui.mount(big)
+  await go(ui, 'arcade-game-thwaite')
+  // 300 колонок дали бы ×8, но 80 строк по высоте — только ×5: экран целиком виден
+  expect((await ui.find({ type: 'Svg' })).props.width).toBe(1280)
+  await ui.unmount()
+})
+
+test('плашка поверх игры: «Агент закончил» и «Агент ждёт разрешения», кнопки «Играть дальше» и «К агенту»', HEAVY, async ($, on) => {
+  const { closed } = stubs(on)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await go(ui, 'arcade-game-thwaite')
+  expect(await ui.find({ key: 'arcade-alert-ok' })).toBeUndefined()
+  await $.turn.start({ turnId: 't1' })
+  await $.turn.complete({ turnId: 't1' })
+  expect(await ui.find({ type: 'Text', text: ' Агент закончил ' })).toBeDefined()
+  await ui.press({ key: 'arcade-alert-ok' }) // играть дальше — плашка уходит
+  expect(await ui.find({ type: 'Text', text: ' Агент закончил ' })).toBeUndefined()
+  await $.turn.start({ turnId: 't2' })
+  await $.classic.PermissionRequest({ tool_name: 'Write', tool_input: { file_path: 'notes.txt' } })
+  expect(await ui.find({ type: 'Text', text: ' Агент ждёт разрешения ' })).toBeDefined()
+  await ui.press({ key: 'arcade-to-agent' }) // к агенту — панель закрывается
+  expect(closed).toContain('arcade')
+  await ui.unmount()
+})
+
+test('сигналы агента: настройки «Когда агент закончил» и «…ждёт разрешения» переключаются по кругу и запоминаются', async ($, on) => {
+  const { saved } = stubs(on)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(ui, 'arcade-on-done') // мягко → пауза
+  expect(await ui.find({ key: 'arcade-on-done' })).toMatchObject({ props: { label: 'Когда агент закончил: пауза и плашка' } })
+  expect(saved.get('onDone')).toBe('pause')
+  await ui.press({ key: 'arcade-on-done' })
+  expect(await ui.find({ key: 'arcade-on-done' })).toMatchObject({ props: { label: 'Когда агент закончил: сразу к агенту' } })
+  await ui.press({ key: 'arcade-on-done' })
+  expect(saved.get('onDone')).toBe('notify')
+  expect(await ui.find({ key: 'arcade-on-permission' })).toMatchObject({ props: { label: 'Когда агент ждёт разрешения: пауза и плашка' } })
+  await ui.unmount()
+})
+
+test('сигналы агента в VS Code: «закончил» — игра идёт, «ждёт разрешения» — пауза до «Играть дальше»', HEAVY, async ($, on) => {
+  const { clock } = stubs(on)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  await go(ui, 'arcade-game-thwaite')
+  const frame = async () => (await ui.find({ type: 'Svg' })).props.source
+  // Игра идёт, если Start меняет экран
+  const runs = async () => {
+    const before = await frame()
+    await ui.press({ key: 'arcade-pad-start' })
+    await clock.advance(2000)
+    return (await frame()) !== before
+  }
+  await clock.advance(1000)
+  await $.turn.start({ turnId: 't1' })
+  await $.turn.complete({ turnId: 't1' })
+  expect(await ui.find({ type: 'Text', text: ' Агент закончил ' })).toBeDefined()
+  expect(await runs()).toBe(true) // мягко: игра идёт под плашкой
+  await $.turn.start({ turnId: 't2' })
+  await $.classic.PermissionRequest({ tool_name: 'Write', tool_input: { file_path: 'notes.txt' } })
+  expect(await ui.find({ type: 'Text', text: ' Агент ждёт разрешения · пауза ' })).toBeDefined()
+  expect(await runs()).toBe(false) // пауза: экран стоит даже после Start
+  await ui.press({ key: 'arcade-alert-ok' })
+  expect(await ui.find({ key: 'arcade-alert-ok' })).toBeUndefined()
+  expect(await runs()).toBe(true) // «Играть дальше» — игра пошла
+  await ui.unmount()
+})
+
+test('сигналы агента: «сразу к агенту» закрывает панель; в терминале пауза видна и снимается клавишей игры', HEAVY, async ($, on) => {
+  const { clock, closed, blits } = stubs(on, { stored: { onDone: 'close' } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(ui, 'arcade-game-thwaite')
+  await clock.advance(500)
+  // «Ждёт разрешения» по умолчанию — пауза: кадры не уходят, над экраном сказано почему
+  await $.turn.start({ turnId: 't1' })
+  await $.classic.PermissionRequest({ tool_name: 'Write', tool_input: { file_path: 'notes.txt' } })
+  expect(await ui.find({ type: 'Text', text: /^Пауза: агент ждёт разрешения\. Любая клавиша игры — играть дальше/ })).toBeDefined()
+  const frozen = blits.length
+  await clock.advance(500)
+  expect(blits.length).toBe(frozen)
+  await tap(ui, 'd') // любая клавиша игры — дальше
+  await clock.advance(500)
+  expect(blits.length > frozen).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^Пауза:/ })).toBeUndefined()
+  // «Закончил» с настройкой «сразу к агенту» — панель закрывается
+  await $.turn.complete({ turnId: 't1' })
+  expect(closed).toContain('arcade')
+  await ui.unmount()
+})
+
+// Картридж Master System или Game Gear: метка TMR SEGA и код региона (4 — Master System, 6 — Game Gear)
+function tmrRom(region: number) {
+  const bytes = new Uint8Array(0x8000)
+  bytes.set(new TextEncoder().encode('TMR SEGA'), 0x7ff0)
+  bytes[0x7fff] = region << 4
+  return bytes
+}
+
+test('Master System и Game Gear: мод узнаёт картриджи, свои игры добавляются, игры каталога — в окне, у каждой вкладки кнопка окна', async ($, on) => {
+  expect(identifyRom(tmrRom(4))).toEqual({ console: 'sms' })
+  expect(identifyRom(tmrRom(6))).toEqual({ console: 'gg' })
+  expect(identifyRom(new Uint8Array(0x8000), 'C:\\Игры\\japan.gg')).toEqual({ console: 'gg' }) // без метки — по расширению
+  expect(identifyRom(new Uint8Array(0x8000), 'x.bin').error).toMatch(/Master System \(\.sms\) или Game Gear \(\.gg\)/)
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'sms', title: 'Master System' }, { id: 'gg', title: 'Game Gear', empty: 'Свободных игр для Game Gear пока нет.' })
+  const sha = 'f'.repeat(64)
+  site.games.skyhaul = { console: 'sms', title: 'SkyHaul', genre: 'шутер', about: 'шутер', keys: '…', rom: { url: `files/${sha}.sms`, base64: `files/${sha}.sms.b64`, sha256: sha, size: 1 } }
+  const { clock, launches } = stubs(on, { env: { ...WINDOWS, USERPROFILE: 'C:\\Users\\Иван' }, site: JSON.stringify(site), disk: { 'D:\\Игры\\Моя.sms': tmrRom(4) } })
+  await start($)
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade-add', args: 'D:\\Игры\\Моя.sms' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await ui.find({ type: 'Text', text: 'Добавлено: Моя (Master System).' })).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-sms' })
+  await ui.press({ key: 'arcade-game-skyhaul' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=skyhaul`)
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-gg' })
+  expect(await ui.find({ type: 'Text', text: 'Свободных игр для Game Gear пока нет.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-open-tab-gg' })).toMatchObject({ props: { label: 'Открыть Game Gear в окне' } })
+  await ui.press({ key: 'arcade-open-tab-gg' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=gg`)
+  await ui.unmount()
+})
+
+// Маппер 28 (Action 53): эталон NESdev — [режим $80, внешний $81, внутренний $01, банк на $8000, банк на $C000]
+const A53_CASES = [[0, 0, 0, 0, 1], [0, 0, 1, 0, 1], [0, 0, 5, 0, 1], [0, 0, 15, 0, 1], [0, 3, 0, 6, 7], [0, 3, 1, 6, 7], [0, 3, 5, 6, 7], [0, 3, 15, 6, 7], [0, 42, 0, 84, 85], [0, 42, 1, 84, 85], [0, 42, 5, 84, 85], [0, 42, 15, 84, 85], [8, 0, 0, 0, 0], [8, 0, 1, 0, 1], [8, 0, 5, 0, 1], [8, 0, 15, 0, 1], [8, 3, 0, 6, 6], [8, 3, 1, 6, 7], [8, 3, 5, 6, 7], [8, 3, 15, 6, 7], [8, 42, 0, 84, 84], [8, 42, 1, 84, 85], [8, 42, 5, 84, 85], [8, 42, 15, 84, 85], [12, 0, 0, 0, 1], [12, 0, 1, 1, 1], [12, 0, 5, 1, 1], [12, 0, 15, 1, 1], [12, 3, 0, 6, 7], [12, 3, 1, 7, 7], [12, 3, 5, 7, 7], [12, 3, 15, 7, 7], [12, 42, 0, 84, 85], [12, 42, 1, 85, 85], [12, 42, 5, 85, 85], [12, 42, 15, 85, 85], [16, 0, 0, 0, 1], [16, 0, 1, 2, 3], [16, 0, 5, 2, 3], [16, 0, 15, 2, 3], [16, 3, 0, 4, 5], [16, 3, 1, 6, 7], [16, 3, 5, 6, 7], [16, 3, 15, 6, 7], [16, 42, 0, 84, 85], [16, 42, 1, 86, 87], [16, 42, 5, 86, 87], [16, 42, 15, 86, 87], [24, 0, 0, 0, 0], [24, 0, 1, 0, 1], [24, 0, 5, 0, 1], [24, 0, 15, 0, 3], [24, 3, 0, 6, 4], [24, 3, 1, 6, 5], [24, 3, 5, 6, 5], [24, 3, 15, 6, 7], [24, 42, 0, 84, 84], [24, 42, 1, 84, 85], [24, 42, 5, 84, 85], [24, 42, 15, 84, 87], [28, 0, 0, 0, 1], [28, 0, 1, 1, 1], [28, 0, 5, 1, 1], [28, 0, 15, 3, 1], [28, 3, 0, 4, 7], [28, 3, 1, 5, 7], [28, 3, 5, 5, 7], [28, 3, 15, 7, 7], [28, 42, 0, 84, 85], [28, 42, 1, 85, 85], [28, 42, 5, 85, 85], [28, 42, 15, 87, 85], [32, 0, 0, 0, 1], [32, 0, 1, 2, 3], [32, 0, 5, 2, 3], [32, 0, 15, 6, 7], [32, 3, 0, 0, 1], [32, 3, 1, 2, 3], [32, 3, 5, 2, 3], [32, 3, 15, 6, 7], [32, 42, 0, 80, 81], [32, 42, 1, 82, 83], [32, 42, 5, 82, 83], [32, 42, 15, 86, 87], [40, 0, 0, 0, 0], [40, 0, 1, 0, 1], [40, 0, 5, 0, 5], [40, 0, 15, 0, 7], [40, 3, 0, 6, 0], [40, 3, 1, 6, 1], [40, 3, 5, 6, 5], [40, 3, 15, 6, 7], [40, 42, 0, 84, 80], [40, 42, 1, 84, 81], [40, 42, 5, 84, 85], [40, 42, 15, 84, 87], [44, 0, 0, 0, 1], [44, 0, 1, 1, 1], [44, 0, 5, 5, 1], [44, 0, 15, 7, 1], [44, 3, 0, 0, 7], [44, 3, 1, 1, 7], [44, 3, 5, 5, 7], [44, 3, 15, 7, 7], [44, 42, 0, 80, 85], [44, 42, 1, 81, 85], [44, 42, 5, 85, 85], [44, 42, 15, 87, 85], [48, 0, 0, 0, 1], [48, 0, 1, 2, 3], [48, 0, 5, 10, 11], [48, 0, 15, 14, 15], [48, 3, 0, 0, 1], [48, 3, 1, 2, 3], [48, 3, 5, 10, 11], [48, 3, 15, 14, 15], [48, 42, 0, 80, 81], [48, 42, 1, 82, 83], [48, 42, 5, 90, 91], [48, 42, 15, 94, 95], [56, 0, 0, 0, 0], [56, 0, 1, 0, 1], [56, 0, 5, 0, 5], [56, 0, 15, 0, 15], [56, 3, 0, 6, 0], [56, 3, 1, 6, 1], [56, 3, 5, 6, 5], [56, 3, 15, 6, 15], [56, 42, 0, 84, 80], [56, 42, 1, 84, 81], [56, 42, 5, 84, 85], [56, 42, 15, 84, 95], [60, 0, 0, 0, 1], [60, 0, 1, 1, 1], [60, 0, 5, 5, 1], [60, 0, 15, 15, 1], [60, 3, 0, 0, 7], [60, 3, 1, 1, 7], [60, 3, 5, 5, 7], [60, 3, 15, 15, 7], [60, 42, 0, 80, 85], [60, 42, 1, 81, 85], [60, 42, 5, 85, 85], [60, 42, 15, 95, 85]]
+
+test('маппер 28: формула банков совпадает с эталоном NESdev во всех 144 случаях', async () => {
+  for (const [mode, outer, inner, lo, hi] of A53_CASES) {
+    expect([prgBank(0, mode, outer, inner), prgBank(1, mode, outer, inner)]).toEqual([lo, hi])
+  }
+})
+
+test('маппер 28 в JSNES: банки ПЗУ, 32 КБ CHR RAM и отражения', async () => {
+  installMapper28(Mappers)
+  // Синтетический картридж: 512 КБ ПЗУ (32 банка по 16 КБ), CHR RAM, маппер 28; в начале каждого банка — его номер
+  const banks = 32
+  const rom = new Uint8Array(16 + banks * 16384)
+  rom.set([0x4e, 0x45, 0x53, 0x1a, banks, 0, (28 & 0x0f) << 4, 28 & 0xf0], 0)
+  for (let b = 0; b < banks; b++) rom[16 + b * 16384] = b
+  const nes = new NES({ onFrame() {}, emulateSound: false })
+  nes.loadROM(Array.from(rom, (x) => String.fromCharCode(x)).join(''))
+  const mem = nes.cpu.mem
+  expect(mem[0xc000]).toBe(31) // при включении на $C000 — последний банк
+  const reg = (select: number, value: number) => {
+    nes.mmap.write(0x5000, select)
+    nes.mmap.write(0x8000, value)
+  }
+  // Режимы и банки — ровно как в эталоне
+  for (const [mode, outer, inner, lo, hi] of A53_CASES.filter((c) => c[1] !== 0x2a)) {
+    reg(0x80, mode)
+    reg(0x81, outer)
+    reg(0x01, inner)
+    expect([mem[0x8000], mem[0xc000]]).toEqual([lo % banks, hi % banks])
+  }
+  // CHR RAM: четыре банка по 8 КБ, содержимое сохраняется при переключении
+  reg(0x80, 0x02) // вертикальное отражение, чтобы не мешало
+  const ppu = nes.ppu
+  ppu.vramMem[0] = 0xaa
+  ppu.vramMem[8191] = 0x55
+  reg(0x00, 1)
+  expect([ppu.vramMem[0], ppu.vramMem[8191]]).toEqual([0, 0]) // банк 1 пустой
+  ppu.vramMem[0] = 0x11
+  reg(0x00, 0)
+  expect([ppu.vramMem[0], ppu.vramMem[8191]]).toEqual([0xaa, 0x55]) // банк 0 вернулся
+  reg(0x00, 1)
+  expect(ppu.vramMem[0]).toBe(0x11)
+  // Отражения: вертикальное, горизонтальное и одноэкранное — бит 4 записи в $00 выбирает экран
+  expect(ppu.currentMirroring).toBe(nes.rom.VERTICAL_MIRRORING)
+  reg(0x80, 0x03)
+  expect(ppu.currentMirroring).toBe(nes.rom.HORIZONTAL_MIRRORING)
+  reg(0x80, 0x00)
+  expect(ppu.currentMirroring).toBe(nes.rom.SINGLESCREEN_MIRRORING)
+  reg(0x00, 0x10)
+  expect(ppu.currentMirroring).toBe(nes.rom.SINGLESCREEN_MIRRORING2)
+  // «Свои игры» принимают маппер 28
+  expect(identifyRom(rom)).toEqual({ console: 'nes', mapper: 28 })
+})
+
+// Все строки дерева интерфейса — чтобы проверить, что перевод ничего не пропустил
+async function drawnTexts(ui: any) {
+  const texts: string[] = []
+  const walk = (n: any) => {
+    if (n == null) return
+    if (typeof n === 'string') return texts.push(n)
+    if (n.props?.label) texts.push(n.props.label)
+    if (n.props?.placeholder) texts.push(n.props.placeholder)
+    for (const c of n.children ?? []) walk(c)
+  }
+  walk(await ui.drawn())
+  return texts
+}
+
+test('язык: по окружению, правила с подстановками', async () => {
+  expect([detectLang('ru_RU.UTF-8'), detectLang('uk_UA'), detectLang('en_US.UTF-8'), detectLang(undefined, 'de_DE'), detectLang()]).toEqual(['ru', 'ru', 'en', 'en', 'ru'])
+  expect(tr('Агент работает 2 мин 14 с — сыграть?', 'en')).toBe('Agent has been working for 2 min 14 s — play?')
+  expect(tr('  3 игры', 'en')).toBe('  3 games')
+  expect(tr('Добавлено: Моя (Денди).', 'en')).toBe('Added: Моя (NES).')
+  expect(tr('Когда агент закончил: пауза и плашка', 'en')).toBe('When the agent finishes: pause and banner')
+  expect(tr('Настройки', 'ru')).toBe('Настройки')
+})
+
+test('английский интерфейс: главное меню без русских букв, вопрос над вводом, переключатель, окно на том же языке', async ($, on) => {
+  const { clock, launches, saved } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(134_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await band.find({ type: 'Text', text: 'Agent has been working for 2 min 14 s — play?' })).toBeDefined()
+  expect(await band.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Here' } })
+  expect(await band.find({ key: 'arcade-later' })).toMatchObject({ props: { label: 'Not now' } })
+  await band.unmount()
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x))
+  expect(cyrillic).toEqual([])
+  expect(await ui.find({ key: 'arcade-menu-settings' })).toMatchObject({ props: { label: 'Settings' } })
+  // Игра в окне — адрес с языком
+  await go(ui, 'arcade-game-thwaite')
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=thwaite&lang=en`)
+  // Переключатель: обратно на русский и запоминается
+  await go(ui, 'arcade-lang')
+  expect(await ui.find({ key: 'arcade-lang' })).toMatchObject({ props: { label: 'Язык: русский' } })
+  expect(saved.get('lang')).toBe('ru')
+  expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Назад' } })
   await ui.unmount()
 })

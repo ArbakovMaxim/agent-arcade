@@ -11,6 +11,7 @@ import { build } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'arcade-site-'))
+process.on('exit', () => fs.rmSync(DIST, { recursive: true, force: true })) // собранный сайт — только на время теста
 build({ root: ROOT, out: DIST })
 
 // Сеть: файлы из собранного сайта; можно подменить ответ или «уронить» адрес
@@ -64,7 +65,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
     URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder,
-    history: { replaceState: (s, title, url) => { page.replaced = url } },
+    history: { replaceState: (s, title, url) => { page.replaced = url }, pushState: (s, title, url) => { page.pushed = url } },
     fetch: network(net),
     performance: { now: () => now },
     requestAnimationFrame: (cb) => raf.push(cb),
@@ -92,7 +93,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
       setTimeout(() => script.onload && script.onload(), 0)
     }
   }
-  for (const file of ['jsnes.js', 'stats.js', 'mine.js', 'library.js', 'game.js', 'boot.js']) {
+  for (const file of ['i18n.js', 'jsnes.js', 'mapper28.js', 'stats.js', 'mine.js', 'library.js', 'game.js', 'boot.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
   }
   // Ждём, пока каталог и игра скачаются и проверятся: проверка хеша в Node идёт в другом потоке
@@ -137,6 +138,7 @@ assert.ok(Object.keys(catalog.games).length >= 12)
   assert.match(textOf(cards[0]), /Thwaite.*аркада.*ещё не играли/)
   assert.equal(lib.focused, cards[0])
   lib.fire('keydown', { code: 'ArrowRight' })
+  assert.equal(lib.pushed, '?tab=sega', 'у вкладки свой адрес')
   assert.deepEqual(library.querySelectorAll('.card').map((c) => c.dataset.game), ['miniplanets', 'dragons-castle', 'kleleatoms', 'lunch-break', '5stars', 'tank-battle', 'battle-4tris', 'pong', 'snake-arena', 'space-shooter', 'breakout'])
   lib.fire('keydown', { code: 'ArrowLeft' })
   lib.fire('keydown', { code: 'ArrowDown' })
@@ -320,6 +322,47 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   // Без подсказки от мода и без файла в браузере — понятное сообщение
   const lost = await makePage(new Map(), { search: '', hash: '#mine=mine-000000000000' })
   assert.equal(lost.byId['overlay-title'].textContent, 'Игра не найдена')
+}
+
+// --- Язык окна: lang=en от мода — английский интерфейс; кнопка RU/EN; по умолчанию — русский -------------------
+{
+  const en = await makePage(new Map(), { search: '?tab=nes&lang=en' })
+  const lib = en.byId.library
+  const button = (cls) => lib.querySelectorAll(cls)
+  assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
+  assert.match(textOf(lib), /Your \.nes file opens only on this device/)
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'Game Gear', 'PlayStation'])
+  assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
+  assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
+  const game = await makePage(new Map(), { search: '?game=skyhaul&lang=en' })
+  assert.equal(game.byId.keys.textContent, 'move — arrows · 1 (and Start) — X · 2 — Z · pause — Enter')
+  const ru = await makePage(new Map(), { search: '?tab=nes' })
+  assert.equal(ru.byId.library.querySelectorAll('.open-rom')[1].textContent, 'EN', 'без выбора — русский, кнопка предлагает английский')
+}
+
+// --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------
+{
+  const page = await makePage(new Map(), { search: '' })
+  assert.equal(vm.runInContext('typeof jsnes.Mappers[28]', page.ctx), 'function')
+  assert.equal(vm.runInContext('typeof jsnes.Mappers[0]', page.ctx), 'function', 'остальные мапперы на месте')
+}
+
+// --- Master System и Game Gear: то же ядро Genesis Plus GX, свои файлы — с расширением в имени -------------------------
+{
+  const sms = await makePage(new Map(), { search: '?game=skyhaul' })
+  assert.equal(sms.ctx.EJS_core, 'genesis_plus_gx', 'Master System — на нашем ядре, а не на SMS Plus с чужого CDN')
+  assert.equal(sms.ctx.EJS_gameUrl, catalog.games.skyhaul.rom.url)
+  const gg = await makePage(new Map(), { search: '?tab=gg' })
+  assert.match(textOf(gg.byId.library), /Свободных игр для Game Gear пока нет/)
+  gg.byId.library.querySelectorAll('.open-rom')[0].click()
+  assert.equal(gg.byId['local-rom'].accept, '.gg')
+  // Свой файл Master System: имя с расширением — по нему ядро узнаёт приставку
+  gg.ctx.__sms = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'games', 'skyhaul', 'skyhaul.sms')))
+  await vm.runInContext(`(async () => ArcadePlayMine(await ArcadeMine.add(new File([__sms], 'My_Game.sms'), 'sms')))()`, gg.ctx)
+  await until(() => gg.ctx.EJS_core)
+  assert.equal(gg.ctx.EJS_core, 'genesis_plus_gx')
+  assert.equal(gg.ctx.EJS_gameName, 'My Game.sms')
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(4096)], 'x.gg'), 'sms')`, gg.ctx), /не игра для Master System/)
 }
 
 console.log('окно: все проверки прошли')

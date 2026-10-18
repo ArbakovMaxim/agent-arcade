@@ -6,8 +6,11 @@
   'use strict'
 
   const SYSTEMS = {
-    sega: { core: 'segaMD', keys: 'движение — стрелки · A — S · B — X · C — Z · Start — Enter' },
-    psx: { core: 'psx', keys: 'движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V' },
+    sega: { core: 'segaMD', keys: T('движение — стрелки · A — S · B — X · C — Z · Start — Enter') },
+    // Master System — явно Genesis Plus GX: иначе EmulatorJS взял бы ядро SMS Plus, которого у нас нет
+    sms: { core: 'genesis_plus_gx', keys: T('движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter') },
+    gg: { core: 'segaGG', keys: T('движение — стрелки · 1 — X · 2 — Z · Start — Enter') },
+    psx: { core: 'psx', keys: T('движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V') },
   }
 
   async function sha256(bytes) {
@@ -25,8 +28,8 @@
   function prepare(title, keys, credit) {
     document.body.classList.remove('library-mode')
     document.title = `${title} · Arcade`
-    document.getElementById('keys').textContent = keys
-    document.getElementById('credit').textContent = credit
+    document.getElementById('keys').textContent = T(keys)
+    document.getElementById('credit').textContent = T(credit)
     // EmulatorJS растягивает контейнер на всего родителя — поэтому он внутри области игры, а не поверх полосы
     const screen = document.getElementById('screen')
     if (screen) screen.style.display = 'none'
@@ -63,7 +66,7 @@
     const game = (catalog.games || {})[id]
     const system = game && SYSTEMS[game.console]
     if (!system) {
-      overlay('Игра не найдена', 'Вернись в библиотеку и выбери игру.')
+      overlay(T('Игра не найдена'), T('Вернись в библиотеку и выбери игру.'))
       return
     }
     prepare(game.title, game.keys || system.keys, game.credit)
@@ -72,14 +75,14 @@
     const sourceFile = files.find((f) => /\.tar\.gz$|\.zip$/i.test(f.name))
     document.getElementById('license').href = licenseFile ? licenseFile.url : game.license.source
     document.getElementById('source').href = sourceFile ? sourceFile.url : game.license.source
-    overlay(game.title, 'Загружаю игру…')
+    overlay(game.title, T('Загружаю игру…'))
     try {
       const response = await fetch(game.rom.url)
-      if (!response.ok) throw new Error(`сервер ответил ${response.status}`)
+      if (!response.ok) throw new Error(T(`сервер ответил ${response.status}`))
       const bytes = new Uint8Array(await response.arrayBuffer())
-      if ((await sha256(bytes)) !== game.rom.sha256) throw new Error('файл повреждён: хеш не совпал')
+      if ((await sha256(bytes)) !== game.rom.sha256) throw new Error(T('файл повреждён: хеш не совпал'))
     } catch (err) {
-      overlay('Не удалось загрузить игру', `${err.message}. Проверь интернет и открой окно ещё раз.`)
+      overlay(T('Не удалось загрузить игру'), T(`${err.message}. Проверь интернет и открой окно ещё раз.`))
       return
     }
     document.getElementById('overlay').classList.remove('shown')
@@ -90,12 +93,14 @@
   function startLocal(entry) {
     const system = SYSTEMS[entry.console]
     if (!system) {
-      overlay('Не получилось', 'Эта приставка пока не поддерживает свои файлы.')
+      overlay(T('Не получилось'), T('Эта приставка пока не поддерживает свои файлы.'))
       return
     }
-    prepare(entry.title, system.keys, 'свой файл — хранится только в этом браузере')
+    prepare(entry.title, system.keys, T('свой файл — хранится только в этом браузере'))
     for (const id of ['license', 'source']) document.getElementById(id).style.display = 'none'
-    launch(system.core, URL.createObjectURL(entry.file), entry.title)
+    // Ядро узнаёт Master System и Game Gear по расширению, а у файла из браузера имени нет — даём его сами
+    const ext = (String(entry.file && entry.file.name).match(/\.([a-z0-9]+)$/i) || [])[1]
+    launch(system.core, URL.createObjectURL(entry.file), ext ? `${entry.title}.${ext.toLowerCase()}` : entry.title)
   }
 
   window.ArcadeEJS = { start, startLocal }

@@ -8,7 +8,16 @@ import { fileURLToPath } from 'node:url'
 import { build } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
-const temp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `arcade-${name}-`))
+// Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск
+const temps = []
+const temp = (name) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `arcade-${name}-`))
+  temps.push(dir)
+  return dir
+}
+process.on('exit', () => {
+  for (const dir of temps) fs.rmSync(dir, { recursive: true, force: true })
+})
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
 // Настоящий каталог
@@ -16,7 +25,7 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'psx'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'gg', 'psx'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
 assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
@@ -27,7 +36,7 @@ for (const [id, game] of Object.entries(catalog.games)) {
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
-  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin|zip)$/, id)
+  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin|zip|sms|gg)$/, id)
   assert.equal(game.rom.sha256, sha256(rom), `${id}: хеш`)
   assert.equal(game.rom.url, `files/${game.rom.sha256}${ext}`)
   assert.equal(game.rom.size, rom.length)
@@ -37,6 +46,9 @@ for (const [id, game] of Object.entries(catalog.games)) {
     assert.equal(rom.subarray(0, 4).toString('latin1'), 'NES\x1a', `${id}: это ROM Денди`)
     const mapper = (rom[6] >> 4) | (rom[7] & 0xf0)
     assert.ok([0, 1, 2, 3, 4, 7, 66].includes(mapper), `${id}: маппер ${mapper} JSNES поддерживает`)
+  } else if (game.console === 'sms' || game.console === 'gg') {
+    const tmr = rom.subarray(0x7ff0, 0x7ff8).toString('latin1') === 'TMR SEGA'
+    assert.ok(tmr || path.extname(romPath) === `.${game.console}`, `${id}: ROM Master System или Game Gear`)
   } else if (game.console === 'sega') {
     assert.equal(rom.subarray(0x100, 0x104).toString('latin1'), 'SEGA', `${id}: это ROM Mega Drive`)
   } else {
@@ -61,7 +73,7 @@ for (const f of ['index.html', 'boot.js', 'library.js', 'game.js', 'stats.js', '
 const headers = fs.readFileSync(path.join(out, '_headers'), 'utf8')
 assert.match(headers, /\/files\/\*\n  Cache-Control: public, max-age=31536000, immutable/)
 assert.match(headers, /\/catalog\.json\n  Cache-Control: public, max-age=60/)
-assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers\n')
+assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers\n_redirects\n')
 
 // Повторная сборка даёт те же файлы (кроме времени сборки)
 const again = build({ root: ROOT, out: temp('again'), now: new Date('2026-10-17T12:00:00Z') })
@@ -70,7 +82,7 @@ assert.deepEqual(again, catalog)
 // Ошибки в каталоге ловятся при сборке, а не у пользователей
 function broken(change) {
   const root = temp('broken')
-  fs.cpSync(path.join(ROOT, 'content'), path.join(root, 'content'), { recursive: true })
+  fs.cpSync(path.join(ROOT, 'content'), path.join(root, 'content'), { recursive: true, filter: (src) => !src.includes(`${path.sep}voxide`) })
   fs.cpSync(path.join(ROOT, 'web'), path.join(root, 'web'), { recursive: true })
   fs.cpSync(path.join(ROOT, 'third_party'), path.join(root, 'third_party'), { recursive: true })
   const file = path.join(root, 'content', 'catalog.json')
@@ -120,4 +132,23 @@ console.log('сборка: все проверки прошли')
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'miniplanets').console = 'nes' }), /игра miniplanets: это не ROM Денди/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sega' }), /игра thwaite: это не ROM Sega Mega Drive/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'psx' }), /игра thwaite: диск PlayStation должен быть \.zip/)
+// Master System и Game Gear: игры, короткие адреса приставок, проверка метки TMR SEGA
+{
+  const dir = temp('sms')
+  const built = build({ root: ROOT, out: dir })
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sms'), ['balloon-master', 'skyhaul', 'food-fighter', 'escape-from-monster-dimension'])
+  assert.equal(Object.values(built.games).filter((g) => g.console === 'gg').length, 0)
+  const redirects = fs.readFileSync(path.join(dir, '_redirects'), 'utf8')
+  for (const c of ['nes', 'sega', 'sms', 'gg', 'psx']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
+  assert.match(fs.readFileSync(path.join(dir, '.assetsignore'), 'utf8'), /_redirects/)
+}
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System или Game Gear \(нет метки TMR SEGA и расширение не/)
+// Маппер 28 — общий с модом: сборка делает из модуля мода обычный скрипт
+{
+  const dir = temp('mapper28')
+  build({ root: ROOT, out: dir })
+  const script = fs.readFileSync(path.join(dir, 'mapper28.js'), 'utf8')
+  assert.ok(!/^export /m.test(script), 'без export — это обычный скрипт')
+  assert.match(script, /installMapper28\(window\.jsnes && window\.jsnes\.Mappers\)/)
+}
 console.log('Sega: все проверки прошли')

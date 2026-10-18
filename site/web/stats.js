@@ -61,13 +61,13 @@
 
   function duration(seconds) {
     const minutes = Math.floor(seconds / 60)
-    if (minutes < 1) return 'меньше минуты'
-    if (minutes < 60) return `${minutes} мин`
-    return `${Math.floor(minutes / 60)} ч ${String(minutes % 60).padStart(2, '0')} мин`
+    if (minutes < 1) return T('меньше минуты')
+    if (minutes < 60) return T(`${minutes} мин`)
+    return T(`${Math.floor(minutes / 60)} ч ${String(minutes % 60).padStart(2, '0')} мин`)
   }
 
   function times(n) {
-    return `${n} ${plural(n, 'раз', 'раза', 'раз')}`
+    return T(`${n} ${plural(n, 'раз', 'раза', 'раз')}`)
   }
 
   function number(n) {
@@ -77,8 +77,8 @@
   // Одна строка о игре: «сыграно 12 мин · 4 раза · рекорд 12 300»
   function summary(id, spec) {
     const s = get(id)
-    if (!s.plays) return 'ещё не играли'
-    const parts = [`сыграно ${duration(s.seconds)}`, times(s.plays)]
+    if (!s.plays) return T('ещё не играли')
+    const parts = [T(`сыграно ${duration(s.seconds)}`), times(s.plays)]
     if (spec && s.best !== null && s.best > 0) parts.push(`${spec.label} ${number(s.best)}`)
     return parts.join(' · ')
   }

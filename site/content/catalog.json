@@ -16,6 +16,24 @@
       "noncommercial": true
     },
     {
+      "id": "sms",
+      "section": "games",
+      "title": "Master System",
+      "about": "Sega Master System",
+      "emulator": "EmulatorJS (GPL-3.0) + Genesis Plus GX",
+      "noncommercial": true,
+      "empty": "Свободных игр для Master System пока нет. Открой свой файл .sms — кнопка «Открыть свой файл» сверху."
+    },
+    {
+      "id": "gg",
+      "section": "games",
+      "title": "Game Gear",
+      "about": "Sega Game Gear",
+      "emulator": "EmulatorJS (GPL-3.0) + Genesis Plus GX",
+      "noncommercial": true,
+      "empty": "Свободных игр для Game Gear пока нет. Открой свой файл .gg — кнопка «Открыть свой файл» сверху."
+    },
+    {
       "id": "psx",
       "section": "games",
       "title": "PlayStation",
@@ -789,6 +807,84 @@
         "files": [
           "games/breakout/LICENSE.txt",
           "games/breakout/breakout-eb7dc30-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "balloon-master",
+      "console": "sms",
+      "title": "Balloon Master",
+      "genre": "приключение",
+      "about": "Веди воздушный шар через шесть миров: держись между препятствиями, лови топливо и не сгори. Бета-версия.",
+      "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
+      "rom": "games/balloon-master/balloon-master.sms",
+      "license": {
+        "name": "MIT",
+        "author": "RCD (Retro Computer Dresden)",
+        "source": "https://github.com/joergsf4/balloon-master",
+        "commit": "98488f2f85f5c69ba6176398a95a272a1cda92fe",
+        "files": [
+          "games/balloon-master/LICENSE.txt",
+          "games/balloon-master/balloon-master-98488f2-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "skyhaul",
+      "console": "sms",
+      "title": "SkyHaul",
+      "genre": "шутер",
+      "about": "Аркадный шутер по мотивам Skyhaul от ABA Games, перенесённый на Master System.",
+      "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
+      "rom": "games/skyhaul/skyhaul.sms",
+      "license": {
+        "name": "MIT",
+        "author": "ABA Games, порт — haroldo-ok",
+        "source": "https://github.com/haroldo-ok/skyhaul-sms",
+        "commit": "94483a95ac3a34b67e246290354605bc8330319a",
+        "files": [
+          "games/skyhaul/LICENSE.txt",
+          "games/skyhaul/skyhaul-94483a9-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "food-fighter",
+      "console": "sms",
+      "title": "Food Fighter",
+      "genre": "шутер",
+      "about": "Шутер в духе MegaMania: отстреливайся от волн летящей еды.",
+      "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
+      "rom": "games/food-fighter/food-fighter.sms",
+      "license": {
+        "name": "MIT, графика CC0",
+        "author": "haroldo-ok",
+        "source": "https://github.com/haroldo-ok/food-fighter",
+        "commit": "48fe2ea967952fb233f148c44ed48f66a01fb567",
+        "files": [
+          "games/food-fighter/LICENSE.txt",
+          "games/food-fighter/CREDITS.md",
+          "games/food-fighter/food-fighter-48fe2ea-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "escape-from-monster-dimension",
+      "console": "sms",
+      "title": "Escape from Monster Dimension",
+      "genre": "шутер",
+      "about": "Юного мага занесло в измерение монстров: отбивайся и выбирайся оттуда.",
+      "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
+      "rom": "games/escape-from-monster-dimension/escape-from-monster-dimension.sms",
+      "license": {
+        "name": "MIT, графика CC0, CC BY 3.0, CC BY-SA 3.0",
+        "author": "haroldo-ok",
+        "source": "https://github.com/haroldo-ok/escape-from-monster-dimension",
+        "commit": "01f8f89562f1a92e73e8523622085e84c4da7322",
+        "files": [
+          "games/escape-from-monster-dimension/LICENSE.txt",
+          "games/escape-from-monster-dimension/CREDITS.md",
+          "games/escape-from-monster-dimension/escape-from-monster-dimension-01f8f89-src.tar.gz"
         ]
       }
     }

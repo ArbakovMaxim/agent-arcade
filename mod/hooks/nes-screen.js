@@ -1,6 +1,9 @@
 // Денди в панели: эмулятор JSNES (Apache-2.0, third_party/jsnes) и перевод кадра в символы терминала.
 // Здесь нет вызовов Claude Code — только расчёты, поэтому модуль можно проверять отдельно.
-import { NES, Controller } from './vendor/jsnes.mjs'
+import { NES, Controller, Mappers } from './vendor/jsnes.mjs'
+import { installMapper28 } from './mapper28.js'
+
+installMapper28(Mappers) // Action 53 и самодельные мультикарты
 
 export { Controller }
 

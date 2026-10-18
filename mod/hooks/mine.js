@@ -5,7 +5,7 @@
 export const MINE_MAX_BYTES = 4 * 1024 * 1024 // больше за одно чтение мод не получит; игры Денди и Sega помещаются
 
 // Мапперы, с которыми работает наш эмулятор Денди (JSNES): проверено загрузкой каждого номера
-export const NES_MAPPERS = new Set([0, 1, 2, 3, 4, 5, 7, 9, 11, 34, 38, 66, 71, 79, 94, 118, 119, 140, 180, 240, 241])
+export const NES_MAPPERS = new Set([0, 1, 2, 3, 4, 5, 7, 9, 11, 28, 34, 38, 66, 71, 79, 94, 118, 119, 140, 180, 240, 241])
 
 const ID = /^mine-[0-9a-f]{12}$/
 const SHA256 = /^[0-9a-f]{64}$/
@@ -19,8 +19,11 @@ export function cleanPath(args) {
   return path
 }
 
-// Что за файл: Денди (заголовок iNES) или Sega Mega Drive (метка SEGA в заголовке картриджа по адресу $100)
-export function identifyRom(bytes) {
+export const CONSOLE_NAMES = { nes: 'Денди', sega: 'Sega Mega Drive', sms: 'Master System', gg: 'Game Gear' }
+
+// Что за файл: Денди (заголовок iNES), Sega Mega Drive (метка SEGA по адресу $100), Master System или Game Gear
+// (метка TMR SEGA и код региона; у японских картриджей метки бывает нет — тогда по расширению .sms или .gg)
+export function identifyRom(bytes, path = '') {
   const head = String.fromCharCode(...bytes.subarray(0, 6))
   if (head.startsWith('PK\x03\x04') || head.startsWith('7z\xbc\xaf\x27\x1c') || head.startsWith('Rar!')) {
     return { error: 'это архив. Распакуй его и укажи путь к самому файлу игры: .nes, .md или .bin' }
@@ -32,7 +35,15 @@ export function identifyRom(bytes) {
   }
   const at = (offset) => String.fromCharCode(...bytes.subarray(offset, offset + 4))
   if (bytes.length >= 0x200 && (at(0x100) === 'SEGA' || at(0x101) === 'SEGA')) return { console: 'sega' }
-  return { error: 'это не похоже на игру для Денди (.nes) или Sega Mega Drive (.md, .bin, .gen)' }
+  for (const o of [0x7ff0, 0x3ff0, 0x1ff0]) {
+    if (bytes.length >= o + 16 && String.fromCharCode(...bytes.subarray(o, o + 8)) === 'TMR SEGA') {
+      const region = bytes[o + 15] >> 4
+      return { console: region >= 5 && region <= 7 ? 'gg' : 'sms' }
+    }
+  }
+  const ext = (String(path).match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase()
+  if (ext === 'sms' || ext === 'gg') return { console: ext }
+  return { error: 'это не похоже на игру для Денди (.nes), Sega Mega Drive (.md, .bin, .gen), Master System (.sms) или Game Gear (.gg)' }
 }
 
 // Название из имени файла: без папки и расширения, подчёркивания — пробелы
@@ -50,7 +61,7 @@ export function mineId(sha256) {
 export function restoreMine(saved) {
   if (!Array.isArray(saved)) return []
   return saved
-    .filter((m) => m && ID.test(m.id ?? '') && SHA256.test(m.sha256 ?? '') && (m.console === 'nes' || m.console === 'sega'))
+    .filter((m) => m && ID.test(m.id ?? '') && SHA256.test(m.sha256 ?? '') && Object.hasOwn(CONSOLE_NAMES, m.console))
     .map((m) => ({ id: m.id, console: m.console, title: String(m.title ?? 'Моя игра').slice(0, 48), sha256: m.sha256 }))
 }
 

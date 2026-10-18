@@ -7,11 +7,11 @@
   // Скачивает файл игры и сверяет SHA-256 с каталогом: битый или подменённый файл не запустится
   async function loadFile(file) {
     const response = await fetch(file.url)
-    if (!response.ok) throw new Error(`сервер ответил ${response.status}`)
+    if (!response.ok) throw new Error(T(`сервер ответил ${response.status}`))
     const bytes = new Uint8Array(await response.arrayBuffer())
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     const hex = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
-    if (hex !== file.sha256) throw new Error('файл повреждён: хеш не совпал')
+    if (hex !== file.sha256) throw new Error(T('файл повреждён: хеш не совпал'))
     return bytes
   }
 
@@ -62,13 +62,13 @@
   }
 
   if (!game) {
-    showOverlay('Игра не найдена', `В этой сборке нет игры «${id}».`)
+    showOverlay(T('Игра не найдена'), T(`В этой сборке нет игры «${id}».`))
     return
   }
   document.body.classList.remove('library-mode')
   document.title = `${game.title} · Arcade`
-  document.getElementById('keys').textContent = game.keys
-  document.getElementById('credit').textContent = game.credit
+  document.getElementById('keys').textContent = T(game.keys)
+  document.getElementById('credit').textContent = T(game.credit)
   const licenseFiles = (game.license && game.license.files) || []
   const licenseFile = licenseFiles.find((f) => /license/i.test(f.name))
   const sourceFile = licenseFiles.find((f) => /\.tar\.gz$|\.zip$/i.test(f.name))
@@ -84,12 +84,12 @@
     sourceLink.href = sourceFile ? sourceFile.url : game.license.source
   }
 
-  showOverlay(game.title, 'Загружаю игру…')
+  showOverlay(game.title, T('Загружаю игру…'))
   let romBytes
   try {
     romBytes = localRom ? localRom.bytes : await loadFile(game.rom)
   } catch (err) {
-    showOverlay('Не удалось загрузить игру', `${err.message}. Проверь интернет и открой окно ещё раз.`)
+    showOverlay(T('Не удалось загрузить игру'), T(`${err.message}. Проверь интернет и открой окно ещё раз.`))
     return
   }
 
@@ -131,7 +131,7 @@
   try {
     nes.loadROM(romBytes)
   } catch (err) {
-    showOverlay('Не удалось открыть ROM', `${err.message || 'эмулятор не распознал файл'}.`)
+    showOverlay(T('Не удалось открыть ROM'), T(`${err.message || 'эмулятор не распознал файл'}.`))
     return
   }
 
@@ -155,7 +155,7 @@
   }
 
   function showSound() {
-    soundButton.textContent = soundOn ? 'Звук: вкл' : 'Звук: выкл'
+    soundButton.textContent = soundOn ? T('Звук: вкл') : T('Звук: выкл')
   }
   showSound()
   soundButton.addEventListener('click', () => {
@@ -286,7 +286,7 @@
     save()
     flushStats()
     if (audio) audio.suspend()
-    showOverlay('Пауза', 'Кликни или нажми любую клавишу, чтобы продолжить')
+    showOverlay(T('Пауза'), T('Кликни или нажми любую клавишу, чтобы продолжить'))
   }
   function resume() {
     if (!paused) return
@@ -365,26 +365,26 @@
   const restored = restore()
   nes.frame()
   context.putImageData(image, 0, 0)
-  showOverlay(game.title, restored ? 'Продолжаем с места остановки — кликни или нажми любую клавишу' : 'Кликни или нажми любую клавишу, чтобы начать')
+  showOverlay(game.title, restored ? T('Продолжаем с места остановки — кликни или нажми любую клавишу') : T('Кликни или нажми любую клавишу, чтобы начать'))
   requestAnimationFrame(loop)
   }
 
   async function startLocal(bytes, fileName) {
-    if (!(bytes instanceof Uint8Array)) throw new Error('Не удалось прочитать файл.')
+    if (!(bytes instanceof Uint8Array)) throw new Error(T('Не удалось прочитать файл.'))
     if (bytes.length < 16 || bytes[0] !== 0x4e || bytes[1] !== 0x45 || bytes[2] !== 0x53 || bytes[3] !== 0x1a) {
-      throw new Error('Это не ROM для NES: в файле нет заголовка iNES.')
+      throw new Error(T('Это не ROM для NES: в файле нет заголовка iNES.'))
     }
-    if (bytes.length > 16 * 1024 * 1024) throw new Error('ROM больше 16 МБ — такой файл не поддерживается.')
+    if (bytes.length > 16 * 1024 * 1024) throw new Error(T('ROM больше 16 МБ — такой файл не поддерживается.'))
     const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))
     const hash = Array.from(digest, (b) => b.toString(16).padStart(2, '0')).join('')
-    const cleanName = String(fileName || 'Свой ROM').replace(/\.nes$/i, '').trim() || 'Свой ROM'
+    const cleanName = String(fileName || T('Свой ROM')).replace(/\.nes$/i, '').trim() || T('Свой ROM')
     const id = `local-${hash.slice(0, 16)}`
     const catalog = {
       games: {
         [id]: {
           title: cleanName,
-          keys: 'Стрелки/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift',
-          credit: 'локальный ROM',
+          keys: T('Стрелки/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift'),
+          credit: T('локальный ROM'),
           license: { files: [], source: '#' },
         },
       },

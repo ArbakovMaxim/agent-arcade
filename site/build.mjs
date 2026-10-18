@@ -91,6 +91,11 @@ export function build({ root, out, now = new Date() }) {
     if (g.console === 'sega' && !['SEGA'].includes(bytes.subarray(0x100, 0x104).toString('latin1')) && bytes.subarray(0x101, 0x105).toString('latin1') !== 'SEGA') {
       fail(`${where}: это не ROM Sega Mega Drive (нет метки SEGA в заголовке)`)
     }
+    // Master System и Game Gear — метка TMR SEGA в заголовке картриджа
+    const tmr = [0x7ff0, 0x3ff0, 0x1ff0].some((o) => bytes.length >= o + 8 && bytes.subarray(o, o + 8).toString('latin1') === 'TMR SEGA')
+    // У части картриджей метки нет — тогда эмулятор узнаёт приставку по расширению, и оно должно совпадать
+    const extOk = path.extname(romPath).slice(1).toLowerCase() === g.console
+    if ((g.console === 'sms' || g.console === 'gg') && !tmr && !extOk) fail(`${where}: это не ROM Master System или Game Gear (нет метки TMR SEGA и расширение не .sms/.gg)`)
     // PlayStation — диск в .zip, внутри .cue и .bin: эмулятор распакует его сам
     if (g.console === 'psx' && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.cue')))) {
       fail(`${where}: диск PlayStation должен быть .zip, где лежат .cue и .bin`)
@@ -133,9 +138,14 @@ export function build({ root, out, now = new Date() }) {
   for (const file of fs.readdirSync(path.join(root, 'web'))) copy(path.join(root, 'web', file), path.join(out, file))
   copy(path.join(root, 'third_party', 'jsnes', 'LICENSE.txt'), path.join(out, 'licenses', 'jsnes', 'LICENSE.txt'))
   copyEmulatorJS(path.join(root, 'vendor', 'emulatorjs'), out)
+  // Маппер 28 (Action 53) — общий с модом: из модуля мода делаем обычный скрипт для страницы
+  const mapper28 = fs.readFileSync(path.join(root, '..', 'mod', 'hooks', 'mapper28.js'), 'utf8').replace(/^export /gm, '')
+  fs.writeFileSync(path.join(out, 'mapper28.js'), `;(function () {\n'use strict'\n${mapper28}\ninstallMapper28(window.jsnes && window.jsnes.Mappers)\n})()\n`)
   fs.writeFileSync(path.join(out, '_headers'), HEADERS)
+  // Короткие адреса приставок: /sega — сразу вкладка Sega
+  fs.writeFileSync(path.join(out, '_redirects'), catalog.consoles.map((c) => `/${c.id} /?tab=${c.id} 302`).join('\n') + '\n')
   // Wrangler читает _headers как правила, но не выкладывает его как обычный файл
-  fs.writeFileSync(path.join(out, '.assetsignore'), '_headers\n')
+  fs.writeFileSync(path.join(out, '.assetsignore'), '_headers\n_redirects\n')
   return catalog
 }
 

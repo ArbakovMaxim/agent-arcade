@@ -4,7 +4,8 @@
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, parseDetection, windowBounds } from './browsers.js'
-import { MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
+import { LANGS, detectLang, tr, translateTree } from './i18n.js'
+import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
@@ -35,6 +36,8 @@ const LAUNCH_TIMEOUT_MS = 20_000 // сколько ждать PowerShell, кот
 
 const ROM_CACHE_LIMIT = 8 // сколько скачанных игр держать в хранилище мода (у него предел 4 МиБ на всё)
 const REMOTE_MAX_WIDTH = 768 // в Desktop и VS Code экран Денди не шире ×3
+const WIDE_COLUMNS = 400 // «во всю ширину»: просим столько колонок — Claude Code даст, сколько позволит раскладка
+const REMOTE_MAX_WIDTH_WIDE = 1536 // во всю ширину экран Денди до ×6 — если хватает и ширины, и высоты
 const HOLD_TICKS_FIRST = 8 // поле ввода VS Code: кнопка держится ≈260 мс после нажатия…
 const HOLD_TICKS_REPEAT = 4 // …и ≈130 мс после каждого повтора, пока идёт автоповтор
 
@@ -79,6 +82,15 @@ let osNotify = true // системные уведомления «агент з
 let asked = false // в этом ходе на вопрос уже ответили
 let askVisible = false
 let paneOpen = false
+let lang = 'ru' // язык интерфейса: ru или en — настройка, иначе по окружению
+let wide = false // панель игры во всю ширину: разговор с агентом сжимается в узкую полосу
+let agentAlert = null // пока открыта игра: 'done' — агент закончил, 'permission' — ждёт разрешения; плашка поверх игры
+// Что делать с игрой в панели, когда агент закончил или ждёт разрешения — отдельно для каждого сигнала
+const SIGNAL_MODES = ['notify', 'pause', 'close']
+const SIGNAL_LABELS = { notify: 'плашка, игра идёт', pause: 'пауза и плашка', close: 'сразу к агенту' }
+let onDone = 'notify'
+let onPermission = 'pause' // агент стоит и ждёт человека — это срочнее
+let paused = false // игра на паузе из-за сигнала агента: снимается «Играть дальше» или любой клавишей игры
 let view = 'library' // library или id игры (field — проверка клавиш)
 let menu = 'main' // что открыто в библиотеке: main, id приставки или settings
 let menuFrom = null // откуда вернулись в главное меню — туда ставим фокус
@@ -128,7 +140,7 @@ function games() {
       id: m.id,
       console: m.console,
       title: m.title,
-      note: `${m.console === 'nes' ? 'Денди' : 'Sega Mega Drive'} — твой файл, хранится только у тебя`,
+      note: `${CONSOLE_NAMES[m.console]} — твой файл, хранится только у тебя`,
       rom: { sha256: m.sha256, mine: true },
       web: true, // в окне: страница найдёт файл в браузере или один раз попросит его выбрать
       mine: true,
@@ -152,6 +164,14 @@ function clockTime() {
 
 function log(text) {
   events = [`${clockTime()} ${text}`, ...events].slice(0, 6)
+}
+
+function consoleTitle(id) {
+  return catalog.consoles.find((c) => c.id === id)?.title ?? CONSOLE_NAMES[id] ?? id
+}
+
+function paneColumns() {
+  return wide ? WIDE_COLUMNS : PANE_COLUMNS
 }
 
 function workedSeconds(now) {
@@ -353,6 +373,12 @@ function readInput(data) {
     const before = lastCounts[key] ?? 0
     const fresh = n >= before ? n - before : n // экран игры создан заново — счёт пошёл с нуля
     lastCounts[key] = n
+    if (paused && fresh > 0 && view !== 'field') {
+      paused = false
+      agentAlert = null
+      redraw = true
+      continue
+    }
     for (let i = 0; i < Math.min(fresh, 10); i++) {
       if (pressKey(key)) save = true
       redraw = true
@@ -436,9 +462,16 @@ function windowTarget() {
 // Команда, которая открывает окно с игрой (или с библиотекой, если id нет) на сайте Arcade.
 // На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
 function windowUrl(id) {
-  if (typeof id === 'string' && id.startsWith('tab:')) return tabPageUrl(id.slice(4))
-  const m = mine.find((x) => x.id === id)
-  return m ? minePageUrl(m) : pageUrl(id)
+  let url
+  if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(id.slice(4))
+  else {
+    const m = mine.find((x) => x.id === id)
+    url = m ? minePageUrl(m) : pageUrl(id)
+  }
+  if (lang !== 'en') return url
+  // Язык передаём в адресе: после # — если своя игра там, иначе обычным параметром
+  if (url.includes('#')) return `${url}&lang=en`
+  return url.includes('?') ? `${url}&lang=en` : `${url}?lang=en`
 }
 
 function windowCommand(id) {
@@ -546,7 +579,7 @@ async function addMine($, rawPath) {
       }
       const { base64 } = await $.fs.read(path, { as: 'bytes' })
       const bytes = Uint8Array.fromBase64(base64)
-      const info = identifyRom(bytes)
+      const info = identifyRom(bytes, path)
       if (info.error) throw new Error(info.error)
       const sha = await sha256Hex(bytes)
       const title = titleFromPath(path)
@@ -556,7 +589,7 @@ async function addMine($, rawPath) {
         await $.fs.write(mineFile(sha), base64)
         mine = [...mine, { id: mineId(sha), console: info.console, title, sha256: sha }]
         await $.store.set('mine', mine)
-        message = `Добавлено: ${title} (${info.console === 'nes' ? 'Денди' : 'Sega Mega Drive'}).`
+        message = `Добавлено: ${title} (${CONSOLE_NAMES[info.console]}).`
       }
     } catch (err) {
       message = `Не получилось добавить: ${err?.message ?? err}`
@@ -570,6 +603,13 @@ export function register(on) {
     try {
       keymap = restoreKeymap(await $.store.get('keys'))
       osNotify = (await $.store.get('notify')) !== false
+      wide = (await $.store.get('wide')) === true
+      const storedLang = await $.store.get('lang')
+      lang = LANGS.includes(storedLang) ? storedLang : detectLang(await $.env.get('LC_ALL'), await $.env.get('LC_MESSAGES'), await $.env.get('LANG'))
+      const storedDone = await $.store.get('onDone')
+      const storedPermission = await $.store.get('onPermission')
+      if (SIGNAL_MODES.includes(storedDone)) onDone = storedDone
+      if (SIGNAL_MODES.includes(storedPermission)) onPermission = storedPermission
       mine = restoreMine(await $.store.get('mine'))
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
@@ -629,12 +669,11 @@ export function register(on) {
           $.ui.invalidate('ui.render')
         })
       }
-      await $.command.register({ name: 'arcade', description: 'Открыть Arcade', immediate: true })
-      await $.command.register({ name: 'arcade-keys', description: 'Arcade: назначить клавиши заново', immediate: true })
+      await $.command.register({ name: 'arcade', description: tr('Открыть Arcade', lang), immediate: true })
       await $.command.register({
         name: 'arcade-add',
-        description: 'Arcade: добавить свою игру — файл ROM Денди или Sega',
-        argumentHint: 'путь к файлу .nes, .md или .bin',
+        description: tr('Arcade: добавить свою игру — файл ROM Денди или Sega', lang),
+        argumentHint: tr('путь к файлу .nes, .md или .bin', lang),
         immediate: true,
       })
       // Раз в секунду: проверить порог вопроса и обновить счётчик секунд
@@ -648,7 +687,7 @@ export function register(on) {
       // Игровой цикл Денди: идёт, только пока открыта панель с игрой.
       // В Desktop и VS Code кадр уходит перерисовкой панели (Svg), в терминале — через $.ui.blit.
       $.clock.every(TICK_MS, async () => {
-        if (!nesView() || !paneOpen || !nes) return
+        if (!nesView() || !paneOpen || !nes || paused) return
         if (remoteSurface) {
           stepNes()
           $.ui.invalidate('ui.render')
@@ -688,6 +727,8 @@ export function register(on) {
       turnStartedAt = await $.clock.now()
       asked = false
       askVisible = false
+      agentAlert = null
+      paused = false
       log('агент начал ход')
       if (DEBUG) await $.ui.toast('arcade: агент начал ход')
     } catch (err) {
@@ -700,10 +741,18 @@ export function register(on) {
     try {
       status = 'permission'
       askVisible = false
+      if (paneOpen && view !== 'library') {
+        agentAlert = 'permission'
+        if (onPermission === 'pause') {
+          paused = true
+          releaseAll()
+        }
+        if (onPermission === 'close') await $.ui.close({ id: PANE })
+      }
       log(`запрос разрешения: ${e.tool_name ?? 'инструмент'}`)
       const now = await $.clock.now()
       const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS
-        ? notifyCommand(platform, 'Claude Code', 'Агент ждёт разрешения')
+        ? notifyCommand(platform, 'Claude Code', tr('Агент ждёт разрешения', lang))
         : null
       if (command) {
         $.clock.after(0, async () => {
@@ -738,12 +787,20 @@ export function register(on) {
     try {
       status = 'done'
       askVisible = false
+      if (paneOpen && view !== 'library') {
+        agentAlert = 'done'
+        if (onDone === 'pause') {
+          paused = true
+          releaseAll()
+        }
+        if (onDone === 'close') await $.ui.close({ id: PANE }) // панель закрывается — игра встаёт на паузу, клавиатура у Claude Code
+      }
       log('агент закончил ход')
-      if (paneOpen) await $.ui.toast('Агент закончил — Esc, чтобы вернуться')
+      if (paneOpen) await $.ui.toast(tr('Агент закончил — Esc, чтобы вернуться', lang))
       // Играешь в окне браузера — Claude Code не видно: системное уведомление, если ход был долгим
       const now = await $.clock.now()
       const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS && now - turnStartedAt >= ASK_AFTER_MS
-        ? notifyCommand(platform, 'Claude Code', 'Агент закончил — можно возвращаться')
+        ? notifyCommand(platform, 'Claude Code', tr('Агент закончил — можно возвращаться', lang))
         : null
       if (command) {
         $.clock.after(0, async () => {
@@ -764,6 +821,8 @@ export function register(on) {
   on('ui.close', async ($, e, next) => {
     if (e.id === PANE) {
       paneOpen = false
+      agentAlert = null
+      paused = false // закрытая панель и так стоит на паузе
       releaseAll() // Денди стоит на паузе, пока панель закрыта
     }
     return next(e)
@@ -780,7 +839,7 @@ export function register(on) {
 
   on('command.run', { command: 'arcade' }, async ($) => {
     markPaneOpen()
-    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: PANE_COLUMNS, rows: PANE_ROWS })
+    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
     $.ui.invalidate('ui.render')
     return {}
   })
@@ -792,23 +851,16 @@ export function register(on) {
     if (view !== 'library') toLibrary()
     menu = 'mine'
     markPaneOpen()
-    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: PANE_COLUMNS, rows: PANE_ROWS })
-    $.ui.invalidate('ui.render')
-    return {}
-  })
-
-  on('command.run', { command: 'arcade-keys' }, async ($) => {
-    if (view === 'library') launch('field')
-    startAssign('Назначаем управление заново.')
-    markPaneOpen()
-    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: PANE_COLUMNS, rows: PANE_ROWS })
+    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
     $.ui.invalidate('ui.render')
     return {}
   })
 
   // Полоса над полем ввода: «1» — играть, «2» — не сейчас (цифра в пустом поле ввода и пауза).
   // Пока вопрос виден, полоса занята целиком: то, что рисуют там другие моды, скрыто.
-  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) =>
+    translateTree(
+      await (async () => {
     // VS Code: пока в панели идёт игра, клавиатура — в поле над строкой ввода. Саму панель VS Code
     // не делает фокусом, а поле в колонке чата получает клавиши. Что рисуют в полосе другие моды, остаётся ниже.
     if (!askVisible && e.surface === 'vscode' && paneOpen && nesView()) {
@@ -873,7 +925,7 @@ export function register(on) {
           plain: true,
           onPress: async () => {
             markPaneOpen()
-            await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: PANE_COLUMNS, rows: PANE_ROWS })
+            await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
             $.ui.invalidate('ui.render')
           },
         }),
@@ -896,7 +948,7 @@ export function register(on) {
                     libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
                   }
                   $.ui.invalidate('ui.render')
-                  await $.ui.toast(libraryNotice)
+                  await $.ui.toast(tr(libraryNotice, lang))
                 },
               }),
             ]
@@ -914,11 +966,16 @@ export function register(on) {
         }),
       ],
     })
-  })
+      })(),
+      lang,
+    ),
+  )
 
   // Панель: библиотека игр или сама игра. Клавиши над экраном игры ловит Client (hooks/input.js)
   // после клика по экрану, в любой раскладке.
-  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+  on('ui.render', { component: 'Pane' }, async ($, e, next) =>
+    translateTree(
+      await (async () => {
     if (e.requestId !== PANE) return next(e)
     const { Box, Text, Raster, Image, Button, Client, Svg, Input } = $.ui.resolve(e)
     const now = await $.clock.now()
@@ -975,10 +1032,10 @@ export function register(on) {
           label: g.title,
           ...(focus ? { autoFocus: true } : {}),
           onPress: async () => {
-            // Sega и PlayStation идут только в окне браузера (EmulatorJS на сайте): в панели их показать нечем
-            const sega = g.console === 'sega' || g.console === 'psx'
+            // Всё, кроме Денди, идёт только в окне браузера (EmulatorJS на сайте): в панели показать нечем
+            const sega = Boolean(g.console) && g.console !== 'nes' // у «Проверки клавиш» приставки нет — она в панели
             if (sega && (!platform || e.surface === 'desktop')) {
-              libraryNotice = `Игры ${g.console === 'psx' ? 'PlayStation' : 'Sega'} идут в окне браузера, а здесь его открыть нельзя.`
+              libraryNotice = `Игры ${consoleTitle(g.console)} идут в окне браузера, а здесь его открыть нельзя.`
               $.ui.invalidate('ui.render')
               return
             }
@@ -1067,6 +1124,46 @@ export function register(on) {
                 }),
                 dim('  пиксели — в терминалах с картинками (kitty, Ghostty, Rio), символы — везде'),
               ]),
+          Button({
+            key: 'arcade-lang',
+            label: `Язык: ${lang === 'ru' ? 'русский' : 'English'}`,
+            onPress: async () => {
+              lang = lang === 'ru' ? 'en' : 'ru'
+              $.ui.invalidate('ui.render')
+              await $.store.set('lang', lang)
+            },
+          }),
+          Button({
+            key: 'arcade-wide',
+            label: `Размер панели: ${wide ? 'во всю ширину' : 'обычный'}`,
+            onPress: async () => {
+              wide = !wide
+              $.ui.invalidate('ui.render')
+              await $.store.set('wide', wide)
+              // Панель уже открыта — просим новую ширину сразу
+              await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+            },
+          }),
+          dim('  во всю ширину разговор с агентом сжимается в узкую полосу; поправить ширину можно мышью'),
+          Button({
+            key: 'arcade-on-done',
+            label: `Когда агент закончил: ${SIGNAL_LABELS[onDone]}`,
+            onPress: async () => {
+              onDone = SIGNAL_MODES[(SIGNAL_MODES.indexOf(onDone) + 1) % SIGNAL_MODES.length]
+              $.ui.invalidate('ui.render')
+              await $.store.set('onDone', onDone)
+            },
+          }),
+          Button({
+            key: 'arcade-on-permission',
+            label: `Когда агент ждёт разрешения: ${SIGNAL_LABELS[onPermission]}`,
+            onPress: async () => {
+              onPermission = SIGNAL_MODES[(SIGNAL_MODES.indexOf(onPermission) + 1) % SIGNAL_MODES.length]
+              $.ui.invalidate('ui.render')
+              await $.store.set('onPermission', onPermission)
+            },
+          }),
+          dim('  для игры в панели Claude; в окне браузера — системное уведомление'),
           ...(platform
             ? [
                 Button({
@@ -1081,9 +1178,23 @@ export function register(on) {
                 dim('  системное уведомление со звуком, когда агент закончил или ждёт разрешения'),
               ]
             : []),
-          gameButton(field, false),
-          dim(`  ${field.note}`),
-          dim('  /arcade-keys — назначить клавиши заново'),
+          // Проверка и назначение клавиш — только в терминале: в VS Code клавиши идут через строку 🎮, в Desktop поля нет
+          ...(e.surface === 'terminal'
+            ? [
+                gameButton(field, false),
+                dim(`  ${field.note}`),
+                Button({
+                  key: 'arcade-assign',
+                  label: 'Назначить клавиши заново',
+                  onPress: () => {
+                    launch('field')
+                    startAssign('Назначаем управление заново.')
+                    $.ui.invalidate('ui.render')
+                  },
+                }),
+                dim('  мод попросит нажать клавиши по очереди: вверх, вниз, влево, вправо, A, B, Start, Select'),
+              ]
+            : []),
           ...noticeLines,
           ...hint,
         ]
@@ -1136,20 +1247,20 @@ export function register(on) {
           ...(list.length
             ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
-          // PlayStation идёт только в окне браузера: свои диски добавляются там, кнопкой «Открыть свой файл»
-          ...(c.id === 'psx'
+          // Всё, кроме Денди, идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
+          ...(c.id !== 'nes'
             ? platform && e.surface !== 'desktop'
               ? [
                   gap,
                   Button({
-                    key: 'arcade-open-tab-psx',
-                    label: 'Открыть PlayStation в окне',
+                    key: `arcade-open-tab-${c.id}`,
+                    label: `Открыть ${c.title} в окне`,
                     ...(!list.length ? { autoFocus: true } : {}),
                     onPress: async () => {
-                      const command = windowCommand('tab:psx')
+                      const command = windowCommand(`tab:${c.id}`)
                       try {
                         const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                        libraryNotice = result?.exitCode === 0 ? 'Окно Arcade открыто на вкладке PlayStation.' : launchNotice(result, null)
+                        libraryNotice = result?.exitCode === 0 ? `Окно Arcade открыто на вкладке ${c.title}.` : launchNotice(result, null)
                         if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
                       } catch (err) {
                         libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
@@ -1158,7 +1269,7 @@ export function register(on) {
                     },
                   }),
                 ]
-              : [gap, dim('PlayStation идёт в окне браузера, а здесь его открыть нельзя.')]
+              : [gap, dim(`${c.title} идёт в окне браузера, а здесь его открыть нельзя.`)]
             : []),
           ...(list.length ? [gap, dim(`Игры открываются ${opensWindow(e.surface) ? whereText() : 'здесь, в панели'}.`)] : []),
           ...noticeLines,
@@ -1235,8 +1346,12 @@ export function register(on) {
         ? `прицел ${moves} · огонь ${first('b')} ${first('a')} · Start ${first('start')}`
         : `движение ${moves} · A ${first('a')} · B ${first('b')} · Start ${first('start')}`
     // Назначение клавиш или сообщение мода; иначе — подсказка для этой поверхности
-    const message =
-      mode === 'assign'
+    const message = paused
+      ? Text({
+          color: 'yellow',
+          children: [`Пауза: ${agentAlert === 'permission' ? 'агент ждёт разрешения' : 'агент закончил'}. Любая клавиша игры — играть дальше, Esc — к агенту`],
+        })
+      : mode === 'assign'
         ? Text({ color: 'yellow', children: [`${notice} Нажми клавишу для «${ACTIONS[assignStep].label}» (${assignStep + 1} из ${ACTIONS.length})`] })
         : notice
           ? Text({ color: 'yellow', children: [notice] })
@@ -1250,16 +1365,45 @@ export function register(on) {
           children: [header, Text({ children: ['Проверка клавиш работает только в терминале.'] }), libraryButton],
         })
       }
-      const scale = Math.max(1, Math.min(REMOTE_MAX_WIDTH / 256, Math.floor(((e.props.bodyColumns ?? 60) * 7.5) / 256)))
+      // Во всю ширину картинка крупнее, но целиком помещается и по высоте панели
+      const byWidth = Math.floor(((e.props.bodyColumns ?? 60) * 7.5) / 256)
+      const byHeight = wide ? Math.floor(((e.props.scroll?.bodyRows ?? 30) * 17) / 240) : Infinity
+      const scale = Math.max(1, Math.min((wide ? REMOTE_MAX_WIDTH_WIDE : REMOTE_MAX_WIDTH) / 256, byWidth, byHeight))
       const width = 256 * scale
       const height = 240 * scale
       const picture = Svg({ source: frameToSvg(frame, width, height), alt: game.title, width, height })
+      // Агент закончил или ждёт разрешения, пока идёт игра: яркая плашка над экраном — её видно и во всю ширину
+      const alertBar = agentAlert
+        ? Box({
+            flexDirection: 'row',
+            columnGap: 2,
+            children: [
+              Text({
+                bold: true,
+                color: 'black',
+                backgroundColor: agentAlert === 'permission' ? 'yellow' : 'green',
+                children: [`${agentAlert === 'permission' ? ' Агент ждёт разрешения ' : ' Агент закончил '}${paused ? '· пауза ' : ''}`],
+              }),
+              Button({ key: 'arcade-to-agent', label: 'К агенту', onPress: async () => { await $.ui.close({ id: PANE }) } }),
+              Button({
+                key: 'arcade-alert-ok',
+                label: 'Играть дальше',
+                onPress: () => {
+                  agentAlert = null
+                  paused = false
+                  $.ui.invalidate('ui.render')
+                },
+              }),
+            ],
+          })
+        : null
       // В Desktop клавиши ловит Client поверх экрана, как в терминале; в VS Code его пока нет
       if (e.surface === 'desktop') {
         return Box({
           flexDirection: 'column',
           children: [
             header,
+            ...(alertBar ? [alertBar] : []),
             message ?? Text({ dimColor: true, children: ['Кликни по экрану — играть · Esc — к агенту · Backspace — библиотека'] }),
             Box({
               children: [
@@ -1295,7 +1439,8 @@ export function register(on) {
         flexDirection: 'column',
         children: [
           header,
-          message ?? Text({ dimColor: true, children: ['Клавиатура — в поле «клавиши для игры» над строкой ввода Claude · кнопки — мышью'] }),
+          ...(alertBar ? [alertBar] : []),
+          message ?? Text({ dimColor: true, children: ['Клавиатура — в строке 🎮 над строкой ввода Claude · кнопки — мышью'] }),
           picture,
           Box({
             flexDirection: 'row',
@@ -1357,10 +1502,13 @@ export function register(on) {
         Text({ dimColor: true, children: [`Нажатия: ${pressed.join(' ') || '—'}`] }),
         Text({ dimColor: true, children: [`Зажато: ${heldKeys.join(' ') || '—'}`] }),
         Text({ dimColor: true, children: [`Клавиши: ${ACTIONS.map((a) => `${a.label} ${keymap[a.id].join(' ')}`).join(' · ')}`] }),
-        Text({ dimColor: true, children: ['/arcade-keys — назначить клавиши'] }),
+        Text({ dimColor: true, children: ['Назначить заново: «Настройки» → «Назначить клавиши заново»'] }),
         Text({ children: [' '] }),
         ...eventLines,
       ],
     })
-  })
+      })(),
+      lang,
+    ),
+  )
 }
