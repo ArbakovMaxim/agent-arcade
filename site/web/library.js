@@ -108,7 +108,7 @@
       card.dataset.game = id
       const top = el('div', 'card-top')
       top.append(el('span', 'title', game.title), el('span', 'genre', T(game.genre)))
-      card.append(top, el('div', 'about', game.about), el('div', 'stats', ArcadeStats.summary(id, game.score)))
+      card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang === 'en' && game.about_en ? game.about_en : game.about), el('div', 'stats', ArcadeStats.summary(id, game.score)))
       list.append(card)
     }
     if (mineList.length) list.append(el('div', 'mine-head', T('Мои игры — только в этом браузере')))

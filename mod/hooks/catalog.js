@@ -26,15 +26,15 @@ export function bundledCatalog() {
       { id: 'sega', title: 'Sega', soon: 'Готовим эмулятор Mega Drive и подбираем свободные игры.' },
     ],
     games: [
-      game('thwaite', 'Thwaite', 'аркада', 'Ракеты падают на город — сбивай их фейерверками, пока дома целы.', 'ee51cd9562f28195ba015d9857c6c4fc9bf67cdfb213e95f655e586b92195173'),
-      game('croom', 'Concentration Room', 'найди пару', 'Переворачивай карточки и находи пары — одному, вдвоём или против компьютера.', 'c24c1aec75242d3bc80b35c15deb705d35f4cd778b22d1cf1df8b38d8dd62726'),
-      game('rfk', 'robotfindskitten', 'без спешки', 'Робот ищет котёнка среди странных предметов. Ни врагов, ни таймера.', '0778e86400a536407fd94d10619208c06dd120d0f5f28ad79778690048dd0091'),
+      game('thwaite', 'Thwaite', 'аркада', 'Ракеты падают на город — сбивай их фейерверками, пока дома целы.', 'ee51cd9562f28195ba015d9857c6c4fc9bf67cdfb213e95f655e586b92195173', 'Missiles are falling on the town — shoot them down with fireworks while the houses still stand.'),
+      game('croom', 'Concentration Room', 'найди пару', 'Переворачивай карточки и находи пары — одному, вдвоём или против компьютера.', 'c24c1aec75242d3bc80b35c15deb705d35f4cd778b22d1cf1df8b38d8dd62726', 'Flip cards and find the pairs — alone, with a friend or against the computer.'),
+      game('rfk', 'robotfindskitten', 'без спешки', 'Робот ищет котёнка среди странных предметов. Ни врагов, ни таймера.', '0778e86400a536407fd94d10619208c06dd120d0f5f28ad79778690048dd0091', 'A robot looks for a kitten among strange objects. No enemies, no timer.'),
     ],
   }
 }
 
-function game(id, title, genre, about, sha256) {
-  return { id, console: 'nes', title, genre, about, rom: { sha256, base64: `files/${sha256}.nes.b64` } }
+function game(id, title, genre, about, sha256, aboutEn) {
+  return { id, console: 'nes', title, genre, about, about_en: aboutEn, rom: { sha256, base64: `files/${sha256}.nes.b64` } }
 }
 
 // catalog.json с сайта → { source: 'site', consoles, games }, или null, если ответ не похож на каталог.
@@ -62,7 +62,8 @@ export function parseCatalog(text) {
     if (![g.title, g.genre, g.about].every((s) => typeof s === 'string' && s)) continue
     const rom = g.rom ?? {}
     if (!SHA256.test(rom.sha256 ?? '') || typeof rom.base64 !== 'string' || !rom.base64.startsWith('files/')) continue
-    games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, rom: { sha256: rom.sha256, base64: rom.base64 } })
+    const aboutEn = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
+    games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEn, rom: { sha256: rom.sha256, base64: rom.base64 } })
   }
   if (!consoles.length) return null
   return { source: 'site', consoles, games }

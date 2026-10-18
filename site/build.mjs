@@ -78,7 +78,8 @@ export function build({ root, out, now = new Date() }) {
     if (!ID.test(g.id ?? '')) fail(`у игры неправильный id ${JSON.stringify(g.id)}`)
     if (games[g.id]) fail(`${where} описана дважды`)
     if (!consoleIds.has(g.console)) fail(`${where}: нет приставки ${g.console}`)
-    for (const field of ['title', 'genre', 'about', 'keys', 'rom']) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    for (const field of ['title', 'genre', 'about', 'about_en', 'keys', 'rom']) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    if (/[А-Яа-яЁё]/.test(g.about_en)) fail(`${where}: в about_en русские буквы — нужно английское описание`)
     const license = g.license ?? {}
     for (const field of ['name', 'author', 'source']) if (!license[field]) fail(`${where}: в лицензии нет поля ${field}`)
 
@@ -120,6 +121,7 @@ export function build({ root, out, now = new Date() }) {
       title: g.title,
       genre: g.genre,
       about: g.about,
+      about_en: g.about_en,
       keys: g.keys,
       credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
       ...(g.score

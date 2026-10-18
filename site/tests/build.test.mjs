@@ -151,4 +151,15 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   assert.ok(!/^export /m.test(script), 'без export — это обычный скрипт')
   assert.match(script, /installMapper28\(window\.jsnes && window\.jsnes\.Mappers\)/)
 }
+// Английские описания: у каждой игры, без русских букв; игра без него ломает сборку
+{
+  const dir = temp('about-en')
+  const built = build({ root: ROOT, out: dir })
+  for (const [id, g] of Object.entries(built.games)) {
+    assert.ok(typeof g.about_en === 'string' && g.about_en.length > 10, `${id}: есть английское описание`)
+    assert.ok(!/[А-Яа-яЁё]/.test(g.about_en), `${id}: описание по-английски`)
+  }
+}
+assert.throws(broken((d) => { delete d.games.find((g) => g.id === 'thwaite').about_en }), /игра thwaite: нет поля about_en/)
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').about_en = 'Ракеты' }), /в about_en русские буквы/)
 console.log('Sega: все проверки прошли')

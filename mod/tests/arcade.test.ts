@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
-import { SITE, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
+import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
 import { workedText } from '../hooks/register.js'
 import { detectLang, tr } from '../hooks/i18n.js'
@@ -1422,4 +1422,18 @@ test('английский интерфейс: главное меню без р
   expect(saved.get('lang')).toBe('ru')
   expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Назад' } })
   await ui.unmount()
+})
+
+test('английские описания игр в меню мода: жанр и описание по-английски, и в запасном каталоге тоже', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.games.thwaite.about_en = 'Missiles are falling on the town — shoot them down with fireworks while the houses still stand.'
+  const { clock } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, site: JSON.stringify(site) })
+  await start($)
+  await clock.advance(300)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-nes' })
+  expect(await ui.find({ type: 'Text', text: '  arcade — Missiles are falling on the town — shoot them down with fireworks while the houses still stand.' })).toBeDefined()
+  await ui.unmount()
+  // Запасной каталог мода — тоже с английскими описаниями
+  expect(bundledCatalog().games.every((g: any) => typeof g.about_en === 'string' && !/[А-Яа-яЁё]/.test(g.about_en))).toBe(true)
 })

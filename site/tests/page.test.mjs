@@ -334,6 +334,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'Game Gear', 'PlayStation'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
+  assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
+  assert.match(textOf(lib), /Missiles are falling on the town/)
   const game = await makePage(new Map(), { search: '?game=skyhaul&lang=en' })
   assert.equal(game.byId.keys.textContent, 'move — arrows · 1 (and Start) — X · 2 — Z · pause — Enter')
   const ru = await makePage(new Map(), { search: '?tab=nes' })

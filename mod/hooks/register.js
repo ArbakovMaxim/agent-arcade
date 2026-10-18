@@ -135,7 +135,7 @@ function consoles() {
 // Игры каталога и проверка клавиш; note — строка под названием в меню
 function games() {
   return [
-    ...catalog.games.map((g) => ({ ...g, note: `${g.genre} — ${g.about}`, web: true })),
+    ...catalog.games.map((g) => ({ ...g, note: `${tr(g.genre, lang)} — ${lang === 'en' && g.about_en ? g.about_en : g.about}`, web: true })),
     ...mine.map((m) => ({
       id: m.id,
       console: m.console,

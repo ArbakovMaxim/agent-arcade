@@ -49,6 +49,7 @@
       "title": "Thwaite",
       "genre": "аркада",
       "about": "Ракеты падают на город — сбивай их фейерверками, пока дома целы.",
+      "about_en": "Missiles are falling on the town — shoot them down with fireworks while the houses still stand.",
       "keys": "прицел — стрелки или WASD · огонь — Z X или J K · Start — Enter",
       "rom": "games/thwaite/thwaite.nes",
       "score": {
@@ -81,6 +82,7 @@
       "title": "Concentration Room",
       "genre": "найди пару",
       "about": "Переворачивай карточки и находи пары — одному, вдвоём или против компьютера.",
+      "about_en": "Flip cards and find the pairs — alone, with a friend or against the computer.",
       "keys": "курсор — стрелки или WASD · открыть — X или K · Start — Enter",
       "rom": "games/croom/croom.nes",
       "license": {
@@ -100,6 +102,7 @@
       "title": "robotfindskitten",
       "genre": "без спешки",
       "about": "Робот ищет котёнка среди странных предметов. Ни врагов, ни таймера.",
+      "about_en": "A robot looks for a kitten among strange objects. No enemies, no timer.",
       "keys": "ходить — стрелки или WASD · Start — Enter",
       "rom": "games/rfk/robotfindskitten.nes",
       "score": {
@@ -128,6 +131,7 @@
       "title": "Double Action Blaster Guys",
       "genre": "платформер",
       "about": "Аркадный платформер на двоих: 52 уровня, больше 25 видов врагов и встроенный редактор уровней.",
+      "about_en": "An arcade platformer for two: 52 levels, over 25 kinds of enemies and a built-in level editor.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/dabg/dabg.nes",
       "license": {
@@ -147,6 +151,7 @@
       "title": "Nova the Squirrel",
       "genre": "платформер",
       "about": "Белка Нова попадает в незнакомый мир и копирует способности врагов. Платформер с головоломками.",
+      "about_en": "Nova the squirrel lands in an unfamiliar world and copies the abilities of enemies. A platformer with puzzles.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/nova/nova.nes",
       "noncommercial": true,
@@ -168,6 +173,7 @@
       "title": "Sgt. Helmet's Training Day",
       "genre": "экшен",
       "about": "Учения сержанта Хелмета: пробейся через охрану и заложи пять бомб в злой компьютер.",
+      "about_en": "Sgt. Helmet's training day: fight your way past the guards and plant five bombs in the evil computer.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/sgt-helmet/sgt-helmet.nes",
       "license": {
@@ -188,6 +194,7 @@
       "title": "Jet Paco",
       "genre": "приключение",
       "about": "Космический агент Пако пробирается через вражескую базу.",
+      "about_en": "Space agent Paco sneaks through an enemy base.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/jet-paco/jet-paco.nes",
       "license": {
@@ -208,6 +215,7 @@
       "title": "Lala Prologue",
       "genre": "приключение",
       "about": "Юная волшебница Лала ищет ключи и предметы в доме, полном чудищ. Пролог к Lala the Magical.",
+      "about_en": "Young witch Lala searches for keys and items in a house full of monsters. A prologue to Lala the Magical.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/lala-prologue/lala-prologue.nes",
       "license": {
@@ -228,6 +236,7 @@
       "title": "Cheril Perils Classic",
       "genre": "платформер",
       "about": "Платформер с резонаторами: нажми кнопку — враги замрут, и их можно раздавить. Есть и классический режим.",
+      "about_en": "A platformer with resonators: press a button and the enemies freeze, so you can squash them. A classic mode is included.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/cheril-perils/cheril-perils.nes",
       "license": {
@@ -248,6 +257,7 @@
       "title": "Cadàveriön",
       "genre": "головоломка",
       "about": "Головоломка в духе Sokoban: двигай статуи на постаменты, чтобы открыть ворота, пока не вышло время.",
+      "about_en": "A Sokoban-style puzzle: push statues onto pedestals to open the gates before time runs out.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/cadaverion/cadaverion.nes",
       "license": {
@@ -268,6 +278,7 @@
       "title": "Che-Man",
       "genre": "приключение",
       "about": "Разгроми 25 барабанщиков и отнеси 15 медальонов к тотемам. Языки: английский, немецкий и «бадахосский».",
+      "about_en": "Defeat 25 drummers and carry 15 medallions to the totems. Languages: English, German and “Badajoz”.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/che-man/che-man.nes",
       "license": {
@@ -288,6 +299,7 @@
       "title": "Espitene",
       "genre": "платформер",
       "about": "Шуточный «Соник»: разгон, кольца разлетаются при ударе, изумруд — во втором акте каждого мира.",
+      "about_en": "A Sonic parody: build up speed, rings scatter when you are hit, and the emerald waits in the second act of every world.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/espitene/espitene.nes",
       "license": {
@@ -308,6 +320,7 @@
       "title": "F-FF",
       "genre": "гонки",
       "about": "Простые гонки с видом сверху. Select в меню включает режим на двоих с разделённым экраном.",
+      "about_en": "Simple top-down racing. Select on the menu turns on a split-screen mode for two.",
       "keys": "руль — стрелки · газ — B (Z или J) · ускорение — A (X или K) · Start — Enter",
       "rom": "games/f-ff/f-ff.nes",
       "license": {
@@ -325,6 +338,7 @@
       "title": "Lunar Limit",
       "genre": "шутер",
       "about": "Аркадный шутер в духе ранних 80-х: «Мини-Земля» и Лунная пушка против захватчиков.",
+      "about_en": "An early-80s style arcade shooter: Mini-Earth and the Lunar Cannon against the invaders.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/lunar-limit/lunar-limit.nes",
       "license": {
@@ -342,6 +356,7 @@
       "title": "RALPH 4",
       "genre": "головоломка",
       "about": "Гном Ральф проходит 20 этажей логова злых медведей. Задел медведя — этаж заново.",
+      "about_en": "Ralph the gnome climbs 20 floors of the evil bears' lair. Touch a bear and the floor starts over.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/ralph-4/ralph-4.nes",
       "license": {
@@ -359,6 +374,7 @@
       "title": "Star Evil",
       "genre": "шутер",
       "about": "Быстрый ремейк шутера Star Evil с Atari 5200.",
+      "about_en": "A fast remake of the Atari 5200 shooter Star Evil.",
       "keys": "движение — стрелки или WASD · огонь — A или B · Start — Enter",
       "rom": "games/star-evil/star-evil.nes",
       "license": {
@@ -376,6 +392,7 @@
       "title": "Falling",
       "genre": "аркада",
       "about": "Простая аркада на ассемблере 6502 — первая игра автора, сделанная за 11 дней.",
+      "about_en": "A simple arcade game in 6502 assembly — the author's first game, made in 11 days.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/falling/falling.nes",
       "license": {
@@ -393,6 +410,7 @@
       "title": "NesertBus",
       "genre": "шуточный симулятор",
       "about": "Демейк Desert Bus: бесконечная поездка по прямой дороге, автобус всё время уводит вправо.",
+      "about_en": "A demake of Desert Bus: an endless drive along a straight road while the bus keeps drifting to the right.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/nesertbus/nesertbus.nes",
       "license": {
@@ -410,6 +428,7 @@
       "title": "Super Tilt Bro",
       "genre": "файтинг",
       "about": "Файтинг-платформер в духе Super Smash Bros. для Денди.",
+      "about_en": "A platform fighter in the spirit of Super Smash Bros. for the NES.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/super-tilt-bro/super-tilt-bro.nes",
       "license": {
@@ -427,6 +446,7 @@
       "title": "Sir Ababol Remastered",
       "genre": "платформер",
       "about": "Юный крестоносец сэр Абабол после падения в реку выбирается из пустыни Монегрос.",
+      "about_en": "After falling into a river, young crusader Sir Ababol makes his way out of the Monegros desert.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/sir-ababol/sir-ababol.nes",
       "license": {
@@ -444,6 +464,7 @@
       "title": "Wo Xiang Niao Niao",
       "genre": "платформер",
       "about": "Лин Лин должна поймать восемь мух для Короля-лягушки — иначе он не пустит её в туалет.",
+      "about_en": "Lin Lin must catch eight flies for the Frog King — otherwise he won't let her into the toilet.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/wo-xiang-niao-niao/wo-xiang-niao-niao.nes",
       "license": {
@@ -461,6 +482,7 @@
       "title": "Yun",
       "genre": "платформер",
       "about": "Вместо птенца редкой цапли из яйца вылупился красный демон с пышной причёской.",
+      "about_en": "Instead of a rare heron chick, a red demon with a fluffy hairdo hatches from the egg.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/yun/yun.nes",
       "license": {
@@ -478,6 +500,7 @@
       "title": "Lala the Magical",
       "genre": "платформер",
       "about": "Ученица волшебника Лала берёт палочку учителя и идёт за тремя Камнями силы в Небесный дворец.",
+      "about_en": "The wizard's apprentice Lala takes her teacher's wand and sets off for the three Power Stones in the Sky Palace.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/lala-the-magical/lala-the-magical.nes",
       "license": {
@@ -495,6 +518,7 @@
       "title": "Super Uwol",
       "genre": "платформер",
       "about": "Уволь и супергероиня Мимейд ищут украденные деньги в запутанных подвалах Штормового дворца.",
+      "about_en": "Uwol and a superheroine search the tangled cellars of the Storm Palace for the stolen money.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/super-uwol/super-uwol.nes",
       "license": {
@@ -513,6 +537,7 @@
       "title": "Driar",
       "genre": "головоломка",
       "about": "Собери все звёзды на каждом из 38 уровней. Ушёл за правый край — появился слева.",
+      "about_en": "Collect all the stars on each of the 38 levels. Leave through the right edge and you come back on the left.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/driar/driar.nes",
       "license": {
@@ -531,6 +556,7 @@
       "title": "Cybercoaster",
       "genre": "гонки",
       "about": "Гонка на время: три круга по трассе, следи за скоростью.",
+      "about_en": "A time trial: three laps around the track — watch your speed.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/cybercoaster/cybercoaster.nes",
       "license": {
@@ -548,6 +574,7 @@
       "title": "Brick Breaker",
       "genre": "арканоид",
       "about": "Разбивай кирпичи мячом на время. Участник конкурса NESdev 2016 года.",
+      "about_en": "Break the bricks with the ball against the clock. An entry in the 2016 NESdev competition.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/brickbreaker/brickbreaker.nes",
       "license": {
@@ -567,6 +594,7 @@
       "title": "Big City Sliding Blaster",
       "genre": "шутер",
       "about": "Шутер с видом сверху в духе Ballmaster: 10 уровней, игра вдвоём и редактор уровней.",
+      "about_en": "A top-down shooter in the spirit of Ballmaster: 10 levels, two-player mode and a level editor.",
       "keys": "движение — стрелки или WASD · A — X или K · B — Z или J · Start — Enter",
       "rom": "games/sliding-blaster/sliding-blaster.nes",
       "license": {
@@ -586,6 +614,7 @@
       "title": "Miniplanets",
       "genre": "платформер",
       "about": "Прыгай по крошечным круглым планетам, чтобы спасти детей Киши и вернуть порядок в систему Планелаго.",
+      "about_en": "Jump across tiny round planets to rescue Qisha's children and bring order back to the Planelago system.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/miniplanets/miniplanets.bin",
       "license": {
@@ -605,6 +634,7 @@
       "title": "Dragon's Castle",
       "genre": "платформер",
       "about": "Юная ведьма Мерлина пробирается в замок, чтобы прогнать дракона и вернуть покой в город. Прототип.",
+      "about_en": "Young witch Merlina sneaks into the castle to drive out the dragon and bring peace back to the town. A prototype.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/dragons-castle/dragons-castle.bin",
       "license": {
@@ -624,6 +654,7 @@
       "title": "KłełeAtoms",
       "genre": "стратегия",
       "about": "Захватывай клетки поля цепными реакциями атомов. До четырёх игроков, есть компьютерные соперники трёх уровней.",
+      "about_en": "Capture the board with chain reactions of atoms. Up to four players, with computer opponents on three levels.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/kleleatoms/kleleatoms.bin",
       "license": {
@@ -643,6 +674,7 @@
       "title": "Lunch Break",
       "genre": "приключение",
       "about": "Поговори со всеми коллегами в офисе и не попадайся на глаза начальнику.",
+      "about_en": "Talk to all your coworkers in the office and stay out of the boss’s sight.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/lunch-break/lunch-break.bin",
       "license": {
@@ -662,6 +694,7 @@
       "title": "5 Stars",
       "genre": "шутер",
       "about": "Минималистичный космический шутер на одном экране от автора Miniplanets.",
+      "about_en": "A minimalist single-screen space shooter by the author of Miniplanets.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/5stars/5stars.bin",
       "license": {
@@ -681,6 +714,7 @@
       "title": "Hello Pong",
       "genre": "аркада",
       "about": "Понг для PlayStation: против компьютера или вдвоём, можно стиками DualShock.",
+      "about_en": "Pong for the PlayStation: against the computer or with a friend, DualShock sticks supported.",
       "keys": "движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
       "rom": "games/hello-pong/hello-pong.zip",
       "license": {
@@ -702,6 +736,7 @@
       "title": "Tank Battle",
       "genre": "экшен",
       "about": "Танковые бои с видом сверху: против компьютера или вдвоём до пяти побед. Каждый раунд — новая арена.",
+      "about_en": "Top-down tank battles against the computer or a friend, first to five wins. Every round is a new arena.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/tank-battle/tank-battle.bin",
       "license": {
@@ -721,6 +756,7 @@
       "title": "Battle 4Tris",
       "genre": "головоломка",
       "about": "Падающие блоки: один против растущей скорости или дуэль вдвоём, где твои линии летят сопернику.",
+      "about_en": "Falling blocks: solo against rising speed, or a duel for two where your cleared lines fly over to your opponent.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/battle-4tris/battle-4tris.bin",
       "license": {
@@ -740,6 +776,7 @@
       "title": "Pong",
       "genre": "аркада",
       "about": "Классический Понг для Mega Drive — одному или вдвоём.",
+      "about_en": "Classic Pong for the Mega Drive — solo or for two.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/pong/pong.bin",
       "license": {
@@ -759,6 +796,7 @@
       "title": "Snake Arena",
       "genre": "аркада",
       "about": "Змейка: собирай еду и расти, а вдвоём — соревнуйтесь, кто дольше продержится.",
+      "about_en": "Snake: eat and grow, or compete with a friend to see who lasts longer.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/snake-arena/snake-arena.bin",
       "license": {
@@ -778,6 +816,7 @@
       "title": "Space Shooter",
       "genre": "шутер",
       "about": "Вертикальный космический шутер, можно пройти вдвоём.",
+      "about_en": "A vertical space shooter you can play through with a friend.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/space-shooter/space-shooter.bin",
       "license": {
@@ -797,6 +836,7 @@
       "title": "Breakout",
       "genre": "аркада",
       "about": "Разбивай стены кирпичей мячом и платформой.",
+      "about_en": "Smash walls of bricks with a ball and a paddle.",
       "keys": "движение — стрелки · A — S · B — X · C — Z · Start — Enter",
       "rom": "games/breakout/breakout.bin",
       "license": {
@@ -816,6 +856,7 @@
       "title": "Balloon Master",
       "genre": "приключение",
       "about": "Веди воздушный шар через шесть миров: держись между препятствиями, лови топливо и не сгори. Бета-версия.",
+      "about_en": "Steer a hot-air balloon through six worlds: stay between the obstacles, catch fuel and don't burn up. Beta version.",
       "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
       "rom": "games/balloon-master/balloon-master.sms",
       "license": {
@@ -835,6 +876,7 @@
       "title": "SkyHaul",
       "genre": "шутер",
       "about": "Аркадный шутер по мотивам Skyhaul от ABA Games, перенесённый на Master System.",
+      "about_en": "An arcade shooter based on Skyhaul by ABA Games, ported to the Master System.",
       "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
       "rom": "games/skyhaul/skyhaul.sms",
       "license": {
@@ -854,6 +896,7 @@
       "title": "Food Fighter",
       "genre": "шутер",
       "about": "Шутер в духе MegaMania: отстреливайся от волн летящей еды.",
+      "about_en": "A MegaMania-style shooter: fend off waves of flying food.",
       "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
       "rom": "games/food-fighter/food-fighter.sms",
       "license": {
@@ -874,6 +917,7 @@
       "title": "Escape from Monster Dimension",
       "genre": "шутер",
       "about": "Юного мага занесло в измерение монстров: отбивайся и выбирайся оттуда.",
+      "about_en": "A young wizard is stranded in the monster dimension: fight back and find a way out.",
       "keys": "движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter",
       "rom": "games/escape-from-monster-dimension/escape-from-monster-dimension.sms",
       "license": {
