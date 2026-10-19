@@ -169,7 +169,10 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').about_en =
 {
   const dir = temp('doom')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'doom'), ['freedm', 'freedoom-1', 'freedoom-2'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'doom'), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'])
+  assert.equal(built.games.blasphemer.engine, 'heretic')
+  assert.equal(built.games.blasphdm.net, 'heretic-dm')
+  for (const f of ['heretic-wasm/websockets-heretic.js', 'heretic-wasm/websockets-heretic.wasm', 'licenses/heretic-wasm/COPYING.md', 'licenses/heretic-wasm/heretic-wasm-src.tar.gz', 'licenses/blasphemer/LICENSE.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
   assert.equal(built.games.freedm.net, 'doom')
   assert.match(built.games.freedm.rom.url, /\.wad$/)
   for (const f of ['doom-wasm/websockets-doom.js', 'doom-wasm/websockets-doom.wasm', 'licenses/doom-wasm/COPYING.md', 'licenses/doom-wasm/BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)

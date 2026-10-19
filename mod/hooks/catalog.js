@@ -69,7 +69,7 @@ export function parseCatalog(text) {
     const rom = g.rom ?? {}
     if (!SHA256.test(rom.sha256 ?? '') || typeof rom.base64 !== 'string' || !rom.base64.startsWith('files/')) continue
     const aboutEn = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
-    const net = g.net === 'doom' ? { net: 'doom' } : {}
+    const net = ['doom', 'heretic', 'heretic-dm'].includes(g.net) ? { net: g.net } : {}
     games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEn, ...net, rom: { sha256: rom.sha256, base64: rom.base64 } })
   }
   if (!consoles.length) return null

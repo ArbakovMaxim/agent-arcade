@@ -194,10 +194,12 @@ function waitingFrom(data) {
   for (const g of catalog.games) {
     let count = 0
     if (g.net === 'doom') count = Number(data?.doom) || 0
+    else if (g.net === 'heretic-dm') count = Number(data?.dm?.[g.id]) || 0 // BlasphDM
+    else if (g.net === 'heretic') count = Number(data?.coop?.[g.id]) || 0 // Blasphemer по сети — кооператив
     else if (g.console === 'doom') count = Number(data?.coop?.[g.id]) || 0 // кооператив Freedoom
     else if (g.kind === 'board') count = Number(data?.board?.[g.id]) || 0 // настольные: ждут в лобби поиска соперника
     else if (['nes', 'sega', 'sms', 'psx'].includes(g.console) && g.rom?.sha256) count = Number(data?.games?.[parseInt(g.rom.sha256.slice(0, 7), 16)]) || 0
-    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, coop: g.console === 'doom' && g.net !== 'doom', count })
+    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, coop: g.console === 'doom' && g.net !== 'doom' && g.net !== 'heretic-dm', count })
   }
   return list.sort((a, b) => b.count - a.count)
 }

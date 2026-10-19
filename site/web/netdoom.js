@@ -17,6 +17,11 @@
   const BACK_TO_LOBBY_MS = ROUND_MS + 40_000 // раунд, табло и запас — потом снова лобби
 
   const NET_KEYS = 'движение — стрелки · огонь — Ctrl · открыть — пробел · бег — Shift · шаг вбок — Alt и стрелки · оружие — 1–7'
+  // Движок: doom-wasm для Doom, heretic-wasm для Blasphemer. Heretic ищет файл игры под именем heretic.wad
+  const ENGINES = {
+    doom: { dir: 'doom-wasm', script: 'websockets-doom.js' },
+    heretic: { dir: 'heretic-wasm', script: 'websockets-heretic.js' },
+  }
 
   // Ведущий лобби — наименьший номер: у всех он один и тот же, сервер для этого не нужен
   const leaderOf = (ids) => [...ids].sort()[0]
@@ -24,6 +29,7 @@
   // Параметры doom-wasm: хозяин — сервер игры, остальные подключаются к нему (номер 1)
   function doomArgs(wad, url, isHost, mode = 'dm') {
     const common = ['-iwad', wad, '-window', '-nogui', '-nomusic', '-servername', 'arcade', '-nodes', String(MAX_PLAYERS)]
+    if (mode === 'solo') return common.slice(0, -2) // одному: без сервера и без -nodes
     const rules = mode === 'coop' ? ['-skill', '3'] : ['-deathmatch', '-timer', '5']
     return isHost
       ? [...common, '-server', '-privateserver', ...rules, '-dup', '1', '-wss', url]
@@ -61,7 +67,18 @@
     document.body.classList.remove('library-mode')
     document.title = `${game.title} · Arcade`
     // Сетевой движок — классический Doom: у кооператива свои клавиши, не PrBoom из одиночной игры
-    document.getElementById('keys').textContent = T(coop ? NET_KEYS : game.keys)
+    document.getElementById('keys').textContent = T(coop && !game.engine ? NET_KEYS : game.keys)
+    // Одному (Blasphemer): без лобби — сразу игра; «По сети» — кооператив
+    if (mode === 'solo') {
+      const netLink = document.getElementById('net')
+      if (netLink) {
+        netLink.href = `?game=${encodeURIComponent(id)}&net=coop`
+        netLink.hidden = false
+        netLink.style.display = ''
+      }
+      launch(game, null, false, 'solo', id)
+      return
+    }
     document.getElementById('credit').textContent = T(game.credit)
     const files = (game.license && game.license.files) || []
     const licenseFile = files.find((f) => /license/i.test(f.name))
@@ -76,7 +93,7 @@
 
     overlay(T(coop ? 'Кооператив' : 'Сетевой deathmatch'), T('Подключаюсь к лобби…'))
     // Лобби: у FreeDM общее, у кооператива — своё для каждой игры
-    const ws = new WebSocket(wsUrl(`/net/room/${coop ? `coop-${id}` : LOBBY}`))
+    const ws = new WebSocket(wsUrl(`/net/room/${coop ? `coop-${id}` : game.engine ? `dm-${id}` : LOBBY}`))
     let me = null
     const peers = new Set()
     let round = null
@@ -149,8 +166,9 @@
   const WADS = { 'freedoom-1': 'freedoom1.wad', 'freedoom-2': 'freedoom2.wad' }
 
   function launch(game, room, isHost, mode = 'dm', id = '') {
-    const wad = WADS[id] || 'freedm.wad'
-    overlay(T(isHost ? 'Ты хозяин раунда' : 'Подключаюсь к раунду'), T('Загружаю движок и карты…'))
+    const engine = ENGINES[game.engine || 'doom']
+    const wad = game.engine === 'heretic' ? 'heretic.wad' : WADS[id] || 'freedm.wad'
+    overlay(mode === 'solo' ? game.title : T(isHost ? 'Ты хозяин раунда' : 'Подключаюсь к раунду'), T('Загружаю движок и карты…'))
     const stage = document.getElementById('stage') || document.body
     const canvas = document.createElement('canvas')
     canvas.id = 'canvas'
@@ -158,11 +176,11 @@
     canvas.style.width = '100%'
     canvas.style.height = '100%'
     stage.appendChild(canvas)
-    const url = wsUrl(`/net/doom/${room}`)
+    const url = room ? wsUrl(`/net/doom/${room}`) : null
     window.Module = {
       noInitialRun: true,
       canvas,
-      locateFile: (file) => `doom-wasm/${file}`,
+      locateFile: (file) => `${engine.dir}/${file}`,
       preRun: [
         () => {
           // WAD — в файловую систему движка; из .zip — после распаковки
@@ -186,15 +204,15 @@
         }, 1000)
         setTimeout(() => clearInterval(keep), 60_000)
         // Хозяин начинает матч, когда все уже подключились: пробел на экране ожидания Chocolate Doom
-        if (isHost) setTimeout(() => pressSpace(canvas), HOST_START_MS)
+        if (isHost && mode !== 'solo') setTimeout(() => pressSpace(canvas), HOST_START_MS)
         // Deathmatch идёт раундами — после раунда снова лобби; кооператив — сколько захотите
-        if (mode !== 'coop') setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
+        if (mode === 'dm') setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
       },
       print: (text) => console.log(text),
       printErr: (text) => console.error(text),
     }
     const script = document.createElement('script')
-    script.src = 'doom-wasm/websockets-doom.js'
+    script.src = `${engine.dir}/${engine.script}`
     document.body.appendChild(script)
   }
 

@@ -120,7 +120,7 @@
       })
     }
     window.ArcadeBoard.start(catalog, id)
-  } else if (id && catalog.games && catalog.games[id] && (catalog.games[id].net === 'doom' || (catalog.games[id].console === 'doom' && params.get('net') === 'coop'))) {
+  } else if (id && catalog.games && catalog.games[id] && (catalog.games[id].net || (catalog.games[id].console === 'doom' && params.get('net') === 'coop'))) {
     // Сетевой Doom — своя страница с лобби (netdoom.js) и движок doom-wasm
     await new Promise((resolve) => {
       const script = document.createElement('script')
@@ -128,7 +128,10 @@
       script.onload = resolve
       document.body.appendChild(script)
     })
-    window.ArcadeNetDoom.start(catalog, id, catalog.games[id].net === 'doom' ? 'dm' : 'coop')
+    // Режим: FreeDM и BlasphDM — deathmatch; Blasphemer — одному, с ?net=coop — кооператив; Freedoom с ?net=coop — кооператив
+    const g = catalog.games[id]
+    const mode = g.net === 'doom' || g.net === 'heretic-dm' ? 'dm' : params.get('net') === 'coop' ? 'coop' : g.net === 'heretic' ? 'solo' : 'coop'
+    window.ArcadeNetDoom.start(catalog, id, mode)
   } else if (id && catalog.games && catalog.games[id] && (['sega', 'sms', 'psx', 'doom'].includes(catalog.games[id].console) || (catalog.games[id].console === 'nes' && params.get('net') === '1'))) {
     // Денди с ?net=1 — сетевая игра на EmulatorJS (FCEUmm); без него — обычный JSNES
     await loadEJS()

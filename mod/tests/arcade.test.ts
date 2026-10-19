@@ -1533,3 +1533,21 @@ test('настольные игры: мод знает их без ROM, откр
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess`)
   await ui.unmount()
 })
+
+test('кто ждёт в сети и Blasphemer: BlasphDM ведёт в своё лобби, Blasphemer — в кооператив', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'doom', title: 'Doom' })
+  const sha = (c: string) => c.repeat(64)
+  site.games.blasphemer = { console: 'doom', engine: 'heretic', net: 'heretic', title: 'Blasphemer', genre: 'шутер', about: 'фэнтези', keys: '…', rom: { url: `files/${sha('c')}.wad`, base64: `files/${sha('c')}.wad.b64`, sha256: sha('c'), size: 1 } }
+  site.games.blasphdm = { console: 'doom', engine: 'heretic', net: 'heretic-dm', title: 'BlasphDM', genre: 'шутер', about: 'дезматч', keys: '…', rom: { url: `files/${sha('d')}.wad`, base64: `files/${sha('d')}.wad.b64`, sha256: sha('d'), size: 1 } }
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site), files: { 'api/lobbies': JSON.stringify({ doom: 0, games: {}, coop: { blasphemer: 1 }, dm: { blasphdm: 2 } }) } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-net-join' })).toMatchObject({ props: { label: 'Присоединиться: BlasphDM' } })
+  expect(await ui.find({ type: 'Text', text: '  в сети ждут: BlasphDM (2), Blasphemer (1)' })).toBeDefined()
+  await ui.press({ key: 'arcade-net-join' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=blasphdm`)
+  await ui.unmount()
+})

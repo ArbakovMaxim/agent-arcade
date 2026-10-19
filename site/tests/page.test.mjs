@@ -362,7 +362,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(doom.ctx.EJS_gameUrl, catalog.games['freedoom-1'].rom.url)
   assert.match(doom.byId.keys.textContent, /огонь — A/)
   const lib = await makePage(new Map(), { search: '?tab=doom' })
-  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'])
   lib.byId.library.querySelectorAll('.open-rom')[0].click()
   assert.equal(lib.byId['local-rom'].accept, '.wad,.zip')
   lib.ctx.__wad = new TextEncoder().encode('IWAD' + '\0'.repeat(64))
@@ -570,6 +570,25 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const lib = await makePage(new Map(), { search: '?tab=web' })
   assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
+}
+
+// --- Blasphemer: движок Heretic — одному без лобби, кооператив и BlasphDM в своих лобби ---------------------------
+{
+  const solo = await makePage(new Map(), { search: '?game=blasphemer' })
+  await until(() => solo.appended.some((s) => s.src === 'heretic-wasm/websockets-heretic.js'))
+  assert.equal(solo.sockets.length, 0, 'одному — без лобби')
+  assert.equal(solo.ctx.Module.locateFile('websockets-heretic.wasm'), 'heretic-wasm/websockets-heretic.wasm')
+  assert.equal(solo.byId.net.href, '?game=blasphemer&net=coop')
+  assert.match(solo.byId.keys.textContent, /предметы — \[ \] и Enter/)
+  const args = Array.from(vm.runInContext("ArcadeNetDoom.doomArgs('heretic.wad', null, false, 'solo')", solo.ctx))
+  assert.deepEqual(args.slice(0, 2), ['-iwad', 'heretic.wad'])
+  for (const a of ['-server', '-connect', '-wss', '-nodes']) assert.ok(!args.includes(a), `одному — без ${a}`)
+  const coop = await makePage(new Map(), { search: '?game=blasphemer&net=coop' })
+  await until(() => coop.sockets.length > 0)
+  assert.match(coop.sockets[0].url, /\/net\/room\/coop-blasphemer$/)
+  const dm = await makePage(new Map(), { search: '?game=blasphdm' })
+  await until(() => dm.sockets.length > 0)
+  assert.match(dm.sockets[0].url, /\/net\/room\/dm-blasphdm$/)
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------

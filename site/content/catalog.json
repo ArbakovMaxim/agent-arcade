@@ -1009,6 +1009,50 @@
       }
     },
     {
+      "id": "blasphemer",
+      "console": "doom",
+      "engine": "heretic",
+      "net": "heretic",
+      "title": "Blasphemer",
+      "genre": "шутер",
+      "about": "Свободная замена Heretic: тёмное фэнтези на движке Doom — посохи, жезлы и магия вместо дробовиков. Три эпизода; можно одному или вдвоём по сети.",
+      "about_en": "A free replacement for Heretic: dark fantasy on the Doom engine — staves, wands and magic instead of shotguns. Three episodes; play alone or co-op online.",
+      "keys": "движение — стрелки · огонь — Ctrl · открыть — пробел · бег — Shift · шаг вбок — Alt и стрелки · оружие — 1–7 · предметы — [ ] и Enter",
+      "rom": "games/blasphemer/blasphem.wad",
+      "license": {
+        "name": "BSD-3-Clause",
+        "author": "участники проекта Blasphemer",
+        "source": "https://github.com/Blasphemer/blasphemer",
+        "commit": "v0.1.8",
+        "files": [
+          "games/blasphemer/LICENSE.txt",
+          "games/blasphemer/CREDITS.md"
+        ]
+      }
+    },
+    {
+      "id": "blasphdm",
+      "console": "doom",
+      "engine": "heretic",
+      "net": "heretic-dm",
+      "title": "BlasphDM — сетевой deathmatch",
+      "genre": "шутер",
+      "about": "Deathmatch на картах Blasphemer с теми, кто тоже ждёт своего агента: раунды по 5 минут, до четырёх игроков.",
+      "about_en": "Deathmatch on Blasphemer maps with others who are also waiting for their agent: 5-minute rounds, up to four players.",
+      "keys": "движение — стрелки · огонь — Ctrl · открыть — пробел · бег — Shift · шаг вбок — Alt и стрелки · оружие — 1–7 · предметы — [ ] и Enter",
+      "rom": "games/blasphdm/blasphdm.wad",
+      "license": {
+        "name": "BSD-3-Clause",
+        "author": "участники проекта Blasphemer",
+        "source": "https://github.com/Blasphemer/blasphemer",
+        "commit": "v0.1.8",
+        "files": [
+          "games/blasphdm/LICENSE.txt",
+          "games/blasphdm/CREDITS.md"
+        ]
+      }
+    },
+    {
       "id": "chess",
       "console": "board",
       "kind": "board",

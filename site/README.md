@@ -68,6 +68,8 @@ npx serve dist       # посмотреть его в браузере на http
 
 - `/net/doom/<имя>` — комната сетевого Doom (`DoomRoom`): пакеты doom-wasm уходят не всем, а адресату по номеру игрока; хозяин игры — номер 1, его первый пакет начинает новую игру. По образцу маршрутизатора Cloudflare doom-workers (BSD-3-Clause).
 
+Движок Heretic для Blasphemer (heretic-wasm) — doom-wasm плюс Chocolate Heretic того же коммита Chocolate Doom: дерево сборки готовит `tools/heretic-wasm/prepare.py` (главный цикл Heretic — через `emscripten_set_main_loop`), собирает `.github/workflows/heretic-wasm.yml`, результат — в `vendor/heretic-wasm` с исходниками этой сборки. Blasphemer одному — без лобби, по сети — кооператив (`coop-blasphemer`), BlasphDM — deathmatch (`dm-blasphdm`); Heretic ищет файл игры под именем `heretic.wad`.
+
 Движок сетевого Doom (doom-wasm, GPL-2.0) собирается в GitHub Actions — сценарий `.github/workflows/doom-wasm.yml`, запуск вручную — и лежит в `vendor/doom-wasm` вместе с архивом исходников.
 
 - `/net/ejs/<номер игры>` и `/net/ejs/list` — сетевая игра EmulatorJS (`EjsGame`, один Durable Object на игру): комнаты, состав, пересылка нажатий и сохранений. Окно говорит с ним через `web/netplay-io.js` — сборка кладёт её вместо `emulatorjs/src/socket.io.min.js`, поэтому чужой сервер netplay.emulatorjs.org не нужен. Номер игры — первые 7 знаков хеша ROM.

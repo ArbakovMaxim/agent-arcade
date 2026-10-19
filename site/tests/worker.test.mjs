@@ -171,9 +171,9 @@ try {
   await set('g9', 0)
   assert.equal((await set('лишнее', 1)).status, 400)
   await set('coop-freedoom-1', 2)
-  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 2, games: { 123: 1 }, coop: { 'freedoom-1': 2 }, board: {} })
+  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 2, games: { 123: 1 }, coop: { 'freedoom-1': 2 }, board: {}, dm: {} })
   await set('doom', 0)
-  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 0, games: { 123: 1 }, coop: { 'freedoom-1': 2 }, board: {} })
+  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 0, games: { 123: 1 }, coop: { 'freedoom-1': 2 }, board: {}, dm: {} })
 }
 globalThis.WebSocketPair = class { constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket() } }
 globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket } }
@@ -195,6 +195,12 @@ try {
   const coopLobby = new Room({ acceptWebSocket: (ws) => coopSockets.push(ws), getWebSockets: () => coopSockets, waitUntil: () => {} }, presenceEnv)
   await coopLobby.fetch({ headers: new Headers({ 'X-Room': 'coop-freedoom-1' }) })
   assert.deepEqual(posts.at(-1), { key: 'coop-freedoom-1', value: 1 })
+  // Лобби BlasphDM — по имени комнаты
+  posts.length = 0
+  const dmSockets = []
+  const dmLobby = new Room({ acceptWebSocket: (ws) => dmSockets.push(ws), getWebSockets: () => dmSockets, waitUntil: () => {} }, presenceEnv)
+  await dmLobby.fetch({ headers: new Headers({ 'X-Room': 'dm-blasphdm' }) })
+  assert.deepEqual(posts.at(-1), { key: 'dm-blasphdm', value: 1 })
   // Обычная комната счётчику не пишет
   posts.length = 0
   const other = new Room({ acceptWebSocket: () => {}, getWebSockets: () => [], waitUntil: () => {} }, presenceEnv)

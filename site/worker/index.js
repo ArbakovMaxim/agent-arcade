@@ -174,7 +174,7 @@ export class Room {
     const sockets = this.ctx.getWebSockets()
     const name = sockets.map((ws) => ws.deserializeAttachment()?.room).find(Boolean)
     // Лобби FreeDM — «doom», лобби кооператива — по имени комнаты (coop-freedoom-1)
-    const key = name === 'doom-lobby' ? 'doom' : /^(coop|board)-[a-z0-9-]{1,40}$/.test(name || '') ? name : null
+    const key = name === 'doom-lobby' ? 'doom' : /^(coop|board|dm)-[a-z0-9-]{1,40}$/.test(name || '') ? name : null
     if (!key || !this.env?.PRESENCE) return
     const count = sockets.filter((ws) => ws !== leaving).length
     const presence = this.env.PRESENCE.get(this.env.PRESENCE.idFromName('all'))
@@ -410,7 +410,7 @@ export class Presence {
     const url = new URL(request.url)
     if (url.pathname === '/set' && request.method === 'POST') {
       const { key, value } = await request.json()
-      if (!/^(doom|g\d{1,10}|(coop|board)-[a-z0-9-]{1,40})$/.test(key || '')) return new Response('Неверный ключ', { status: 400 })
+      if (!/^(doom|g\d{1,10}|(coop|board|dm)-[a-z0-9-]{1,40})$/.test(key || '')) return new Response('Неверный ключ', { status: 400 })
       if (Number(value) > 0) await this.ctx.storage.put(key, Math.min(99, Number(value)))
       else await this.ctx.storage.delete(key)
       return Response.json({ ok: true })
@@ -419,12 +419,14 @@ export class Presence {
     const games = {}
     const coop = {}
     const board = {}
+    const dm = {}
     for (const [key, value] of all) {
       if (/^g\d/.test(key)) games[key.slice(1)] = value
       else if (key.startsWith('coop-')) coop[key.slice(5)] = value
       else if (key.startsWith('board-')) board[key.slice(6)] = value
+      else if (key.startsWith('dm-')) dm[key.slice(3)] = value
     }
-    return Response.json({ doom: all.get('doom') || 0, games, coop, board })
+    return Response.json({ doom: all.get('doom') || 0, games, coop, board, dm })
   }
 }
 
