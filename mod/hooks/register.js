@@ -170,6 +170,20 @@ function consoleTitle(id) {
   return catalog.consoles.find((c) => c.id === id)?.title ?? CONSOLE_NAMES[id] ?? id
 }
 
+const WINDOW_NOTICE_MS = 15_000
+
+// Сообщение про окно браузера («… открыт в Google Chrome») — на время: что окно закрыли, мод узнать не может,
+// и через минуту такое сообщение уже неправда. Убираем его, если за это время его не сменило другое.
+function windowNotice($, text) {
+  libraryNotice = text
+  $.clock.after(WINDOW_NOTICE_MS, () => {
+    if (libraryNotice === text) {
+      libraryNotice = ''
+      $.ui.invalidate('ui.render')
+    }
+  })
+}
+
 function paneColumns() {
   return wide ? WIDE_COLUMNS : PANE_COLUMNS
 }
@@ -942,7 +956,7 @@ export function register(on) {
                   const command = windowCommand(lastGame)
                   try {
                     const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                    libraryNotice = launchNotice(result, lastGame)
+                    windowNotice($, launchNotice(result, lastGame))
                     if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
                   } catch (err) {
                     libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
@@ -1046,7 +1060,7 @@ export function register(on) {
               const command = windowCommand(g.id)
               try {
                 const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                libraryNotice = launchNotice(result, g.id)
+                windowNotice($, launchNotice(result, g.id))
                 if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
               } catch (err) {
                 libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
@@ -1260,7 +1274,7 @@ export function register(on) {
                       const command = windowCommand(`tab:${c.id}`)
                       try {
                         const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                        libraryNotice = result?.exitCode === 0 ? `Окно Arcade открыто на вкладке ${c.title}.` : launchNotice(result, null)
+                        windowNotice($, result?.exitCode === 0 ? `Окно Arcade открыто на вкладке ${c.title}.` : launchNotice(result, null))
                         if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
                       } catch (err) {
                         libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
@@ -1298,7 +1312,7 @@ export function register(on) {
                     const command = windowCommand(null)
                     try {
                       const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                      libraryNotice = launchNotice(result, null)
+                      windowNotice($, launchNotice(result, null))
                       if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
                     } catch (err) {
                       libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`

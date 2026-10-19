@@ -1433,3 +1433,18 @@ test('английские описания игр в меню мода: жан�
   // Запасной каталог мода — тоже с английскими описаниями
   expect(bundledCatalog().games.every((g: any) => typeof g.about_en === 'string' && !/[А-Яа-яЁё]/.test(g.about_en))).toBe(true)
 })
+
+test('сообщение «… открыт в Google Chrome» само уходит через 15 секунд: закрытие окна мод увидеть не может', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(ui, 'arcade-game-thwaite')
+  expect(launches.length).toBe(1)
+  expect(await ui.find({ type: 'Text', text: /открыт в .+\. Игра стоит на паузе, пока окно не в фокусе\./ })).toBeDefined()
+  await clock.advance(14_000)
+  expect(await ui.find({ type: 'Text', text: /открыт в / })).toBeDefined() // ещё видно
+  await clock.advance(2_000)
+  expect(await ui.find({ type: 'Text', text: /открыт в / })).toBeUndefined() // ушло само
+  await ui.unmount()
+})
