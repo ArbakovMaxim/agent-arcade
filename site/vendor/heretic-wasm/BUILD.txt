@@ -1,0 +1,4 @@
+heretic-wasm — Chocolate Heretic в WebAssembly с сетевой игрой через WebSocket. GPL-2.0 (COPYING.md).
+Дерево сборки: doom-wasm (https://github.com/cloudflare/doom-wasm, коммит 65e0d3ae2ffa604155eebd96ed40da6567bd08f4) + src/heretic из
+Chocolate Doom (https://github.com/chocolate-doom/chocolate-doom, коммит 5b967edaf6); правки — tools/heretic-wasm/prepare.py в репозитории Arcade.
+Исходники ровно этой сборки — heretic-wasm-src.tar.gz рядом. Emscripten 3.1.61, autoreconf + configure --host=none-none-none + make.
