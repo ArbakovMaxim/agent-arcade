@@ -1518,6 +1518,8 @@ test('настольные игры: мод знает их без ROM, откр
   site.consoles.push({ id: 'board', title: 'Настольные' })
   site.games.chess = { console: 'board', kind: 'board', board: 'chess', title: 'Шахматы', genre: 'стратегия', about: 'по сети', keys: '…' }
   expect(parseCatalog(JSON.stringify(site)).games.find((g: any) => g.id === 'chess')).toMatchObject({ console: 'board', kind: 'board', title: 'Шахматы' })
+  const withWeb = { ...site, consoles: [...site.consoles, { id: 'web', title: 'Браузерные' }], games: { ...site.games, hexgl: { console: 'web', kind: 'web', page: 'web-games/hexgl/index.html', title: 'HexGL', genre: 'гонки', about: 'гонки', keys: '…' } } }
+  expect(parseCatalog(JSON.stringify(withWeb)).games.find((g: any) => g.id === 'hexgl')).toMatchObject({ console: 'web', kind: 'web', title: 'HexGL' })
   const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site), files: { 'api/lobbies': JSON.stringify({ doom: 0, games: {}, board: { chess: 1 } }) } })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await clock.advance(2_500)

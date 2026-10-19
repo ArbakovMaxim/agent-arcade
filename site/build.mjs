@@ -78,11 +78,40 @@ export function build({ root, out, now = new Date() }) {
     if (!ID.test(g.id ?? '')) fail(`у игры неправильный id ${JSON.stringify(g.id)}`)
     if (games[g.id]) fail(`${where} описана дважды`)
     if (!consoleIds.has(g.console)) fail(`${where}: нет приставки ${g.console}`)
-    for (const field of ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : ['rom'])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    for (const field of ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : ['rom'])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
     if (/[А-Яа-яЁё]/.test(g.about_en)) fail(`${where}: в about_en русские буквы — нужно английское описание`)
     const license = g.license ?? {}
     for (const field of ['name', 'author', 'source']) if (!license[field]) fail(`${where}: в лицензии нет поля ${field}`)
 
+    // Браузерная игра — своя страница: папка игры целиком в web-games/<id>/, окно открывает её в рамке
+    if (g.kind === 'web') {
+      const pagePath = path.join(content, g.page)
+      if (!fs.existsSync(pagePath)) fail(`${where}: нет страницы игры ${g.page}`)
+      const folder = path.dirname(pagePath)
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name)
+          if (entry.isDirectory()) walk(full)
+          else {
+            if (fs.statSync(full).size > MAX_FILE) fail(`${where}: файл ${entry.name} больше 25 МиБ`)
+            copy(full, path.join(out, 'web-games', g.id, path.relative(folder, full)))
+          }
+        }
+      }
+      walk(folder)
+      const files = (license.files ?? []).map((file) => {
+        const from = path.join(content, file)
+        if (!fs.existsSync(from)) fail(`${where}: нет файла лицензии ${file}`)
+        copy(from, path.join(out, 'licenses', g.id, path.basename(file)))
+        return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
+      })
+      games[g.id] = {
+        console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page)}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
+        credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
+        license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files },
+      }
+      continue
+    }
     // Настольная игра — без ROM: доска, правила и сеть — страница board.js
     if (g.kind === 'board') {
       if (!['chess', 'checkers', 'reversi'].includes(g.board)) fail(`${where}: неизвестная настольная игра ${g.board}`)

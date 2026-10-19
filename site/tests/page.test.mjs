@@ -114,7 +114,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     const library = byId.library?.children?.length ?? 0
     const overlayShown = byId.overlay?.classList.contains('shown')
     const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
-    const board = (byId.stage?.children ?? []).some((n) => n.id === 'board-root' && n.children?.length) // настольные игры
+    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game') // настольные и браузерные
     return library > 0 || segaStarted || board || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
@@ -344,7 +344,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const button = (cls) => lib.querySelectorAll(cls)
   assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Doom', 'Board games'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Doom', 'Board games', 'Browser games'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -557,6 +557,19 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   ws.emit('message', JSON.stringify({ type: 'move', ply: 0, move: [2, 3] }))
   assert.match(textOf(game.byId.stage), /Ход соперника — можно вернуться к агенту/)
   assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', game.ctx), 1)
+}
+
+// --- Браузерные игры: HexGL в рамке под полосой окна ----------------------------------------------------------------
+{
+  const page = await makePage(new Map(), { search: '?game=hexgl' })
+  await until(() => page.byId.stage.children.some((n) => n.id === 'web-game'))
+  const frame = page.byId.stage.children.find((n) => n.id === 'web-game')
+  assert.equal(frame.src, 'web-games/hexgl/index.html')
+  assert.match(page.byId.keys.textContent, /воздушные тормоза — A и D/)
+  assert.match(page.byId.license.href, /licenses\/hexgl\/LICENSE$/)
+  const lib = await makePage(new Map(), { search: '?tab=web' })
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
+  assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------

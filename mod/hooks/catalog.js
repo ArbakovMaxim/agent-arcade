@@ -62,8 +62,8 @@ export function parseCatalog(text) {
     if (![g.title, g.genre, g.about].every((s) => typeof s === 'string' && s)) continue
     const aboutEnBoard = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
     // Настольные игры (шахматы, шашки, реверси) — без ROM: только в окне браузера
-    if (g.kind === 'board') {
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEnBoard, kind: 'board' })
+    if (g.kind === 'board' || g.kind === 'web') {
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEnBoard, kind: g.kind })
       continue
     }
     const rom = g.rom ?? {}

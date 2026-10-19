@@ -46,6 +46,13 @@
       "title": "Настольные",
       "about": "Шахматы, шашки и реверси по сети",
       "emulator": "правила Arcade + chess.js (BSD-2-Clause)"
+    },
+    {
+      "id": "web",
+      "section": "games",
+      "title": "Браузерные",
+      "about": "Игры, написанные сразу для браузера",
+      "emulator": "без эмулятора"
     }
   ],
   "games": [
@@ -1051,6 +1058,28 @@
         "name": "правила — код Arcade",
         "author": "Arcade",
         "source": "https://github.com/ArbakovMaxim/agent-arcade"
+      }
+    },
+    {
+      "id": "hexgl",
+      "console": "web",
+      "kind": "web",
+      "page": "games/hexgl/index.html",
+      "title": "HexGL",
+      "genre": "гонки",
+      "about": "Футуристические гонки на антигравитационных кораблях в духе Wipeout: трасса над ночным городом, ускорители и воздушные тормоза.",
+      "about_en": "Futuristic anti-gravity racing in the spirit of Wipeout: a track above a night city, speed pads and air brakes.",
+      "keys": "газ — ↑ · тормоз — ↓ · руль — ← → · воздушные тормоза — A и D (или Q и E)",
+      "license": {
+        "name": "MIT",
+        "author": "Thibaut Despoulain",
+        "source": "https://github.com/BKcore/HexGL",
+        "commit": "6addc95a2fce3bf05f4d751823cc054c61a16d68",
+        "files": [
+          "games/hexgl/LICENSE",
+          "games/hexgl/NOTICE.txt",
+          "games/hexgl/OFL.txt"
+        ]
       }
     }
   ]

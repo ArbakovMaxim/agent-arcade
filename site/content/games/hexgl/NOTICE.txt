@@ -1,0 +1,12 @@
+HexGL — футуристические гонки для браузера, © 2015 Thibaut Despoulain, лицензия MIT (LICENSE).
+Исходники: https://github.com/BKcore/HexGL, коммит 6addc95a2fce3bf05f4d751823cc054c61a16d68.
+
+Изменения в Arcade:
+- не взяты архив package.zip, файлы упаковки (package.webapp, manifest.webapp), устаревший офлайн-кеш
+  cache.appcache (и ссылка на него из index.html), текстуры высокого разрешения textures.full, редактор
+  libs/Editor* и неиспользуемая libs/Three.r53.js;
+- шрифт Bebas Neue заменён свободной версией (Dharma Type, SIL Open Font License 1.1 — OFL.txt) из
+  https://github.com/google/fonts/tree/main/ofl/bebasneue; в css/fonts.css — ссылка на новый файл.
+
+Библиотеки в libs/: three.js (MIT, © three.js authors), dat.GUI (Apache-2.0, © Google Data Arts Team),
+Stats.js (MIT, © mrdoob), Detector.js и ShaderExtras.js (из three.js, MIT), leap.js 0.4.1 (Apache-2.0, © Leap Motion).

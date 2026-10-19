@@ -25,7 +25,7 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
 assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
@@ -33,7 +33,7 @@ assert.ok(Object.keys(catalog.games).length >= 12, 'в каталоге все �
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf8')), catalog)
 
 for (const [id, game] of Object.entries(catalog.games)) {
-  if (game.kind === 'board') continue // настольные — без ROM, проверены отдельно
+  if (game.kind === 'board' || game.kind === 'web') continue // настольные и браузерные — без ROM, проверены отдельно
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
@@ -142,7 +142,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sms'), ['balloon-master', 'skyhaul', 'food-fighter', 'escape-from-monster-dimension'])
   assert.equal(built.consoles.find((c) => c.id === 'gg'), undefined, 'Game Gear убран')
   const redirects = fs.readFileSync(path.join(dir, '_redirects'), 'utf8')
-  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom', 'board']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
+  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
   assert.match(fs.readFileSync(path.join(dir, '.assetsignore'), 'utf8'), /_redirects/)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System \(нет метки TMR SEGA и расширение не/)
@@ -188,4 +188,14 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   for (const f of ['vendor/chess/chess.js', 'licenses/chess.js/LICENSE.txt', 'licenses/chess/chess.js-LICENSE.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'chess').board = 'go' }), /неизвестная настольная игра go/)
+// Браузерная игра: папка игры — в web-games/<id>/, лицензии — в licenses/<id>/
+{
+  const dir = temp('web')
+  const built = build({ root: ROOT, out: dir })
+  assert.equal(built.games.hexgl.kind, 'web')
+  assert.equal(built.games.hexgl.page, 'web-games/hexgl/index.html')
+  for (const f of ['web-games/hexgl/index.html', 'web-games/hexgl/libs/Three.dev.js', 'web-games/hexgl/css/BebasNeue-Regular.ttf', 'licenses/hexgl/LICENSE', 'licenses/hexgl/OFL.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
+  assert.ok(!fs.existsSync(path.join(dir, 'web-games/hexgl/package.zip')), 'лишнее не взято')
+}
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'hexgl').page = 'games/hexgl/nope.html' }), /нет страницы игры/)
 console.log('Sega: все проверки прошли')

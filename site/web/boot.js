@@ -76,6 +76,31 @@
     if (entry) await play(entry)
     else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || T('свою игру'))
     else overlay(T('Игра не найдена'), T('В этом браузере её нет. Вернись в библиотеку и открой файл заново.'))
+  } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'web') {
+    // Браузерная игра — своя страница в рамке под полосой окна
+    const game = catalog.games[id]
+    document.body.classList.remove('library-mode')
+    document.title = `${game.title} · Arcade`
+    document.getElementById('keys').textContent = T(game.keys)
+    document.getElementById('credit').textContent = T(game.credit)
+    const licenseFile = (game.license.files || []).find((f) => /^license/i.test(f.name))
+    document.getElementById('license').href = licenseFile ? licenseFile.url : game.license.source
+    document.getElementById('source').href = game.license.source
+    for (const el of ['sound', 'restart', 'best', 'net']) {
+      const node = document.getElementById(el)
+      if (node) node.style.display = 'none'
+    }
+    const screen = document.getElementById('screen')
+    if (screen) screen.style.display = 'none'
+    document.getElementById('overlay').classList.remove('shown')
+    const frame = document.createElement('iframe')
+    frame.id = 'web-game'
+    frame.src = game.page
+    frame.title = game.title
+    frame.allow = 'fullscreen; gamepad; autoplay'
+    frame.style.cssText = 'width:100%;height:100%;border:0;display:block;background:#000'
+    ;(document.getElementById('stage') || document.body).appendChild(frame)
+    frame.focus()
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {
     // Настольные игры по сети — правила и страница партии
     for (const src of ['board-rules.js', 'board.js']) {
