@@ -1,0 +1,3 @@
+doom-wasm — Chocolate Doom в WebAssembly с сетевой игрой через WebSocket. © Cloudflare и авторы Chocolate Doom, GPL-2.0 (COPYING.md).
+Исходники: https://github.com/cloudflare/doom-wasm, коммит 65e0d3ae2ffa604155eebd96ed40da6567bd08f4 (архив рядом).
+Собрано в GitHub Actions без изменений: Emscripten 3.1.61, autoreconf + configure --host=none-none-none + make.
