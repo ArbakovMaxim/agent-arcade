@@ -94,6 +94,10 @@ export function build({ root, out, now = new Date() }) {
           if (entry.isDirectory()) walk(full)
           else {
             if (fs.statSync(full).size > MAX_FILE) fail(`${where}: файл ${entry.name} больше 25 МиБ`)
+            // Никаких счётчиков и аналитики в чужих играх: игроки Arcade не должны уходить в чужие аккаунты
+            if (/\.(html?|js)$/i.test(entry.name) && /google-analytics|googletagmanager|_gaq\b|gtag\(/.test(fs.readFileSync(full, 'utf8'))) {
+              fail(`${where}: в ${path.relative(folder, full)} счётчик аналитики — уберите его`)
+            }
             copy(full, path.join(out, 'web-games', g.id, path.relative(folder, full)))
           }
         }
@@ -106,7 +110,8 @@ export function build({ root, out, now = new Date() }) {
         return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
       })
       games[g.id] = {
-        console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page)}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
+        // Cloudflare отвечает на …/index.html переходом на папку — сразу даём адрес папки
+        console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page) === 'index.html' ? '' : path.basename(g.page)}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
         credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
         license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files },
       }

@@ -564,7 +564,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const page = await makePage(new Map(), { search: '?game=hexgl' })
   await until(() => page.byId.stage.children.some((n) => n.id === 'web-game'))
   const frame = page.byId.stage.children.find((n) => n.id === 'web-game')
-  assert.equal(frame.src, 'web-games/hexgl/index.html')
+  assert.equal(frame.src, 'web-games/hexgl/')
   assert.match(page.byId.keys.textContent, /воздушные тормоза — A и D/)
   assert.match(page.byId.license.href, /licenses\/hexgl\/LICENSE$/)
   const lib = await makePage(new Map(), { search: '?tab=web' })

@@ -193,9 +193,11 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'chess').board = 'go'
   const dir = temp('web')
   const built = build({ root: ROOT, out: dir })
   assert.equal(built.games.hexgl.kind, 'web')
-  assert.equal(built.games.hexgl.page, 'web-games/hexgl/index.html')
+  assert.equal(built.games.hexgl.page, 'web-games/hexgl/', 'адрес папки: на index.html Cloudflare отвечает переходом')
   for (const f of ['web-games/hexgl/index.html', 'web-games/hexgl/libs/Three.dev.js', 'web-games/hexgl/css/BebasNeue-Regular.ttf', 'licenses/hexgl/LICENSE', 'licenses/hexgl/OFL.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
   assert.ok(!fs.existsSync(path.join(dir, 'web-games/hexgl/package.zip')), 'лишнее не взято')
+  assert.ok(fs.existsSync(path.join(dir, 'web-games/hexgl/textures.full/tracks/cityscape/diffuse.jpg')), 'текстуры для качества VERY HIGH на месте')
+  assert.ok(!/google-analytics|_gaq/.test(fs.readFileSync(path.join(dir, 'web-games/hexgl/index.html'), 'utf8')), 'без аналитики')
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'hexgl').page = 'games/hexgl/nope.html' }), /нет страницы игры/)
 console.log('Sega: все проверки прошли')

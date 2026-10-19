@@ -2,9 +2,9 @@ HexGL — футуристические гонки для браузера, © 
 Исходники: https://github.com/BKcore/HexGL, коммит 6addc95a2fce3bf05f4d751823cc054c61a16d68.
 
 Изменения в Arcade:
+- из index.html убран счётчик Google Analytics автора: он отправлял данные игроков в чужой аккаунт;
 - не взяты архив package.zip, файлы упаковки (package.webapp, manifest.webapp), устаревший офлайн-кеш
-  cache.appcache (и ссылка на него из index.html), текстуры высокого разрешения textures.full, редактор
-  libs/Editor* и неиспользуемая libs/Three.r53.js;
+  cache.appcache (и ссылка на него из index.html), редактор libs/Editor* и неиспользуемая libs/Three.r53.js;
 - шрифт Bebas Neue заменён свободной версией (Dharma Type, SIL Open Font License 1.1 — OFL.txt) из
   https://github.com/google/fonts/tree/main/ofl/bebasneue; в css/fonts.css — ссылка на новый файл.
 
