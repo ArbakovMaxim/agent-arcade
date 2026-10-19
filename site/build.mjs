@@ -103,6 +103,15 @@ export function build({ root, out, now = new Date() }) {
         }
       }
       walk(folder)
+      // Свои скрипты Arcade — в страницу игры, перед её первым скриптом (у OpenTTD — графика OpenGFX до старта)
+      for (const script of g.inject ?? []) {
+        if (!fs.existsSync(path.join(folder, script))) fail(`${where}: нет скрипта ${script}`)
+        const pageOut = path.join(out, 'web-games', g.id, path.basename(g.page))
+        const html = fs.readFileSync(pageOut, 'utf8')
+        const at = html.search(/<script[^>]*\ssrc=/i)
+        if (at < 0) fail(`${where}: в странице игры нет подключаемого скрипта — некуда вставить ${script}`)
+        fs.writeFileSync(pageOut, `${html.slice(0, at)}<script src="${script}"></script>${html.slice(at)}`)
+      }
       const files = (license.files ?? []).map((file) => {
         const from = path.join(content, file)
         if (!fs.existsSync(from)) fail(`${where}: нет файла лицензии ${file}`)

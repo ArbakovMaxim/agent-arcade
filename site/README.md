@@ -93,3 +93,5 @@ npx serve dist       # посмотреть его в браузере на http
 
 Игры, написанные сразу для браузера (`kind: "web"` в каталоге): папка игры целиком лежит в `content/games/<id>/`, сборка кладёт её в `web-games/<id>/`, окно открывает страницу игры во встроенной рамке под своей полосой. Первая — HexGL (MIT): что изменено при подключении, написано в `content/games/hexgl/NOTICE.txt`.
 
+**OpenTTD 15.3** собирается в GitHub Actions официальным способом (`.github/workflows/openttd-wasm.yml`), графика — OpenGFX 8.0. Свои скрипты Arcade попадают в страницу игры при сборке сайта (поле `inject` в каталоге): `arcade-opengfx.js` кладёт OpenGFX с нашего сайта в `/baseset` до старта, поэтому игра не качает графику с openttd.org. Сохранения — в браузере игрока (IndexedDB), как у OpenTTD.
+

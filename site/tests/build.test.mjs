@@ -203,4 +203,15 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'chess').board = 'go'
   assert.ok(!/google-analytics|_gaq/.test(fs.readFileSync(path.join(dir, 'web-games/hexgl/index.html'), 'utf8')), 'без аналитики')
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'hexgl').page = 'games/hexgl/nope.html' }), /нет страницы игры/)
+// OpenTTD: свой скрипт с графикой OpenGFX — в странице перед openttd.js; графика и данные игры на месте
+{
+  const dir = temp('openttd')
+  const built = build({ root: ROOT, out: dir })
+  assert.equal(built.games.openttd.page, 'web-games/openttd/openttd.html')
+  const page = fs.readFileSync(path.join(dir, 'web-games/openttd/openttd.html'), 'utf8')
+  assert.ok(page.indexOf('<script src="arcade-opengfx.js"></script>') >= 0, 'скрипт графики вставлен')
+  assert.ok(page.indexOf('arcade-opengfx.js') < page.indexOf('src=openttd.js'), 'и стоит раньше openttd.js')
+  for (const f of ['openttd.wasm', 'openttd.data', 'baseset/opengfx-8.0.tar', 'openttd-15.3-src.tar.gz']) assert.ok(fs.existsSync(path.join(dir, 'web-games/openttd', f)), f)
+}
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = ['nope.js'] }), /нет скрипта nope\.js/)
 console.log('Sega: все проверки прошли')

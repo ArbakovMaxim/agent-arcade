@@ -1125,6 +1125,30 @@
           "games/hexgl/OFL.txt"
         ]
       }
+    },
+    {
+      "id": "openttd",
+      "console": "web",
+      "kind": "web",
+      "page": "games/openttd/openttd.html",
+      "inject": [
+        "arcade-opengfx.js"
+      ],
+      "title": "OpenTTD",
+      "genre": "стратегия",
+      "about": "Транспортная империя по мотивам Transport Tycoon Deluxe: поезда, автобусы, корабли и самолёты, города растут вокруг твоих станций. Игра сохраняется в браузере.",
+      "about_en": "A transport empire based on Transport Tycoon Deluxe: trains, buses, ships and planes, with towns growing around your stations. Saves stay in your browser.",
+      "keys": "всё мышью: левая кнопка — строить и выбирать · правая — двигать карту · колёсико — масштаб",
+      "license": {
+        "name": "GPL-2.0",
+        "author": "авторы OpenTTD; графика — OpenGFX",
+        "source": "https://github.com/OpenTTD/OpenTTD/tree/15.3",
+        "commit": "15.3",
+        "files": [
+          "games/openttd/LICENSE.md",
+          "games/openttd/BUILD.txt"
+        ]
+      }
     }
   ]
 }

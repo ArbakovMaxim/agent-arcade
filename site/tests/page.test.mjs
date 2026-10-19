@@ -568,7 +568,10 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(page.byId.keys.textContent, /воздушные тормоза — A и D/)
   assert.match(page.byId.license.href, /licenses\/hexgl\/LICENSE$/)
   const lib = await makePage(new Map(), { search: '?tab=web' })
-  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl', 'openttd'])
+  const ttd = await makePage(new Map(), { search: '?game=openttd' })
+  await until(() => ttd.byId.stage.children.some((n) => n.id === 'web-game'))
+  assert.equal(ttd.byId.stage.children.find((n) => n.id === 'web-game').src, 'web-games/openttd/openttd.html')
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
 }
 
