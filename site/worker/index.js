@@ -6,10 +6,66 @@
 export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт
 const ROOM_NAME = /^[A-Za-z0-9_-]{1,64}$/
+export const MAX_PER_IP = 4 // подключений с одного адреса в одну комнату: две вкладки для проверки пройдут, сотня — нет
+
+// Ограничение частоты — «ведро жетонов» на каждый сокет: сообщения и байты в секунду с запасом на всплеск.
+// Лишнее отбрасывается; кто долго превышает лимит, того комната отключает. Состояние в памяти: после «спячки»
+// ведро снова полное — это нормально, «спячка» и значит, что в комнате было тихо.
+export class Limiter {
+  constructor({ messages, bytes, now = () => Date.now() }) {
+    this.messages = messages
+    this.bytes = bytes
+    this.now = now
+    this.buckets = new WeakMap()
+  }
+
+  // true — пропустить; false — отбросить; 'close' — отключить сокет
+  allow(ws, size) {
+    const t = this.now()
+    let b = this.buckets.get(ws)
+    if (!b) this.buckets.set(ws, (b = { m: this.messages * 2, b: this.bytes * 2, at: t, strikes: 0 }))
+    const dt = Math.max(0, t - b.at) / 1000
+    b.at = t
+    b.m = Math.min(this.messages * 2, b.m + dt * this.messages)
+    b.b = Math.min(this.bytes * 2, b.b + dt * this.bytes)
+    if (b.m >= 1 && b.b >= size) {
+      b.m -= 1
+      b.b -= size
+      b.strikes = Math.max(0, b.strikes - 0.1)
+      return true
+    }
+    b.strikes += 1
+    return b.strikes > 200 ? 'close' : false
+  }
+}
+
+// Отбросить сообщение или отключить того, кто долго заваливает комнату
+function limited(limiter, ws, size) {
+  const verdict = limiter.allow(ws, size)
+  if (verdict === 'close') {
+    try {
+      ws.close(1008, 'слишком много сообщений')
+    } catch {
+      // уже закрыт
+    }
+  }
+  return verdict !== true
+}
+
+// С одного адреса — не больше MAX_PER_IP подключений в одну комнату
+function tooManyFrom(ctx, ip) {
+  if (!ip) return false
+  return ctx.getWebSockets().filter((ws) => ws.deserializeAttachment()?.ip === ip).length >= MAX_PER_IP
+}
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
+    // WebSocket — только со страниц нашего сайта: чужой сайт не сделает из комнат свой бесплатный сервер
+    const origin = request.headers.get('Origin')
+    if (url.pathname.startsWith('/net/') && request.headers.get('Upgrade') === 'websocket' && origin && origin !== url.origin) {
+      return new Response('Подключение только со страниц Arcade', { status: 403 })
+    }
     if (url.pathname === '/api/ping') return Response.json({ ok: true })
     // Кто сейчас ждёт в сети — для мода и окна: { doom: игроков в лобби, games: { номер игры: открытых комнат } }
     if (url.pathname === '/api/lobbies') return env.PRESENCE.get(env.PRESENCE.idFromName('all')).fetch('https://presence/get')
@@ -48,10 +104,12 @@ export class Room {
 
   async fetch(request) {
     if (this.ctx.getWebSockets().length >= MAX_PEERS) return new Response('Комната заполнена', { status: 409 })
+    const ip = request?.headers?.get('CF-Connecting-IP') || ''
+    if (tooManyFrom(this.ctx, ip)) return new Response('Слишком много подключений с одного адреса', { status: 429 })
     const [client, server] = Object.values(new WebSocketPair())
     const id = crypto.randomUUID().slice(0, 8)
     this.ctx.acceptWebSocket(server)
-    server.serializeAttachment({ id, room: request?.headers?.get('X-Room') || '' })
+    server.serializeAttachment({ id, ip, room: request?.headers?.get('X-Room') || '' })
     this.report()
     server.send(JSON.stringify({ type: 'welcome', id, peers: this.peers(server) }))
     this.broadcast(JSON.stringify({ type: 'join', id }), server)
@@ -80,6 +138,9 @@ export class Room {
   async webSocketMessage(ws, message) {
     const size = typeof message === 'string' ? message.length : message.byteLength
     if (size > MAX_MESSAGE) return
+    // Лобби и комнаты друзей — редкие сообщения: 20 в секунду и 256 КБ/с с запасом
+    this.limiter ??= new Limiter({ messages: 20, bytes: 256 * 1024 })
+    if (limited(this.limiter, ws, size)) return
     this.broadcast(message, ws)
   }
 
@@ -123,16 +184,21 @@ export class DoomRoom {
     this.env = env
   }
 
-  async fetch() {
+  async fetch(request) {
     if (this.ctx.getWebSockets().length >= MAX_PEERS) return new Response('Комната заполнена', { status: 409 })
+    const ip = request?.headers?.get('CF-Connecting-IP') || ''
+    if (tooManyFrom(this.ctx, ip)) return new Response('Слишком много подключений с одного адреса', { status: 429 })
     const [client, server] = Object.values(new WebSocketPair())
     this.ctx.acceptWebSocket(server)
-    server.serializeAttachment({ uid: null })
+    server.serializeAttachment({ uid: null, ip })
     return new Response(null, { status: 101, webSocket: client })
   }
 
   async webSocketMessage(ws, message) {
     if (typeof message === 'string' || message.byteLength < 8 || message.byteLength > MAX_MESSAGE) return
+    // Doom шлёт десятки пакетов в секунду на каждого игрока: 400 в секунду и 512 КБ/с с запасом
+    this.limiter ??= new Limiter({ messages: 400, bytes: 512 * 1024 })
+    if (limited(this.limiter, ws, message.byteLength)) return
     const head = new DataView(message)
     const to = head.getUint32(0, true)
     const from = head.getUint32(4, true)
@@ -149,7 +215,7 @@ export class DoomRoom {
         }
       }
     }
-    if (ws.deserializeAttachment()?.uid !== from) ws.serializeAttachment({ uid: from })
+    if (ws.deserializeAttachment()?.uid !== from) ws.serializeAttachment({ ...ws.deserializeAttachment(), uid: from })
     const target = this.ctx.getWebSockets().find((other) => other !== ws && other.deserializeAttachment()?.uid === to)
     if (target) {
       try {
@@ -187,9 +253,11 @@ export class EjsGame {
     const url = new URL(request.url)
     if (url.pathname === '/list') return Response.json(this.rooms())
     const game = url.pathname.split('/').pop()
+    const ip = request.headers.get('CF-Connecting-IP') || ''
+    if (tooManyFrom(this.ctx, ip)) return new Response('Слишком много подключений с одного адреса', { status: 429 })
     const [client, server] = Object.values(new WebSocketPair())
     this.ctx.acceptWebSocket(server)
-    server.serializeAttachment({ game })
+    server.serializeAttachment({ game, ip })
     return new Response(null, { status: 101, webSocket: client })
   }
 
@@ -231,6 +299,9 @@ export class EjsGame {
 
   async webSocketMessage(ws, message) {
     if (typeof message !== 'string' || message.length > MAX_MESSAGE) return
+    // Нажатия идут по кадру — до 60 в секунду; сохранение при выравнивании — всплеск в несколько мегабайт кусками
+    this.limiter ??= new Limiter({ messages: 150, bytes: 2 * 1024 * 1024 })
+    if (limited(this.limiter, ws, message.length)) return
     let frame
     try {
       frame = JSON.parse(message)
@@ -285,12 +356,12 @@ export class EjsGame {
   // Ушёл хозяин — комната закрывается для всех; ушёл игрок — остальным новый состав
   gone(ws) {
     const me = ws.deserializeAttachment() || {}
-    ws.serializeAttachment({ game: me.game })
+    ws.serializeAttachment({ game: me.game, ip: me.ip })
     if (!me.sessionid) return
     if (me.owner) {
       for (const other of this.members(me.sessionid)) {
         this.send(other, { t: 'event', event: 'disconnect' })
-        other.serializeAttachment({ game: other.deserializeAttachment().game })
+        other.serializeAttachment({ game: other.deserializeAttachment().game, ip: other.deserializeAttachment().ip })
       }
     } else this.usersUpdated(me.sessionid)
     this.report(me.game)

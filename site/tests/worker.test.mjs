@@ -1,6 +1,6 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
-import worker, { Room, DoomRoom, EjsGame, Presence, MAX_PEERS, MAX_MESSAGE } from '../worker/index.js'
+import worker, { Room, DoomRoom, EjsGame, Presence, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -195,5 +195,48 @@ try {
   assert.equal(posts.length, 0)
 } finally {
   globalThis.Response = RealResponse
+}
+// --- Ограничения: частота сообщений, подключения с одного адреса, чужие сайты -------------------------------------
+{
+  let now = 0
+  const limiter = new Limiter({ messages: 10, bytes: 1000, now: () => now })
+  const ws = {}
+  let passed = 0
+  for (let i = 0; i < 30; i++) if (limiter.allow(ws, 10) === true) passed++
+  assert.equal(passed, 20, 'всплеск — двойной запас, остальное отбрасывается')
+  now += 1000
+  passed = 0
+  for (let i = 0; i < 30; i++) if (limiter.allow(ws, 10) === true) passed++
+  assert.equal(passed, 10, 'за секунду ведро пополнилось на лимит')
+  assert.equal(limiter.allow({}, 5000), false, 'слишком большое для ведра — отброшено')
+  let verdict
+  for (let i = 0; i < 300; i++) verdict = limiter.allow(ws, 10)
+  assert.equal(verdict, 'close', 'долгий поток — отключить')
+}
+globalThis.WebSocketPair = class { constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket() } }
+globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket } }
+try {
+  const sockets = []
+  const ctx = { acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed), waitUntil: () => {} }
+  const room = new Room(ctx, {})
+  const from = (ip) => ({ headers: new Headers({ 'CF-Connecting-IP': ip }) })
+  for (let i = 0; i < MAX_PER_IP; i++) assert.equal((await room.fetch(from('1.2.3.4'))).status, 101)
+  assert.equal((await room.fetch(from('1.2.3.4'))).status, 429, 'пятое с того же адреса — отказ')
+  assert.equal((await room.fetch(from('5.6.7.8'))).status, 101, 'с другого — можно')
+  // Заваливающий сообщениями перестаёт доходить до остальных
+  const [spammer, listener] = sockets
+  const before = listener.sent.length
+  for (let i = 0; i < 200; i++) await room.webSocketMessage(spammer, 'спам')
+  const got = listener.sent.length - before
+  assert.ok(got >= 40 && got <= 41, `дошло ${got} — всплеск, остальное отброшено`)
+} finally {
+  globalThis.Response = RealResponse
+}
+{
+  const env = { ASSETS: { fetch: async () => new Response('статика') }, ROOMS: { idFromName: (n) => n, get: () => ({ fetch: async () => new Response('комната') }) } }
+  const ws = (origin) => worker.fetch(new Request('https://arcade.test/net/room/lobby', { headers: { Upgrade: 'websocket', ...(origin ? { Origin: origin } : {}) } }), env)
+  assert.equal((await ws('https://evil.example')).status, 403, 'с чужого сайта — нельзя')
+  assert.equal(await (await ws('https://arcade.test')).text(), 'комната', 'со своего — можно')
+  assert.equal(await (await ws()).text(), 'комната', 'без Origin (не браузер) — можно')
 }
 console.log('комнаты: все проверки прошли')
