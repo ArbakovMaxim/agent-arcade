@@ -1,0 +1,60 @@
+# Сборка движка сетевого Doom — doom-wasm (Chocolate Doom в WebAssembly, Cloudflare, GPL-2.0).
+# В песочнице Arcade нужного компилятора нет, поэтому движок собирается здесь и кладётся в site/vendor/doom-wasm.
+# Запуск вручную: Actions → «Сборка doom-wasm» → Run workflow. Коммит и версия Emscripten закреплены.
+name: Сборка doom-wasm
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOOM_WASM_REPO: https://github.com/cloudflare/doom-wasm
+  DOOM_WASM_COMMIT: 65e0d3ae2ffa604155eebd96ed40da6567bd08f4
+  EMSDK_VERSION: 3.1.61
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Исходники doom-wasm на закреплённом коммите
+        run: |
+          git clone "$DOOM_WASM_REPO" /tmp/doom-wasm
+          git -C /tmp/doom-wasm checkout "$DOOM_WASM_COMMIT"
+
+      - name: Инструменты сборки
+        run: sudo apt-get update && sudo apt-get install -y automake autoconf libtool pkg-config
+
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+
+      - name: Сборка
+        working-directory: /tmp/doom-wasm
+        run: |
+          emconfigure autoreconf -fiv
+          ac_cv_exeext=".html" emconfigure ./configure --host=none-none-none
+          emmake make -j"$(nproc)"
+          ls -la src/websockets-doom.js src/websockets-doom.wasm
+
+      - name: Готовый движок и исходники — в репозиторий
+        run: |
+          OUT=site/vendor/doom-wasm
+          SHORT="${DOOM_WASM_COMMIT:0:7}"
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          cp /tmp/doom-wasm/src/websockets-doom.js /tmp/doom-wasm/src/websockets-doom.wasm "$OUT/"
+          cp /tmp/doom-wasm/COPYING.md "$OUT/COPYING.md"
+          git -C /tmp/doom-wasm archive --format=tar.gz --prefix="doom-wasm-$SHORT/" -o "$PWD/$OUT/doom-wasm-$SHORT-src.tar.gz" "$DOOM_WASM_COMMIT"
+          {
+            echo "doom-wasm — Chocolate Doom в WebAssembly с сетевой игрой через WebSocket. © Cloudflare и авторы Chocolate Doom, GPL-2.0 (COPYING.md)."
+            echo "Исходники: $DOOM_WASM_REPO, коммит $DOOM_WASM_COMMIT (архив рядом)."
+            echo "Собрано в GitHub Actions без изменений: Emscripten $EMSDK_VERSION, autoreconf + configure --host=none-none-none + make."
+          } > "$OUT/BUILD.txt"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "doom-wasm: сборка ${SHORT} (Emscripten $EMSDK_VERSION)"
+          git push

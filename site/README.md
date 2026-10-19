@@ -66,5 +66,9 @@ npx serve dist       # посмотреть его в браузере на http
 - `/api/ping` — проверка, что код работает.
 - `/net/room/<имя>` — WebSocket в комнату. Комната — Durable Object (на SQLite, есть на бесплатном тарифе): каждое сообщение уходит всем остальным игрокам как есть, о входе и выходе приходят `{"type":"join"}` и `{"type":"leave"}`, новичок получает `{"type":"welcome","id":…,"peers":[…]}`. До 8 игроков, сообщение — до 1 МБ.
 
+- `/net/doom/<имя>` — комната сетевого Doom (`DoomRoom`): пакеты doom-wasm уходят не всем, а адресату по номеру игрока; хозяин игры — номер 1, его первый пакет начинает новую игру. По образцу маршрутизатора Cloudflare doom-workers (BSD-3-Clause).
+
+Движок сетевого Doom (doom-wasm, GPL-2.0) собирается в GitHub Actions — сценарий `.github/workflows/doom-wasm.yml`, запуск вручную — и лежит в `vendor/doom-wasm` вместе с архивом исходников.
+
 На комнатах будут работать сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom. Тест — `tests/worker.test.mjs`.
 

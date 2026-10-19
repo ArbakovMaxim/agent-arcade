@@ -11,11 +11,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     if (url.pathname === '/api/ping') return Response.json({ ok: true })
-    const room = url.pathname.match(/^\/net\/room\/([^/]+)$/)
+    const room = url.pathname.match(/^\/net\/(room|doom)\/([^/]+)$/)
     if (room) {
-      if (!ROOM_NAME.test(room[1])) return new Response('Имя комнаты: латиница, цифры, - и _, до 64 символов', { status: 400 })
+      if (!ROOM_NAME.test(room[2])) return new Response('Имя комнаты: латиница, цифры, - и _, до 64 символов', { status: 400 })
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('Нужно подключение WebSocket', { status: 426 })
-      return env.ROOMS.get(env.ROOMS.idFromName(room[1])).fetch(request)
+      const space = room[1] === 'doom' ? env.DOOM : env.ROOMS
+      return space.get(space.idFromName(room[2])).fetch(request)
     }
     return env.ASSETS.fetch(request)
   },
@@ -83,3 +84,61 @@ export class Room {
     if (id) this.broadcast(JSON.stringify({ type: 'leave', id }), ws)
   }
 }
+
+// Комната сетевого Doom: пакеты doom-wasm идут не всем, а конкретному игроку.
+// Пакет клиента: [кому: uint32][от кого: uint32][данные]; адресату уходит [от кого][данные].
+// Хозяин игры — номер 1; его первый пакет «кому 0» начинает новую игру, прежних игроков комната отключает.
+// По образцу маршрутизатора Cloudflare doom-workers (BSD-3-Clause, © 2021 Cloudflare), на API со «спячкой».
+export class DoomRoom {
+  constructor(ctx, env) {
+    this.ctx = ctx
+    this.env = env
+  }
+
+  async fetch() {
+    if (this.ctx.getWebSockets().length >= MAX_PEERS) return new Response('Комната заполнена', { status: 409 })
+    const [client, server] = Object.values(new WebSocketPair())
+    this.ctx.acceptWebSocket(server)
+    server.serializeAttachment({ uid: null })
+    return new Response(null, { status: 101, webSocket: client })
+  }
+
+  async webSocketMessage(ws, message) {
+    if (typeof message === 'string' || message.byteLength < 8 || message.byteLength > MAX_MESSAGE) return
+    const head = new DataView(message)
+    const to = head.getUint32(0, true)
+    const from = head.getUint32(4, true)
+    if (from === 1 && to === 0) {
+      // Хозяин начинает новую игру — прежние игроки этой комнаты отключаются
+      for (const other of this.ctx.getWebSockets()) {
+        if (other !== ws) {
+          try {
+            other.close(1011, 'новая игра')
+          } catch {
+            // уже закрыт
+          }
+        }
+      }
+    }
+    if (ws.deserializeAttachment()?.uid !== from) ws.serializeAttachment({ uid: from })
+    const target = this.ctx.getWebSockets().find((other) => other !== ws && other.deserializeAttachment()?.uid === to)
+    if (target) {
+      try {
+        target.send(message.slice(4))
+      } catch {
+        // адресат отключается
+      }
+    }
+  }
+
+  async webSocketClose(ws, code, reason) {
+    try {
+      ws.close(code, reason)
+    } catch {
+      // уже закрыт
+    }
+  }
+
+  async webSocketError() {}
+}
+
