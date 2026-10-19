@@ -137,5 +137,5 @@
     await loadEJS()
     window.ArcadeEJS.start(catalog, id)
   } else if (id) window.ArcadeGame.start(catalog, id)
-  else window.ArcadeLibrary.start(catalog, params.get('tab'))
+  else window.ArcadeLibrary.start(catalog, params.get('tab'), params.get('shelf'))
 })()

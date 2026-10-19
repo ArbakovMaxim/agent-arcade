@@ -344,7 +344,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const button = (cls) => lib.querySelectorAll(cls)
   assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Doom', 'Board games', 'Browser games'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Games'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -567,11 +567,22 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(frame.src, 'web-games/hexgl/')
   assert.match(page.byId.keys.textContent, /воздушные тормоза — A и D/)
   assert.match(page.byId.license.href, /licenses\/hexgl\/LICENSE$/)
+  // Вкладка «Игры»: полки; старый адрес ?tab=web открывает полку первой его игры — гонки
   const lib = await makePage(new Map(), { search: '?tab=web' })
-  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl', 'openttd'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['Шутеры', 'Гонки', 'Стратегии', 'Настольные'])
+  assert.equal(lib.byId.library.querySelectorAll('.shelf').find((b) => /\bactive\b/.test(b.className)).textContent, 'Гонки')
+  const strategy = await makePage(new Map(), { search: '?tab=games&shelf=strategy' })
+  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd'])
+  const shooters = await makePage(new Map(), { search: '?tab=games' })
+  assert.deepEqual(shooters.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'], 'по умолчанию — первая полка, шутеры')
+  assert.equal(shooters.byId.library.querySelectorAll('.open-rom').length, 2, 'у шутеров — «Открыть свой файл» (WAD) и язык')
+  // Переключение полки — свой адрес
+  strategy.byId.library.querySelectorAll('.shelf').find((b) => b.dataset.shelf === 'board').click()
+  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi'])
   const ttd = await makePage(new Map(), { search: '?game=openttd' })
   await until(() => ttd.byId.stage.children.some((n) => n.id === 'web-game'))
-  assert.equal(ttd.byId.stage.children.find((n) => n.id === 'web-game').src, 'web-games/openttd/openttd.html')
+  assert.equal(ttd.byId.stage.children.find((n) => n.id === 'web-game').src, 'web-games/openttd/openttd', 'без .html — сразу конечный адрес')
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
 }
 

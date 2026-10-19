@@ -119,8 +119,10 @@ export function build({ root, out, now = new Date() }) {
         return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
       })
       games[g.id] = {
+      ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
+        ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
         // Cloudflare отвечает на …/index.html переходом на папку — сразу даём адрес папки
-        console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page) === 'index.html' ? '' : path.basename(g.page)}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
+        console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page) === 'index.html' ? '' : path.basename(g.page).replace(/\.html?$/i, '')}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
         credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
         license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files },
       }
@@ -136,6 +138,8 @@ export function build({ root, out, now = new Date() }) {
         return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
       })
       games[g.id] = {
+      ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
+        ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
         console: g.console, kind: 'board', board: g.board, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
         credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
         license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files },
@@ -183,6 +187,7 @@ export function build({ root, out, now = new Date() }) {
     })
 
     games[g.id] = {
+      ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
       console: g.console,
       title: g.title,
       genre: g.genre,
@@ -201,7 +206,15 @@ export function build({ root, out, now = new Date() }) {
     }
   }
 
-  const catalog = { version: 1, built: now.toISOString(), consoles, games }
+  // Группы вкладок и полки: «Игры» — шутеры, гонки, стратегии, настольные (у каждой игры группы — своя полка)
+  const groups = (source.groups ?? []).map((g) => ({ id: g.id, title: g.title, ...(g.about ? { about: g.about } : {}) }))
+  const shelves = (source.shelves ?? []).map((s) => ({ id: s.id, title: s.title }))
+  for (const c of consoles) if (c.group && !groups.some((g) => g.id === c.group)) fail(`приставка ${c.id}: нет группы ${c.group}`)
+  for (const [id, g] of Object.entries(games)) {
+    const c = consoles.find((x) => x.id === g.console)
+    if (c?.group && !shelves.some((s) => s.id === g.shelf)) fail(`игра ${id}: у игр группы ${c.group} должна быть полка (shelf) из списка shelves`)
+  }
+  const catalog = { version: 1, built: now.toISOString(), consoles, groups, shelves, games }
   fs.writeFileSync(path.join(out, 'catalog.json'), `${JSON.stringify(catalog, null, 2)}\n`)
 
   // Окно Arcade и лицензии сторонних библиотек
@@ -226,7 +239,7 @@ export function build({ root, out, now = new Date() }) {
   fs.writeFileSync(path.join(out, 'mapper28.js'), `;(function () {\n'use strict'\n${mapper28}\ninstallMapper28(window.jsnes && window.jsnes.Mappers)\n})()\n`)
   fs.writeFileSync(path.join(out, '_headers'), HEADERS)
   // Короткие адреса приставок: /sega — сразу вкладка Sega
-  fs.writeFileSync(path.join(out, '_redirects'), catalog.consoles.map((c) => `/${c.id} /?tab=${c.id} 302`).join('\n') + '\n')
+  fs.writeFileSync(path.join(out, '_redirects'), [...catalog.consoles, ...catalog.groups].map((c) => `/${c.id} /?tab=${c.id} 302`).join('\n') + '\n')
   // Wrangler читает _headers как правила, но не выкладывает его как обычный файл
   fs.writeFileSync(path.join(out, '.assetsignore'), '_headers\n_redirects\n')
   return catalog

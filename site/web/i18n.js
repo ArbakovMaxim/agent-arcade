@@ -27,6 +27,10 @@
     'Мои игры — только в этом браузере': 'My games — only in this browser',
     'Сетевой deathmatch': 'Network deathmatch',
     'Настольные': 'Board games',
+    'Шутеры': 'Shooters',
+    'Игры': 'Games',
+    'Гонки': 'Racing',
+    'Стратегии': 'Strategy',
     'Браузерные': 'Browser games',
 
     'Шахматы': 'Chess',

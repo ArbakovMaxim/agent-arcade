@@ -127,7 +127,7 @@ const reason = (t) =>
     .replace(/^файл больше 4 МБ\..*$/, 'the file is larger than 4 MB. NES and Sega games are added here; PlayStation discs are added in the Arcade window: PlayStation → “Open PlayStation in a window”')
     .replace(/^это не похоже на игру.*$/, 'this does not look like a NES, Sega Mega Drive or Master System game')
     .replace(/^это игра для Game Gear.*$/, 'this is a Game Gear game — Game Gear is not supported in Arcade')
-    .replace(/^это файл Doom \(WAD\)\..*$/, 'this is a Doom file (WAD). Add those in the Arcade window: Doom tab → “Open your own file”')
+    .replace(/^это файл Doom \(WAD\)\..*$/, 'this is a Doom file (WAD). Add those in the Arcade window: Games → Shooters → “Open your own file”')
     .replace(/^картридж с маппером (\d+) наш эмулятор Денди пока не поддерживает$/, 'our NES emulator does not support mapper $1 yet')
 
 const RULES = [

@@ -1455,9 +1455,9 @@ test('сообщение «… открыт в Google Chrome» само уход
 
 test('Doom: мод узнаёт WAD и подсказывает добавить его в окне', async () => {
   const wad = new TextEncoder().encode('IWAD' + '\0'.repeat(64))
-  expect(identifyRom(wad).error).toBe('это файл Doom (WAD). Их добавляют в окне Arcade: вкладка Doom → «Открыть свой файл»')
+  expect(identifyRom(wad).error).toBe('это файл Doom (WAD). Их добавляют в окне Arcade: «Игры» → «Шутеры» → «Открыть свой файл»')
   expect(identifyRom(new TextEncoder().encode('PWAD' + '\0'.repeat(64))).error).toMatch(/^это файл Doom/)
-  expect(tr('Не получилось добавить: это файл Doom (WAD). Их добавляют в окне Arcade: вкладка Doom → «Открыть свой файл»', 'en')).toMatch(/^Could not add it: this is a Doom file \(WAD\)/)
+  expect(tr('Не получилось добавить: это файл Doom (WAD). Их добавляют в окне Arcade: «Игры» → «Шутеры» → «Открыть свой файл»', 'en')).toMatch(/^Could not add it: this is a Doom file \(WAD\)/)
 })
 
 test('кто ждёт в сети: мод спрашивает сайт, пишет об этом в вопросе и даёт «Присоединиться»', async ($, on) => {
@@ -1549,5 +1549,38 @@ test('кто ждёт в сети и Blasphemer: BlasphDM ведёт в своё
   expect(await ui.find({ type: 'Text', text: '  в сети ждут: BlasphDM (2), Blasphemer (1)' })).toBeDefined()
   await ui.press({ key: 'arcade-net-join' })
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=blasphdm`)
+  await ui.unmount()
+})
+
+test('вкладка «Игры»: в главном меню одна группа, внутри — полки, в полке — её игры; «Назад» — к полкам', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'web', title: 'Браузерные', group: 'games' })
+  site.groups = [{ id: 'games', title: 'Игры' }]
+  site.shelves = [{ id: 'shooters', title: 'Шутеры' }, { id: 'racing', title: 'Гонки' }, { id: 'strategy', title: 'Стратегии' }]
+  const sha = 'e'.repeat(64)
+  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  site.games.hexgl = { console: 'web', kind: 'web', shelf: 'racing', page: 'web-games/hexgl/', title: 'HexGL', genre: 'гонки', about: 'гонки', keys: '…' }
+  const parsed = parseCatalog(JSON.stringify(site))
+  expect(parsed.groups).toEqual([{ id: 'games', title: 'Игры' }])
+  expect(parsed.games.find((g: any) => g.id === 'hexgl').shelf).toBe('racing')
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-menu-games' })).toMatchObject({ props: { label: 'Игры' } })
+  expect(await ui.find({ type: 'Text', text: '  2 игры' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-menu-doom' })).toBeUndefined()
+  await ui.press({ key: 'arcade-menu-games' })
+  expect(await ui.find({ key: 'arcade-menu-shelf-shooters' })).toMatchObject({ props: { label: 'Шутеры' } })
+  expect(await ui.find({ key: 'arcade-menu-shelf-racing' })).toMatchObject({ props: { label: 'Гонки' } })
+  expect(await ui.find({ key: 'arcade-menu-shelf-strategy' })).toBeUndefined() // пустые полки не показываем
+  await ui.press({ key: 'arcade-menu-shelf-racing' })
+  expect(await ui.find({ key: 'arcade-game-hexgl' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-freedm' })).toBeUndefined()
+  await ui.press({ key: 'arcade-open-tab-shelf-racing' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=games&shelf=racing`)
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-shelf-racing' })).toBeDefined() // вернулись к полкам
   await ui.unmount()
 })

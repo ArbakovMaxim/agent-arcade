@@ -207,11 +207,22 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'hexgl').page = 'game
 {
   const dir = temp('openttd')
   const built = build({ root: ROOT, out: dir })
-  assert.equal(built.games.openttd.page, 'web-games/openttd/openttd.html')
+  assert.equal(built.games.openttd.page, 'web-games/openttd/openttd')
   const page = fs.readFileSync(path.join(dir, 'web-games/openttd/openttd.html'), 'utf8')
   assert.ok(page.indexOf('<script src="arcade-opengfx.js"></script>') >= 0, 'скрипт графики вставлен')
   assert.ok(page.indexOf('arcade-opengfx.js') < page.indexOf('src=openttd.js'), 'и стоит раньше openttd.js')
   for (const f of ['openttd.wasm', 'openttd.data', 'baseset/opengfx-8.0.tar', 'openttd-15.3-src.tar.gz']) assert.ok(fs.existsSync(path.join(dir, 'web-games/openttd', f)), f)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = ['nope.js'] }), /нет скрипта nope\.js/)
+// Группа «Игры» и полки: у игр группы — полка; /games — вкладка группы
+{
+  const dir = temp('groups')
+  const built = build({ root: ROOT, out: dir })
+  assert.deepEqual(built.groups.map((g) => g.id), ['games'])
+  assert.deepEqual(built.shelves.map((s) => s.id), ['shooters', 'racing', 'strategy', 'board'])
+  assert.equal(built.games.hexgl.shelf, 'racing')
+  assert.equal(built.games.thwaite.shelf, undefined, 'у игр приставок полки нет')
+  assert.match(fs.readFileSync(path.join(dir, '_redirects'), 'utf8'), /\/games \/\?tab=games 302/)
+}
+assert.throws(broken((d) => { delete d.games.find((g) => g.id === 'hexgl').shelf }), /игра hexgl: у игр группы games должна быть полка/)
 console.log('Sega: все проверки прошли')

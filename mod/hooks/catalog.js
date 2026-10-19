@@ -39,6 +39,8 @@ function game(id, title, genre, about, sha256, aboutEn) {
 
 // catalog.json с сайта → { source: 'site', consoles, games }, или null, если ответ не похож на каталог.
 // Ответ пришёл по сети, поэтому каждое поле проверяется; игры с ошибками просто пропускаются.
+const shelfOf = (g) => (typeof g.shelf === 'string' && ID.test(g.shelf) ? { shelf: g.shelf } : {})
+
 export function parseCatalog(text) {
   let data
   try {
@@ -54,7 +56,12 @@ export function parseCatalog(text) {
       title: c.title,
       ...(typeof c.soon === 'string' ? { soon: c.soon } : {}),
       ...(typeof c.empty === 'string' ? { empty: c.empty.slice(0, 200) } : {}),
+      ...(typeof c.group === 'string' && ID.test(c.group) ? { group: c.group } : {}), // вкладка группы («Игры»)
     }))
+  // Группы и полки: «Игры» — шутеры, гонки, стратегии, настольные
+  const titled = (list) => (Array.isArray(list) ? list : []).filter((x) => x && ID.test(x.id ?? '') && typeof x.title === 'string' && x.title).map((x) => ({ id: x.id, title: x.title.slice(0, 40) }))
+  const groups = titled(data.groups)
+  const shelves = titled(data.shelves)
   const ids = new Set(consoles.map((c) => c.id))
   const games = []
   for (const [id, g] of Object.entries(data.games)) {
@@ -63,23 +70,23 @@ export function parseCatalog(text) {
     const aboutEnBoard = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
     // Настольные игры (шахматы, шашки, реверси) — без ROM: только в окне браузера
     if (g.kind === 'board' || g.kind === 'web') {
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEnBoard, kind: g.kind })
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEnBoard, kind: g.kind, ...shelfOf(g) })
       continue
     }
     const rom = g.rom ?? {}
     if (!SHA256.test(rom.sha256 ?? '') || typeof rom.base64 !== 'string' || !rom.base64.startsWith('files/')) continue
     const aboutEn = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
     const net = ['doom', 'heretic', 'heretic-dm'].includes(g.net) ? { net: g.net } : {}
-    games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEn, ...net, rom: { sha256: rom.sha256, base64: rom.base64 } })
+    games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEn, ...net, ...shelfOf(g), rom: { sha256: rom.sha256, base64: rom.base64 } })
   }
   if (!consoles.length) return null
-  return { source: 'site', consoles, games }
+  return { source: 'site', consoles, groups, shelves, games }
 }
 
 // Сохранённая копия каталога из $.store; та же проверка, что и для ответа сайта
 export function restoreCatalog(saved) {
   if (!saved || typeof saved !== 'object') return null
-  const parsed = parseCatalog(JSON.stringify({ consoles: saved.consoles, games: Object.fromEntries((saved.games ?? []).map((g) => [g.id, g])) }))
+  const parsed = parseCatalog(JSON.stringify({ consoles: saved.consoles, groups: saved.groups, shelves: saved.shelves, games: Object.fromEntries((saved.games ?? []).map((g) => [g.id, g])) }))
   return parsed ? { ...parsed, source: 'cache' } : null
 }
 
@@ -104,8 +111,8 @@ export function minePageUrl(m) {
 }
 
 // Окно на вкладке приставки (например, PlayStation — свои диски добавляются там)
-export function tabPageUrl(consoleId) {
-  return `${SITE}/?tab=${encodeURIComponent(consoleId)}`
+export function tabPageUrl(consoleId, shelf) {
+  return `${SITE}/?tab=${encodeURIComponent(consoleId)}${shelf ? `&shelf=${encodeURIComponent(shelf)}` : ''}`
 }
 
 // Проверяет скачанную игру: base64 → байты → SHA-256 совпадает с каталогом

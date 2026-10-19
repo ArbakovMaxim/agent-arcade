@@ -35,24 +35,52 @@
     {
       "id": "doom",
       "section": "games",
-      "title": "Doom",
-      "about": "Doom на движке PrBoom",
-      "emulator": "EmulatorJS (GPL-3.0) + PrBoom (GPL-2.0)",
-      "empty": "Свободных игр для Doom пока нет. Открой свой файл .wad — кнопка «Открыть свой файл» сверху."
+      "title": "Шутеры",
+      "about": "Doom и Heretic на движке Doom: Freedoom, Blasphemer и сетевые арены",
+      "emulator": "EmulatorJS + PrBoom (GPL-2.0), doom-wasm и heretic-wasm (GPL-2.0)",
+      "empty": "Свободных игр для Doom пока нет. Открой свой файл .wad — кнопка «Открыть свой файл» сверху.",
+      "group": "games"
     },
     {
       "id": "board",
       "section": "games",
       "title": "Настольные",
       "about": "Шахматы, шашки и реверси по сети",
-      "emulator": "правила Arcade + chess.js (BSD-2-Clause)"
+      "emulator": "правила Arcade + chess.js (BSD-2-Clause)",
+      "group": "games"
     },
     {
       "id": "web",
       "section": "games",
       "title": "Браузерные",
       "about": "Игры, написанные сразу для браузера",
-      "emulator": "без эмулятора"
+      "emulator": "без эмулятора",
+      "group": "games"
+    }
+  ],
+  "groups": [
+    {
+      "id": "games",
+      "title": "Игры",
+      "about": "Шутеры, гонки, стратегии и настольные игры — не эмулятор приставки"
+    }
+  ],
+  "shelves": [
+    {
+      "id": "shooters",
+      "title": "Шутеры"
+    },
+    {
+      "id": "racing",
+      "title": "Гонки"
+    },
+    {
+      "id": "strategy",
+      "title": "Стратегии"
+    },
+    {
+      "id": "board",
+      "title": "Настольные"
     }
   ],
   "games": [
@@ -964,7 +992,8 @@
           "games/freedm/LICENSE.txt",
           "games/freedm/CREDITS.txt"
         ]
-      }
+      },
+      "shelf": "shooters"
     },
     {
       "id": "freedoom-1",
@@ -985,7 +1014,8 @@
           "games/freedoom-1/CREDITS.txt",
           "games/freedoom-1/CREDITS-MUSIC.txt"
         ]
-      }
+      },
+      "shelf": "shooters"
     },
     {
       "id": "freedoom-2",
@@ -1006,7 +1036,8 @@
           "games/freedoom-2/CREDITS.txt",
           "games/freedoom-2/CREDITS-MUSIC.txt"
         ]
-      }
+      },
+      "shelf": "shooters"
     },
     {
       "id": "blasphemer",
@@ -1028,7 +1059,8 @@
           "games/blasphemer/LICENSE.txt",
           "games/blasphemer/CREDITS.md"
         ]
-      }
+      },
+      "shelf": "shooters"
     },
     {
       "id": "blasphdm",
@@ -1050,7 +1082,8 @@
           "games/blasphdm/LICENSE.txt",
           "games/blasphdm/CREDITS.md"
         ]
-      }
+      },
+      "shelf": "shooters"
     },
     {
       "id": "chess",
@@ -1070,7 +1103,8 @@
         "files": [
           "games/board/chess.js-LICENSE.txt"
         ]
-      }
+      },
+      "shelf": "board"
     },
     {
       "id": "checkers",
@@ -1086,7 +1120,8 @@
         "name": "правила — код Arcade",
         "author": "Arcade",
         "source": "https://github.com/ArbakovMaxim/agent-arcade"
-      }
+      },
+      "shelf": "board"
     },
     {
       "id": "reversi",
@@ -1102,7 +1137,8 @@
         "name": "правила — код Arcade",
         "author": "Arcade",
         "source": "https://github.com/ArbakovMaxim/agent-arcade"
-      }
+      },
+      "shelf": "board"
     },
     {
       "id": "hexgl",
@@ -1124,7 +1160,8 @@
           "games/hexgl/NOTICE.txt",
           "games/hexgl/OFL.txt"
         ]
-      }
+      },
+      "shelf": "racing"
     },
     {
       "id": "openttd",
@@ -1148,7 +1185,8 @@
           "games/openttd/LICENSE.md",
           "games/openttd/BUILD.txt"
         ]
-      }
+      },
+      "shelf": "strategy"
     }
   ]
 }

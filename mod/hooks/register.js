@@ -134,6 +134,28 @@ function consoles() {
   return catalog.consoles
 }
 
+// Группы вкладок и полки: «Игры» — шутеры, гонки, стратегии, настольные
+function groupsList() {
+  return catalog.groups ?? []
+}
+function shelvesList() {
+  return catalog.shelves ?? []
+}
+function groupConsoles(groupId) {
+  return consoles().filter((c) => c.group === groupId).map((c) => c.id)
+}
+function shelfGames(shelfId) {
+  return games().filter((g) => g.shelf === shelfId && !g.mine && consoles().some((c) => c.id === g.console && c.group))
+}
+// Полка как «приставка» для списка игр: заголовок, адрес вкладки окна, группа для «Назад»
+function shelfView(menuId) {
+  const s = shelvesList().find((x) => `shelf:${x.id}` === menuId)
+  if (!s) return null
+  const g = shelfGames(s.id)[0]
+  const group = consoles().find((c) => c.id === g?.console)?.group ?? groupsList()[0]?.id
+  return { id: menuId, title: s.title, tab: `${group}:${s.id}`, group, list: shelfGames(s.id) }
+}
+
 // Игры каталога и проверка клавиш; note — строка под названием в меню
 function games() {
   return [
@@ -359,7 +381,7 @@ function usableKey(key) {
 function toLibrary() {
   releaseAll()
   const g = gameById(view)
-  menu = g?.mine ? 'mine' : g?.console ?? 'settings' // в список, откуда игру открыли
+  menu = g?.mine ? 'mine' : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
   view = 'library'
   mode = 'play'
   notice = ''
@@ -504,7 +526,8 @@ function windowTarget() {
 // На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
 function windowUrl(id) {
   let url
-  if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(id.slice(4))
+  // tab:<вкладка> или tab:<группа>:<полка>
+  if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(...id.slice(4).split(':'))
   // Денди по сети — та же игра в окне на EmulatorJS (FCEUmm) с его сетевой игрой
   else if (typeof id === 'string' && id.startsWith('net:')) url = `${pageUrl(id.slice(4))}&net=1`
   // Кооператив Freedoom — лобби кооператива этой игры
@@ -573,7 +596,9 @@ function plural(n, one, few, many) {
 }
 
 function consoleNote(c) {
-  const count = games().filter((g) => g.console === c.id && !g.mine).length
+  const count = c.group === undefined && groupsList().some((g) => g.id === c.id)
+    ? games().filter((g) => groupConsoles(c.id).includes(g.console) && !g.mine).length
+    : games().filter((g) => g.console === c.id && !g.mine).length
   return count ? `${count} ${plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
@@ -585,7 +610,7 @@ function settingsNote() {
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'mine') return 'Arcade · мои игры'
-  const c = consoles().find((x) => x.id === menu)
+  const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
   return c ? `Arcade · ${c.title}` : 'Arcade'
 }
 
@@ -697,7 +722,7 @@ export function register(on) {
           const fresh = response.ok ? parseCatalog(response.text) : null
           if (fresh) {
             catalog = fresh
-            await $.store.set('catalog', { consoles: fresh.consoles, games: fresh.games })
+            await $.store.set('catalog', { consoles: fresh.consoles, groups: fresh.groups, shelves: fresh.shelves, games: fresh.games })
             $.ui.invalidate('ui.render')
           }
         } catch (err) {
@@ -1298,12 +1323,30 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
-      } else if (menu !== 'main') {
-        const c = consoles().find((x) => x.id === menu) ?? consoles()[0]
-        const list = games().filter((g) => g.console === c.id && !g.mine)
-        const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
+      } else if (groupsList().some((x) => x.id === menu)) {
+        // Вкладка группы («Игры»): полки с играми
+        const group = groupsList().find((x) => x.id === menu)
+        const shelvesHere = shelvesList().filter((s) => shelfGames(s.id).some((g) => groupConsoles(group.id).includes(g.console)))
         items = [
           back,
+          gap,
+          ...shelvesHere.flatMap((s, i) => {
+            const n = shelfGames(s.id).length
+            return [
+              Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
+              dim(`  ${n} ${plural(n, 'игра', 'игры', 'игр')}`),
+            ]
+          }),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu !== 'main') {
+        const shelf = shelfView(menu)
+        const c = shelf ?? consoles().find((x) => x.id === menu) ?? consoles()[0]
+        const list = shelf ? shelf.list : games().filter((g) => g.console === c.id && !g.mine)
+        const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
+        items = [
+          shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
           ...(list.length
             ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
@@ -1314,11 +1357,11 @@ export function register(on) {
               ? [
                   gap,
                   Button({
-                    key: `arcade-open-tab-${c.id}`,
+                    key: `arcade-open-tab-${shelf ? shelf.id.replace('shelf:', 'shelf-') : c.id}`,
                     label: `Открыть ${c.title} в окне`,
                     ...(!list.length ? { autoFocus: true } : {}),
                     onPress: async () => {
-                      const command = windowCommand(`tab:${c.id}`)
+                      const command = windowCommand(`tab:${shelf ? shelf.tab : c.id}`)
                       try {
                         const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                         windowNotice($, result?.exitCode === 0 ? `Окно Arcade открыто на вкладке ${c.title}.` : launchNotice(result, null))
@@ -1338,7 +1381,7 @@ export function register(on) {
         ]
       } else {
         items = [
-          ...consoles().flatMap((c) => [
+          ...[...consoles().filter((c) => !c.group), ...groupsList()].flatMap((c) => [
             Button({
               key: `arcade-menu-${c.id}`,
               label: c.title,

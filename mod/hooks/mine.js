@@ -19,7 +19,7 @@ export function cleanPath(args) {
   return path
 }
 
-const DOOM_WAD = 'это файл Doom (WAD). Их добавляют в окне Arcade: вкладка Doom → «Открыть свой файл»'
+const DOOM_WAD = 'это файл Doom (WAD). Их добавляют в окне Arcade: «Игры» → «Шутеры» → «Открыть свой файл»'
 const GAME_GEAR = 'это игра для Game Gear — Game Gear в Arcade не поддерживается'
 
 export const CONSOLE_NAMES = { nes: 'Денди', sega: 'Sega Mega Drive', sms: 'Master System' }

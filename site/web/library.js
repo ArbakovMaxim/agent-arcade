@@ -12,16 +12,35 @@
     psx: T('Свой диск .chd, .pbp, .iso или .zip с .cue и .bin откроется только на этом устройстве. BIOS Sony не нужен.'),
   }
 
-  function start(catalog, startTab) {
+  function start(catalog, startTab, startShelf) {
   const consoles = catalog.consoles || []
   const games = catalog.games || {}
+  const groups = catalog.groups || []
+  const shelves = catalog.shelves || []
+  // Вкладки: приставки без группы и группы — у «Игр» внутри полки: шутеры, гонки, стратегии, настольные
+  const tabsList = [...consoles.filter((c) => !c.group), ...groups]
+  const groupOf = (id) => groups.find((g) => g.id === id)
+  const inGroup = (gid) => consoles.filter((c) => c.group === gid).map((c) => c.id)
+  const shelvesOf = (gid) => shelves.filter((s) => Object.values(games).some((g) => g.shelf === s.id && inGroup(gid).includes(g.console)))
+  // Свои файлы: у вкладки приставки — её; у полки шутеров — WAD для Doom; у остальных полок своих файлов нет
+  const OWN = { shooters: 'doom' }
   const root = document.getElementById('library')
   const romInput = document.getElementById('local-rom')
   document.body.classList.add('library-mode')
   document.title = 'Arcade'
 
   let tab = startTab || localStorage.getItem('arcade:tab')
-  if (!consoles.some((c) => c.id === tab)) tab = consoles[0] ? consoles[0].id : null
+  let shelf = startShelf || localStorage.getItem('arcade:shelf')
+  // Старые адреса (?tab=doom, ?tab=board, ?tab=web) — вкладка группы и полка этой приставки
+  const legacy = consoles.find((c) => c.id === tab && c.group)
+  if (legacy) {
+    const first = Object.values(games).find((g) => g.console === legacy.id && g.shelf)
+    tab = legacy.group
+    if (first && !startShelf) shelf = first.shelf
+  }
+  if (!tabsList.some((c) => c.id === tab)) tab = tabsList[0] ? tabsList[0].id : null
+  if (groupOf(tab) && !shelvesOf(tab).some((s) => s.id === shelf)) shelf = shelvesOf(tab)[0] ? shelvesOf(tab)[0].id : null
+  const own = () => (groupOf(tab) ? OWN[shelf] || null : tab)
   let index = 0 // какая карточка выбрана
   let localError = ''
   let mineList = [] // свои игры текущей вкладки
@@ -45,15 +64,29 @@
   }
 
   async function refreshMine() {
-    mineList = window.ArcadeMine ? await window.ArcadeMine.list(tab) : []
+    mineList = window.ArcadeMine && own() ? await window.ArcadeMine.list(own()) : []
     render()
+  }
+
+  // Полка во вкладке группы: свой адрес, как у вкладки
+  function switchShelf(id) {
+    shelf = id
+    localStorage.setItem('arcade:shelf', shelf)
+    history.pushState(null, '', `?tab=${encodeURIComponent(tab)}&shelf=${encodeURIComponent(shelf)}`)
+    index = 0
+    localError = ''
+    mineList = []
+    render()
+    select(0)
+    refreshMine().then(() => select(0))
   }
 
   function switchTab(id) {
     tab = id
     localStorage.setItem('arcade:tab', tab)
+    if (groupOf(tab) && !shelvesOf(tab).some((s) => s.id === shelf)) shelf = shelvesOf(tab)[0] ? shelvesOf(tab)[0].id : null
     // У каждой вкладки свой адрес: его можно скопировать, сохранить в закладки, «Назад» возвращает на прошлую
-    history.pushState(null, '', `?tab=${encodeURIComponent(tab)}`)
+    history.pushState(null, '', `?tab=${encodeURIComponent(tab)}${groupOf(tab) && shelf ? `&shelf=${encodeURIComponent(shelf)}` : ''}`)
     index = 0
     localError = ''
     mineList = []
@@ -78,19 +111,19 @@
     const open = el('button', 'open-rom', T('Открыть свой файл'))
     open.type = 'button'
     open.addEventListener('click', () => {
-      romInput.accept = (window.ArcadeMine && window.ArcadeMine.ACCEPT[tab]) || ''
+      romInput.accept = (window.ArcadeMine && window.ArcadeMine.ACCEPT[own()]) || ''
       romInput.click()
     })
     // Свои файлы бывают не у всех вкладок: у настольных игр их нет
-    if (window.ArcadeMine && window.ArcadeMine.ACCEPT[tab]) actions.append(open)
+    if (window.ArcadeMine && own() && window.ArcadeMine.ACCEPT[own()]) actions.append(open)
     actions.append(langButton)
     head.append(actions)
     root.append(head)
 
-    root.append(el('div', localError ? 'local-error' : 'local-note', localError || NOTES[tab] || ''))
+    root.append(el('div', localError ? 'local-error' : 'local-note', localError || NOTES[own()] || ''))
 
     const tabs = el('div', 'tabs')
-    for (const c of consoles) {
+    for (const c of tabsList) {
       const button = el('button', c.id === tab ? 'tab active' : 'tab', T(c.title))
       button.tabIndex = -1
       if (c.soon) button.append(el('span', 'soon', T('скоро')))
@@ -98,10 +131,22 @@
       tabs.append(button)
     }
     root.append(tabs)
+    // Вкладка группы — ряд полок
+    if (groupOf(tab)) {
+      const row = el('div', 'tabs shelves')
+      for (const s of shelvesOf(tab)) {
+        const button = el('button', s.id === shelf ? 'tab shelf active' : 'tab shelf', T(s.title))
+        button.tabIndex = -1
+        button.dataset.shelf = s.id
+        button.addEventListener('click', () => switchShelf(s.id))
+        row.append(button)
+      }
+      root.append(row)
+    }
 
     const current = consoles.find((c) => c.id === tab)
     const list = el('div', 'games')
-    const ids = Object.keys(games).filter((id) => games[id].console === tab)
+    const ids = Object.keys(games).filter((id) => (groupOf(tab) ? inGroup(tab).includes(games[id].console) && games[id].shelf === shelf : games[id].console === tab))
     if (!ids.length) list.append(el('div', 'empty', T((current && (current.empty || current.soon)) || 'Здесь пока нет игр.')))
     for (const id of ids) {
       const game = games[id]
@@ -139,11 +184,11 @@
 
   window.addEventListener('keydown', (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return
-    const at = consoles.findIndex((c) => c.id === tab)
+    const at = tabsList.findIndex((c) => c.id === tab)
     if (e.code === 'ArrowDown' || e.code === 'KeyS') select(index + 1)
     else if (e.code === 'ArrowUp' || e.code === 'KeyW') select(index - 1)
-    else if (e.code === 'ArrowRight' || e.code === 'KeyD') switchTab(consoles[(at + 1) % consoles.length].id)
-    else if (e.code === 'ArrowLeft' || e.code === 'KeyA') switchTab(consoles[(at - 1 + consoles.length) % consoles.length].id)
+    else if (e.code === 'ArrowRight' || e.code === 'KeyD') switchTab(tabsList[(at + 1) % tabsList.length].id)
+    else if (e.code === 'ArrowLeft' || e.code === 'KeyA') switchTab(tabsList[(at - 1 + tabsList.length) % tabsList.length].id)
     else if (e.code === 'Enter') {
       const card = cards()[index]
       if (card && card.dataset.mine) location.hash = `mine=${encodeURIComponent(card.dataset.mine)}`
@@ -157,7 +202,7 @@
     romInput.value = ''
     if (!file) return
     try {
-      const entry = await window.ArcadeMine.add(file, tab)
+      const entry = await window.ArcadeMine.add(file, own())
       history.replaceState(null, '', `#mine=${encodeURIComponent(entry.id)}`)
       root.replaceChildren()
       await window.ArcadePlayMine(entry)
