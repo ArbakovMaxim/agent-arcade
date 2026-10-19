@@ -144,8 +144,9 @@
       return jumps.length ? jumps : steps // бить обязательно
     },
 
-    apply(state, path) {
-      const legal = checkers.moves(state).some((m) => JSON.stringify(m) === JSON.stringify(path))
+    apply(state, path, trusted = false) {
+      // trusted — ход взят из moves() (перебор бота): проверять второй раз незачем
+      const legal = trusted || checkers.moves(state).some((m) => JSON.stringify(m) === JSON.stringify(path))
       if (!legal) throw new Error('недопустимый ход')
       const board = copy(state.board)
       let [r, c] = path[0]
@@ -170,5 +171,70 @@
     },
   }
 
-  window.ArcadeBoardRules = { reversi, checkers }
+  // --- Боты: перебор с альфа-бета отсечением; оценка — со стороны того, кто ходит ---------------------------------
+  // Реверси: углы ценнее всего, клетки рядом с углом опасны, плюс подвижность
+  const WEIGHTS = [
+    [100, -20, 10, 5, 5, 10, -20, 100],
+    [-20, -50, -2, -2, -2, -2, -50, -20],
+    [10, -2, 1, 1, 1, 1, -2, 10],
+    [5, -2, 1, 0, 0, 1, -2, 5],
+    [5, -2, 1, 0, 0, 1, -2, 5],
+    [10, -2, 1, 1, 1, 1, -2, 10],
+    [-20, -50, -2, -2, -2, -2, -50, -20],
+    [100, -20, 10, 5, 5, 10, -20, 100],
+  ]
+  const evaluate = {
+    reversi(state) {
+      let score = 0
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const x = state.board[r][c]
+        if (x !== null) score += x === state.turn ? WEIGHTS[r][c] : -WEIGHTS[r][c]
+      }
+      return score + 2 * (reversi.placements(state, state.turn).length - reversi.placements(state, 1 - state.turn).length)
+    },
+    // Шашки: дамка втрое дороже шашки, шашке — за продвижение к дамочному ряду
+    checkers(state) {
+      let score = 0
+      for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const p = state.board[r][c]
+        if (!p) continue
+        const value = p.king ? 30 : 10 + (p.side === 0 ? 7 - r : r) * 0.5
+        score += p.side === state.turn ? value : -value
+      }
+      return score
+    },
+  }
+  const step = { reversi: (s, m) => reversi.apply(s, m), checkers: (s, m) => checkers.apply(s, m, true) }
+
+  function search(kind, rules, state, depth, alpha, beta) {
+    const done = rules.result(state)
+    if (done) return done.winner === -1 ? 0 : done.winner === state.turn ? 1e6 + depth : -1e6 - depth
+    if (depth === 0) return evaluate[kind](state)
+    let best = -Infinity
+    for (const m of rules.moves(state)) {
+      const v = -search(kind, rules, step[kind](state, m), depth - 1, -beta, -alpha)
+      if (v > best) best = v
+      if (best > alpha) alpha = best
+      if (alpha >= beta) break
+    }
+    return best
+  }
+
+  // Лучший ход для того, кто ходит; при равенстве — случайный, чтобы партии не повторялись
+  function bestMove(kind, state, depth = kind === 'checkers' ? 4 : 3, random = Math.random) {
+    const rules = kind === 'reversi' ? reversi : checkers
+    const moves = rules.moves(state)
+    let best = -Infinity
+    let choices = []
+    for (const m of moves) {
+      const v = -search(kind, rules, step[kind](state, m), depth - 1, -Infinity, Infinity)
+      if (v > best) {
+        best = v
+        choices = [m]
+      } else if (v === best) choices.push(m)
+    }
+    return choices[Math.floor(random() * choices.length)] ?? null
+  }
+
+  window.ArcadeBoardRules = { reversi, checkers, bestMove, evaluate }
 })()

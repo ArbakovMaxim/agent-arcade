@@ -16,6 +16,8 @@
   const ROUND_MS = 5 * 60_000 // -timer 5
   const BACK_TO_LOBBY_MS = ROUND_MS + 40_000 // раунд, табло и запас — потом снова лобби
 
+  const NET_KEYS = 'движение — стрелки · огонь — Ctrl · открыть — пробел · бег — Shift · шаг вбок — Alt и стрелки · оружие — 1–7'
+
   // Ведущий лобби — наименьший номер: у всех он один и тот же, сервер для этого не нужен
   const leaderOf = (ids) => [...ids].sort()[0]
 
@@ -58,7 +60,8 @@
     const coop = mode === 'coop'
     document.body.classList.remove('library-mode')
     document.title = `${game.title} · Arcade`
-    document.getElementById('keys').textContent = T(game.keys)
+    // Сетевой движок — классический Doom: у кооператива свои клавиши, не PrBoom из одиночной игры
+    document.getElementById('keys').textContent = T(coop ? NET_KEYS : game.keys)
     document.getElementById('credit').textContent = T(game.credit)
     const files = (game.license && game.license.files) || []
     const licenseFile = files.find((f) => /license/i.test(f.name))
@@ -93,7 +96,7 @@
       const all = everyone()
       if (round || !me || all.length < 2 || leaderOf(all) !== me) return
       const players = [...all].sort().slice(0, MAX_PLAYERS)
-      const msg = { type: 'round', room: `dm-${me}-${Date.now().toString(36)}`, host: me, players }
+      const msg = { type: 'round', room: `${coop ? 'coop' : 'dm'}-${me}-${Date.now().toString(36)}`, host: me, players }
       ws.send(JSON.stringify(msg))
       begin(msg)
     }
@@ -176,7 +179,12 @@
         main(doomArgs(wad, url, isHost, mode))
         canvas.focus()
         // Движок ставит вкладке своё название («Websockets Doom») — возвращаем наше
-        for (const ms of [500, 3000, 15000]) setTimeout(() => { document.title = `${game.title} · Arcade` }, ms)
+        // Движок ставит своё название не сразу, а при загрузке уровня — возвращаем наше первую минуту
+        const ours = `${game.title} · Arcade`
+        const keep = setInterval(() => {
+          if (document.title !== ours) document.title = ours
+        }, 1000)
+        setTimeout(() => clearInterval(keep), 60_000)
         // Хозяин начинает матч, когда все уже подключились: пробел на экране ожидания Chocolate Doom
         if (isHost) setTimeout(() => pressSpace(canvas), HOST_START_MS)
         // Deathmatch идёт раундами — после раунда снова лобби; кооператив — сколько захотите

@@ -424,6 +424,12 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(sega.ctx.EJS_netplayServer, /\/net\/ejs$/)
   assert.equal(sega.ctx.EJS_EXPERIMENTAL_NETPLAY, true, 'без этого флага EmulatorJS 4.2.3 прячет сетевую игру')
   assert.equal(sega.ctx.EJS_Buttons.netplay, true, 'кнопка сети на панели эмулятора по умолчанию скрыта')
+  // «По сети» в полосе — явный выбор: сразу меню сетевой игры эмулятора
+  assert.equal(sega.byId.net.hidden, false)
+  let opened = false
+  sega.ctx.EJS_emulator = { openNetplayMenu: () => { opened = true } }
+  sega.byId.net.listeners.click[0]({ preventDefault() {} })
+  assert.ok(opened, 'меню сетевой игры открылось')
   const doom = await makePage(new Map(), { search: '?game=freedoom-1' })
   assert.equal(doom.ctx.EJS_netplayServer, undefined, 'у одиночного Doom сети EmulatorJS нет')
   // Денди: обычно — JSNES с кнопкой «По сети»; с ?net=1 — EmulatorJS (FCEUmm) с сетевой игрой
@@ -478,6 +484,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(coop.sockets[0].url, /\/net\/room\/coop-freedoom-1$/)
   coop.sockets[0].emit('message', JSON.stringify({ type: 'welcome', id: 'a1', peers: [] }))
   assert.equal(coop.byId['overlay-title'].textContent, 'Ждём напарника')
+  assert.match(coop.byId.keys.textContent, /огонь — Ctrl/, 'клавиши сетевого движка, а не PrBoom')
   const host = Array.from(vm.runInContext("ArcadeNetDoom.doomArgs('freedoom1.wad', 'wss://x/net/doom/r', true, 'coop')", coop.ctx))
   assert.ok(!host.includes('-deathmatch') && !host.includes('-timer'), 'кооператив — без deathmatch и таймера')
   assert.deepEqual(host.slice(host.indexOf('-skill'), host.indexOf('-skill') + 2), ['-skill', '3'])
@@ -506,6 +513,14 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(flying, [[[7, 0], [2, 5]], [[7, 0], [1, 6]], [[7, 0], [0, 7]]], 'дамка бьёт издалека и встаёт на любое поле за шашкой')
   const crowned = JSON.parse(check(`JSON.stringify(ArcadeBoardRules.checkers.moves(${pos([[2, 1, 0, false], [1, 2, 1, false], [2, 5, 1, false]])}))`))
   assert.deepEqual(crowned, [[[2, 1], [0, 3], [3, 6]], [[2, 1], [0, 3], [4, 7]]], 'стала дамкой на 8-м ряду и бьёт дальше как дамка')
+  // Боты: ход по правилам, бот шашек бьёт, бот реверси берёт угол
+  assert.equal(check('JSON.stringify(ArcadeBoardRules.bestMove("checkers", ' + pos([[5, 2, 0, false], [4, 3, 1, false], [7, 6, 0, false], [0, 1, 1, false]]) + '))'), '[[5,2],[3,4]]')
+  const corner = check(`(() => { const s = { turn: 0, board: Array.from({ length: 8 }, () => Array(8).fill(null)) }; s.board[0][1] = 1; s.board[0][2] = 0; s.board[3][3] = 1; s.board[3][2] = 0; return JSON.stringify(ArcadeBoardRules.bestMove('reversi', s, 1)) })()`)
+  assert.equal(corner, '[0,0]', 'по оценке позиции угол — лучший ход (на глубине 3 бот здесь находит победу за два хода)')
+  for (const kind of ['reversi', 'checkers']) {
+    const legal = check(`(() => { const R = ArcadeBoardRules.${kind}; const s = R.start(); const m = ArcadeBoardRules.bestMove('${kind}', s); return R.moves(s).some((x) => JSON.stringify(x) === JSON.stringify(m)) })()`)
+    assert.equal(legal, true, `${kind}: ход бота по правилам`)
+  }
   // Вкладка «Настольные» — без кнопки своих файлов
   const lib = await makePage(new Map(), { search: '?tab=board' })
   assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi'])
@@ -514,6 +529,20 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const menu = await makePage(new Map(), { search: '?game=reversi' })
   await until(() => menu.ctx.ArcadeBoard)
   assert.match(textOf(menu.byId.stage), /Найти соперника/)
+  assert.match(textOf(menu.byId.stage), /С компьютером/)
+  // Игра с ботом: ход игрока — ответ компьютера, партия запоминается, «Начать заново» — стороны меняются
+  const botStore = new Map()
+  const bot = await makePage(botStore, { search: '?game=reversi&vs=bot' })
+  await until(() => /Твой ход/.test(textOf(bot.byId.stage)))
+  assert.match(textOf(bot.byId.stage), /Твой ход \(чёрные\)/)
+  vm.runInContext('ArcadeBoard.game.click(2, 3)', bot.ctx)
+  await until(() => vm.runInContext('ArcadeBoard.game.moves.length', bot.ctx) === 2)
+  assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', bot.ctx), 2, 'компьютер ответил')
+  assert.match(textOf(bot.byId.stage), /Твой ход/)
+  assert.equal(JSON.parse(botStore.get('arcade:board:bot:reversi')).moves.length, 2, 'партия запомнилась')
+  vm.runInContext('ArcadeBoard.game.reset()', bot.ctx)
+  await until(() => vm.runInContext('ArcadeBoard.game.seat === 1 && ArcadeBoard.game.moves.length === 1', bot.ctx))
+  assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', bot.ctx), 1, 'после «Начать заново» бот ходит первым')
   // Партия реверси: подключение, «Твой ход», клик — ход на сервер, ответ — «Ход соперника»
   const game = await makePage(new Map(), { search: '?game=reversi&room=abcdef1234' })
   await until(() => game.sockets.length > 0)

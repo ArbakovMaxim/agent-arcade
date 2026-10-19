@@ -108,6 +108,17 @@
       netLink.style.display = ''
     }
     launch(system.core, game.rom.url, game.title, game.console === 'doom' ? 0 : netId(game))
+    // Игры на двоих — явный выбор: обычный запуск — одному, «По сети» внизу — сразу меню сетевой игры эмулятора
+    if (netLink && game.console !== 'doom') {
+      netLink.href = '#'
+      netLink.hidden = false
+      netLink.style.display = ''
+      netLink.addEventListener('click', (e) => {
+        e.preventDefault()
+        const emulator = window.EJS_emulator
+        if (emulator && typeof emulator.openNetplayMenu === 'function') emulator.openNetplayMenu()
+      })
+    }
   }
 
   // Свой файл из «Моих игр»: в эмулятор он идёт прямо из браузера, на сервер ничего не уходит

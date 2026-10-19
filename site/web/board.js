@@ -1,6 +1,7 @@
 // Настольные игры по сети: шахматы (chess.js, BSD-2-Clause), русские шашки и реверси (board-rules.js).
-// Без ?room — меню: «Найти соперника» (лобби, ведущий сводит двоих), «Пригласить друга» (ссылка), «Мои партии».
-// С ?room=<код> — партия: ходы хранятся на сервере (/net/board/<код>), можно закрыть окно и вернуться по ссылке.
+// Без ?room — меню: «С компьютером», «Найти соперника» (лобби, ведущий сводит двоих), «Пригласить друга», «Мои партии».
+// С ?room=<код> — партия по сети: ходы хранятся на сервере (/net/board/<код>), можно закрыть окно и вернуться по ссылке.
+// С ?vs=bot — партия с ботом прямо в браузере; ходы запоминаются в localStorage, к партии можно вернуться.
 ;(function () {
   'use strict'
 
@@ -41,14 +42,15 @@
   }
 
   // --- Правила за общим интерфейсом: позиция, ходы для клика, отрисовка клетки, итог ----------------------------
-  const DISC = ['●', '○']
+  // Круг шашки или фишки: светлый или тёмный, с обводкой; дамка — с короной
+  const disc = (light, crown = false) => ({ light, crown })
   function reversiAdapter(R) {
     return {
       sides: [T('чёрные'), T('белые')],
       start: () => R.start(),
       apply: (s, m) => R.apply(s, m),
       turn: (s) => s.turn,
-      cell: (s, r, c) => (s.board[r][c] === null ? '' : DISC[s.board[r][c]]),
+      cell: (s, r, c) => (s.board[r][c] === null ? '' : disc(s.board[r][c] === 1)),
       mine: () => false,
       targets: (s) => R.placements(s).map(([r, c]) => [r, c]),
       moveTo: (s, from, [r, c]) => [r, c],
@@ -65,7 +67,7 @@
       turn: (s) => s.turn,
       cell: (s, r, c) => {
         const p = s.board[r][c]
-        return p ? (p.side === 0 ? (p.king ? '♕' : '⛀') : p.king ? '♛' : '⛂') : ''
+        return p ? disc(p.side === 0, p.king) : ''
       },
       mine: (s, r, c, seat) => Boolean(s.board[r][c] && s.board[r][c].side === seat),
       targets: (s, from) => R.moves(s).filter((m) => m[0][0] === from[0] && m[0][1] === from[1]).map((m) => m[m.length - 1]),
@@ -89,7 +91,7 @@
       turn: (g) => (g.turn() === 'w' ? 0 : 1),
       cell: (g, r, c) => {
         const p = g.board()[r][c]
-        return p ? PIECES[p.color][p.type] : ''
+        return p ? { glyph: PIECES.b[p.type], light: p.color === 'w' } : ''
       },
       mine: (g, r, c, seat) => {
         const p = g.board()[r][c]
@@ -106,13 +108,59 @@
       extra: (g) => (g.inCheck() && !g.isGameOver() ? T('шах') : ''),
     }
   }
+  const VALUE = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 0 }
+  const CENTER = [0, 1, 2, 3, 3, 2, 1, 0]
+  function chessScore(g) {
+    let score = 0
+    const board = g.board()
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+      const p = board[r][c]
+      if (!p) continue
+      const v = VALUE[p.type] + (p.type === 'k' ? 0 : (CENTER[r] + CENTER[c]) * (p.type === 'p' ? 2 : 4))
+      score += p.color === g.turn() ? v : -v
+    }
+    return score
+  }
+  function chessSearch(g, depth, alpha, beta) {
+    if (g.isCheckmate()) return -1e6 - depth
+    if (g.isDraw() || g.isStalemate()) return 0
+    if (depth === 0) return chessScore(g)
+    let best = -Infinity
+    const moves = g.moves({ verbose: true }).sort((a, b) => (b.captured ? VALUE[b.captured] : 0) - (a.captured ? VALUE[a.captured] : 0))
+    for (const m of moves) {
+      g.move(m)
+      const v = -chessSearch(g, depth - 1, -beta, -alpha)
+      g.undo()
+      if (v > best) best = v
+      if (best > alpha) alpha = best
+      if (alpha >= beta) break
+    }
+    return best
+  }
+  function chessBest(Chess, g) {
+    const work = new Chess(g.fen())
+    let best = -Infinity
+    let choices = []
+    for (const m of work.moves({ verbose: true })) {
+      work.move(m)
+      const v = -chessSearch(work, 1, -Infinity, Infinity)
+      work.undo()
+      if (v > best) {
+        best = v
+        choices = [m.san]
+      } else if (v === best) choices.push(m.san)
+    }
+    return choices[Math.floor(Math.random() * choices.length)] ?? null
+  }
+
   async function adapter(kind) {
     if (kind === 'chess') {
       const { Chess } = await import('./vendor/chess/chess.js')
-      return chessAdapter(Chess)
+      return { ...chessAdapter(Chess), bot: (g) => chessBest(Chess, g) }
     }
-    const R = window.ArcadeBoardRules[kind]
-    return kind === 'reversi' ? reversiAdapter(R) : checkersAdapter(R)
+    const all = window.ArcadeBoardRules
+    const R = all[kind]
+    return { ...(kind === 'reversi' ? reversiAdapter(R) : checkersAdapter(R)), bot: (s) => all.bestMove(kind, s) }
   }
 
   // --- Страница ----------------------------------------------------------------------------------------------------
@@ -122,6 +170,18 @@
     if (text !== undefined) node.textContent = text
     return node
   }
+  // Фигура на клетке: круг (шашка, фишка) или знак (шахматы), светлые и тёмные с обводкой
+  function piece(content) {
+    if (!content) return el('span', '')
+    if (content.glyph) {
+      const color = content.light ? '#f4f1ea' : '#15151a'
+      const edge = content.light ? '#15151a' : '#f4f1ea'
+      return el('span', `font-size:min(6.5vw,6vh,40px);line-height:1;color:${color};text-shadow:0 0 1px ${edge},0 0 1px ${edge},0 0 2px ${edge}`, content.glyph)
+    }
+    const dot = el('span', `width:72%;height:72%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:min(4vw,3.6vh,24px);background:${content.light ? '#f4f1ea' : '#1c1c22'};border:2px solid ${content.light ? '#8a8578' : '#9a9aa3'};color:${content.light ? '#7a5b16' : '#e0c070'}`, content.crown ? '♛' : '')
+    return dot
+  }
+
   function button(text, onClick) {
     const b = el('button', 'margin:6px;padding:8px 14px;border-radius:8px;border:1px solid #3a3a44;background:#22222a;color:#eee;font:inherit;cursor:pointer', text)
     b.type = 'button'
@@ -150,8 +210,10 @@
   function start(catalog, id) {
     const game = catalog.games[id]
     const root = prepare(game)
-    const code = new URLSearchParams(location.search).get('room')
+    const params = new URLSearchParams(location.search)
+    const code = params.get('room')
     if (code && /^[a-z0-9]{6,16}$/.test(code)) play(game, id, code, root)
+    else if (params.get('vs') === 'bot') playBot(game, id, root)
     else menu(game, id, root)
   }
 
@@ -163,6 +225,9 @@
       location.search = `?game=${encodeURIComponent(id)}&room=${c}`
     }
     root.append(
+      button(T('С компьютером'), () => {
+        location.search = `?game=${encodeURIComponent(id)}&vs=bot`
+      }),
       button(T('Найти соперника'), () => seek(id, status, go)),
       button(T('Пригласить друга'), () => go(randomCode())),
       status,
@@ -215,23 +280,89 @@
     window.ArcadeBoard.lobby = { ws, get me() { return me } }
   }
 
-  // Партия
-  async function play(game, id, code, root) {
-    remember(code, id)
+  // Игра с ботом: «локальный сервер» с тем же разговором, что у комнаты партии; ходы — в localStorage
+  function botSocket(rules, id) {
+    const key = `arcade:board:bot:${id}`
+    let saved = { seat: 0, moves: [] }
+    try {
+      saved = JSON.parse(localStorage.getItem(key)) || saved
+    } catch {}
+    const listeners = {}
+    const emit = (frame) => setTimeout(() => (listeners.message || []).forEach((fn) => fn({ data: JSON.stringify(frame) })), 0)
+    const store = () => {
+      try {
+        localStorage.setItem(key, JSON.stringify(saved))
+      } catch {}
+    }
+    const position = () => saved.moves.reduce((p, m) => rules.apply(p, m), rules.start())
+    function botTurn() {
+      const p = position()
+      if (rules.result(p) || rules.turn(p) === saved.seat) return
+      setTimeout(() => {
+        const move = rules.bot(position())
+        if (move === null || move === undefined) return
+        saved.moves.push(move)
+        store()
+        emit({ type: 'move', ply: saved.moves.length - 1, move })
+        botTurn()
+      }, 500)
+    }
+    function handle(m) {
+      if (m.type === 'hello') {
+        emit({ type: 'state', seat: saved.seat, seats: 2, moves: saved.moves })
+        botTurn()
+      } else if (m.type === 'move') {
+        const p = position()
+        if (m.ply !== saved.moves.length || rules.turn(p) !== saved.seat) return
+        try {
+          rules.apply(p, m.move)
+        } catch {
+          return
+        }
+        saved.moves.push(m.move)
+        store()
+        emit({ type: 'move', ply: m.ply, move: m.move })
+        botTurn()
+      } else if (m.type === 'reset') {
+        // Новая партия — стороны меняются: теперь бот ходит первым
+        saved = { seat: 1 - saved.seat, moves: [] }
+        store()
+        emit({ type: 'state', seat: saved.seat, seats: 2, moves: [] })
+        botTurn()
+      }
+    }
+    setTimeout(() => (listeners.open || []).forEach((fn) => fn({})), 0)
+    return {
+      addEventListener(type, fn) {
+        ;(listeners[type] ||= []).push(fn)
+      },
+      send(text) {
+        handle(JSON.parse(text))
+      },
+    }
+  }
+
+  function playBot(game, id, root) {
+    return play(game, id, null, root, { bot: true })
+  }
+
+  // Партия: по сети (code) или с ботом (options.bot)
+  async function play(game, id, code, root, options = {}) {
+    if (code) remember(code, id)
     const rules = await adapter(game.board)
     const title = el('h2', 'margin:8px 0', game.title)
     const status = el('p', 'min-height:1.4em;color:#e0c070', T('Подключаюсь к партии…'))
-    const grid = el('div', 'display:grid;grid-template-columns:repeat(8,1fr);width:min(92vw,480px);margin:0 auto;border:2px solid #3a3a44')
+    const grid = el('div', 'display:grid;grid-template-columns:repeat(8,1fr);width:min(92vw,62vh,480px);margin:0 auto;border:2px solid #3a3a44')
     const tools = el('div', 'margin-top:10px')
     root.append(title, status, grid, tools)
-    const link = `${location.origin}${location.pathname}?game=${encodeURIComponent(id)}&room=${code}`
+    const link = code ? `${location.origin}${location.pathname}?game=${encodeURIComponent(id)}&room=${code}` : null
 
     let position = rules.start()
     let moves = []
     let seat = -1
     let seats = 0
     let selected = null
-    const ws = new WebSocket(wsUrl(`/net/board/${code}`))
+    const ws = options.bot ? botSocket(rules, id) : new WebSocket(wsUrl(`/net/board/${code}`))
     ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: tokenFor(code), game: id })))
     ws.addEventListener('close', () => {
       status.textContent = T('Связь с партией прервалась — открой ссылку ещё раз, ходы сохранены')
@@ -282,7 +413,8 @@
         const isTarget = targets.some(([y, x]) => y === r && x === c)
         const isSel = selected && selected[0] === r && selected[1] === c
         const bg = isSel ? '#6d6a2c' : isTarget ? '#2f6d3b' : game.board === 'reversi' ? '#1f5b34' : dark ? '#6b4f36' : '#d8c3a0'
-        const cell = el('button', `aspect-ratio:1;border:0;margin:0;padding:0;font-size:min(7vw,40px);line-height:1;cursor:pointer;background:${bg};color:${game.board === 'checkers' ? '#111' : '#111'}`, rules.cell(position, r, c))
+        const cell = el('button', `aspect-ratio:1;border:0;margin:0;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${bg}`)
+        cell.append(piece(rules.cell(position, r, c)))
         cell.type = 'button'
         cell.dataset.r = r
         cell.dataset.c = c
@@ -298,17 +430,21 @@
       } else if (seats < 2) status.textContent = T('Ждём соперника — отправь ему ссылку на эту партию')
       else if (seat < 0) status.textContent = T('Ты смотришь партию: в ней уже двое')
       else if (seat === rules.turn(position)) status.textContent = `${T('Твой ход')} (${mySide})${extra ? ` · ${extra}` : ''}`
+      else if (options.bot) status.textContent = `${T('Компьютер думает…')}${extra ? ` · ${extra}` : ''}`
       else status.textContent = `${T('Ход соперника — можно вернуться к агенту, партия сохранится')}${extra ? ` · ${extra}` : ''}`
       if (!result && seat >= 0 && seat === rules.turn(position) && rules.mustPass(position)) tools.append(button(T('Пропустить ход'), () => send('pass')))
-      tools.append(
-        button(T('Скопировать ссылку на партию'), async () => {
-          try {
-            await navigator.clipboard.writeText(link)
-          } catch {
-            prompt(T('Ссылка на партию'), link)
-          }
-        }),
-      )
+      if (options.bot && !result) tools.append(button(T('Начать заново'), () => ws.send(JSON.stringify({ type: 'reset' }))))
+      if (link) {
+        tools.append(
+          button(T('Скопировать ссылку на партию'), async () => {
+            try {
+              await navigator.clipboard.writeText(link)
+            } catch {
+              prompt(T('Ссылка на партию'), link)
+            }
+          }),
+        )
+      }
     }
 
     function click(r, c) {
@@ -329,7 +465,7 @@
       }
     }
 
-    window.ArcadeBoard.game = { get position() { return position }, get moves() { return moves }, get seat() { return seat }, click, rules }
+    window.ArcadeBoard.game = { get position() { return position }, get moves() { return moves }, get seat() { return seat }, click, rules, reset: () => ws.send(JSON.stringify({ type: 'reset' })) }
   }
 
   window.ArcadeBoard = { start, adapter }
