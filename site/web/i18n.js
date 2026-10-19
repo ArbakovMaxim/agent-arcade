@@ -32,7 +32,6 @@
     'Свой файл .nes откроется только на этом устройстве и не отправится на сервер.': 'Your .nes file opens only on this device and is never sent to the server.',
     'Свой файл .md или .bin откроется только на этом устройстве и не отправится на сервер.': 'Your .md or .bin file opens only on this device and is never sent to the server.',
     'Свой файл .sms откроется только на этом устройстве и не отправится на сервер.': 'Your .sms file opens only on this device and is never sent to the server.',
-    'Свой файл .gg откроется только на этом устройстве и не отправится на сервер.': 'Your .gg file opens only on this device and is never sent to the server.',
     'Свой диск .chd, .pbp, .iso или .zip с .cue и .bin откроется только на этом устройстве. BIOS Sony не нужен.': 'Your .chd, .pbp, .iso disc or a .zip with .cue and .bin opens only on this device. No Sony BIOS needed.',
     'Игра не найдена': 'Game not found',
     'Загружаю игру…': 'Loading the game…',

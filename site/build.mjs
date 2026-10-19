@@ -92,11 +92,11 @@ export function build({ root, out, now = new Date() }) {
     if (g.console === 'sega' && !['SEGA'].includes(bytes.subarray(0x100, 0x104).toString('latin1')) && bytes.subarray(0x101, 0x105).toString('latin1') !== 'SEGA') {
       fail(`${where}: это не ROM Sega Mega Drive (нет метки SEGA в заголовке)`)
     }
-    // Master System и Game Gear — метка TMR SEGA в заголовке картриджа
+    // Master System — метка TMR SEGA в заголовке картриджа
     const tmr = [0x7ff0, 0x3ff0, 0x1ff0].some((o) => bytes.length >= o + 8 && bytes.subarray(o, o + 8).toString('latin1') === 'TMR SEGA')
     // У части картриджей метки нет — тогда эмулятор узнаёт приставку по расширению, и оно должно совпадать
     const extOk = path.extname(romPath).slice(1).toLowerCase() === g.console
-    if ((g.console === 'sms' || g.console === 'gg') && !tmr && !extOk) fail(`${where}: это не ROM Master System или Game Gear (нет метки TMR SEGA и расширение не .sms/.gg)`)
+    if (g.console === 'sms' && !tmr && !extOk) fail(`${where}: это не ROM Master System (нет метки TMR SEGA и расширение не .sms)`)
     // PlayStation — диск в .zip, внутри .cue и .bin: эмулятор распакует его сам
     if (g.console === 'psx' && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.cue')))) {
       fail(`${where}: диск PlayStation должен быть .zip, где лежат .cue и .bin`)

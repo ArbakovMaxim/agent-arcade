@@ -258,7 +258,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   // Вкладка PlayStation из адреса: Hello Pong из каталога и кнопка своего файла с форматами дисков
   const psx = await makePage(new Map(), { search: '?tab=psx' })
   const text = textOf(psx.byId.library)
-  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hello-pong'])
+  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hello-pong', 'cut-for-a-country'])
   assert.match(text, /BIOS Sony не нужен/)
   const open = psx.byId.library.querySelectorAll('.open-rom')[0]
   assert.equal(open.textContent, 'Открыть свой файл')
@@ -331,7 +331,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const button = (cls) => lib.querySelectorAll(cls)
   assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'Game Gear', 'PlayStation'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -349,22 +349,22 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(vm.runInContext('typeof jsnes.Mappers[0]', page.ctx), 'function', 'остальные мапперы на месте')
 }
 
-// --- Master System и Game Gear: то же ядро Genesis Plus GX, свои файлы — с расширением в имени -------------------------
+// --- Master System: ядро Genesis Plus GX, свои файлы — с расширением в имени; Game Gear нет ------------------------
 {
   const sms = await makePage(new Map(), { search: '?game=skyhaul' })
   assert.equal(sms.ctx.EJS_core, 'genesis_plus_gx', 'Master System — на нашем ядре, а не на SMS Plus с чужого CDN')
   assert.equal(sms.ctx.EJS_gameUrl, catalog.games.skyhaul.rom.url)
-  const gg = await makePage(new Map(), { search: '?tab=gg' })
-  assert.match(textOf(gg.byId.library), /Свободных игр для Game Gear пока нет/)
-  gg.byId.library.querySelectorAll('.open-rom')[0].click()
-  assert.equal(gg.byId['local-rom'].accept, '.gg')
+  const lib = await makePage(new Map(), { search: '?tab=sms' })
+  lib.byId.library.querySelectorAll('.open-rom')[0].click()
+  assert.equal(lib.byId['local-rom'].accept, '.sms')
   // Свой файл Master System: имя с расширением — по нему ядро узнаёт приставку
-  gg.ctx.__sms = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'games', 'skyhaul', 'skyhaul.sms')))
-  await vm.runInContext(`(async () => ArcadePlayMine(await ArcadeMine.add(new File([__sms], 'My_Game.sms'), 'sms')))()`, gg.ctx)
-  await until(() => gg.ctx.EJS_core)
-  assert.equal(gg.ctx.EJS_core, 'genesis_plus_gx')
-  assert.equal(gg.ctx.EJS_gameName, 'My Game.sms')
-  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(4096)], 'x.gg'), 'sms')`, gg.ctx), /не игра для Master System/)
+  lib.ctx.__sms = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'games', 'skyhaul', 'skyhaul.sms')))
+  await vm.runInContext(`(async () => ArcadePlayMine(await ArcadeMine.add(new File([__sms], 'My_Game.sms'), 'sms')))()`, lib.ctx)
+  await until(() => lib.ctx.EJS_core)
+  assert.equal(lib.ctx.EJS_core, 'genesis_plus_gx')
+  assert.equal(lib.ctx.EJS_gameName, 'My Game.sms')
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(4096)], 'x.gg'), 'sms')`, lib.ctx), /не игра для Master System/)
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(4096)], 'x.gg'), 'gg')`, lib.ctx), /не поддерживает свои файлы/)
 }
 
 console.log('окно: все проверки прошли')

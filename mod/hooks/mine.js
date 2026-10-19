@@ -19,10 +19,12 @@ export function cleanPath(args) {
   return path
 }
 
-export const CONSOLE_NAMES = { nes: 'Денди', sega: 'Sega Mega Drive', sms: 'Master System', gg: 'Game Gear' }
+const GAME_GEAR = 'это игра для Game Gear — Game Gear в Arcade не поддерживается'
 
-// Что за файл: Денди (заголовок iNES), Sega Mega Drive (метка SEGA по адресу $100), Master System или Game Gear
-// (метка TMR SEGA и код региона; у японских картриджей метки бывает нет — тогда по расширению .sms или .gg)
+export const CONSOLE_NAMES = { nes: 'Денди', sega: 'Sega Mega Drive', sms: 'Master System' }
+
+// Что за файл: Денди (заголовок iNES), Sega Mega Drive (метка SEGA по адресу $100) или Master System
+// (метка TMR SEGA; у японских картриджей метки бывает нет — тогда по расширению .sms). Game Gear Arcade не поддерживает.
 export function identifyRom(bytes, path = '') {
   const head = String.fromCharCode(...bytes.subarray(0, 6))
   if (head.startsWith('PK\x03\x04') || head.startsWith('7z\xbc\xaf\x27\x1c') || head.startsWith('Rar!')) {
@@ -38,12 +40,14 @@ export function identifyRom(bytes, path = '') {
   for (const o of [0x7ff0, 0x3ff0, 0x1ff0]) {
     if (bytes.length >= o + 16 && String.fromCharCode(...bytes.subarray(o, o + 8)) === 'TMR SEGA') {
       const region = bytes[o + 15] >> 4
-      return { console: region >= 5 && region <= 7 ? 'gg' : 'sms' }
+      if (region >= 5 && region <= 7) return { error: GAME_GEAR }
+      return { console: 'sms' }
     }
   }
   const ext = (String(path).match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase()
-  if (ext === 'sms' || ext === 'gg') return { console: ext }
-  return { error: 'это не похоже на игру для Денди (.nes), Sega Mega Drive (.md, .bin, .gen), Master System (.sms) или Game Gear (.gg)' }
+  if (ext === 'gg') return { error: GAME_GEAR }
+  if (ext === 'sms') return { console: 'sms' }
+  return { error: 'это не похоже на игру для Денди (.nes), Sega Mega Drive (.md, .bin, .gen) или Master System (.sms)' }
 }
 
 // Название из имени файла: без папки и расширения, подчёркивания — пробелы

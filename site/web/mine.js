@@ -9,7 +9,6 @@
     nes: '.nes',
     sega: '.md,.bin,.gen,.smd',
     sms: '.sms',
-    gg: '.gg',
     psx: '.chd,.pbp,.iso,.cue,.bin,.img,.zip,.7z,.m3u',
   }
   const PSX_EXT = ['chd', 'pbp', 'iso', 'cue', 'bin', 'img', 'zip', '7z', 'm3u']
@@ -99,14 +98,14 @@
       sha = await sha256(bytes)
       if (expectSha && sha !== expectSha) throw new Error(T('Это другой файл: он не совпадает с тем, что добавлен в моде.'))
       id = `mine-${sha.slice(0, 12)}`
-    } else if (consoleId === 'sms' || consoleId === 'gg') {
-      if (file.size > MAX_SMALL) throw new Error(T('Файл больше 16 МБ — для Master System и Game Gear это не игра.'))
+    } else if (consoleId === 'sms') {
+      if (file.size > MAX_SMALL) throw new Error(T('Файл больше 16 МБ — для Master System это не игра.'))
       const bytes = new Uint8Array(await file.arrayBuffer())
-      if (isArchive(bytes)) throw new Error(T('Это архив. Распакуй его и выбери сам файл игры: .sms или .gg.'))
+      if (isArchive(bytes)) throw new Error(T('Это архив. Распакуй его и выбери сам файл игры: .sms.'))
       const ext = (String(file.name).match(/\.([^.]+)$/) || [])[1]
       const hasTmr = [0x7ff0, 0x3ff0, 0x1ff0].some((o) => bytes.length >= o + 8 && String.fromCharCode(...bytes.subarray(o, o + 8)) === 'TMR SEGA')
       // У японских картриджей метки бывает нет — тогда верим расширению
-      if (!hasTmr && (!ext || ext.toLowerCase() !== consoleId)) throw new Error(T(`Это не игра для ${consoleId === 'gg' ? 'Game Gear' : 'Master System'}: нет метки TMR SEGA и расширение не .${consoleId}.`))
+      if (!hasTmr && (!ext || ext.toLowerCase() !== consoleId)) throw new Error(T('Это не игра для Master System: нет метки TMR SEGA и расширение не .sms.'))
       sha = await sha256(bytes)
       if (expectSha && sha !== expectSha) throw new Error(T('Это другой файл: он не совпадает с тем, что добавлен в моде.'))
       id = `mine-${sha.slice(0, 12)}`

@@ -25,7 +25,7 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'gg', 'psx'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
 assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
@@ -46,9 +46,9 @@ for (const [id, game] of Object.entries(catalog.games)) {
     assert.equal(rom.subarray(0, 4).toString('latin1'), 'NES\x1a', `${id}: это ROM Денди`)
     const mapper = (rom[6] >> 4) | (rom[7] & 0xf0)
     assert.ok([0, 1, 2, 3, 4, 7, 66].includes(mapper), `${id}: маппер ${mapper} JSNES поддерживает`)
-  } else if (game.console === 'sms' || game.console === 'gg') {
+  } else if (game.console === 'sms') {
     const tmr = rom.subarray(0x7ff0, 0x7ff8).toString('latin1') === 'TMR SEGA'
-    assert.ok(tmr || path.extname(romPath) === `.${game.console}`, `${id}: ROM Master System или Game Gear`)
+    assert.ok(tmr || path.extname(romPath) === `.${game.console}`, `${id}: ROM Master System`)
   } else if (game.console === 'sega') {
     assert.equal(rom.subarray(0x100, 0x104).toString('latin1'), 'SEGA', `${id}: это ROM Mega Drive`)
   } else {
@@ -122,7 +122,7 @@ console.log('сборка: все проверки прошли')
   assert.equal(psx.title, 'PlayStation')
   assert.match(psx.empty, /Открой свой диск/)
   // Hello Pong — диск в .zip, собран в Arcade из исходников (MIT + PSn00bSDK под MPL-2.0)
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['hello-pong'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['hello-pong', 'cut-for-a-country'])
   assert.match(built.games['hello-pong'].rom.url, /^files\/[0-9a-f]{64}\.zip$/)
   assert.ok(!fs.existsSync(path.join(dir, `${built.games['hello-pong'].rom.url}.b64`)), 'у PlayStation нет копии base64')
   assert.deepEqual(built.games['hello-pong'].license.files.map((f) => f.name), ['LICENSE.txt', 'NOTICE.txt', 'PSn00bSDK-LICENSE.txt', 'hello-pong-dec2f3f-src.tar.gz'])
@@ -132,17 +132,17 @@ console.log('сборка: все проверки прошли')
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'miniplanets').console = 'nes' }), /игра miniplanets: это не ROM Денди/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sega' }), /игра thwaite: это не ROM Sega Mega Drive/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'psx' }), /игра thwaite: диск PlayStation должен быть \.zip/)
-// Master System и Game Gear: игры, короткие адреса приставок, проверка метки TMR SEGA
+// Master System: игры, короткие адреса приставок, проверка метки TMR SEGA; Game Gear в каталоге нет
 {
   const dir = temp('sms')
   const built = build({ root: ROOT, out: dir })
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sms'), ['balloon-master', 'skyhaul', 'food-fighter', 'escape-from-monster-dimension'])
-  assert.equal(Object.values(built.games).filter((g) => g.console === 'gg').length, 0)
+  assert.equal(built.consoles.find((c) => c.id === 'gg'), undefined, 'Game Gear убран')
   const redirects = fs.readFileSync(path.join(dir, '_redirects'), 'utf8')
-  for (const c of ['nes', 'sega', 'sms', 'gg', 'psx']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
+  for (const c of ['nes', 'sega', 'sms', 'psx']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
   assert.match(fs.readFileSync(path.join(dir, '.assetsignore'), 'utf8'), /_redirects/)
 }
-assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System или Game Gear \(нет метки TMR SEGA и расширение не/)
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System \(нет метки TMR SEGA и расширение не/)
 // Маппер 28 — общий с модом: сборка делает из модуля мода обычный скрипт
 {
   const dir = temp('mapper28')

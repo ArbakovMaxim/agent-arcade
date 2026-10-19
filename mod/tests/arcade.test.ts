@@ -1283,7 +1283,7 @@ test('сигналы агента: «сразу к агенту» закрыва
   await ui.unmount()
 })
 
-// Картридж Master System или Game Gear: метка TMR SEGA и код региона (4 — Master System, 6 — Game Gear)
+// Картридж с меткой TMR SEGA и кодом региона: 4 — Master System, 6 — Game Gear (Game Gear Arcade не поддерживает)
 function tmrRom(region: number) {
   const bytes = new Uint8Array(0x8000)
   bytes.set(new TextEncoder().encode('TMR SEGA'), 0x7ff0)
@@ -1291,13 +1291,14 @@ function tmrRom(region: number) {
   return bytes
 }
 
-test('Master System и Game Gear: мод узнаёт картриджи, свои игры добавляются, игры каталога — в окне, у каждой вкладки кнопка окна', async ($, on) => {
+test('Master System: мод узнаёт картриджи, свои игры добавляются, игры каталога — в окне; Game Gear — понятный отказ', async ($, on) => {
   expect(identifyRom(tmrRom(4))).toEqual({ console: 'sms' })
-  expect(identifyRom(tmrRom(6))).toEqual({ console: 'gg' })
-  expect(identifyRom(new Uint8Array(0x8000), 'C:\\Игры\\japan.gg')).toEqual({ console: 'gg' }) // без метки — по расширению
-  expect(identifyRom(new Uint8Array(0x8000), 'x.bin').error).toMatch(/Master System \(\.sms\) или Game Gear \(\.gg\)/)
+  expect(identifyRom(tmrRom(6)).error).toBe('это игра для Game Gear — Game Gear в Arcade не поддерживается')
+  expect(identifyRom(new Uint8Array(0x8000), 'C:\\Игры\\japan.gg').error).toMatch(/Game Gear в Arcade не поддерживается/)
+  expect(identifyRom(new Uint8Array(0x8000), 'C:\\Игры\\japan.sms')).toEqual({ console: 'sms' }) // без метки — по расширению
+  expect(identifyRom(new Uint8Array(0x8000), 'x.bin').error).toMatch(/или Master System \(\.sms\)$/)
   const site = JSON.parse(siteCatalog())
-  site.consoles.push({ id: 'sms', title: 'Master System' }, { id: 'gg', title: 'Game Gear', empty: 'Свободных игр для Game Gear пока нет.' })
+  site.consoles.push({ id: 'sms', title: 'Master System' })
   const sha = 'f'.repeat(64)
   site.games.skyhaul = { console: 'sms', title: 'SkyHaul', genre: 'шутер', about: 'шутер', keys: '…', rom: { url: `files/${sha}.sms`, base64: `files/${sha}.sms.b64`, sha256: sha, size: 1 } }
   const { clock, launches } = stubs(on, { env: { ...WINDOWS, USERPROFILE: 'C:\\Users\\Иван' }, site: JSON.stringify(site), disk: { 'D:\\Игры\\Моя.sms': tmrRom(4) } })
@@ -1311,11 +1312,6 @@ test('Master System и Game Gear: мод узнаёт картриджи, сво
   await ui.press({ key: 'arcade-game-skyhaul' })
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=skyhaul`)
   await ui.press({ key: 'arcade-back' })
-  await ui.press({ key: 'arcade-menu-gg' })
-  expect(await ui.find({ type: 'Text', text: 'Свободных игр для Game Gear пока нет.' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-open-tab-gg' })).toMatchObject({ props: { label: 'Открыть Game Gear в окне' } })
-  await ui.press({ key: 'arcade-open-tab-gg' })
-  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=gg`)
   await ui.unmount()
 })
 

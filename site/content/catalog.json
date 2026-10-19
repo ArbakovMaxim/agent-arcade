@@ -25,15 +25,6 @@
       "empty": "Свободных игр для Master System пока нет. Открой свой файл .sms — кнопка «Открыть свой файл» сверху."
     },
     {
-      "id": "gg",
-      "section": "games",
-      "title": "Game Gear",
-      "about": "Sega Game Gear",
-      "emulator": "EmulatorJS (GPL-3.0) + Genesis Plus GX",
-      "noncommercial": true,
-      "empty": "Свободных игр для Game Gear пока нет. Открой свой файл .gg — кнопка «Открыть свой файл» сверху."
-    },
-    {
       "id": "psx",
       "section": "games",
       "title": "PlayStation",
@@ -929,6 +920,28 @@
           "games/escape-from-monster-dimension/LICENSE.txt",
           "games/escape-from-monster-dimension/CREDITS.md",
           "games/escape-from-monster-dimension/escape-from-monster-dimension-01f8f89-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "cut-for-a-country",
+      "console": "psx",
+      "title": "Cut for a Country 32",
+      "genre": "файтинг",
+      "about": "Файтинг с графикой из треугольников: гном против Морковного короля. Можно вдвоём; три языка — датский, английский и испанский.",
+      "about_en": "A fighting game with graphics made of triangles: a gnome against the Carrot King. Two players supported; three languages — Danish, English and Spanish.",
+      "keys": "движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
+      "rom": "games/cut-for-a-country/cut-for-a-country.zip",
+      "license": {
+        "name": "Apache-2.0",
+        "author": "Lars Rune Præstmark (SeaLiteral)",
+        "source": "https://github.com/SeaLiteral/cut-for-a-country-32",
+        "commit": "1177fd29d7f55aef3562f0603d02ffecbbcf9277",
+        "files": [
+          "games/cut-for-a-country/LICENSE.txt",
+          "games/cut-for-a-country/NOTICE.txt",
+          "games/cut-for-a-country/PSn00bSDK-LICENSE.txt",
+          "games/cut-for-a-country/cut-for-a-country-1177fd2-src.tar.gz"
         ]
       }
     }

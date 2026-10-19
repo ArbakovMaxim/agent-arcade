@@ -9,7 +9,6 @@
     sega: { core: 'segaMD', keys: T('движение — стрелки · A — S · B — X · C — Z · Start — Enter') },
     // Master System — явно Genesis Plus GX: иначе EmulatorJS взял бы ядро SMS Plus, которого у нас нет
     sms: { core: 'genesis_plus_gx', keys: T('движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter') },
-    gg: { core: 'segaGG', keys: T('движение — стрелки · 1 — X · 2 — Z · Start — Enter') },
     psx: { core: 'psx', keys: T('движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V') },
   }
 
@@ -98,7 +97,7 @@
     }
     prepare(entry.title, system.keys, T('свой файл — хранится только в этом браузере'))
     for (const id of ['license', 'source']) document.getElementById(id).style.display = 'none'
-    // Ядро узнаёт Master System и Game Gear по расширению, а у файла из браузера имени нет — даём его сами
+    // Ядро узнаёт Master System по расширению, а у файла из браузера имени нет — даём его сами
     const ext = (String(entry.file && entry.file.name).match(/\.([a-z0-9]+)$/i) || [])[1]
     launch(system.core, URL.createObjectURL(entry.file), ext ? `${entry.title}.${ext.toLowerCase()}` : entry.title)
   }
