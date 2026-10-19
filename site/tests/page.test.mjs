@@ -258,7 +258,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   // Вкладка PlayStation из адреса: Hello Pong из каталога и кнопка своего файла с форматами дисков
   const psx = await makePage(new Map(), { search: '?tab=psx' })
   const text = textOf(psx.byId.library)
-  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hello-pong', 'cut-for-a-country'])
+  assert.deepEqual(psx.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hello-pong'])
   assert.match(text, /BIOS Sony не нужен/)
   const open = psx.byId.library.querySelectorAll('.open-rom')[0]
   assert.equal(open.textContent, 'Открыть свой файл')

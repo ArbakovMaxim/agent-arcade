@@ -1,12 +1,21 @@
-// Сайт Arcade на Cloudflare Workers: без кода Worker, только статика из dist/.
-// dist/ собирает node build.mjs; правила кеширования — в dist/_headers.
+// Сайт Arcade на Cloudflare Workers: статика из dist/ и код для сетевой игры (worker/index.js).
+// dist/ собирает node build.mjs; правила кеширования — в dist/_headers, короткие адреса — в dist/_redirects.
 {
   "name": "agent-arcade",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-01",
-  // Адрес agent-arcade.<аккаунт>.workers.dev и пробные адреса для веток и pull request
+  // Адрес agent-arcade.<аккаунт>.workers.dev. Пробные адреса веток выключены: Cloudflare не делает их для Worker'ов с Durable Objects
   "workers_dev": true,
-  "preview_urls": true,
+  "preview_urls": false,
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+    "binding": "ASSETS",
+    // Код вызывается только для сетевых адресов — всю остальную статику Cloudflare отдаёт сам, как раньше
+    "run_worker_first": ["/api/*", "/net/*"]
+  },
+  // Комнаты для сетевой игры — Durable Objects на SQLite: они есть на бесплатном тарифе
+  "durable_objects": {
+    "bindings": [{ "name": "ROOMS", "class_name": "Room" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
 }

@@ -932,28 +932,6 @@
       }
     },
     {
-      "id": "cut-for-a-country",
-      "console": "psx",
-      "title": "Cut for a Country 32",
-      "genre": "файтинг",
-      "about": "Файтинг с графикой из треугольников: гном против Морковного короля. Можно вдвоём; три языка — датский, английский и испанский.",
-      "about_en": "A fighting game with graphics made of triangles: a gnome against the Carrot King. Two players supported; three languages — Danish, English and Spanish.",
-      "keys": "движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
-      "rom": "games/cut-for-a-country/cut-for-a-country.zip",
-      "license": {
-        "name": "Apache-2.0",
-        "author": "Lars Rune Præstmark (SeaLiteral)",
-        "source": "https://github.com/SeaLiteral/cut-for-a-country-32",
-        "commit": "1177fd29d7f55aef3562f0603d02ffecbbcf9277",
-        "files": [
-          "games/cut-for-a-country/LICENSE.txt",
-          "games/cut-for-a-country/NOTICE.txt",
-          "games/cut-for-a-country/PSn00bSDK-LICENSE.txt",
-          "games/cut-for-a-country/cut-for-a-country-1177fd2-src.tar.gz"
-        ]
-      }
-    },
-    {
       "id": "freedoom-1",
       "console": "doom",
       "title": "Freedoom: Phase 1",

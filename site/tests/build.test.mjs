@@ -124,7 +124,7 @@ console.log('сборка: все проверки прошли')
   assert.equal(psx.title, 'PlayStation')
   assert.match(psx.empty, /Открой свой диск/)
   // Hello Pong — диск в .zip, собран в Arcade из исходников (MIT + PSn00bSDK под MPL-2.0)
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['hello-pong', 'cut-for-a-country'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'psx'), ['hello-pong']) // Cut for a Country 32 убрана: зависает на старте со встроенной заменой BIOS
   assert.match(built.games['hello-pong'].rom.url, /^files\/[0-9a-f]{64}\.zip$/)
   assert.ok(!fs.existsSync(path.join(dir, `${built.games['hello-pong'].rom.url}.b64`)), 'у PlayStation нет копии base64')
   assert.deepEqual(built.games['hello-pong'].license.files.map((f) => f.name), ['LICENSE.txt', 'NOTICE.txt', 'PSn00bSDK-LICENSE.txt', 'hello-pong-dec2f3f-src.tar.gz'])

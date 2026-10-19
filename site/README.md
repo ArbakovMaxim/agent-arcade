@@ -58,3 +58,13 @@ npx serve dist       # посмотреть его в браузере на http
 - Сайт и скрипты — код проекта.
 - **JSNES** 2.1.0, Apache-2.0: `third_party/jsnes/LICENSE.txt`.
 - **Thwaite** © Damian Yerrick, GPL-3.0-or-later; **Concentration Room** © Damian Yerrick, GPL-3.0-or-later; **robotfindskitten** © Damian Yerrick и Leonard Richardson, zlib. Лицензии и исходники — в `content/games/<id>/`, на сайте — в `licenses/<id>/`.
+
+## Сетевая игра
+
+Кроме статики, у сайта есть небольшой код Worker'а — `worker/index.js`. Он вызывается только для адресов `/api/*` и `/net/*`, всё остальное Cloudflare отдаёт из `dist/` сам.
+
+- `/api/ping` — проверка, что код работает.
+- `/net/room/<имя>` — WebSocket в комнату. Комната — Durable Object (на SQLite, есть на бесплатном тарифе): каждое сообщение уходит всем остальным игрокам как есть, о входе и выходе приходят `{"type":"join"}` и `{"type":"leave"}`, новичок получает `{"type":"welcome","id":…,"peers":[…]}`. До 8 игроков, сообщение — до 1 МБ.
+
+На комнатах будут работать сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom. Тест — `tests/worker.test.mjs`.
+

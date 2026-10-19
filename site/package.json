@@ -2,10 +2,12 @@
   "name": "agent-arcade",
   "private": true,
   "type": "module",
-  "description": "Arcade: игры, пока агент работает. Сайт с каталогом и окном для Cloudflare Pages.",
+  "description": "Arcade: игры, пока агент работает. Сайт с каталогом, окном и сетевой игрой для Cloudflare Workers.",
   "scripts": {
     "build": "node build.mjs",
-    "test": "node tests/build.test.mjs && node tests/page.test.mjs"
+    "test": "node tests/build.test.mjs && node tests/page.test.mjs && node tests/worker.test.mjs"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
