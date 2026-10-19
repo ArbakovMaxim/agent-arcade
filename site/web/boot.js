@@ -99,6 +99,14 @@
     frame.title = game.title
     frame.allow = 'fullscreen; gamepad; autoplay'
     frame.style.cssText = 'width:100%;height:100%;border:0;display:block;background:#000'
+    // Холст игры может не перестроиться при смене размера окна — фон под ним тёмный, а не белый
+    frame.addEventListener('load', () => {
+      try {
+        frame.contentDocument.documentElement.style.background = '#000'
+      } catch {
+        // чужой адрес — не трогаем
+      }
+    })
     ;(document.getElementById('stage') || document.body).appendChild(frame)
     frame.focus()
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {

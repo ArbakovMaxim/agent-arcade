@@ -1,0 +1,70 @@
+# Сборка движка Heretic для браузера: doom-wasm (Cloudflare, GPL-2.0) + Chocolate Heretic того же коммита.
+# Дерево сборки готовит tools/heretic-wasm/prepare.py; готовый движок и исходники кладутся в site/vendor/heretic-wasm.
+# Запуск вручную: Actions → «Сборка heretic-wasm» → Run workflow. Коммиты и версия Emscripten закреплены.
+name: Сборка heretic-wasm
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOOM_WASM_REPO: https://github.com/cloudflare/doom-wasm
+  DOOM_WASM_COMMIT: 65e0d3ae2ffa604155eebd96ed40da6567bd08f4
+  CHOCOLATE_REPO: https://github.com/chocolate-doom/chocolate-doom
+  CHOCOLATE_COMMIT: 5b967edaf6
+  EMSDK_VERSION: 3.1.61
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Исходники doom-wasm и Chocolate Doom на закреплённых коммитах
+        run: |
+          git clone "$DOOM_WASM_REPO" /tmp/doom-wasm
+          git -C /tmp/doom-wasm checkout "$DOOM_WASM_COMMIT"
+          git clone "$CHOCOLATE_REPO" /tmp/chocolate
+          git -C /tmp/chocolate checkout "$CHOCOLATE_COMMIT"
+
+      - name: Дерево сборки Heretic
+        run: |
+          python3 tools/heretic-wasm/prepare.py /tmp/doom-wasm /tmp/chocolate /tmp/heretic-wasm
+          # Исходники ровно того, что собираем, — для GPL, до сборки
+          tar -czf /tmp/heretic-wasm-src.tar.gz -C /tmp heretic-wasm
+
+      - name: Инструменты сборки
+        run: sudo apt-get update && sudo apt-get install -y automake autoconf libtool pkg-config
+
+      - uses: emscripten-core/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+
+      - name: Сборка
+        working-directory: /tmp/heretic-wasm
+        run: |
+          emconfigure autoreconf -fiv
+          ac_cv_exeext=".html" emconfigure ./configure --host=none-none-none
+          emmake make -j"$(nproc)"
+          ls -la src/websockets-heretic.js src/websockets-heretic.wasm
+
+      - name: Готовый движок и исходники — в репозиторий
+        run: |
+          OUT=site/vendor/heretic-wasm
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          cp /tmp/heretic-wasm/src/websockets-heretic.js /tmp/heretic-wasm/src/websockets-heretic.wasm "$OUT/"
+          cp /tmp/heretic-wasm/COPYING.md "$OUT/COPYING.md"
+          cp /tmp/heretic-wasm-src.tar.gz "$OUT/heretic-wasm-src.tar.gz"
+          {
+            echo "heretic-wasm — Chocolate Heretic в WebAssembly с сетевой игрой через WebSocket. GPL-2.0 (COPYING.md)."
+            echo "Дерево сборки: doom-wasm ($DOOM_WASM_REPO, коммит $DOOM_WASM_COMMIT) + src/heretic из"
+            echo "Chocolate Doom ($CHOCOLATE_REPO, коммит $CHOCOLATE_COMMIT); правки — tools/heretic-wasm/prepare.py в репозитории Arcade."
+            echo "Исходники ровно этой сборки — heretic-wasm-src.tar.gz рядом. Emscripten $EMSDK_VERSION, autoreconf + configure --host=none-none-none + make."
+          } > "$OUT/BUILD.txt"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "heretic-wasm: сборка (doom-wasm ${DOOM_WASM_COMMIT:0:7} + Chocolate Heretic ${CHOCOLATE_COMMIT:0:7}, Emscripten $EMSDK_VERSION)"
+          git push
