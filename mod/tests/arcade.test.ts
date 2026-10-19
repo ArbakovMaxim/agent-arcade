@@ -1496,3 +1496,38 @@ test('кто ждёт в сети и Денди: игры Денди тоже в
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=thwaite&net=1`)
   await ui.unmount()
 })
+
+test('кто ждёт в сети и кооператив Freedoom: «Присоединиться» открывает лобби кооператива ?net=coop', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'doom', title: 'Doom' })
+  const sha = 'b'.repeat(64)
+  site.games['freedoom-1'] = { console: 'doom', title: 'Freedoom: Phase 1', genre: 'шутер', about: 'кооп', keys: '…', rom: { url: `files/${sha}.zip`, base64: `files/${sha}.zip.b64`, sha256: sha, size: 1 } }
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site), files: { 'api/lobbies': JSON.stringify({ doom: 0, games: {}, coop: { 'freedoom-1': 1 } }) } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-net-join' })).toMatchObject({ props: { label: 'Присоединиться: Freedoom: Phase 1' } })
+  await ui.press({ key: 'arcade-net-join' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=freedoom-1&net=coop`)
+  await ui.unmount()
+})
+
+test('настольные игры: мод знает их без ROM, открывает в окне, «кто ждёт» ведёт в шахматы', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'board', title: 'Настольные' })
+  site.games.chess = { console: 'board', kind: 'board', board: 'chess', title: 'Шахматы', genre: 'стратегия', about: 'по сети', keys: '…' }
+  expect(parseCatalog(JSON.stringify(site)).games.find((g: any) => g.id === 'chess')).toMatchObject({ console: 'board', kind: 'board', title: 'Шахматы' })
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site), files: { 'api/lobbies': JSON.stringify({ doom: 0, games: {}, board: { chess: 1 } }) } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-net-join' })).toMatchObject({ props: { label: 'Присоединиться: Шахматы' } })
+  await ui.press({ key: 'arcade-net-join' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess`)
+  await ui.press({ key: 'arcade-menu-board' })
+  await ui.press({ key: 'arcade-game-chess' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess`)
+  await ui.unmount()
+})

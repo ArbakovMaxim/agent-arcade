@@ -60,6 +60,12 @@ export function parseCatalog(text) {
   for (const [id, g] of Object.entries(data.games)) {
     if (!ID.test(id) || !g || !ids.has(g.console)) continue
     if (![g.title, g.genre, g.about].every((s) => typeof s === 'string' && s)) continue
+    const aboutEnBoard = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
+    // Настольные игры (шахматы, шашки, реверси) — без ROM: только в окне браузера
+    if (g.kind === 'board') {
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEnBoard, kind: 'board' })
+      continue
+    }
     const rom = g.rom ?? {}
     if (!SHA256.test(rom.sha256 ?? '') || typeof rom.base64 !== 'string' || !rom.base64.startsWith('files/')) continue
     const aboutEn = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}

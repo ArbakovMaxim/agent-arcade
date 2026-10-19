@@ -64,7 +64,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const byId = {}
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
-    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, btoa, atob,
+    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, btoa, atob, DecompressionStream, Response,
     // Таймеры страницы не держат тест: отсчёт раунда и возврат в лобби — минуты
     setTimeout: (fn, ms) => { const h = setTimeout(fn, ms); h.unref?.(); return h },
     setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref?.(); return h },
@@ -100,7 +100,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (script.src === 'ejs.js' || script.src === 'netdoom.js') {
+    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js'].includes(script.src)) {
       vm.runInContext(fs.readFileSync(path.join(DIST, script.src), 'utf8'), ctx, { filename: script.src })
       setTimeout(() => script.onload && script.onload(), 0)
     }
@@ -114,7 +114,8 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     const library = byId.library?.children?.length ?? 0
     const overlayShown = byId.overlay?.classList.contains('shown')
     const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
-    return library > 0 || segaStarted || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
+    const board = (byId.stage?.children ?? []).some((n) => n.id === 'board-root' && n.children?.length) // настольные игры
+    return library > 0 || segaStarted || board || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
   assert.ok(settled(), 'окно так и не загрузилось')
@@ -343,7 +344,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const button = (cls) => lib.querySelectorAll(cls)
   assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Doom'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Doom', 'Board games'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -465,6 +466,68 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   got = page.ctx.__got
   assert.equal(got.state.length, 700000)
   assert.equal(got.state[500], 500 % 251)
+}
+
+// --- Кооператив Freedoom: «По сети» у одиночной игры, своё лобби, хозяин без deathmatch, WAD из .zip --------------
+{
+  const solo = await makePage(new Map(), { search: '?game=freedoom-1' })
+  assert.equal(solo.byId.net.href, '?game=freedoom-1&net=coop')
+  assert.equal(solo.byId.net.hidden, false)
+  const coop = await makePage(new Map(), { search: '?game=freedoom-1&net=coop' })
+  await until(() => coop.sockets.length > 0)
+  assert.match(coop.sockets[0].url, /\/net\/room\/coop-freedoom-1$/)
+  coop.sockets[0].emit('message', JSON.stringify({ type: 'welcome', id: 'a1', peers: [] }))
+  assert.equal(coop.byId['overlay-title'].textContent, 'Ждём напарника')
+  const host = Array.from(vm.runInContext("ArcadeNetDoom.doomArgs('freedoom1.wad', 'wss://x/net/doom/r', true, 'coop')", coop.ctx))
+  assert.ok(!host.includes('-deathmatch') && !host.includes('-timer'), 'кооператив — без deathmatch и таймера')
+  assert.deepEqual(host.slice(host.indexOf('-skill'), host.indexOf('-skill') + 2), ['-skill', '3'])
+  // WAD из настоящего .zip Freedoom — распакован целиком
+  const zip = fs.readFileSync(path.join(ROOT, 'content', 'games', 'freedoom-1', 'freedoom1.zip'))
+  coop.ctx.fetch = async () => ({ arrayBuffer: async () => zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength) })
+  const wad = await vm.runInContext("ArcadeNetDoom.wadFrom('files/x.zip')", coop.ctx)
+  assert.equal(wad.length, 28795076)
+  assert.equal(String.fromCharCode(...wad.subarray(0, 4)), 'IWAD')
+}
+
+// --- Настольные игры: правила, вкладка, меню, партия реверси -------------------------------------------------------
+{
+  const page = await makePage(new Map(), { search: '' })
+  vm.runInContext(fs.readFileSync(path.join(DIST, 'board-rules.js'), 'utf8'), page.ctx)
+  const check = (code) => vm.runInContext(code, page.ctx)
+  // Реверси: в начале 4 хода, пропускать нельзя, переворот
+  assert.equal(check('ArcadeBoardRules.reversi.moves(ArcadeBoardRules.reversi.start()).length'), 4)
+  assert.throws(() => check("ArcadeBoardRules.reversi.apply(ArcadeBoardRules.reversi.start(), 'pass')"), /пропускать нельзя/)
+  assert.equal(check('ArcadeBoardRules.reversi.score(ArcadeBoardRules.reversi.apply(ArcadeBoardRules.reversi.start(), [2, 3])).join(":")'), '4:1')
+  // Шашки: в начале 7 ходов; бить обязательно; дамка «летает»; шашка, ставшая дамкой посреди взятия, бьёт дальше как дамка
+  assert.equal(check('ArcadeBoardRules.checkers.moves(ArcadeBoardRules.checkers.start()).length'), 7)
+  const pos = (pieces) => `({ turn: 0, board: (() => { const b = Array.from({ length: 8 }, () => Array(8).fill(null)); for (const [r, c, side, king] of ${JSON.stringify(pieces)}) b[r][c] = { side, king }; return b })() })`
+  assert.equal(check(`JSON.stringify(ArcadeBoardRules.checkers.moves(${pos([[5, 2, 0, false], [4, 3, 1, false], [6, 7, 0, false]])}))`), '[[[5,2],[3,4]]]', 'есть бой — только бой')
+  const flying = JSON.parse(check(`JSON.stringify(ArcadeBoardRules.checkers.moves(${pos([[7, 0, 0, true], [3, 4, 1, false]])}))`))
+  assert.deepEqual(flying, [[[7, 0], [2, 5]], [[7, 0], [1, 6]], [[7, 0], [0, 7]]], 'дамка бьёт издалека и встаёт на любое поле за шашкой')
+  const crowned = JSON.parse(check(`JSON.stringify(ArcadeBoardRules.checkers.moves(${pos([[2, 1, 0, false], [1, 2, 1, false], [2, 5, 1, false]])}))`))
+  assert.deepEqual(crowned, [[[2, 1], [0, 3], [3, 6]], [[2, 1], [0, 3], [4, 7]]], 'стала дамкой на 8-м ряду и бьёт дальше как дамка')
+  // Вкладка «Настольные» — без кнопки своих файлов
+  const lib = await makePage(new Map(), { search: '?tab=board' })
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi'])
+  assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
+  // Меню игры
+  const menu = await makePage(new Map(), { search: '?game=reversi' })
+  await until(() => menu.ctx.ArcadeBoard)
+  assert.match(textOf(menu.byId.stage), /Найти соперника/)
+  // Партия реверси: подключение, «Твой ход», клик — ход на сервер, ответ — «Ход соперника»
+  const game = await makePage(new Map(), { search: '?game=reversi&room=abcdef1234' })
+  await until(() => game.sockets.length > 0)
+  const ws = game.sockets[0]
+  assert.match(ws.url, /\/net\/board\/abcdef1234$/)
+  ws.emit('open')
+  assert.equal(JSON.parse(ws.sent[0]).type, 'hello')
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'reversi', seat: 0, seats: 2, moves: [] }))
+  assert.match(textOf(game.byId.stage), /Твой ход \(чёрные\)/)
+  vm.runInContext('ArcadeBoard.game.click(2, 3)', game.ctx)
+  assert.deepEqual(JSON.parse(ws.sent.at(-1)), { type: 'move', ply: 0, move: [2, 3] })
+  ws.emit('message', JSON.stringify({ type: 'move', ply: 0, move: [2, 3] }))
+  assert.match(textOf(game.byId.stage), /Ход соперника — можно вернуться к агенту/)
+  assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', game.ctx), 1)
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------

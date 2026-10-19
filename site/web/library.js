@@ -81,7 +81,9 @@
       romInput.accept = (window.ArcadeMine && window.ArcadeMine.ACCEPT[tab]) || ''
       romInput.click()
     })
-    actions.append(open, langButton)
+    // Свои файлы бывают не у всех вкладок: у настольных игр их нет
+    if (window.ArcadeMine && window.ArcadeMine.ACCEPT[tab]) actions.append(open)
+    actions.append(langButton)
     head.append(actions)
     root.append(head)
 

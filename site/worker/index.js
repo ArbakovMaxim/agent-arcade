@@ -75,6 +75,12 @@ export default {
       if (!/^\d{1,10}$/.test(game)) return Response.json({})
       return env.EJS.get(env.EJS.idFromName(game)).fetch('https://ejs/list')
     }
+    // Партия настольной игры — своя комната с сохранением на сервере
+    const board = url.pathname.match(/^\/net\/board\/([a-z0-9]{6,16})$/)
+    if (board) {
+      if (request.headers.get('Upgrade') !== 'websocket') return new Response('Нужно подключение WebSocket', { status: 426 })
+      return env.BOARD.get(env.BOARD.idFromName(board[1])).fetch(request)
+    }
     const ejs = url.pathname.match(/^\/net\/ejs\/(\d{1,10})$/)
     if (ejs) {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('Нужно подключение WebSocket', { status: 426 })
@@ -167,10 +173,12 @@ export class Room {
   report(leaving) {
     const sockets = this.ctx.getWebSockets()
     const name = sockets.map((ws) => ws.deserializeAttachment()?.room).find(Boolean)
-    if (name !== 'doom-lobby' || !this.env?.PRESENCE) return
+    // Лобби FreeDM — «doom», лобби кооператива — по имени комнаты (coop-freedoom-1)
+    const key = name === 'doom-lobby' ? 'doom' : /^(coop|board)-[a-z0-9-]{1,40}$/.test(name || '') ? name : null
+    if (!key || !this.env?.PRESENCE) return
     const count = sockets.filter((ws) => ws !== leaving).length
     const presence = this.env.PRESENCE.get(this.env.PRESENCE.idFromName('all'))
-    this.ctx.waitUntil?.(presence.fetch('https://presence/set', { method: 'POST', body: JSON.stringify({ key: 'doom', value: count }) }).catch(() => {}))
+    this.ctx.waitUntil?.(presence.fetch('https://presence/set', { method: 'POST', body: JSON.stringify({ key, value: count }) }).catch(() => {}))
   }
 }
 
@@ -402,14 +410,125 @@ export class Presence {
     const url = new URL(request.url)
     if (url.pathname === '/set' && request.method === 'POST') {
       const { key, value } = await request.json()
-      if (!/^(doom|g\d{1,10})$/.test(key || '')) return new Response('Неверный ключ', { status: 400 })
+      if (!/^(doom|g\d{1,10}|(coop|board)-[a-z0-9-]{1,40})$/.test(key || '')) return new Response('Неверный ключ', { status: 400 })
       if (Number(value) > 0) await this.ctx.storage.put(key, Math.min(99, Number(value)))
       else await this.ctx.storage.delete(key)
       return Response.json({ ok: true })
     }
     const all = await this.ctx.storage.list()
     const games = {}
-    for (const [key, value] of all) if (key.startsWith('g')) games[key.slice(1)] = value
-    return Response.json({ doom: all.get('doom') || 0, games })
+    const coop = {}
+    const board = {}
+    for (const [key, value] of all) {
+      if (/^g\d/.test(key)) games[key.slice(1)] = value
+      else if (key.startsWith('coop-')) coop[key.slice(5)] = value
+      else if (key.startsWith('board-')) board[key.slice(6)] = value
+    }
+    return Response.json({ doom: all.get('doom') || 0, games, coop, board })
   }
 }
+
+// Партия настольной игры (шахматы, шашки, реверси): ходы хранятся в SQLite этого Durable Object — можно закрыть
+// окно, уйти к агенту и вернуться по той же ссылке. Места — за браузерами игроков (жетон в localStorage), сторона 0
+// ходит первой; сервер следит за очерёдностью, а правила проверяют оба окна. Тихая месяц партия удаляется сама.
+export const BOARD_IDLE_MS = 30 * 24 * 60 * 60 * 1000
+
+export class BoardRoom {
+  constructor(ctx, env) {
+    this.ctx = ctx
+    this.env = env
+  }
+
+  async state() {
+    this.s ??= (await this.ctx.storage.get('state')) || { game: null, seats: [], moves: [] }
+    return this.s
+  }
+
+  async save() {
+    await this.ctx.storage.put('state', this.s)
+    await this.ctx.storage.setAlarm?.(Date.now() + BOARD_IDLE_MS)
+  }
+
+  async alarm() {
+    await this.ctx.storage.deleteAll()
+    this.s = null
+  }
+
+  async fetch(request) {
+    if (this.ctx.getWebSockets().length >= MAX_PEERS) return new Response('Партия заполнена', { status: 409 })
+    const ip = request?.headers?.get('CF-Connecting-IP') || ''
+    if (tooManyFrom(this.ctx, ip)) return new Response('Слишком много подключений с одного адреса', { status: 429 })
+    const [client, server] = Object.values(new WebSocketPair())
+    this.ctx.acceptWebSocket(server)
+    server.serializeAttachment({ ip, seat: -1 })
+    return new Response(null, { status: 101, webSocket: client })
+  }
+
+  send(ws, frame) {
+    try {
+      ws.send(JSON.stringify(frame))
+    } catch {
+      // сокет закрывается
+    }
+  }
+
+  snapshot(ws) {
+    const s = this.s
+    return { type: 'state', game: s.game, seat: ws.deserializeAttachment()?.seat ?? -1, seats: s.seats.length, moves: s.moves }
+  }
+
+  async webSocketMessage(ws, message) {
+    if (typeof message !== 'string' || message.length > 4096) return
+    this.limiter ??= new Limiter({ messages: 10, bytes: 32 * 1024 })
+    if (limited(this.limiter, ws, message.length)) return
+    let m
+    try {
+      m = JSON.parse(message)
+    } catch {
+      return
+    }
+    const s = await this.state()
+    const me = ws.deserializeAttachment() || {}
+    if (m.type === 'hello') {
+      if (!/^[a-z0-9]{8,32}$/.test(m.token || '')) return
+      if (!s.game && /^[a-z0-9-]{1,40}$/.test(m.game || '')) s.game = m.game
+      let seat = s.seats.indexOf(m.token)
+      if (seat < 0 && s.seats.length < 2) {
+        s.seats.push(m.token)
+        seat = s.seats.length - 1
+        await this.save()
+      }
+      ws.serializeAttachment({ ...me, seat })
+      this.send(ws, this.snapshot(ws))
+      for (const other of this.ctx.getWebSockets()) if (other !== ws) this.send(other, { type: 'seats', seats: s.seats.length })
+    } else if (m.type === 'move') {
+      // Ходит только тот, чья очередь, и только следующим ходом; иначе — пусть возьмёт свежую позицию
+      if (me.seat < 0 || m.ply !== s.moves.length || s.moves.length % 2 !== me.seat || s.seats.length < 2) return this.send(ws, this.snapshot(ws))
+      s.moves.push(m.move)
+      await this.save()
+      for (const other of this.ctx.getWebSockets()) this.send(other, { type: 'move', ply: m.ply, move: m.move })
+    } else if (m.type === 'reset') {
+      // Новая партия: стороны меняются местами
+      if (me.seat < 0) return
+      s.moves = []
+      s.seats.reverse()
+      await this.save()
+      for (const other of this.ctx.getWebSockets()) {
+        const a = other.deserializeAttachment() || {}
+        if (a.seat >= 0) other.serializeAttachment({ ...a, seat: 1 - a.seat })
+        this.send(other, this.snapshot(other))
+      }
+    }
+  }
+
+  async webSocketClose(ws, code, reason) {
+    try {
+      ws.close(code, reason)
+    } catch {
+      // уже закрыт
+    }
+  }
+
+  async webSocketError() {}
+}
+

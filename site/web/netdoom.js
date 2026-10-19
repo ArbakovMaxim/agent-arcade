@@ -1,4 +1,5 @@
-// Сетевой Doom в окне: deathmatch на картах FreeDM для тех, кто ждёт своего агента.
+// Сетевой Doom в окне: deathmatch на картах FreeDM и кооператив Freedoom для тех, кто ждёт своего агента.
+// Режимы: dm — FreeDM, раунды по 5 минут, до четырёх; coop — Freedoom Phase 1 или 2 вместе, без таймера.
 // Лобби — общая комната /net/room/doom-lobby: все видят, сколько людей ждёт. Ведущий лобби — игрок с наименьшим
 // номером: когда собралось двое и больше, он объявляет раунд — комнату Doom, хозяина и игроков (до четырёх).
 // Хозяин запускает doom-wasm с -server, остальные — с -connect 1 чуть позже; через 10 секунд страница хозяина
@@ -19,11 +20,29 @@
   const leaderOf = (ids) => [...ids].sort()[0]
 
   // Параметры doom-wasm: хозяин — сервер игры, остальные подключаются к нему (номер 1)
-  function doomArgs(wad, url, isHost) {
+  function doomArgs(wad, url, isHost, mode = 'dm') {
     const common = ['-iwad', wad, '-window', '-nogui', '-nomusic', '-servername', 'arcade', '-nodes', String(MAX_PLAYERS)]
+    const rules = mode === 'coop' ? ['-skill', '3'] : ['-deathmatch', '-timer', '5']
     return isHost
-      ? [...common, '-server', '-privateserver', '-deathmatch', '-timer', '5', '-dup', '1', '-wss', url]
+      ? [...common, '-server', '-privateserver', ...rules, '-dup', '1', '-wss', url]
       : [...common, '-connect', '1', '-dup', '1', '-wss', url]
+  }
+
+  // WAD из .zip (Freedoom весит почти 29 МБ — больше лимита Cloudflare на файл): разбираем архив сами,
+  // распаковка — встроенный в браузер DecompressionStream
+  async function wadFrom(url) {
+    const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer())
+    if (String.fromCharCode(...bytes.subarray(0, 4)) !== 'PK\x03\x04') return bytes
+    const view = new DataView(bytes.buffer)
+    const method = view.getUint16(8, true)
+    const size = view.getUint32(18, true)
+    const nameLength = view.getUint16(26, true)
+    const extraLength = view.getUint16(28, true)
+    const start = 30 + nameLength + extraLength
+    const data = bytes.subarray(start, start + size)
+    if (method === 0) return data
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+    return new Uint8Array(await new Response(stream).arrayBuffer())
   }
 
   const wsUrl = (path) => `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${path}`
@@ -34,8 +53,9 @@
     document.getElementById('overlay').classList.add('shown')
   }
 
-  function start(catalog, id) {
+  function start(catalog, id, mode = 'dm') {
     const game = catalog.games[id]
+    const coop = mode === 'coop'
     document.body.classList.remove('library-mode')
     document.title = `${game.title} · Arcade`
     document.getElementById('keys').textContent = T(game.keys)
@@ -51,8 +71,9 @@
     const screen = document.getElementById('screen')
     if (screen) screen.style.display = 'none'
 
-    overlay(T('Сетевой deathmatch'), T('Подключаюсь к лобби…'))
-    const ws = new WebSocket(wsUrl(`/net/room/${LOBBY}`))
+    overlay(T(coop ? 'Кооператив' : 'Сетевой deathmatch'), T('Подключаюсь к лобби…'))
+    // Лобби: у FreeDM общее, у кооператива — своё для каждой игры
+    const ws = new WebSocket(wsUrl(`/net/room/${coop ? `coop-${id}` : LOBBY}`))
     let me = null
     const peers = new Set()
     let round = null
@@ -62,8 +83,9 @@
     function lobbyText() {
       const count = everyone().length
       if (round) return
-      if (count < 2) overlay(T('Ждём второго игрока'), T('Как только кто-то зайдёт, начнётся раунд. А пока можно сыграть в Freedoom одному — кнопка «Библиотека».'))
-      else overlay(T('Сетевой deathmatch'), T(`В лобби ${count} — раунд вот-вот начнётся`))
+      if (count < 2 && coop) overlay(T('Ждём напарника'), T('Как только кто-то зайдёт, начнёте вместе. Позови друга — пусть откроет эту же игру и нажмёт «По сети».'))
+      else if (count < 2) overlay(T('Ждём второго игрока'), T('Как только кто-то зайдёт, начнётся раунд. А пока можно сыграть в Freedoom одному — кнопка «Библиотека».'))
+      else overlay(T(coop ? 'Кооператив' : 'Сетевой deathmatch'), T(`В лобби ${count} — раунд вот-вот начнётся`))
     }
 
     // Ведущий объявляет раунд всем в лобби
@@ -80,7 +102,7 @@
       round = msg
       if (!msg.players.includes(me)) {
         overlay(T('Идёт раунд'), T('В нём уже четыре игрока. Подожди здесь — следующий начнётся через несколько минут.'))
-        setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
+        if (!coop) setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
         return
       }
       const isHost = msg.host === me
@@ -92,7 +114,7 @@
       }, 1000)
       setTimeout(() => {
         clearInterval(tick)
-        launch(game, msg.room, isHost)
+        launch(game, msg.room, isHost, mode, id)
       }, COUNTDOWN_MS + (isHost ? 0 : CLIENT_DELAY_MS))
     }
 
@@ -120,7 +142,11 @@
   }
 
   // Запуск doom-wasm: WAD грузится в его файловую систему, дальше — main с параметрами сети
-  function launch(game, room, isHost) {
+  // Chocolate Doom узнаёт игру по имени файла: freedoom1.wad — первая часть, freedoom2.wad — Doom II, freedm.wad — FreeDM
+  const WADS = { 'freedoom-1': 'freedoom1.wad', 'freedoom-2': 'freedoom2.wad' }
+
+  function launch(game, room, isHost, mode = 'dm', id = '') {
+    const wad = WADS[id] || 'freedm.wad'
     overlay(T(isHost ? 'Ты хозяин раунда' : 'Подключаюсь к раунду'), T('Загружаю движок и карты…'))
     const stage = document.getElementById('stage') || document.body
     const canvas = document.createElement('canvas')
@@ -134,17 +160,27 @@
       noInitialRun: true,
       canvas,
       locateFile: (file) => `doom-wasm/${file}`,
-      preRun: [() => window.Module.FS.createPreloadedFile('', 'freedm.wad', game.rom.url, true, false)],
+      preRun: [
+        () => {
+          // WAD — в файловую систему движка; из .zip — после распаковки
+          window.Module.addRunDependency('wad')
+          wadFrom(game.rom.url).then((bytes) => {
+            window.Module.FS.writeFile(wad, bytes)
+            window.Module.removeRunDependency('wad')
+          })
+        },
+      ],
       onRuntimeInitialized: () => {
         document.getElementById('overlay').classList.remove('shown')
         const main = window.Module.callMain || window.callMain // в сборках Emscripten бывает и так, и так
-        main(doomArgs('freedm.wad', url, isHost))
+        main(doomArgs(wad, url, isHost, mode))
         canvas.focus()
         // Движок ставит вкладке своё название («Websockets Doom») — возвращаем наше
         for (const ms of [500, 3000, 15000]) setTimeout(() => { document.title = `${game.title} · Arcade` }, ms)
         // Хозяин начинает матч, когда все уже подключились: пробел на экране ожидания Chocolate Doom
         if (isHost) setTimeout(() => pressSpace(canvas), HOST_START_MS)
-        setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
+        // Deathmatch идёт раундами — после раунда снова лобби; кооператив — сколько захотите
+        if (mode !== 'coop') setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
       },
       print: (text) => console.log(text),
       printErr: (text) => console.error(text),
@@ -163,5 +199,5 @@
     }
   }
 
-  window.ArcadeNetDoom = { start, leaderOf, doomArgs }
+  window.ArcadeNetDoom = { start, leaderOf, doomArgs, wadFrom }
 })()

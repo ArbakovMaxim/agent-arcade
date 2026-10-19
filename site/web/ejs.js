@@ -100,6 +100,13 @@
       return
     }
     document.getElementById('overlay').classList.remove('shown')
+    // Freedoom: «По сети» — кооператив на сетевом движке (netdoom.js)
+    const netLink = document.getElementById('net')
+    if (netLink && game.console === 'doom') {
+      netLink.href = `?game=${encodeURIComponent(id)}&net=coop`
+      netLink.hidden = false
+      netLink.style.display = ''
+    }
     launch(system.core, game.rom.url, game.title, game.console === 'doom' ? 0 : netId(game))
   }
 

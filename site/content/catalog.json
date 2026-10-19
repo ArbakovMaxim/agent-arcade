@@ -39,6 +39,13 @@
       "about": "Doom на движке PrBoom",
       "emulator": "EmulatorJS (GPL-3.0) + PrBoom (GPL-2.0)",
       "empty": "Свободных игр для Doom пока нет. Открой свой файл .wad — кнопка «Открыть свой файл» сверху."
+    },
+    {
+      "id": "board",
+      "section": "games",
+      "title": "Настольные",
+      "about": "Шахматы, шашки и реверси по сети",
+      "emulator": "правила Arcade + chess.js (BSD-2-Clause)"
     }
   ],
   "games": [
@@ -992,6 +999,58 @@
           "games/freedoom-2/CREDITS.txt",
           "games/freedoom-2/CREDITS-MUSIC.txt"
         ]
+      }
+    },
+    {
+      "id": "chess",
+      "console": "board",
+      "kind": "board",
+      "board": "chess",
+      "title": "Шахматы",
+      "genre": "стратегия",
+      "about": "Шахматы по сети: найди соперника или позови друга по ссылке. Партия хранится на сервере — сделал ход и вернулся к агенту.",
+      "about_en": "Chess online: find an opponent or invite a friend by link. The game is kept on the server — make a move and go back to your agent.",
+      "keys": "клик по своей фигуре, потом по клетке",
+      "license": {
+        "name": "правила — chess.js, BSD-2-Clause",
+        "author": "Jeff Hlywa и авторы chess.js",
+        "source": "https://github.com/jhlywa/chess.js",
+        "commit": "v1.4.0",
+        "files": [
+          "games/board/chess.js-LICENSE.txt"
+        ]
+      }
+    },
+    {
+      "id": "checkers",
+      "console": "board",
+      "kind": "board",
+      "board": "checkers",
+      "title": "Русские шашки",
+      "genre": "стратегия",
+      "about": "Русские шашки по сети: бить обязательно и назад, дамка ходит далеко. Партия хранится на сервере — можно вернуться к ней позже.",
+      "about_en": "Russian draughts online: capturing is mandatory, backwards too, and kings fly. The game is kept on the server — come back to it later.",
+      "keys": "клик по своей фигуре, потом по клетке",
+      "license": {
+        "name": "правила — код Arcade",
+        "author": "Arcade",
+        "source": "https://github.com/ArbakovMaxim/agent-arcade"
+      }
+    },
+    {
+      "id": "reversi",
+      "console": "board",
+      "kind": "board",
+      "board": "reversi",
+      "title": "Реверси",
+      "genre": "стратегия",
+      "about": "Реверси по сети: зажимай фишки соперника и переворачивай их. Партия хранится на сервере — можно вернуться к ней позже.",
+      "about_en": "Reversi online: trap your opponent’s discs and flip them. The game is kept on the server — come back to it later.",
+      "keys": "клик по своей фигуре, потом по клетке",
+      "license": {
+        "name": "правила — код Arcade",
+        "author": "Arcade",
+        "source": "https://github.com/ArbakovMaxim/agent-arcade"
       }
     }
   ]

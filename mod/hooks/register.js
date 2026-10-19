@@ -194,8 +194,10 @@ function waitingFrom(data) {
   for (const g of catalog.games) {
     let count = 0
     if (g.net === 'doom') count = Number(data?.doom) || 0
+    else if (g.console === 'doom') count = Number(data?.coop?.[g.id]) || 0 // кооператив Freedoom
+    else if (g.kind === 'board') count = Number(data?.board?.[g.id]) || 0 // настольные: ждут в лобби поиска соперника
     else if (['nes', 'sega', 'sms', 'psx'].includes(g.console) && g.rom?.sha256) count = Number(data?.games?.[parseInt(g.rom.sha256.slice(0, 7), 16)]) || 0
-    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, count })
+    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, coop: g.console === 'doom' && g.net !== 'doom', count })
   }
   return list.sort((a, b) => b.count - a.count)
 }
@@ -503,6 +505,8 @@ function windowUrl(id) {
   if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(id.slice(4))
   // Денди по сети — та же игра в окне на EmulatorJS (FCEUmm) с его сетевой игрой
   else if (typeof id === 'string' && id.startsWith('net:')) url = `${pageUrl(id.slice(4))}&net=1`
+  // Кооператив Freedoom — лобби кооператива этой игры
+  else if (typeof id === 'string' && id.startsWith('coop:')) url = `${pageUrl(id.slice(5))}&net=coop`
   else {
     const m = mine.find((x) => x.id === id)
     url = m ? minePageUrl(m) : pageUrl(id)
@@ -1373,7 +1377,9 @@ export function register(on) {
                           lastGame = target.id
                           libraryNotice = 'Открываю окно…'
                           $.ui.invalidate('ui.render')
-                          const command = windowCommand(target.console === 'nes' ? `net:${target.id}` : target.id)
+                          const command = windowCommand(
+                            target.console === 'nes' ? `net:${target.id}` : target.coop ? `coop:${target.id}` : target.id,
+                          )
                           try {
                             const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                             windowNotice($, launchNotice(result, target.id))

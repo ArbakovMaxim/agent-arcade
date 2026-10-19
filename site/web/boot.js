@@ -76,7 +76,18 @@
     if (entry) await play(entry)
     else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || T('свою игру'))
     else overlay(T('Игра не найдена'), T('В этом браузере её нет. Вернись в библиотеку и открой файл заново.'))
-  } else if (id && catalog.games && catalog.games[id] && catalog.games[id].net === 'doom') {
+  } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {
+    // Настольные игры по сети — правила и страница партии
+    for (const src of ['board-rules.js', 'board.js']) {
+      await new Promise((resolve) => {
+        const script = document.createElement('script')
+        script.src = src
+        script.onload = resolve
+        document.body.appendChild(script)
+      })
+    }
+    window.ArcadeBoard.start(catalog, id)
+  } else if (id && catalog.games && catalog.games[id] && (catalog.games[id].net === 'doom' || (catalog.games[id].console === 'doom' && params.get('net') === 'coop'))) {
     // Сетевой Doom — своя страница с лобби (netdoom.js) и движок doom-wasm
     await new Promise((resolve) => {
       const script = document.createElement('script')
@@ -84,7 +95,7 @@
       script.onload = resolve
       document.body.appendChild(script)
     })
-    window.ArcadeNetDoom.start(catalog, id)
+    window.ArcadeNetDoom.start(catalog, id, catalog.games[id].net === 'doom' ? 'dm' : 'coop')
   } else if (id && catalog.games && catalog.games[id] && (['sega', 'sms', 'psx', 'doom'].includes(catalog.games[id].console) || (catalog.games[id].console === 'nes' && params.get('net') === '1'))) {
     // Денди с ?net=1 — сетевая игра на EmulatorJS (FCEUmm); без него — обычный JSNES
     await loadEJS()

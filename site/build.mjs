@@ -78,11 +78,27 @@ export function build({ root, out, now = new Date() }) {
     if (!ID.test(g.id ?? '')) fail(`у игры неправильный id ${JSON.stringify(g.id)}`)
     if (games[g.id]) fail(`${where} описана дважды`)
     if (!consoleIds.has(g.console)) fail(`${where}: нет приставки ${g.console}`)
-    for (const field of ['title', 'genre', 'about', 'about_en', 'keys', 'rom']) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    for (const field of ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : ['rom'])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
     if (/[А-Яа-яЁё]/.test(g.about_en)) fail(`${where}: в about_en русские буквы — нужно английское описание`)
     const license = g.license ?? {}
     for (const field of ['name', 'author', 'source']) if (!license[field]) fail(`${where}: в лицензии нет поля ${field}`)
 
+    // Настольная игра — без ROM: доска, правила и сеть — страница board.js
+    if (g.kind === 'board') {
+      if (!['chess', 'checkers', 'reversi'].includes(g.board)) fail(`${where}: неизвестная настольная игра ${g.board}`)
+      const files = (license.files ?? []).map((file) => {
+        const from = path.join(content, file)
+        if (!fs.existsSync(from)) fail(`${where}: нет файла лицензии ${file}`)
+        copy(from, path.join(out, 'licenses', g.id, path.basename(file)))
+        return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
+      })
+      games[g.id] = {
+        console: g.console, kind: 'board', board: g.board, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
+        credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
+        license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files },
+      }
+      continue
+    }
     const romPath = path.join(content, g.rom)
     if (!fs.existsSync(romPath)) fail(`${where}: нет файла ${g.rom}`)
     const bytes = fs.readFileSync(romPath)
@@ -151,6 +167,9 @@ export function build({ root, out, now = new Date() }) {
   const doomWasm = path.join(root, 'vendor', 'doom-wasm')
   for (const name of ['websockets-doom.js', 'websockets-doom.wasm']) copy(path.join(doomWasm, name), path.join(out, 'doom-wasm', name))
   for (const name of fs.readdirSync(doomWasm).filter((n) => !n.startsWith('websockets-doom'))) copy(path.join(doomWasm, name), path.join(out, 'licenses', 'doom-wasm', name))
+  // Шахматы — правила chess.js (BSD-2-Clause), модуль для страницы board.js
+  copy(path.join(root, 'vendor', 'chess.js', 'chess.js'), path.join(out, 'vendor', 'chess', 'chess.js'))
+  copy(path.join(root, 'vendor', 'chess.js', 'LICENSE.txt'), path.join(out, 'licenses', 'chess.js', 'LICENSE.txt'))
   // Сетевая игра EmulatorJS — через наш сервер: вместо socket.io эмулятор получает нашу прослойку (web/netplay-io.js)
   copy(path.join(root, 'web', 'netplay-io.js'), path.join(out, 'emulatorjs', 'src', 'socket.io.min.js'))
   // Маппер 28 (Action 53) — общий с модом: из модуля мода делаем обычный скрипт для страницы

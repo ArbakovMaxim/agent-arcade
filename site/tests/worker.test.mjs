@@ -1,6 +1,6 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
-import worker, { Room, DoomRoom, EjsGame, Presence, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
+import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -170,9 +170,10 @@ try {
   await set('g123', 1)
   await set('g9', 0)
   assert.equal((await set('лишнее', 1)).status, 400)
-  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 2, games: { 123: 1 } })
+  await set('coop-freedoom-1', 2)
+  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 2, games: { 123: 1 }, coop: { 'freedoom-1': 2 }, board: {} })
   await set('doom', 0)
-  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 0, games: { 123: 1 } })
+  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 0, games: { 123: 1 }, coop: { 'freedoom-1': 2 }, board: {} })
 }
 globalThis.WebSocketPair = class { constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket() } }
 globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket } }
@@ -188,6 +189,12 @@ try {
   sockets[0].closed = true
   await lobby.webSocketClose(sockets[0], 1000, '')
   assert.deepEqual(posts.at(-1), { key: 'doom', value: 1 })
+  // Лобби кооператива — по имени комнаты
+  posts.length = 0
+  const coopSockets = []
+  const coopLobby = new Room({ acceptWebSocket: (ws) => coopSockets.push(ws), getWebSockets: () => coopSockets, waitUntil: () => {} }, presenceEnv)
+  await coopLobby.fetch({ headers: new Headers({ 'X-Room': 'coop-freedoom-1' }) })
+  assert.deepEqual(posts.at(-1), { key: 'coop-freedoom-1', value: 1 })
   // Обычная комната счётчику не пишет
   posts.length = 0
   const other = new Room({ acceptWebSocket: () => {}, getWebSockets: () => [], waitUntil: () => {} }, presenceEnv)
@@ -238,5 +245,50 @@ try {
   assert.equal((await ws('https://evil.example')).status, 403, 'с чужого сайта — нельзя')
   assert.equal(await (await ws('https://arcade.test')).text(), 'комната', 'со своего — можно')
   assert.equal(await (await ws()).text(), 'комната', 'без Origin (не браузер) — можно')
+}
+// --- Партия настольной игры: места, очерёдность, сохранение, новая партия, удаление ------------------------------
+globalThis.WebSocketPair = class { constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket() } }
+globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket } }
+try {
+  const store = new Map()
+  let alarm = null
+  const storage = { get: async (k) => structuredClone(store.get(k)), put: async (k, v) => store.set(k, structuredClone(v)), deleteAll: async () => store.clear(), setAlarm: async (t) => { alarm = t } }
+  const sockets = []
+  const ctx = { storage, acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed) }
+  let room = new BoardRoom(ctx, {})
+  const say = (ws, m) => room.webSocketMessage(ws, JSON.stringify(m))
+  const last = (ws) => JSON.parse(ws.sent.at(-1))
+  for (let i = 0; i < 3; i++) await room.fetch({ headers: new Headers() })
+  const [a, b, watcher] = sockets
+  await say(a, { type: 'hello', token: 'tokenaaaa1', game: 'reversi' })
+  assert.deepEqual(last(a), { type: 'state', game: 'reversi', seat: 0, seats: 1, moves: [] })
+  await say(b, { type: 'hello', token: 'tokenbbbb2', game: 'chess' })
+  assert.equal(last(b).seat, 1)
+  assert.equal(last(b).game, 'reversi', 'игра комнаты — та, что задал первый')
+  assert.deepEqual(last(a), { type: 'seats', seats: 2 })
+  await say(watcher, { type: 'hello', token: 'tokencccc3' })
+  assert.equal(last(watcher).seat, -1, 'третий — зритель')
+  // Очерёдность: ходит сторона 0, потом 1; чужой ход — возврат позиции
+  await say(b, { type: 'move', ply: 0, move: [2, 3] })
+  assert.equal(last(b).type, 'state')
+  await say(a, { type: 'move', ply: 0, move: [2, 3] })
+  for (const ws of [a, b, watcher]) assert.deepEqual(last(ws), { type: 'move', ply: 0, move: [2, 3] })
+  await say(watcher, { type: 'move', ply: 1, move: [2, 2] })
+  assert.equal(last(watcher).type, 'state', 'зритель не ходит')
+  assert.ok(alarm > Date.now(), 'партия удалится сама, если её долго не трогать')
+  // Комната перезапустилась — партия на месте, а игрок по своему жетону — на своём месте
+  room = new BoardRoom(ctx, {})
+  await room.fetch({ headers: new Headers() })
+  const back = sockets.at(-1)
+  await room.webSocketMessage(back, JSON.stringify({ type: 'hello', token: 'tokenbbbb2' }))
+  assert.deepEqual(last(back), { type: 'state', game: 'reversi', seat: 1, seats: 2, moves: [[2, 3]] })
+  // Новая партия — стороны меняются местами
+  await room.webSocketMessage(back, JSON.stringify({ type: 'reset' }))
+  assert.equal(last(back).seat, 0)
+  assert.deepEqual(last(back).moves, [])
+  await room.alarm()
+  assert.equal(store.size, 0)
+} finally {
+  globalThis.Response = RealResponse
 }
 console.log('комнаты: все проверки прошли')
