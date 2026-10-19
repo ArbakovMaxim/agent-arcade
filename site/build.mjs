@@ -97,6 +97,10 @@ export function build({ root, out, now = new Date() }) {
     // У части картриджей метки нет — тогда эмулятор узнаёт приставку по расширению, и оно должно совпадать
     const extOk = path.extname(romPath).slice(1).toLowerCase() === g.console
     if (g.console === 'sms' && !tmr && !extOk) fail(`${where}: это не ROM Master System (нет метки TMR SEGA и расширение не .sms)`)
+    // Doom — WAD в .zip: эмулятор распакует его сам
+    if (g.console === 'doom' && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.wad')))) {
+      fail(`${where}: игра для Doom должна быть .zip, где лежит .wad`)
+    }
     // PlayStation — диск в .zip, внутри .cue и .bin: эмулятор распакует его сам
     if (g.console === 'psx' && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.cue')))) {
       fail(`${where}: диск PlayStation должен быть .zip, где лежат .cue и .bin`)

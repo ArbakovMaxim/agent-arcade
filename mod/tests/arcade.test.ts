@@ -1448,3 +1448,10 @@ test('сообщение «… открыт в Google Chrome» само уход
   expect(await ui.find({ type: 'Text', text: /открыт в / })).toBeUndefined() // ушло само
   await ui.unmount()
 })
+
+test('Doom: мод узнаёт WAD и подсказывает добавить его в окне', async () => {
+  const wad = new TextEncoder().encode('IWAD' + '\0'.repeat(64))
+  expect(identifyRom(wad).error).toBe('это файл Doom (WAD). Их добавляют в окне Arcade: вкладка Doom → «Открыть свой файл»')
+  expect(identifyRom(new TextEncoder().encode('PWAD' + '\0'.repeat(64))).error).toMatch(/^это файл Doom/)
+  expect(tr('Не получилось добавить: это файл Doom (WAD). Их добавляют в окне Arcade: вкладка Doom → «Открыть свой файл»', 'en')).toMatch(/^Could not add it: this is a Doom file \(WAD\)/)
+})

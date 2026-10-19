@@ -14,3 +14,8 @@ EmulatorJS 4.2.3 — © Ethan O'Brien и участники, GNU General Public 
 (пакет npm @emulatorjs/core-pcsx_rearmed@4.2.3), без изменений. Лицензия — GNU General Public License v2.0
 (PCSX-ReARMed-COPYING.txt). Исходники: https://github.com/EmulatorJS/pcsx_rearmed
 Ядро содержит свою открытую замену BIOS (HLE): BIOS Sony Arcade не распространяет и не требует.
+
+Ядро PrBoom для Doom — © авторы PrBoom и libretro-prboom, сборка EmulatorJS 4.2.3
+(пакет npm @emulatorjs/core-prboom@4.2.3), без изменений. Лицензия — GNU General Public License v2.0
+(PrBoom-COPYING.txt). Исходники: https://github.com/EmulatorJS/libretro-prboom
+Служебный файл prboom.wad встроен в ядро. Данные игр id Software (doom.wad, doom2.wad) Arcade не распространяет.

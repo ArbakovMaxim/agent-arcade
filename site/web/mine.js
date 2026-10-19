@@ -10,6 +10,7 @@
     sega: '.md,.bin,.gen,.smd',
     sms: '.sms',
     psx: '.chd,.pbp,.iso,.cue,.bin,.img,.zip,.7z,.m3u',
+    doom: '.wad,.zip',
   }
   const PSX_EXT = ['chd', 'pbp', 'iso', 'cue', 'bin', 'img', 'zip', '7z', 'm3u']
   const MAX_SMALL = 16 * 1024 * 1024 // Денди и Sega читаем целиком: проверить заголовок и посчитать хеш
@@ -109,6 +110,16 @@
       sha = await sha256(bytes)
       if (expectSha && sha !== expectSha) throw new Error(T('Это другой файл: он не совпадает с тем, что добавлен в моде.'))
       id = `mine-${sha.slice(0, 12)}`
+    } else if (consoleId === 'doom') {
+      // WAD бывает на десятки мегабайт: проверяем только заголовок, id — по имени, размеру и дате
+      const ext = ((String(file.name).match(/\.([^.]+)$/) || [])[1] || '').toLowerCase()
+      if (ext !== 'wad' && ext !== 'zip') throw new Error(T('Для Doom нужен файл .wad — или .zip, где он лежит.'))
+      if (ext === 'wad') {
+        const head = String.fromCharCode(...new Uint8Array(await file.slice(0, 4).arrayBuffer()))
+        if (head !== 'IWAD' && head !== 'PWAD') throw new Error(T('Это не файл Doom: в начале нет метки IWAD или PWAD.'))
+      }
+      const key = new TextEncoder().encode(`${file.name}:${file.size}:${file.lastModified}`)
+      id = `doom-${(await sha256(key)).slice(0, 12)}`
     } else if (consoleId === 'psx') {
       const ext = (String(file.name).match(/\.([^.]+)$/) || [])[1]
       if (!ext || !PSX_EXT.includes(ext.toLowerCase())) {

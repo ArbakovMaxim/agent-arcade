@@ -25,6 +25,9 @@
     'скоро': 'soon',
     'Здесь пока нет игр.': 'No games here yet.',
     'Мои игры — только в этом браузере': 'My games — only in this browser',
+    'Свой файл .wad — например, купленный doom.wad — откроется только на этом устройстве и не отправится на сервер.': 'Your own .wad file — for example, a doom.wad you bought — opens only on this device and is never sent to the server.',
+    'Для Doom нужен файл .wad — или .zip, где он лежит.': 'Doom needs a .wad file — or a .zip that contains one.',
+    'Это не файл Doom: в начале нет метки IWAD или PWAD.': 'This is not a Doom file: it does not start with IWAD or PWAD.',
     'свой файл': 'own file',
     'Удалить из этого браузера': 'Remove from this browser',
     '↑ ↓ — выбрать игру · ← → — приставка · Enter — играть': '↑ ↓ — pick a game · ← → — console · Enter — play',
@@ -85,6 +88,7 @@
 
   const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')
   const KEY_WORDS = [
+    ['открыть или нажать', 'open or press'], ['шаг вбок', 'strafe'], ['оружие', 'weapon'], ['карта', 'map'], ['меню', 'menu'], ['бег', 'run'],
     ['движение', 'move'], ['стрелки', 'arrows'], ['или', 'or'], ['прицел', 'aim'], ['огонь', 'fire'], ['пауза', 'pause'], ['и Start', 'and Start'],
   ]
   const keys = (t) => KEY_WORDS.reduce((s, [ru, en]) => s.split(ru).join(en), t)

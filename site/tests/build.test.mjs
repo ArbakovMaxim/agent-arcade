@@ -25,7 +25,7 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
 assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
@@ -49,6 +49,8 @@ for (const [id, game] of Object.entries(catalog.games)) {
   } else if (game.console === 'sms') {
     const tmr = rom.subarray(0x7ff0, 0x7ff8).toString('latin1') === 'TMR SEGA'
     assert.ok(tmr || path.extname(romPath) === `.${game.console}`, `${id}: ROM Master System`)
+  } else if (game.console === 'doom') {
+    assert.equal(rom.subarray(0, 4).toString('latin1'), 'PK\x03\x04', `${id}: WAD для Doom в .zip`)
   } else if (game.console === 'sega') {
     assert.equal(rom.subarray(0x100, 0x104).toString('latin1'), 'SEGA', `${id}: это ROM Mega Drive`)
   } else {
@@ -139,7 +141,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sms'), ['balloon-master', 'skyhaul', 'food-fighter', 'escape-from-monster-dimension'])
   assert.equal(built.consoles.find((c) => c.id === 'gg'), undefined, 'Game Gear убран')
   const redirects = fs.readFileSync(path.join(dir, '_redirects'), 'utf8')
-  for (const c of ['nes', 'sega', 'sms', 'psx']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
+  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
   assert.match(fs.readFileSync(path.join(dir, '.assetsignore'), 'utf8'), /_redirects/)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System \(нет метки TMR SEGA и расширение не/)
@@ -162,4 +164,14 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
 }
 assert.throws(broken((d) => { delete d.games.find((g) => g.id === 'thwaite').about_en }), /игра thwaite: нет поля about_en/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').about_en = 'Ракеты' }), /в about_en русские буквы/)
+// Doom: ядро PrBoom, две игры Freedoom в .zip, игра не в .zip — ошибка сборки
+{
+  const dir = temp('doom')
+  const built = build({ root: ROOT, out: dir })
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'doom'), ['freedoom-1', 'freedoom-2'])
+  for (const f of ['emulatorjs/cores/prboom-wasm.data', 'emulatorjs/cores/reports/prboom.json']) assert.ok(fs.existsSync(path.join(dir, f)), f)
+  assert.ok(fs.existsSync(path.join(dir, 'licenses', 'emulatorjs', 'PrBoom-COPYING.txt')))
+  assert.match(fs.readFileSync(path.join(dir, '_redirects'), 'utf8'), /\/doom \/\?tab=doom 302/)
+}
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'doom' }), /игра thwaite: игра для Doom должна быть \.zip/)
 console.log('Sega: все проверки прошли')

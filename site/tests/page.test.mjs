@@ -331,7 +331,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const button = (cls) => lib.querySelectorAll(cls)
   assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Doom'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -340,6 +340,25 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(game.byId.keys.textContent, 'move — arrows · 1 (and Start) — X · 2 — Z · pause — Enter')
   const ru = await makePage(new Map(), { search: '?tab=nes' })
   assert.equal(ru.byId.library.querySelectorAll('.open-rom')[1].textContent, 'EN', 'без выбора — русский, кнопка предлагает английский')
+}
+
+// --- Doom: ядро PrBoom, Freedoom из каталога, свой WAD — с расширением в имени ------------------------------------
+{
+  const doom = await makePage(new Map(), { search: '?game=freedoom-1' })
+  assert.equal(doom.ctx.EJS_core, 'prboom')
+  assert.equal(doom.ctx.EJS_gameUrl, catalog.games['freedoom-1'].rom.url)
+  assert.match(doom.byId.keys.textContent, /огонь — A/)
+  const lib = await makePage(new Map(), { search: '?tab=doom' })
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedoom-1', 'freedoom-2'])
+  lib.byId.library.querySelectorAll('.open-rom')[0].click()
+  assert.equal(lib.byId['local-rom'].accept, '.wad,.zip')
+  lib.ctx.__wad = new TextEncoder().encode('IWAD' + '\0'.repeat(64))
+  await vm.runInContext(`(async () => ArcadePlayMine(await ArcadeMine.add(new File([__wad], 'My_Doom.wad'), 'doom')))()`, lib.ctx)
+  await until(() => lib.ctx.EJS_core)
+  assert.equal(lib.ctx.EJS_core, 'prboom')
+  assert.equal(lib.ctx.EJS_gameName, 'My Doom.wad')
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(64)], 'x.wad'), 'doom')`, lib.ctx), /нет метки IWAD или PWAD/)
+  await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(64)], 'x.txt'), 'doom')`, lib.ctx), /нужен файл \.wad/)
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------

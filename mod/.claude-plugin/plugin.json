@@ -1,6 +1,6 @@
 {
   "name": "arcade",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "Игры, пока агент Claude Code работает: в окне браузера или прямо в панели. Пробная версия.",
   "author": { "name": "Max" }
 }

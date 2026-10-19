@@ -9,6 +9,8 @@
     sega: { core: 'segaMD', keys: T('движение — стрелки · A — S · B — X · C — Z · Start — Enter') },
     // Master System — явно Genesis Plus GX: иначе EmulatorJS взял бы ядро SMS Plus, которого у нас нет
     sms: { core: 'genesis_plus_gx', keys: T('движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter') },
+    // Doom — ядро PrBoom: служебный prboom.wad встроен, данные id Software не нужны
+    doom: { core: 'prboom', keys: T('движение — стрелки · огонь — A · открыть или нажать — Z · бег — S · шаг вбок — Q/E · оружие — Tab/R · карта — V · меню — Enter') },
     psx: { core: 'psx', keys: T('движение — стрелки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V') },
   }
 

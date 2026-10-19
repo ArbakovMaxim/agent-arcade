@@ -19,6 +19,7 @@ export function cleanPath(args) {
   return path
 }
 
+const DOOM_WAD = 'это файл Doom (WAD). Их добавляют в окне Arcade: вкладка Doom → «Открыть свой файл»'
 const GAME_GEAR = 'это игра для Game Gear — Game Gear в Arcade не поддерживается'
 
 export const CONSOLE_NAMES = { nes: 'Денди', sega: 'Sega Mega Drive', sms: 'Master System' }
@@ -35,6 +36,9 @@ export function identifyRom(bytes, path = '') {
     if (!NES_MAPPERS.has(mapper)) return { error: `картридж с маппером ${mapper} наш эмулятор Денди пока не поддерживает` }
     return { console: 'nes', mapper }
   }
+  // Doom: WAD бывает на десятки мегабайт — добавляется в окне Arcade
+  const head4 = String.fromCharCode(...bytes.subarray(0, 4))
+  if (head4 === 'IWAD' || head4 === 'PWAD') return { error: DOOM_WAD }
   const at = (offset) => String.fromCharCode(...bytes.subarray(offset, offset + 4))
   if (bytes.length >= 0x200 && (at(0x100) === 'SEGA' || at(0x101) === 'SEGA')) return { console: 'sega' }
   for (const o of [0x7ff0, 0x3ff0, 0x1ff0]) {

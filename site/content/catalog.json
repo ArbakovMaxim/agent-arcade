@@ -31,6 +31,14 @@
       "about": "PlayStation 1",
       "emulator": "EmulatorJS (GPL-3.0) + PCSX ReARMed (GPL-2.0)",
       "empty": "Свободных игр для PlayStation пока нет. Открой свой диск — кнопка «Открыть свой файл» сверху. BIOS Sony не нужен."
+    },
+    {
+      "id": "doom",
+      "section": "games",
+      "title": "Doom",
+      "about": "Doom на движке PrBoom",
+      "emulator": "EmulatorJS (GPL-3.0) + PrBoom (GPL-2.0)",
+      "empty": "Свободных игр для Doom пока нет. Открой свой файл .wad — кнопка «Открыть свой файл» сверху."
     }
   ],
   "games": [
@@ -942,6 +950,48 @@
           "games/cut-for-a-country/NOTICE.txt",
           "games/cut-for-a-country/PSn00bSDK-LICENSE.txt",
           "games/cut-for-a-country/cut-for-a-country-1177fd2-src.tar.gz"
+        ]
+      }
+    },
+    {
+      "id": "freedoom-1",
+      "console": "doom",
+      "title": "Freedoom: Phase 1",
+      "genre": "шутер",
+      "about": "Свободная замена первого Doom: четыре эпизода по девять уровней, и всё своё — карты, монстры, оружие, звуки и музыка.",
+      "about_en": "A free replacement for the first Doom: four episodes of nine levels each, with everything its own — maps, monsters, weapons, sounds and music.",
+      "keys": "движение — стрелки · огонь — A · открыть или нажать — Z · бег — S · шаг вбок — Q/E · оружие — Tab/R · карта — V · меню — Enter",
+      "rom": "games/freedoom-1/freedoom1.zip",
+      "license": {
+        "name": "BSD-3-Clause",
+        "author": "участники проекта Freedoom",
+        "source": "https://github.com/freedoom/freedoom",
+        "commit": "v0.13.0",
+        "files": [
+          "games/freedoom-1/LICENSE.txt",
+          "games/freedoom-1/CREDITS.txt",
+          "games/freedoom-1/CREDITS-MUSIC.txt"
+        ]
+      }
+    },
+    {
+      "id": "freedoom-2",
+      "console": "doom",
+      "title": "Freedoom: Phase 2",
+      "genre": "шутер",
+      "about": "Свободная замена Doom II: 32 уровня подряд, двустволка и новые монстры — всё нарисовано и записано заново.",
+      "about_en": "A free replacement for Doom II: 32 levels in a row, the double-barrelled shotgun and new monsters — all drawn and recorded from scratch.",
+      "keys": "движение — стрелки · огонь — A · открыть или нажать — Z · бег — S · шаг вбок — Q/E · оружие — Tab/R · карта — V · меню — Enter",
+      "rom": "games/freedoom-2/freedoom2.zip",
+      "license": {
+        "name": "BSD-3-Clause",
+        "author": "участники проекта Freedoom",
+        "source": "https://github.com/freedoom/freedoom",
+        "commit": "v0.13.0",
+        "files": [
+          "games/freedoom-2/LICENSE.txt",
+          "games/freedoom-2/CREDITS.txt",
+          "games/freedoom-2/CREDITS-MUSIC.txt"
         ]
       }
     }

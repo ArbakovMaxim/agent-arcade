@@ -76,7 +76,7 @@
     if (entry) await play(entry)
     else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || T('свою игру'))
     else overlay(T('Игра не найдена'), T('В этом браузере её нет. Вернись в библиотеку и открой файл заново.'))
-  } else if (id && catalog.games && catalog.games[id] && ['sega', 'sms', 'psx'].includes(catalog.games[id].console)) {
+  } else if (id && catalog.games && catalog.games[id] && ['sega', 'sms', 'psx', 'doom'].includes(catalog.games[id].console)) {
     await loadEJS()
     window.ArcadeEJS.start(catalog, id)
   } else if (id) window.ArcadeGame.start(catalog, id)
