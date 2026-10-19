@@ -36,7 +36,7 @@ for (const [id, game] of Object.entries(catalog.games)) {
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
-  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin|zip|sms|gg)$/, id)
+  assert.match(game.rom.url, /^files\/[0-9a-f]{64}\.(nes|bin|zip|sms|gg|wad)$/, id)
   assert.equal(game.rom.sha256, sha256(rom), `${id}: хеш`)
   assert.equal(game.rom.url, `files/${game.rom.sha256}${ext}`)
   assert.equal(game.rom.size, rom.length)
@@ -50,7 +50,7 @@ for (const [id, game] of Object.entries(catalog.games)) {
     const tmr = rom.subarray(0x7ff0, 0x7ff8).toString('latin1') === 'TMR SEGA'
     assert.ok(tmr || path.extname(romPath) === `.${game.console}`, `${id}: ROM Master System`)
   } else if (game.console === 'doom') {
-    assert.equal(rom.subarray(0, 4).toString('latin1'), 'PK\x03\x04', `${id}: WAD для Doom в .zip`)
+    assert.equal(rom.subarray(0, 4).toString('latin1'), game.net ? 'IWAD' : 'PK\x03\x04', `${id}: WAD для Doom — сам или в .zip`)
   } else if (game.console === 'sega') {
     assert.equal(rom.subarray(0x100, 0x104).toString('latin1'), 'SEGA', `${id}: это ROM Mega Drive`)
   } else {
@@ -168,7 +168,10 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').about_en =
 {
   const dir = temp('doom')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'doom'), ['freedoom-1', 'freedoom-2'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'doom'), ['freedm', 'freedoom-1', 'freedoom-2'])
+  assert.equal(built.games.freedm.net, 'doom')
+  assert.match(built.games.freedm.rom.url, /\.wad$/)
+  for (const f of ['doom-wasm/websockets-doom.js', 'doom-wasm/websockets-doom.wasm', 'licenses/doom-wasm/COPYING.md', 'licenses/doom-wasm/BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
   for (const f of ['emulatorjs/cores/prboom-wasm.data', 'emulatorjs/cores/reports/prboom.json']) assert.ok(fs.existsSync(path.join(dir, f)), f)
   assert.ok(fs.existsSync(path.join(dir, 'licenses', 'emulatorjs', 'PrBoom-COPYING.txt')))
   assert.match(fs.readFileSync(path.join(dir, '_redirects'), 'utf8'), /\/doom \/\?tab=doom 302/)

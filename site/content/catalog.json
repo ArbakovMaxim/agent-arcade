@@ -932,6 +932,27 @@
       }
     },
     {
+      "id": "freedm",
+      "console": "doom",
+      "net": "doom",
+      "title": "FreeDM — сетевой deathmatch",
+      "genre": "шутер",
+      "about": "Deathmatch по сети с теми, кто тоже ждёт своего агента: раунды по 5 минут, до четырёх игроков, карты FreeDM.",
+      "about_en": "Network deathmatch with others who are also waiting for their agent: 5-minute rounds, up to four players, FreeDM maps.",
+      "keys": "движение — стрелки · огонь — Ctrl · открыть — пробел · бег — Shift · шаг вбок — Alt и стрелки · оружие — 1–7 · счёт — F",
+      "rom": "games/freedm/freedm.wad",
+      "license": {
+        "name": "BSD-3-Clause",
+        "author": "участники проекта Freedoom",
+        "source": "https://github.com/freedoom/freedoom",
+        "commit": "v0.13.0",
+        "files": [
+          "games/freedm/LICENSE.txt",
+          "games/freedm/CREDITS.txt"
+        ]
+      }
+    },
+    {
       "id": "freedoom-1",
       "console": "doom",
       "title": "Freedoom: Phase 1",

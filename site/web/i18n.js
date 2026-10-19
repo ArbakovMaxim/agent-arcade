@@ -25,6 +25,18 @@
     'скоро': 'soon',
     'Здесь пока нет игр.': 'No games here yet.',
     'Мои игры — только в этом браузере': 'My games — only in this browser',
+    'Сетевой deathmatch': 'Network deathmatch',
+    'Подключаюсь к лобби…': 'Connecting to the lobby…',
+    'Ждём второго игрока': 'Waiting for a second player',
+    'Как только кто-то зайдёт, начнётся раунд. А пока можно сыграть в Freedoom одному — кнопка «Библиотека».': 'A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.',
+    'Идёт раунд': 'A round is on',
+    'В нём уже четыре игрока. Подожди здесь — следующий начнётся через несколько минут.': 'It already has four players. Wait here — the next one starts in a few minutes.',
+    'Раунд начинается': 'The round is starting',
+    'Нет связи с лобби': 'No connection to the lobby',
+    'Открой окно ещё раз через минуту.': 'Open the window again in a minute.',
+    'Ты хозяин раунда': 'You host this round',
+    'Подключаюсь к раунду': 'Joining the round',
+    'Загружаю движок и карты…': 'Loading the engine and maps…',
     'Свой файл .wad — например, купленный doom.wad — откроется только на этом устройстве и не отправится на сервер.': 'Your own .wad file — for example, a doom.wad you bought — opens only on this device and is never sent to the server.',
     'Для Doom нужен файл .wad — или .zip, где он лежит.': 'Doom needs a .wad file — or a .zip that contains one.',
     'Это не файл Doom: в начале нет метки IWAD или PWAD.': 'This is not a Doom file: it does not start with IWAD or PWAD.',
@@ -88,7 +100,7 @@
 
   const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')
   const KEY_WORDS = [
-    ['открыть или нажать', 'open or press'], ['шаг вбок', 'strafe'], ['оружие', 'weapon'], ['карта', 'map'], ['меню', 'menu'], ['бег', 'run'],
+    ['открыть или нажать', 'open or press'], ['открыть', 'open'], ['счёт', 'score'], ['и стрелки', 'and arrows'], ['шаг вбок', 'strafe'], ['оружие', 'weapon'], ['карта', 'map'], ['меню', 'menu'], ['бег', 'run'],
     ['движение', 'move'], ['стрелки', 'arrows'], ['или', 'or'], ['прицел', 'aim'], ['огонь', 'fire'], ['пауза', 'pause'], ['и Start', 'and Start'],
   ]
   const keys = (t) => KEY_WORDS.reduce((s, [ru, en]) => s.split(ru).join(en), t)
@@ -101,6 +113,8 @@
     [/^([\d.]+) МБ$/, (m) => `${m[1]} MB`],
     [/^движение|^прицел|^Стрелки/, (m) => keys(m.input.replace('Стрелки', 'Arrows'))],
     [/^сервер ответил (\d+)$/, (m) => `the server answered ${m[1]}`],
+    [/^В лобби (\d+) — раунд вот-вот начнётся$/, (m) => `${m[1]} in the lobby — the round is about to start`],
+    [/^Игроков: (\d+)\. Старт через (\d+) с$/, (m) => `Players: ${m[1]}. Starting in ${m[2]} s`],
     [/^(.+)\. Проверь интернет и открой окно ещё раз\.$/, (m) => `${t(m[1])}. Check your connection and open the window again.`],
     [/^файл повреждён: хеш не совпал$/, () => 'the file is damaged: the hash does not match'],
     [/^В этой сборке нет игры «(.+)»\.$/, (m) => `There is no game “${m[1]}” in this build.`],

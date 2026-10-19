@@ -98,7 +98,9 @@ export function build({ root, out, now = new Date() }) {
     const extOk = path.extname(romPath).slice(1).toLowerCase() === g.console
     if (g.console === 'sms' && !tmr && !extOk) fail(`${where}: это не ROM Master System (нет метки TMR SEGA и расширение не .sms)`)
     // Doom — WAD в .zip: эмулятор распакует его сам
-    if (g.console === 'doom' && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.wad')))) {
+    // Сетевой Doom (doom-wasm) берёт сам WAD, без архива: метка IWAD в начале
+    if (g.console === 'doom' && g.net === 'doom' && bytes.subarray(0, 4).toString('latin1') !== 'IWAD') fail(`${where}: для сетевого Doom нужен сам файл .wad`)
+    if (g.console === 'doom' && !g.net && (bytes.subarray(0, 4).toString('latin1') !== 'PK\x03\x04' || !bytes.includes(Buffer.from('.wad')))) {
       fail(`${where}: игра для Doom должна быть .zip, где лежит .wad`)
     }
     // PlayStation — диск в .zip, внутри .cue и .bin: эмулятор распакует его сам
@@ -133,6 +135,7 @@ export function build({ root, out, now = new Date() }) {
         : {}),
       rom: { url, base64: `${url}.b64`, sha256, size: bytes.length },
       ...(g.noncommercial ? { noncommercial: true } : {}), // графика или уровни только для некоммерческого использования
+      ...(g.net ? { net: g.net } : {}), // сетевая игра: doom — сетевой Doom (doom-wasm)
       license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files: licenseFiles },
     }
   }
@@ -144,6 +147,10 @@ export function build({ root, out, now = new Date() }) {
   for (const file of fs.readdirSync(path.join(root, 'web'))) copy(path.join(root, 'web', file), path.join(out, file))
   copy(path.join(root, 'third_party', 'jsnes', 'LICENSE.txt'), path.join(out, 'licenses', 'jsnes', 'LICENSE.txt'))
   copyEmulatorJS(path.join(root, 'vendor', 'emulatorjs'), out)
+  // Движок сетевого Doom (doom-wasm, GPL-2.0): собран в GitHub Actions; лицензия, заметка о сборке и исходники — в licenses/
+  const doomWasm = path.join(root, 'vendor', 'doom-wasm')
+  for (const name of ['websockets-doom.js', 'websockets-doom.wasm']) copy(path.join(doomWasm, name), path.join(out, 'doom-wasm', name))
+  for (const name of fs.readdirSync(doomWasm).filter((n) => !n.startsWith('websockets-doom'))) copy(path.join(doomWasm, name), path.join(out, 'licenses', 'doom-wasm', name))
   // Маппер 28 (Action 53) — общий с модом: из модуля мода делаем обычный скрипт для страницы
   const mapper28 = fs.readFileSync(path.join(root, '..', 'mod', 'hooks', 'mapper28.js'), 'utf8').replace(/^export /gm, '')
   fs.writeFileSync(path.join(out, 'mapper28.js'), `;(function () {\n'use strict'\n${mapper28}\ninstallMapper28(window.jsnes && window.jsnes.Mappers)\n})()\n`)

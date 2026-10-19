@@ -403,11 +403,15 @@ test('подсказка «Кликни сюда» видна до клика и
   await ui.unmount()
 })
 
-test('через 20 секунд работы агента появляется вопрос, «Играть» открывает панель', HEAVY, async ($, on) => {
+test('через 10 секунд работы агента появляется вопрос, «Играть» открывает панель', HEAVY, async ($, on) => {
   const { opened, clock } = stubs(on)
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await $.turn.start({ turnId: 't1' })
-  await clock.advance(21_000)
+  await clock.advance(9_000)
+  const early = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await early.find({ type: 'Text', text: /сыграть\?/ })).toBeUndefined() // до 10 секунд — тихо
+  await early.unmount()
+  await clock.advance(2_000)
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await band.find({ type: 'Text', text: /сыграть\?/ })).toBeDefined()
   // ОС не определена — окна браузера нет, кнопка одна

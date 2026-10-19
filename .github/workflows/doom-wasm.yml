@@ -18,7 +18,7 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Исходники doom-wasm на закреплённом коммите
         run: |
@@ -28,7 +28,7 @@ jobs:
       - name: Инструменты сборки
         run: sudo apt-get update && sudo apt-get install -y automake autoconf libtool pkg-config
 
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: emscripten-core/setup-emsdk@v14 # бывший mymindstorm/setup-emsdk
         with:
           version: ${{ env.EMSDK_VERSION }}
 

@@ -37,7 +37,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const raf = []
   const audioNodes = []
   const handlers = {}
-  const page = { draws: 0, focused: null, navigated: null, appended: [], onScript: null }
+  const page = { draws: 0, focused: null, navigated: null, appended: [], onScript: null, sockets: [] }
   function element(tag) {
     const node = {
       tagName: tag, className: '', textContent: '', href: '', tabIndex: 0, style: {}, dataset: {}, children: [], files: [], value: '',
@@ -65,6 +65,18 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
     URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder,
+    // Таймеры страницы не держат тест: отсчёт раунда и возврат в лобби — минуты
+    setTimeout: (fn, ms) => { const h = setTimeout(fn, ms); h.unref?.(); return h },
+    setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref?.(); return h },
+    clearTimeout, clearInterval,
+    // WebSocket для сетевой игры: тест сам подыгрывает за сервер через page.sockets
+    WebSocket: class {
+      constructor(url) { this.url = url; this.sent = []; this.listeners = {}; page.sockets.push(this) }
+      addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn) }
+      send(data) { this.sent.push(data) }
+      close() { this.closed = true }
+      emit(type, data) { for (const fn of this.listeners[type] || []) fn({ data }) }
+    },
     history: { replaceState: (s, title, url) => { page.replaced = url }, pushState: (s, title, url) => { page.pushed = url } },
     fetch: network(net),
     performance: { now: () => now },
@@ -88,8 +100,8 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (script.src === 'ejs.js') {
-      vm.runInContext(fs.readFileSync(path.join(DIST, 'ejs.js'), 'utf8'), ctx, { filename: 'ejs.js' })
+    if (script.src === 'ejs.js' || script.src === 'netdoom.js') {
+      vm.runInContext(fs.readFileSync(path.join(DIST, script.src), 'utf8'), ctx, { filename: script.src })
       setTimeout(() => script.onload && script.onload(), 0)
     }
   }
@@ -349,7 +361,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(doom.ctx.EJS_gameUrl, catalog.games['freedoom-1'].rom.url)
   assert.match(doom.byId.keys.textContent, /огонь — A/)
   const lib = await makePage(new Map(), { search: '?tab=doom' })
-  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedoom-1', 'freedoom-2'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2'])
   lib.byId.library.querySelectorAll('.open-rom')[0].click()
   assert.equal(lib.byId['local-rom'].accept, '.wad,.zip')
   lib.ctx.__wad = new TextEncoder().encode('IWAD' + '\0'.repeat(64))
@@ -359,6 +371,49 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(lib.ctx.EJS_gameName, 'My Doom.wad')
   await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(64)], 'x.wad'), 'doom')`, lib.ctx), /нет метки IWAD или PWAD/)
   await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(64)], 'x.txt'), 'doom')`, lib.ctx), /нужен файл \.wad/)
+}
+
+// --- Сетевой Doom: лобби, ведущий объявляет раунд, параметры doom-wasm ----------------------------------------------
+{
+  const solo = await makePage(new Map(), { search: '?game=freedm' })
+  await until(() => solo.sockets.length > 0)
+  const ws = solo.sockets[0]
+  assert.match(ws.url, /\/net\/room\/doom-lobby$/)
+  const net = solo.ctx.ArcadeNetDoom
+  assert.equal(vm.runInContext("ArcadeNetDoom.leaderOf(['c9', 'a1', 'b5'])", solo.ctx), 'a1')
+  // Массивы из страницы — в обычные: у них другая среда JavaScript
+  const host = Array.from(net.doomArgs('freedm.wad', 'wss://x/net/doom/r', true))
+  const guest = Array.from(net.doomArgs('freedm.wad', 'wss://x/net/doom/r', false))
+  for (const a of ['-server', '-privateserver', '-deathmatch']) assert.ok(host.includes(a), a)
+  assert.deepEqual(host.slice(host.indexOf('-timer'), host.indexOf('-timer') + 2), ['-timer', '5'])
+  assert.deepEqual(guest.slice(guest.indexOf('-connect'), guest.indexOf('-connect') + 2), ['-connect', '1'])
+  assert.equal(host.at(-1), 'wss://x/net/doom/r')
+  // Один в лобби — ждём второго
+  ws.emit('message', JSON.stringify({ type: 'welcome', id: 'a1', peers: [] }))
+  assert.equal(solo.byId['overlay-title'].textContent, 'Ждём второго игрока')
+  assert.equal(ws.sent.length, 0)
+  // Пришёл второй — ведущий (наименьший номер) объявляет раунд и начинает отсчёт
+  ws.emit('message', JSON.stringify({ type: 'join', id: 'b2' }))
+  const round = JSON.parse(ws.sent[0])
+  assert.equal(round.type, 'round')
+  assert.equal(round.host, 'a1')
+  assert.deepEqual(round.players, ['a1', 'b2'])
+  assert.match(round.room, /^dm-a1-/)
+  assert.equal(solo.byId['overlay-title'].textContent, 'Раунд начинается')
+  // Не ведущий раунд не объявляет, но подхватывает чужое объявление
+  const other = await makePage(new Map(), { search: '?game=freedm' })
+  await until(() => other.sockets.length > 0)
+  const ws2 = other.sockets[0]
+  ws2.emit('message', JSON.stringify({ type: 'welcome', id: 'b2', peers: ['a1'] }))
+  assert.equal(ws2.sent.length, 0)
+  ws2.emit('message', JSON.stringify(round))
+  assert.equal(other.byId['overlay-title'].textContent, 'Раунд начинается')
+  // Лишний — ждёт следующего раунда
+  const late = await makePage(new Map(), { search: '?game=freedm' })
+  await until(() => late.sockets.length > 0)
+  late.sockets[0].emit('message', JSON.stringify({ type: 'welcome', id: 'z9', peers: ['a1', 'b2'] }))
+  late.sockets[0].emit('message', JSON.stringify({ type: 'round', room: 'dm-x', host: 'a1', players: ['a1', 'b2', 'c3', 'd4'] }))
+  assert.equal(late.byId['overlay-title'].textContent, 'Идёт раунд')
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------

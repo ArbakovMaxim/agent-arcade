@@ -9,7 +9,8 @@ import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreM
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
-const ASK_AFTER_MS = 20_000 // через сколько работы агента показать вопрос; для быстрой проверки поставь 5_000
+const ASK_AFTER_MS = 10_000 // через сколько работы агента показать вопрос «сыграть?»; для быстрой проверки поставь 5_000
+const NOTIFY_AFTER_MS = 20_000 // «агент закончил» системным уведомлением — только если ход шёл дольше этого
 const DEBUG = false // тост в начале каждого хода: видно, что мод загрузился
 
 const PANE_COLUMNS = 104 // сколько колонок просить у Claude Code для панели сбоку от транскрипта
@@ -813,7 +814,7 @@ export function register(on) {
       if (paneOpen) await $.ui.toast(tr('Агент закончил — Esc, чтобы вернуться', lang))
       // Играешь в окне браузера — Claude Code не видно: системное уведомление, если ход был долгим
       const now = await $.clock.now()
-      const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS && now - turnStartedAt >= ASK_AFTER_MS
+      const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS && now - turnStartedAt >= NOTIFY_AFTER_MS
         ? notifyCommand(platform, 'Claude Code', tr('Агент закончил — можно возвращаться', lang))
         : null
       if (command) {
