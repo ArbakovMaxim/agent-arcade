@@ -31,21 +31,23 @@
 
 ## Установка
 
-В сессии Claude Code в терминале:
+В сессии Claude Code в терминале — подключить маркетплейс из этого репозитория и поставить мод из него:
 
 ```
-/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+/plugin marketplace add ArbakovMaxim/agent-arcade
+/plugin install arcade@agent-arcade
 ```
 
 Или просто в терминале, без запуска сессии:
 
 ```
-claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
 ```
 
 В расширении для VS Code команды `/plugin` нет — поставь мод из терминала, и расширение подхватит его в новом разговоре.
 
-Она подключает маркетплейс из этого репозитория и ставит мод сразу для всех сессий и приложений. Нужен Claude Code 2.1.275 или новее. Меню открывается командой `/arcade`. Когда агент работает дольше 10 секунд, над строкой ввода появляется вопрос «сыграть?»: `1` — здесь, в панели, `2` — в окне браузера (где оно доступно), `3` — не сейчас.
+Мод ставится сразу для всех сессий и приложений. Нужен Claude Code 2.1.275 или новее. Меню открывается командой `/arcade`. Когда агент работает дольше 10 секунд, над строкой ввода появляется вопрос «сыграть?»: `1` — здесь, в панели, `2` — в окне браузера (где оно доступно), `3` — не сейчас.
 
 Обновить мод: `/plugin marketplace update agent-arcade`. Удалить: `/plugin uninstall arcade@agent-arcade`.
 

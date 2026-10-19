@@ -27,19 +27,21 @@ Every game in the catalog is free and openly licensed. You can also play online 
 
 Requires **Claude Code 2.1.275 or newer**.
 
-In a terminal:
+In a terminal — two commands: add Arcade's marketplace (this repository), then install the plugin from it:
 
 ```
-claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
 ```
 
 Or inside a Claude Code session:
 
 ```
-/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+/plugin marketplace add ArbakovMaxim/agent-arcade
+/plugin install arcade@agent-arcade
 ```
 
-This adds the marketplace from this repository and installs the plugin for all sessions and apps. The VS Code extension has no `/plugin` command — install from a terminal, and the extension picks the plugin up in a new conversation.
+The plugin is installed for all sessions and apps. The VS Code extension has no `/plugin` command — install from a terminal, and the extension picks the plugin up in a new conversation.
 
 **Update:**
 

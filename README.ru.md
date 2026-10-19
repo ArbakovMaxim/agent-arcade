@@ -27,19 +27,21 @@ Arcade — мод для [Claude Code](https://claude.com/claude-code), кото
 
 Нужен **Claude Code 2.1.275 или новее**.
 
-В терминале:
+В терминале — две команды: подключить маркетплейс Arcade (этот репозиторий) и поставить мод из него:
 
 ```
-claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
 ```
 
 Или внутри сессии Claude Code:
 
 ```
-/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+/plugin marketplace add ArbakovMaxim/agent-arcade
+/plugin install arcade@agent-arcade
 ```
 
-Команда подключает маркетплейс из этого репозитория и ставит мод сразу для всех сессий и приложений. В расширении для VS Code команды `/plugin` нет — поставь мод из терминала, и расширение подхватит его в новом разговоре.
+Мод ставится сразу для всех сессий и приложений. В расширении для VS Code команды `/plugin` нет — поставь мод из терминала, и расширение подхватит его в новом разговоре.
 
 **Обновить:**
 
