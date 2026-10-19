@@ -119,7 +119,6 @@ export function build({ root, out, now = new Date() }) {
         return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
       })
       games[g.id] = {
-      ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
         ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
         // Cloudflare отвечает на …/index.html переходом на папку — сразу даём адрес папки
         console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page) === 'index.html' ? '' : path.basename(g.page).replace(/\.html?$/i, '')}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
@@ -138,7 +137,6 @@ export function build({ root, out, now = new Date() }) {
         return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
       })
       games[g.id] = {
-      ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
         ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
         console: g.console, kind: 'board', board: g.board, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
         credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
@@ -214,7 +212,9 @@ export function build({ root, out, now = new Date() }) {
     const c = consoles.find((x) => x.id === g.console)
     if (c?.group && !shelves.some((s) => s.id === g.shelf)) fail(`игра ${id}: у игр группы ${c.group} должна быть полка (shelf) из списка shelves`)
   }
-  const catalog = { version: 1, built: now.toISOString(), consoles, groups, shelves, games }
+  // «Поддержать проект» — добровольно; ссылку видят окно и мод, менять её — здесь, в каталоге
+  const support = source.support && /^https:\/\//.test(source.support.url ?? '') ? { url: source.support.url, title: source.support.title ?? '' } : null
+  const catalog = { version: 1, built: now.toISOString(), consoles, groups, shelves, ...(support ? { support } : {}), games }
   fs.writeFileSync(path.join(out, 'catalog.json'), `${JSON.stringify(catalog, null, 2)}\n`)
 
   // Окно Arcade и лицензии сторонних библиотек

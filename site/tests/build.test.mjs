@@ -219,6 +219,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = [
   const dir = temp('groups')
   const built = build({ root: ROOT, out: dir })
   assert.deepEqual(built.groups.map((g) => g.id), ['games'])
+  assert.equal(built.support.url, 'https://ko-fi.com/agentarcade', 'ссылка «Поддержать проект» — в каталоге')
   assert.deepEqual(built.shelves.map((s) => s.id), ['shooters', 'racing', 'strategy', 'board'])
   assert.equal(built.games.hexgl.shelf, 'racing')
   assert.equal(built.games.thwaite.shelf, undefined, 'у игр приставок полки нет')

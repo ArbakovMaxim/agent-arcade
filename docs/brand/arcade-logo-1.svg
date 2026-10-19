@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">Arcade pixel gamepad logo</title>
+  <desc id="desc">An original eight-bit gamepad with a directional cross and two buttons; one button contains a terminal cursor.</desc>
+  <rect width="512" height="512" fill="#17171c"/>
+
+  <!-- Original stepped arcade controller silhouette, aligned to a 16 px grid. -->
+  <path fill="#E0C070" d="M144 128h224v16h32v32h16v176h-16v32h-48v-32h-32v16H192v-16h-32v32h-48v-32H96V176h16v-32h32z"/>
+  <path fill="#17171c" d="M144 160h224v16h16v144h-16v16h-64v16h-96v-16h-64v-16h-16V176h16z"/>
+
+  <!-- D-pad. -->
+  <path fill="#F4F1EA" d="M176 208h48v32h32v48h-32v32h-48v-32h-32v-48h32z"/>
+  <rect x="192" y="224" width="16" height="80" fill="#E8735A"/>
+  <rect x="160" y="256" width="80" height="16" fill="#E8735A"/>
+
+  <!-- Two intentionally pixel-octagonal action buttons. -->
+  <path fill="#E8735A" d="M304 224h16v-16h48v16h16v48h-16v16h-48v-16h-16z"/>
+  <path fill="#F4F1EA" d="M336 224h16v48h-16z"/>
+
+  <path fill="#F4F1EA" d="M288 304h16v-16h48v16h16v48h-16v16h-48v-16h-16z"/>
+  <rect x="312" y="320" width="32" height="16" fill="#E8735A"/>
+</svg>

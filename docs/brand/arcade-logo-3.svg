@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc" shape-rendering="crispEdges">
+  <title id="title">Arcade pixel A logo</title>
+  <desc id="desc">A large pixel-built letter A with a play symbol in its centre.</desc>
+  <rect width="512" height="512" fill="#17171c"/>
+
+  <!-- Pixel A: 32 px modules with stepped shoulders. -->
+  <rect x="224" y="112" width="64" height="32" fill="#E0C070"/>
+  <rect x="192" y="144" width="128" height="32" fill="#E0C070"/>
+  <rect x="176" y="176" width="64" height="32" fill="#E0C070"/>
+  <rect x="272" y="176" width="64" height="32" fill="#E0C070"/>
+  <rect x="160" y="208" width="64" height="64" fill="#E0C070"/>
+  <rect x="288" y="208" width="64" height="64" fill="#E0C070"/>
+  <rect x="144" y="272" width="224" height="64" fill="#E0C070"/>
+  <rect x="128" y="336" width="80" height="64" fill="#E0C070"/>
+  <rect x="304" y="336" width="80" height="64" fill="#E0C070"/>
+
+  <!-- Counter and play mark. -->
+  <rect x="208" y="208" width="96" height="64" fill="#17171c"/>
+  <path fill="#F4F1EA" d="M240 216h16v8h16v8h16v16h-16v8h-16v8h-16z"/>
+  <rect x="208" y="288" width="96" height="32" fill="#E8735A"/>
+</svg>

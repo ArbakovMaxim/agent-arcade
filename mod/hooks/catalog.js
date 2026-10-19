@@ -62,6 +62,8 @@ export function parseCatalog(text) {
   const titled = (list) => (Array.isArray(list) ? list : []).filter((x) => x && ID.test(x.id ?? '') && typeof x.title === 'string' && x.title).map((x) => ({ id: x.id, title: x.title.slice(0, 40) }))
   const groups = titled(data.groups)
   const shelves = titled(data.shelves)
+  // «Поддержать проект» — ссылка из каталога сайта (её можно поменять, не обновляя мод)
+  const support = data.support && /^https:\/\/[^\s"'`]+$/.test(data.support.url ?? '') ? { url: data.support.url.slice(0, 200) } : null
   const ids = new Set(consoles.map((c) => c.id))
   const games = []
   for (const [id, g] of Object.entries(data.games)) {
@@ -80,13 +82,13 @@ export function parseCatalog(text) {
     games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEn, ...net, ...shelfOf(g), rom: { sha256: rom.sha256, base64: rom.base64 } })
   }
   if (!consoles.length) return null
-  return { source: 'site', consoles, groups, shelves, games }
+  return { source: 'site', consoles, groups, shelves, ...(support ? { support } : {}), games }
 }
 
 // Сохранённая копия каталога из $.store; та же проверка, что и для ответа сайта
 export function restoreCatalog(saved) {
   if (!saved || typeof saved !== 'object') return null
-  const parsed = parseCatalog(JSON.stringify({ consoles: saved.consoles, groups: saved.groups, shelves: saved.shelves, games: Object.fromEntries((saved.games ?? []).map((g) => [g.id, g])) }))
+  const parsed = parseCatalog(JSON.stringify({ consoles: saved.consoles, groups: saved.groups, shelves: saved.shelves, support: saved.support, games: Object.fromEntries((saved.games ?? []).map((g) => [g.id, g])) }))
   return parsed ? { ...parsed, source: 'cache' } : null
 }
 

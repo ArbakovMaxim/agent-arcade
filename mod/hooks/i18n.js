@@ -87,6 +87,8 @@ const EXACT = {
   'Назначить заново: «Настройки» → «Назначить клавиши заново»': 'To reassign: Settings → Reassign keys',
   'Этот терминал не показывает картинки — рисую символами. Как получить пиксели — в README.': 'This terminal does not show images, so the game is drawn with characters. How to get pixels — see the README.',
   'Открыть Arcade': 'Open Arcade',
+  '☕ Поддержать проект': '☕ Support the project',
+  'Открываю страницу поддержки в браузере. Спасибо!': 'Opening the support page in your browser. Thank you!',
   // Жанры каталога
   'аркада': 'arcade',
   'найди пару': 'memory',
@@ -134,6 +136,8 @@ const RULES = [
   [/^Агент работает (.+) — сыграть\? В сети ждут: (.+)$/, (m) => `Agent has been working for ${dur(m[1])} — play? Waiting online: ${m[2]}`],
   [/^Агент работает (.+) — сыграть\?$/, (m) => `Agent has been working for ${dur(m[1])} — play?`],
   [/^Присоединиться: (.+)$/, (m) => `Join: ${m[1]}`],
+  [/^добровольно, на развитие Arcade — (.+)$/, (m) => `voluntary, for Arcade’s development — ${m[1]}`],
+  [/^Страница поддержки: (.+)$/, (m) => `Support page: ${m[1]}`],
   [/^в сети ждут: (.+)$/, (m) => `waiting online: ${m[1]}`],
   [/^Агент работает (.+)$/, (m) => `Agent has been working for ${dur(m[1])}`],
   [/^(\d+) (игра|игры|игр)$/, (m) => games(m[1])],

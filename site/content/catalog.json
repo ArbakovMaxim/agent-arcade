@@ -37,7 +37,7 @@
       "section": "games",
       "title": "Шутеры",
       "about": "Doom и Heretic на движке Doom: Freedoom, Blasphemer и сетевые арены",
-      "emulator": "EmulatorJS + PrBoom (GPL-2.0), doom-wasm и heretic-wasm (GPL-2.0)",
+      "emulator": "EmulatorJS (GPL-3.0) + PrBoom (GPL-2.0), doom-wasm и heretic-wasm (GPL-2.0)",
       "empty": "Свободных игр для Doom пока нет. Открой свой файл .wad — кнопка «Открыть свой файл» сверху.",
       "group": "games"
     },
@@ -83,6 +83,10 @@
       "title": "Настольные"
     }
   ],
+  "support": {
+    "url": "https://ko-fi.com/agentarcade",
+    "title": "Ko-fi"
+  },
   "games": [
     {
       "id": "thwaite",

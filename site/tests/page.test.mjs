@@ -572,6 +572,11 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
   assert.deepEqual(lib.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['Шутеры', 'Гонки', 'Стратегии', 'Настольные'])
   assert.equal(lib.byId.library.querySelectorAll('.shelf').find((b) => /\bactive\b/.test(b.className)).textContent, 'Гонки')
+  // «☕ Поддержать» в шапке — новой вкладкой, без лишних прав для открытой страницы
+  const support = lib.byId.library.querySelectorAll('.support')[0]
+  assert.equal(support.href, catalog.support.url)
+  assert.equal(support.target, '_blank')
+  assert.equal(support.rel, 'noopener')
   const strategy = await makePage(new Map(), { search: '?tab=games&shelf=strategy' })
   assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd'])
   const shooters = await makePage(new Map(), { search: '?tab=games' })

@@ -28,6 +28,8 @@
     'Сетевой deathmatch': 'Network deathmatch',
     'Настольные': 'Board games',
     'Шутеры': 'Shooters',
+    '☕ Поддержать': '☕ Support',
+    'Добровольно, на развитие Arcade': 'Voluntary, for Arcade’s development',
     'Игры': 'Games',
     'Гонки': 'Racing',
     'Стратегии': 'Strategy',

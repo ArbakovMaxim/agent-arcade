@@ -1,6 +1,6 @@
 {
   "name": "agent-arcade",
-  "description": "Arcade: игры, пока агент Claude Code работает",
+  "description": "Arcade: games while your Claude Code agent works · игры, пока агент Claude Code работает",
   "owner": {
     "name": "Max"
   },
@@ -8,7 +8,7 @@
     {
       "name": "arcade",
       "source": "./mod",
-      "description": "Игры Денди, пока агент работает: в окне браузера или прямо в панели Claude Code"
+      "description": "NES, Sega, PlayStation, Doom, chess and more — in the Claude Code panel or a browser window, with online play · Денди, Sega, PlayStation, Doom, шахматы и другие — в панели Claude Code или в окне браузера, с игрой по сети"
     }
   ]
 }

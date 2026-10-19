@@ -123,6 +123,16 @@ export function notifyCommand(platform, title, text) {
   if (platform === 'linux') return { argv: ['notify-send', '--app-name=Claude Code', title, text], env: {} }
   return null
 }
+// Обычная вкладка браузера по умолчанию — для ссылки «Поддержать проект». Адрес — через переменную окружения
+// (на Windows) или отдельным аргументом: его нельзя подменить кавычками в командной строке
+export function openUrlCommand(platform, url) {
+  if (!/^https:\/\/[^\s"'`]+$/.test(url ?? '')) return null
+  if (platform === 'windows') return { argv: powershell('Start-Process -FilePath $env:ARCADE_URL'), env: { ARCADE_URL: url } }
+  if (platform === 'mac') return { argv: ['open', url], env: {} }
+  if (platform === 'linux') return { argv: ['xdg-open', url], env: {} }
+  return null
+}
+
 export const DETECT_SCRIPT_TEXT = DETECT_SCRIPT
 export const LAUNCH_SCRIPT_TEXT = LAUNCH_SCRIPT
 

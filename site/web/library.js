@@ -116,6 +116,15 @@
     })
     // Свои файлы бывают не у всех вкладок: у настольных игр их нет
     if (window.ArcadeMine && own() && window.ArcadeMine.ACCEPT[own()]) actions.append(open)
+    // «Поддержать проект» — добровольно: ссылка на страницу поддержки в новой вкладке
+    if (catalog.support && /^https:\/\//.test(catalog.support.url || '')) {
+      const support = el('a', 'support', T('☕ Поддержать'))
+      support.href = catalog.support.url
+      support.target = '_blank'
+      support.rel = 'noopener'
+      support.title = T('Добровольно, на развитие Arcade')
+      actions.append(support)
+    }
     actions.append(langButton)
     head.append(actions)
     root.append(head)

@@ -3,7 +3,7 @@
 // Требования проверки модов: обработчик в on(...) — сама функция, а $ всегда пишется как $.ui.open(...) и т. п.
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
-import { DETECT_ARGV, launchCommand, notifyCommand, parseDetection, windowBounds } from './browsers.js'
+import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { LANGS, detectLang, tr, translateTree } from './i18n.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 
@@ -135,6 +135,12 @@ function consoles() {
 }
 
 // Группы вкладок и полки: «Игры» — шутеры, гонки, стратегии, настольные
+// «Поддержать проект»: ссылка из каталога сайта, пока каталога нет — запасная
+const SUPPORT_URL = 'https://ko-fi.com/agentarcade'
+function supportUrl() {
+  return catalog.support?.url ?? SUPPORT_URL
+}
+
 function groupsList() {
   return catalog.groups ?? []
 }
@@ -722,7 +728,7 @@ export function register(on) {
           const fresh = response.ok ? parseCatalog(response.text) : null
           if (fresh) {
             catalog = fresh
-            await $.store.set('catalog', { consoles: fresh.consoles, groups: fresh.groups, shelves: fresh.shelves, games: fresh.games })
+            await $.store.set('catalog', { consoles: fresh.consoles, groups: fresh.groups, shelves: fresh.shelves, support: fresh.support, games: fresh.games })
             $.ui.invalidate('ui.render')
           }
         } catch (err) {
@@ -1454,6 +1460,38 @@ export function register(on) {
             onPress: open('settings'),
           }),
           dim(`  ${settingsNote()}`),
+          // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
+          Button({
+            key: 'arcade-lang-main',
+            label: lang === 'ru' ? '🌐 English' : '🌐 Русский',
+            onPress: async () => {
+              lang = lang === 'ru' ? 'en' : 'ru'
+              $.ui.invalidate('ui.render')
+              await $.store.set('lang', lang)
+            },
+          }),
+          // Добровольно, без напоминаний: одна строка внизу меню, ссылка открывается в обычном браузере
+          Button({
+            key: 'arcade-support',
+            label: '☕ Поддержать проект',
+            onPress: async () => {
+              const url = supportUrl()
+              const command = openUrlCommand(platform, url)
+              if (!command) {
+                libraryNotice = `Страница поддержки: ${url}`
+                $.ui.invalidate('ui.render')
+                return
+              }
+              try {
+                const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                windowNotice($, result?.exitCode === 0 ? 'Открываю страницу поддержки в браузере. Спасибо!' : `Страница поддержки: ${url}`)
+              } catch {
+                libraryNotice = `Страница поддержки: ${url}`
+              }
+              $.ui.invalidate('ui.render')
+            },
+          }),
+          dim(`  добровольно, на развитие Arcade — ${supportUrl().replace(/^https:\/\//, '')}`),
           ...noticeLines,
           ...hint,
           gap,
