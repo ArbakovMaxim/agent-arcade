@@ -422,6 +422,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(sega.ctx.EJS_gameID, parseInt(catalog.games['tank-battle'].rom.sha256.slice(0, 7), 16))
   assert.match(sega.ctx.EJS_netplayServer, /\/net\/ejs$/)
   assert.equal(sega.ctx.EJS_EXPERIMENTAL_NETPLAY, true, 'без этого флага EmulatorJS 4.2.3 прячет сетевую игру')
+  assert.equal(sega.ctx.EJS_Buttons.netplay, true, 'кнопка сети на панели эмулятора по умолчанию скрыта')
   const doom = await makePage(new Map(), { search: '?game=freedoom-1' })
   assert.equal(doom.ctx.EJS_netplayServer, undefined, 'у одиночного Doom сети EmulatorJS нет')
   // Денди: обычно — JSNES с кнопкой «По сети»; с ?net=1 — EmulatorJS (FCEUmm) с сетевой игрой

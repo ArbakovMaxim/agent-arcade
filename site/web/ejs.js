@@ -58,6 +58,7 @@
       // Сетевая игра — кнопка на панели эмулятора: создать комнату или войти в чужую; сервер — наш (/net/ejs)
       window.EJS_gameID = net
       window.EJS_EXPERIMENTAL_NETPLAY = true // в EmulatorJS 4.2.3 сетевая игра включается только с этим флагом (и EJS_DEBUG_XX)
+      window.EJS_Buttons = { netplay: true } // кнопка сетевой игры на панели эмулятора по умолчанию скрыта
       window.EJS_netplayServer = `${location.origin}/net/ejs`
     }
     window.EJS_core = core
