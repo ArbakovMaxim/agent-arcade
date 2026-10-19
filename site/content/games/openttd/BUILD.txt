@@ -1,0 +1,4 @@
+OpenTTD 15.3 для браузера — © авторы OpenTTD, GPL-2.0 (LICENSE.md).
+Исходники: https://github.com/OpenTTD/OpenTTD, тег 15.3 (архив рядом).
+Собрано в GitHub Actions без изменений официальным способом из os/emscripten/README.md: Docker-образ из os/emscripten/Dockerfile.
+Графика — OpenGFX 8.0 (GPL-2.0) с https://cdn.openttd.org/opengfx-releases/8.0/, файл baseset/ без изменений.
