@@ -26,6 +26,7 @@
     'Здесь пока нет игр.': 'No games here yet.',
     'Мои игры — только в этом браузере': 'My games — only in this browser',
     'Сетевой deathmatch': 'Network deathmatch',
+    'По сети': 'Online',
     'Подключаюсь к лобби…': 'Connecting to the lobby…',
     'Ждём второго игрока': 'Waiting for a second player',
     'Как только кто-то зайдёт, начнётся раунд. А пока можно сыграть в Freedoom одному — кнопка «Библиотека».': 'A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.',

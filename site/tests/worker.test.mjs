@@ -1,6 +1,6 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
-import worker, { Room, DoomRoom, MAX_PEERS, MAX_MESSAGE } from '../worker/index.js'
+import worker, { Room, DoomRoom, EjsGame, Presence, MAX_PEERS, MAX_MESSAGE } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -101,9 +101,98 @@ try {
   await room.webSocketMessage(guest, 'текст') // текст и обрывки — мимо
   await room.webSocketMessage(guest, new ArrayBuffer(4))
   assert.equal(host.sent.length, 1)
-  // Хозяин начинает новую игру — прежние игроки отключаются
+  // Хозяин представляется ещё раз — игроков не трогаем (они могли подключиться раньше него)…
   await room.webSocketMessage(host, packet(0, 1))
-  assert.ok(guest.closed && other.closed && !host.closed)
+  assert.ok(!guest.closed && !other.closed && !host.closed)
+  // …а второй «хозяин» выкидывает прежнего
+  await room.fetch()
+  const newHost = sockets.at(-1)
+  await room.webSocketMessage(newHost, packet(0, 1))
+  assert.ok(host.closed && !guest.closed && !newHost.closed)
+} finally {
+  globalThis.Response = RealResponse
+}
+// --- Сетевая игра EmulatorJS: комнаты одной игры ---------------------------------------------------------------
+globalThis.WebSocketPair = class { constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket() } }
+globalThis.Response = class {
+  constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket; this.body = body }
+  static json(v) { const r = new this(JSON.stringify(v)); r.value = v; return r }
+}
+const posts = []
+const presenceEnv = { PRESENCE: { idFromName: () => 'all', get: () => ({ fetch: async (url, init) => { posts.push(JSON.parse(init.body)); return {} } }) } }
+try {
+  const sockets = []
+  const ctx = { acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed), waitUntil: () => {} }
+  const game = new EjsGame(ctx, presenceEnv)
+  const frames = (ws) => ws.sent.map((m) => JSON.parse(m))
+  const say = (ws, frame) => game.webSocketMessage(ws, JSON.stringify(frame))
+  await game.fetch(new Request('https://ejs/net/ejs/123'))
+  await game.fetch(new Request('https://ejs/net/ejs/123'))
+  const [owner, guest] = sockets
+  const extra = (userid, name) => ({ domain: 'arcade', game_id: 123, room_name: 'Танки', player_name: name, userid, sessionid: 's1' })
+  await say(owner, { t: 'emit', event: 'open-room', data: { extra: extra('u1', 'Макс'), maxPlayers: 2 }, id: 1 })
+  assert.deepEqual(frames(owner)[0], { t: 'ack', id: 1, args: [null] })
+  assert.deepEqual((await game.fetch(new Request('https://ejs/list'))).value, { s1: { room_name: 'Танки', current: 1, max: 2 } })
+  assert.deepEqual(posts.at(-1), { key: 'g123', value: 1 }, 'счётчик: одна открытая комната')
+  await say(guest, { t: 'emit', event: 'join-room', data: { extra: extra('u2', 'Гость') }, id: 7 })
+  const joined = frames(guest).find((f) => f.t === 'ack')
+  assert.equal(joined.args[0], null)
+  assert.deepEqual(Object.keys(joined.args[1]), ['u1', 'u2'])
+  assert.ok(frames(owner).some((f) => f.event === 'users-updated' && Object.keys(f.data).length === 2))
+  assert.deepEqual(posts.at(-1), { key: 'g123', value: 0 }, 'комната полна — свободных нет')
+  // Третий в комнату на двоих не попадает
+  await game.fetch(new Request('https://ejs/net/ejs/123'))
+  const third = sockets[2]
+  await say(third, { t: 'emit', event: 'join-room', data: { extra: extra('u3', 'Третий') }, id: 2 })
+  assert.deepEqual(frames(third).at(-1), { t: 'ack', id: 2, args: ['Комната заполнена'] })
+  // Нажатия и куски — только своей комнате
+  await say(owner, { t: 'emit', event: 'data-message', data: { 'sync-control': [{ frame: 10 }] } })
+  assert.deepEqual(frames(guest).at(-1), { t: 'event', event: 'data-message', data: { 'sync-control': [{ frame: 10 }] } })
+  await say(guest, { t: 'chunk', id: 'm1', i: 0, n: 2, part: '{"state":' })
+  assert.deepEqual(frames(owner).at(-1), { t: 'chunk', id: 'm1', i: 0, n: 2, part: '{"state":' })
+  assert.equal(third.sent.length, 1, 'чужой комнате ничего')
+  // Хозяин ушёл — комната закрывается для всех
+  owner.closed = true
+  await game.webSocketClose(owner, 1000, '')
+  assert.deepEqual(frames(guest).at(-1), { t: 'event', event: 'disconnect' })
+  assert.deepEqual((await game.fetch(new Request('https://ejs/list'))).value, {})
+} finally {
+  globalThis.Response = RealResponse
+}
+
+// --- Счётчик «кто ждёт» и лобби Doom --------------------------------------------------------------------------
+{
+  const store = new Map()
+  const ctx = { storage: { put: async (k, v) => store.set(k, v), delete: async (k) => store.delete(k), list: async () => new Map(store) } }
+  const presence = new Presence(ctx, {})
+  const set = (key, value) => presence.fetch(new Request('https://presence/set', { method: 'POST', body: JSON.stringify({ key, value }) }))
+  await set('doom', 2)
+  await set('g123', 1)
+  await set('g9', 0)
+  assert.equal((await set('лишнее', 1)).status, 400)
+  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 2, games: { 123: 1 } })
+  await set('doom', 0)
+  assert.deepEqual(await (await presence.fetch(new Request('https://presence/get'))).json(), { doom: 0, games: { 123: 1 } })
+}
+globalThis.WebSocketPair = class { constructor() { this[0] = new FakeSocket(); this[1] = new FakeSocket() } }
+globalThis.Response = class { constructor(body, init = {}) { this.status = init.status ?? 200; this.webSocket = init.webSocket } }
+try {
+  posts.length = 0
+  const sockets = []
+  const ctx = { acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed), waitUntil: () => {} }
+  const lobby = new Room(ctx, presenceEnv)
+  const req = { headers: new Headers({ 'X-Room': 'doom-lobby' }) }
+  await lobby.fetch(req)
+  await lobby.fetch(req)
+  assert.deepEqual(posts.at(-1), { key: 'doom', value: 2 }, 'лобби Doom: двое ждут')
+  sockets[0].closed = true
+  await lobby.webSocketClose(sockets[0], 1000, '')
+  assert.deepEqual(posts.at(-1), { key: 'doom', value: 1 })
+  // Обычная комната счётчику не пишет
+  posts.length = 0
+  const other = new Room({ acceptWebSocket: () => {}, getWebSockets: () => [], waitUntil: () => {} }, presenceEnv)
+  await other.fetch({ headers: new Headers({ 'X-Room': 'friends' }) })
+  assert.equal(posts.length, 0)
 } finally {
   globalThis.Response = RealResponse
 }

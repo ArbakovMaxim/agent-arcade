@@ -53,6 +53,12 @@
   const overlayHint = document.getElementById('overlay-hint')
   const soundButton = document.getElementById('sound')
   const bestLabel = document.getElementById('best')
+  // «По сети» — та же игра на EmulatorJS с его сетевой игрой: создать комнату или войти в чужую
+  const netLink = document.getElementById('net')
+  if (netLink && game && game.rom && game.rom.sha256) {
+    netLink.href = `?game=${encodeURIComponent(id)}&net=1`
+    netLink.hidden = false
+  }
   const restartButton = document.getElementById('restart')
 
   function showOverlay(title, hint) {

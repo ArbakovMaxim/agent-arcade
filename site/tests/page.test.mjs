@@ -64,14 +64,14 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const byId = {}
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
-    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder,
+    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, btoa, atob,
     // Таймеры страницы не держат тест: отсчёт раунда и возврат в лобби — минуты
     setTimeout: (fn, ms) => { const h = setTimeout(fn, ms); h.unref?.(); return h },
     setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref?.(); return h },
     clearTimeout, clearInterval,
     // WebSocket для сетевой игры: тест сам подыгрывает за сервер через page.sockets
     WebSocket: class {
-      constructor(url) { this.url = url; this.sent = []; this.listeners = {}; page.sockets.push(this) }
+      constructor(url) { this.url = url; this.sent = []; this.listeners = {}; this.readyState = 1; page.sockets.push(this) }
       addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn) }
       send(data) { this.sent.push(data) }
       close() { this.closed = true }
@@ -414,6 +414,55 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   late.sockets[0].emit('message', JSON.stringify({ type: 'welcome', id: 'z9', peers: ['a1', 'b2'] }))
   late.sockets[0].emit('message', JSON.stringify({ type: 'round', room: 'dm-x', host: 'a1', players: ['a1', 'b2', 'c3', 'd4'] }))
   assert.equal(late.byId['overlay-title'].textContent, 'Идёт раунд')
+}
+
+// --- Сетевая игра EmulatorJS: наш сервер вместо netplay.emulatorjs.org, прослойка вместо socket.io ------------------
+{
+  const sega = await makePage(new Map(), { search: '?game=tank-battle' })
+  assert.equal(sega.ctx.EJS_gameID, parseInt(catalog.games['tank-battle'].rom.sha256.slice(0, 7), 16))
+  assert.match(sega.ctx.EJS_netplayServer, /\/net\/ejs$/)
+  const doom = await makePage(new Map(), { search: '?game=freedoom-1' })
+  assert.equal(doom.ctx.EJS_netplayServer, undefined, 'у одиночного Doom сети EmulatorJS нет')
+  // Денди: обычно — JSNES с кнопкой «По сети»; с ?net=1 — EmulatorJS (FCEUmm) с сетевой игрой
+  const nes = await makePage(new Map(), { search: '?game=thwaite' })
+  assert.equal(nes.byId.net.href, '?game=thwaite&net=1')
+  assert.equal(nes.byId.net.hidden, false)
+  assert.equal(nes.ctx.EJS_core, undefined, 'обычная Денди — на JSNES')
+  const nesNet = await makePage(new Map(), { search: '?game=thwaite&net=1' })
+  assert.equal(nesNet.ctx.EJS_core, 'nes')
+  assert.equal(nesNet.ctx.EJS_gameID, parseInt(catalog.games.thwaite.rom.sha256.slice(0, 7), 16))
+  assert.match(nesNet.ctx.EJS_netplayServer, /\/net\/ejs$/)
+  assert.match(nesNet.byId.keys.textContent, /A — Z · B — X/)
+  // Прослойка — та, что сборка кладёт вместо socket.io
+  const page = await makePage(new Map(), { search: '' })
+  vm.runInContext(fs.readFileSync(path.join(DIST, 'emulatorjs', 'src', 'socket.io.min.js'), 'utf8'), page.ctx)
+  page.ctx.EJS_gameID = 123
+  const sock = vm.runInContext("io('https://arcade.test/net/ejs')", page.ctx)
+  const ws = page.sockets.at(-1)
+  assert.equal(ws.url, 'wss://arcade.test/net/ejs/123')
+  let connected = false
+  sock.on('connect', () => { connected = true })
+  ws.emit('open')
+  assert.ok(connected)
+  let acked = 'нет'
+  sock.emit('open-room', { extra: { sessionid: 's1' }, maxPlayers: 2 }, (error) => { acked = error })
+  const first = JSON.parse(ws.sent[0])
+  assert.equal(first.t, 'emit')
+  assert.equal(first.event, 'open-room')
+  ws.emit('message', JSON.stringify({ t: 'ack', id: first.id, args: [null] }))
+  assert.equal(acked, null)
+  // Большое сохранение — кусками; собранное обратно — снова двоичные данные
+  vm.runInContext("__state = new Uint8Array(700000).map((_, i) => i % 251); __sock = io('https://arcade.test/net/ejs')", page.ctx)
+  const ws2 = page.sockets.at(-1)
+  vm.runInContext("__sock.emit('data-message', { state: __state })", page.ctx)
+  const chunks = ws2.sent.map((m) => JSON.parse(m))
+  assert.ok(chunks.length >= 2 && chunks.every((c) => c.t === 'chunk'), 'кусками')
+  let got = null
+  vm.runInContext("__sock.on('data-message', (d) => { __got = d })", page.ctx)
+  for (const c of chunks) ws2.emit('message', JSON.stringify(c))
+  got = page.ctx.__got
+  assert.equal(got.state.length, 700000)
+  assert.equal(got.state[500], 500 % 251)
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------

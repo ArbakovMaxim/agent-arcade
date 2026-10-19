@@ -11,12 +11,28 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url)
     if (url.pathname === '/api/ping') return Response.json({ ok: true })
+    // Кто сейчас ждёт в сети — для мода и окна: { doom: игроков в лобби, games: { номер игры: открытых комнат } }
+    if (url.pathname === '/api/lobbies') return env.PRESENCE.get(env.PRESENCE.idFromName('all')).fetch('https://presence/get')
+    // Сетевая игра EmulatorJS: список комнат игры и сокет — один Durable Object на игру
+    if (url.pathname === '/net/ejs/list') {
+      const game = url.searchParams.get('game_id') || ''
+      if (!/^\d{1,10}$/.test(game)) return Response.json({})
+      return env.EJS.get(env.EJS.idFromName(game)).fetch('https://ejs/list')
+    }
+    const ejs = url.pathname.match(/^\/net\/ejs\/(\d{1,10})$/)
+    if (ejs) {
+      if (request.headers.get('Upgrade') !== 'websocket') return new Response('Нужно подключение WebSocket', { status: 426 })
+      return env.EJS.get(env.EJS.idFromName(ejs[1])).fetch(request)
+    }
     const room = url.pathname.match(/^\/net\/(room|doom)\/([^/]+)$/)
     if (room) {
       if (!ROOM_NAME.test(room[2])) return new Response('Имя комнаты: латиница, цифры, - и _, до 64 символов', { status: 400 })
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('Нужно подключение WebSocket', { status: 426 })
       const space = room[1] === 'doom' ? env.DOOM : env.ROOMS
-      return space.get(space.idFromName(room[2])).fetch(request)
+      // Комнате передаём её имя: лобби Doom сообщает счётчику «кто ждёт», сколько в нём людей
+      const forward = new Request(request, { headers: new Headers(request.headers) })
+      forward.headers.set('X-Room', room[2])
+      return space.get(space.idFromName(room[2])).fetch(forward)
     }
     return env.ASSETS.fetch(request)
   },
@@ -30,12 +46,13 @@ export class Room {
     this.env = env
   }
 
-  async fetch() {
+  async fetch(request) {
     if (this.ctx.getWebSockets().length >= MAX_PEERS) return new Response('Комната заполнена', { status: 409 })
     const [client, server] = Object.values(new WebSocketPair())
     const id = crypto.randomUUID().slice(0, 8)
     this.ctx.acceptWebSocket(server)
-    server.serializeAttachment({ id })
+    server.serializeAttachment({ id, room: request?.headers?.get('X-Room') || '' })
+    this.report()
     server.send(JSON.stringify({ type: 'welcome', id, peers: this.peers(server) }))
     this.broadcast(JSON.stringify({ type: 'join', id }), server)
     return new Response(null, { status: 101, webSocket: client })
@@ -82,6 +99,17 @@ export class Room {
   leave(ws) {
     const id = ws.deserializeAttachment()?.id
     if (id) this.broadcast(JSON.stringify({ type: 'leave', id }), ws)
+    this.report(ws)
+  }
+
+  // Лобби Doom — сколько людей ждёт, для счётчика «кто ждёт» (мод и окно показывают это в Claude Code)
+  report(leaving) {
+    const sockets = this.ctx.getWebSockets()
+    const name = sockets.map((ws) => ws.deserializeAttachment()?.room).find(Boolean)
+    if (name !== 'doom-lobby' || !this.env?.PRESENCE) return
+    const count = sockets.filter((ws) => ws !== leaving).length
+    const presence = this.env.PRESENCE.get(this.env.PRESENCE.idFromName('all'))
+    this.ctx.waitUntil?.(presence.fetch('https://presence/set', { method: 'POST', body: JSON.stringify({ key: 'doom', value: count }) }).catch(() => {}))
   }
 }
 
@@ -109,9 +137,10 @@ export class DoomRoom {
     const to = head.getUint32(0, true)
     const from = head.getUint32(4, true)
     if (from === 1 && to === 0) {
-      // Хозяин начинает новую игру — прежние игроки этой комнаты отключаются
+      // Хозяин начинает игру: отключаем только прежнего хозяина. Игроков не трогаем — они могли подключиться раньше
+      // него, а у каждого раунда Arcade своя новая комната, старых сессий в ней не бывает
       for (const other of this.ctx.getWebSockets()) {
-        if (other !== ws) {
+        if (other !== ws && other.deserializeAttachment()?.uid === 1) {
           try {
             other.close(1011, 'новая игра')
           } catch {
@@ -142,3 +171,174 @@ export class DoomRoom {
   async webSocketError() {}
 }
 
+
+// Сетевая игра EmulatorJS (Sega, Master System, PlayStation): один Durable Object на игру.
+// Окно говорит с ним через нашу замену socket.io (web/netplay-io.js): кадры JSON — { t: 'emit', event, data, id },
+// ответы — { t: 'ack', id, args }, события — { t: 'event', event, data }; большие сообщения (сохранение игры
+// при выравнивании) — кусками { t: 'chunk', … }, комната пересылает их как есть. Состав комнат живёт прямо
+// на сокетах (serializeAttachment), поэтому «спячка» его не теряет.
+export class EjsGame {
+  constructor(ctx, env) {
+    this.ctx = ctx
+    this.env = env
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url)
+    if (url.pathname === '/list') return Response.json(this.rooms())
+    const game = url.pathname.split('/').pop()
+    const [client, server] = Object.values(new WebSocketPair())
+    this.ctx.acceptWebSocket(server)
+    server.serializeAttachment({ game })
+    return new Response(null, { status: 101, webSocket: client })
+  }
+
+  members(sessionid) {
+    return this.ctx.getWebSockets().filter((ws) => ws.deserializeAttachment()?.sessionid === sessionid)
+  }
+
+  // Открытые комнаты — в том виде, в каком их ждёт EmulatorJS
+  rooms() {
+    const list = {}
+    for (const ws of this.ctx.getWebSockets()) {
+      const a = ws.deserializeAttachment()
+      if (!a?.owner) continue
+      list[a.sessionid] = { room_name: a.room_name, current: this.members(a.sessionid).length, max: a.max }
+    }
+    return list
+  }
+
+  users(sessionid) {
+    return Object.fromEntries(this.members(sessionid).map((ws) => [ws.deserializeAttachment().userid, ws.deserializeAttachment().extra]))
+  }
+
+  send(ws, frame) {
+    try {
+      ws.send(typeof frame === 'string' ? frame : JSON.stringify(frame))
+    } catch {
+      // сокет закрывается
+    }
+  }
+
+  toOthers(ws, sessionid, frame) {
+    for (const other of this.members(sessionid)) if (other !== ws) this.send(other, frame)
+  }
+
+  usersUpdated(sessionid) {
+    const users = this.users(sessionid)
+    for (const ws of this.members(sessionid)) this.send(ws, { t: 'event', event: 'users-updated', data: users })
+  }
+
+  async webSocketMessage(ws, message) {
+    if (typeof message !== 'string' || message.length > MAX_MESSAGE) return
+    let frame
+    try {
+      frame = JSON.parse(message)
+    } catch {
+      return
+    }
+    const me = ws.deserializeAttachment() || {}
+    const ack = (...args) => frame.id && this.send(ws, { t: 'ack', id: frame.id, args })
+    if (frame.t === 'chunk') {
+      if (me.sessionid) this.toOthers(ws, me.sessionid, message)
+      return
+    }
+    if (frame.t !== 'emit') return
+    const extra = frame.data?.extra || {}
+    const id = (v) => typeof v === 'string' && /^[\w-]{1,64}$/.test(v)
+    if (frame.event === 'open-room') {
+      if (!id(extra.sessionid) || !id(extra.userid)) return ack('Неверные данные комнаты')
+      if (this.members(extra.sessionid).length) return ack('Такая комната уже есть')
+      const max = Math.min(4, Math.max(2, Number(frame.data.maxPlayers) || 2))
+      ws.serializeAttachment({ ...me, sessionid: extra.sessionid, userid: extra.userid, extra: clean(extra), owner: true, max, room_name: String(extra.room_name || 'Arcade').slice(0, 40) })
+      ack(null)
+      this.usersUpdated(extra.sessionid)
+      this.report()
+    } else if (frame.event === 'join-room') {
+      if (!id(extra.sessionid) || !id(extra.userid)) return ack('Неверные данные комнаты')
+      const owner = this.members(extra.sessionid).find((o) => o.deserializeAttachment().owner)
+      if (!owner) return ack('Комната не найдена')
+      const { max } = owner.deserializeAttachment()
+      if (this.members(extra.sessionid).length >= max) return ack('Комната заполнена')
+      ws.serializeAttachment({ ...me, sessionid: extra.sessionid, userid: extra.userid, extra: clean(extra), owner: false, max })
+      ack(null, this.users(extra.sessionid))
+      this.usersUpdated(extra.sessionid)
+      this.report()
+    } else if (frame.event === 'data-message' && me.sessionid) {
+      this.toOthers(ws, me.sessionid, { t: 'event', event: 'data-message', data: frame.data })
+    }
+  }
+
+  async webSocketClose(ws, code, reason) {
+    this.gone(ws)
+    try {
+      ws.close(code, reason)
+    } catch {
+      // уже закрыт
+    }
+  }
+
+  async webSocketError(ws) {
+    this.gone(ws)
+  }
+
+  // Ушёл хозяин — комната закрывается для всех; ушёл игрок — остальным новый состав
+  gone(ws) {
+    const me = ws.deserializeAttachment() || {}
+    ws.serializeAttachment({ game: me.game })
+    if (!me.sessionid) return
+    if (me.owner) {
+      for (const other of this.members(me.sessionid)) {
+        this.send(other, { t: 'event', event: 'disconnect' })
+        other.serializeAttachment({ game: other.deserializeAttachment().game })
+      }
+    } else this.usersUpdated(me.sessionid)
+    this.report(me.game)
+  }
+
+  // Счётчик «кто ждёт»: открытые комнаты этой игры, где есть свободное место
+  report(game) {
+    if (!this.env?.PRESENCE) return
+    const name = game || this.ctx.getWebSockets().map((ws) => ws.deserializeAttachment()?.game).find(Boolean)
+    if (!name) return
+    const open = Object.values(this.rooms()).filter((r) => r.current < r.max).length
+    const presence = this.env.PRESENCE.get(this.env.PRESENCE.idFromName('all'))
+    this.ctx.waitUntil?.(presence.fetch('https://presence/set', { method: 'POST', body: JSON.stringify({ key: `g${name}`, value: open }) }).catch(() => {}))
+  }
+}
+
+// Из данных игрока храним только имя и служебные номера
+function clean(extra) {
+  return {
+    domain: String(extra.domain || '').slice(0, 100),
+    game_id: extra.game_id,
+    room_name: String(extra.room_name || '').slice(0, 40),
+    player_name: String(extra.player_name || 'Игрок').slice(0, 30),
+    userid: extra.userid,
+    sessionid: extra.sessionid,
+  }
+}
+
+// Счётчик «кто ждёт»: лобби Doom и комнаты игр сообщают сюда, сколько людей ждёт; /api/lobbies отдаёт сводку.
+// Числа лежат в хранилище Durable Object (SQLite), «спячка» их не теряет.
+export class Presence {
+  constructor(ctx, env) {
+    this.ctx = ctx
+    this.env = env
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url)
+    if (url.pathname === '/set' && request.method === 'POST') {
+      const { key, value } = await request.json()
+      if (!/^(doom|g\d{1,10})$/.test(key || '')) return new Response('Неверный ключ', { status: 400 })
+      if (Number(value) > 0) await this.ctx.storage.put(key, Math.min(99, Number(value)))
+      else await this.ctx.storage.delete(key)
+      return Response.json({ ok: true })
+    }
+    const all = await this.ctx.storage.list()
+    const games = {}
+    for (const [key, value] of all) if (key.startsWith('g')) games[key.slice(1)] = value
+    return Response.json({ doom: all.get('doom') || 0, games })
+  }
+}

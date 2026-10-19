@@ -6,6 +6,8 @@
   'use strict'
 
   const SYSTEMS = {
+    // Денди по сети — EmulatorJS с ядром FCEUmm; одиночная игра Денди идёт на JSNES (game.js)
+    nes: { core: 'nes', keys: T('движение — стрелки · A — Z · B — X · Start — Enter · Select — V') },
     sega: { core: 'segaMD', keys: T('движение — стрелки · A — S · B — X · C — Z · Start — Enter') },
     // Master System — явно Genesis Plus GX: иначе EmulatorJS взял бы ядро SMS Plus, которого у нас нет
     sms: { core: 'genesis_plus_gx', keys: T('движение — стрелки · 1 (и Start) — X · 2 — Z · пауза — Enter') },
@@ -41,14 +43,22 @@
     const stage = document.getElementById('stage')
     ;(stage || document.body).appendChild(player)
     // Звук, «Сначала» и рекорд в полосе — для Денди; у EmulatorJS свои кнопки на его панели
-    for (const id of ['sound', 'restart', 'best']) {
+    for (const id of ['sound', 'restart', 'best', 'net']) {
       const el = document.getElementById(id)
       if (el) el.style.display = 'none'
     }
   }
 
-  function launch(core, url, name) {
+  // Номер игры для сетевой игры EmulatorJS — из хеша ROM: у всех игроков один и тот же
+  const netId = (game) => parseInt(game.rom.sha256.slice(0, 7), 16)
+
+  function launch(core, url, name, net) {
     window.EJS_player = '#sega-player'
+    if (net) {
+      // Сетевая игра — кнопка на панели эмулятора: создать комнату или войти в чужую; сервер — наш (/net/ejs)
+      window.EJS_gameID = net
+      window.EJS_netplayServer = `${location.origin}/net/ejs`
+    }
     window.EJS_core = core
     window.EJS_gameUrl = url
     window.EJS_gameName = name
@@ -70,7 +80,8 @@
       overlay(T('Игра не найдена'), T('Вернись в библиотеку и выбери игру.'))
       return
     }
-    prepare(game.title, game.keys || system.keys, game.credit)
+    // Подсказка по клавишам каталога написана для JSNES — у сетевой Денди своя раскладка EmulatorJS
+    prepare(game.title, game.console === 'nes' ? system.keys : game.keys || system.keys, game.credit)
     const files = (game.license && game.license.files) || []
     const licenseFile = files.find((f) => /license/i.test(f.name))
     const sourceFile = files.find((f) => /\.tar\.gz$|\.zip$/i.test(f.name))
@@ -87,7 +98,7 @@
       return
     }
     document.getElementById('overlay').classList.remove('shown')
-    launch(system.core, game.rom.url, game.title)
+    launch(system.core, game.rom.url, game.title, game.console === 'doom' ? 0 : netId(game))
   }
 
   // Свой файл из «Моих игр»: в эмулятор он идёт прямо из браузера, на сервер ничего не уходит

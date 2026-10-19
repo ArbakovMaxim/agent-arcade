@@ -131,7 +131,10 @@ const reason = (t) =>
     .replace(/^картридж с маппером (\d+) наш эмулятор Денди пока не поддерживает$/, 'our NES emulator does not support mapper $1 yet')
 
 const RULES = [
+  [/^Агент работает (.+) — сыграть\? В сети ждут: (.+)$/, (m) => `Agent has been working for ${dur(m[1])} — play? Waiting online: ${m[2]}`],
   [/^Агент работает (.+) — сыграть\?$/, (m) => `Agent has been working for ${dur(m[1])} — play?`],
+  [/^Присоединиться: (.+)$/, (m) => `Join: ${m[1]}`],
+  [/^в сети ждут: (.+)$/, (m) => `waiting online: ${m[1]}`],
   [/^Агент работает (.+)$/, (m) => `Agent has been working for ${dur(m[1])}`],
   [/^(\d+) (игра|игры|игр)$/, (m) => games(m[1])],
   [/^Графика: (\S+)(.*)$/, (m) => `Graphics: ${GRAPHICS[m[1]] ?? m[1]}${m[2].replace('сейчас', 'now').replace('пиксели', 'pixels').replace('символы', 'characters')}`],

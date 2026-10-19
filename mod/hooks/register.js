@@ -83,6 +83,7 @@ let osNotify = true // системные уведомления «агент з
 let asked = false // в этом ходе на вопрос уже ответили
 let askVisible = false
 let paneOpen = false
+let netWaiting = [] // кто ждёт в сети: [{ id, title, count }] — из /api/lobbies сайта, раз в минуту
 let lang = 'ru' // язык интерфейса: ru или en — настройка, иначе по окружению
 let wide = false // панель игры во всю ширину: разговор с агентом сжимается в узкую полосу
 let agentAlert = null // пока открыта игра: 'done' — агент закончил, 'permission' — ждёт разрешения; плашка поверх игры
@@ -183,6 +184,27 @@ function windowNotice($, text) {
       $.ui.invalidate('ui.render')
     }
   })
+}
+
+const LOBBIES_EVERY_MS = 60_000
+
+// Сводка сайта «кто ждёт» → игры каталога: номер игры EmulatorJS — из хеша ROM, как в окне; Doom — лобби FreeDM
+function waitingFrom(data) {
+  const list = []
+  for (const g of catalog.games) {
+    let count = 0
+    if (g.net === 'doom') count = Number(data?.doom) || 0
+    else if (['nes', 'sega', 'sms', 'psx'].includes(g.console) && g.rom?.sha256) count = Number(data?.games?.[parseInt(g.rom.sha256.slice(0, 7), 16)]) || 0
+    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, count })
+  }
+  return list.sort((a, b) => b.count - a.count)
+}
+
+function waitingText() {
+  return netWaiting
+    .slice(0, 2)
+    .map((w) => `${w.title} (${w.count})`)
+    .join(', ')
 }
 
 function paneColumns() {
@@ -479,6 +501,8 @@ function windowTarget() {
 function windowUrl(id) {
   let url
   if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(id.slice(4))
+  // Денди по сети — та же игра в окне на EmulatorJS (FCEUmm) с его сетевой игрой
+  else if (typeof id === 'string' && id.startsWith('net:')) url = `${pageUrl(id.slice(4))}&net=1`
   else {
     const m = mine.find((x) => x.id === id)
     url = m ? minePageUrl(m) : pageUrl(id)
@@ -644,6 +668,22 @@ export function register(on) {
       const localAppData = await $.env.get('LOCALAPPDATA')
       profileRoot = localAppData ? `${localAppData}\\claude-arcade` : ''
       if ((await $.env.get('OS')) === 'Windows_NT') platform = 'windows'
+      // Кто ждёт в сети — раз в минуту; первый раз — сразу после каталога
+      const pollLobbies = async () => {
+        try {
+          const response = await $.http.fetch(siteUrl('api/lobbies'))
+          if (!response.ok) return
+          const fresh = waitingFrom(JSON.parse(response.text))
+          if (JSON.stringify(fresh) !== JSON.stringify(netWaiting)) {
+            netWaiting = fresh
+            $.ui.invalidate('ui.render')
+          }
+        } catch {
+          // сайт недоступен — показываем то, что было
+        }
+      }
+      $.clock.after(2_000, pollLobbies)
+      $.clock.every(LOBBIES_EVERY_MS, pollLobbies)
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -930,7 +970,7 @@ export function register(on) {
       flexDirection: 'row',
       columnGap: 2,
       children: [
-        Text({ children: [`Агент работает ${workedText(workedSeconds(now))} — сыграть?`] }),
+        Text({ children: [`Агент работает ${workedText(workedSeconds(now))} — сыграть?${netWaiting.length ? ` В сети ждут: ${waitingText()}` : ''}`] }),
         // «Здесь» — панель Claude Code: в VS Code и Desktop картинкой, в терминале символами или пикселями.
         // «В окне» — браузер; его нет в Desktop (там мод не запускает программы) и пока ОС не определена.
         Button({
@@ -1322,6 +1362,31 @@ export function register(on) {
                   },
                 }),
                 dim('  все игры и статистика в окне браузера'),
+                // Кто-то ждёт в сети — можно сразу к нему
+                ...(netWaiting.length
+                  ? [
+                      Button({
+                        key: 'arcade-net-join',
+                        label: `Присоединиться: ${netWaiting[0].title}`,
+                        onPress: async () => {
+                          const target = netWaiting[0]
+                          lastGame = target.id
+                          libraryNotice = 'Открываю окно…'
+                          $.ui.invalidate('ui.render')
+                          const command = windowCommand(target.console === 'nes' ? `net:${target.id}` : target.id)
+                          try {
+                            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                            windowNotice($, launchNotice(result, target.id))
+                            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+                          } catch (err) {
+                            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+                          }
+                          $.ui.invalidate('ui.render')
+                        },
+                      }),
+                      dim(`  в сети ждут: ${waitingText()}`),
+                    ]
+                  : []),
               ]
             : []),
           Button({

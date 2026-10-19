@@ -5,7 +5,7 @@
 ;(async function () {
   'use strict'
   // Статичные надписи страницы — на языке окна
-  for (const id of ['to-library', 'license', 'source', 'restart']) {
+  for (const id of ['to-library', 'license', 'source', 'restart', 'net']) {
     const node = document.getElementById(id)
     if (node) node.textContent = T(node.textContent)
   }
@@ -85,7 +85,8 @@
       document.body.appendChild(script)
     })
     window.ArcadeNetDoom.start(catalog, id)
-  } else if (id && catalog.games && catalog.games[id] && ['sega', 'sms', 'psx', 'doom'].includes(catalog.games[id].console)) {
+  } else if (id && catalog.games && catalog.games[id] && (['sega', 'sms', 'psx', 'doom'].includes(catalog.games[id].console) || (catalog.games[id].console === 'nes' && params.get('net') === '1'))) {
+    // Денди с ?net=1 — сетевая игра на EmulatorJS (FCEUmm); без него — обычный JSNES
     await loadEJS()
     window.ArcadeEJS.start(catalog, id)
   } else if (id) window.ArcadeGame.start(catalog, id)

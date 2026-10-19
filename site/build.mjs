@@ -151,6 +151,8 @@ export function build({ root, out, now = new Date() }) {
   const doomWasm = path.join(root, 'vendor', 'doom-wasm')
   for (const name of ['websockets-doom.js', 'websockets-doom.wasm']) copy(path.join(doomWasm, name), path.join(out, 'doom-wasm', name))
   for (const name of fs.readdirSync(doomWasm).filter((n) => !n.startsWith('websockets-doom'))) copy(path.join(doomWasm, name), path.join(out, 'licenses', 'doom-wasm', name))
+  // Сетевая игра EmulatorJS — через наш сервер: вместо socket.io эмулятор получает нашу прослойку (web/netplay-io.js)
+  copy(path.join(root, 'web', 'netplay-io.js'), path.join(out, 'emulatorjs', 'src', 'socket.io.min.js'))
   // Маппер 28 (Action 53) — общий с модом: из модуля мода делаем обычный скрипт для страницы
   const mapper28 = fs.readFileSync(path.join(root, '..', 'mod', 'hooks', 'mapper28.js'), 'utf8').replace(/^export /gm, '')
   fs.writeFileSync(path.join(out, 'mapper28.js'), `;(function () {\n'use strict'\n${mapper28}\ninstallMapper28(window.jsnes && window.jsnes.Mappers)\n})()\n`)

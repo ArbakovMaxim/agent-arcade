@@ -70,5 +70,8 @@ npx serve dist       # посмотреть его в браузере на http
 
 Движок сетевого Doom (doom-wasm, GPL-2.0) собирается в GitHub Actions — сценарий `.github/workflows/doom-wasm.yml`, запуск вручную — и лежит в `vendor/doom-wasm` вместе с архивом исходников.
 
-На комнатах будут работать сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom. Тест — `tests/worker.test.mjs`.
+- `/net/ejs/<номер игры>` и `/net/ejs/list` — сетевая игра EmulatorJS (`EjsGame`, один Durable Object на игру): комнаты, состав, пересылка нажатий и сохранений. Окно говорит с ним через `web/netplay-io.js` — сборка кладёт её вместо `emulatorjs/src/socket.io.min.js`, поэтому чужой сервер netplay.emulatorjs.org не нужен. Номер игры — первые 7 знаков хеша ROM.
+- `/api/lobbies` — кто ждёт в сети (`Presence`): `{ doom: игроков в лобби FreeDM, games: { номер игры: открытых комнат } }`. Его раз в минуту спрашивает мод.
+
+Тест — `tests/worker.test.mjs`.
 

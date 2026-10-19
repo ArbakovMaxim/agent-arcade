@@ -172,7 +172,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').about_en =
   assert.equal(built.games.freedm.net, 'doom')
   assert.match(built.games.freedm.rom.url, /\.wad$/)
   for (const f of ['doom-wasm/websockets-doom.js', 'doom-wasm/websockets-doom.wasm', 'licenses/doom-wasm/COPYING.md', 'licenses/doom-wasm/BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
-  for (const f of ['emulatorjs/cores/prboom-wasm.data', 'emulatorjs/cores/reports/prboom.json']) assert.ok(fs.existsSync(path.join(dir, f)), f)
+  for (const f of ['emulatorjs/cores/prboom-wasm.data', 'emulatorjs/cores/reports/prboom.json', 'emulatorjs/cores/fceumm-wasm.data', 'licenses/emulatorjs/FCEUmm-COPYING.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
   assert.ok(fs.existsSync(path.join(dir, 'licenses', 'emulatorjs', 'PrBoom-COPYING.txt')))
   assert.match(fs.readFileSync(path.join(dir, '_redirects'), 'utf8'), /\/doom \/\?tab=doom 302/)
 }

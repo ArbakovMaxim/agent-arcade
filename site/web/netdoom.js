@@ -140,6 +140,8 @@
         const main = window.Module.callMain || window.callMain // в сборках Emscripten бывает и так, и так
         main(doomArgs('freedm.wad', url, isHost))
         canvas.focus()
+        // Движок ставит вкладке своё название («Websockets Doom») — возвращаем наше
+        for (const ms of [500, 3000, 15000]) setTimeout(() => { document.title = `${game.title} · Arcade` }, ms)
         // Хозяин начинает матч, когда все уже подключились: пробел на экране ожидания Chocolate Doom
         if (isHost) setTimeout(() => pressSpace(canvas), HOST_START_MS)
         setTimeout(() => location.reload(), BACK_TO_LOBBY_MS)
