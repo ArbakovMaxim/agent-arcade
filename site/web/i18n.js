@@ -159,7 +159,7 @@
 
   const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')
   const KEY_WORDS = [
-    ['воздушные тормоза — A и D (или Q и E)', 'air brakes — A and D (or Q and E)'], ['газ', 'throttle'], ['тормоз', 'brake'], ['руль', 'steer'],
+    ['воздушные тормоза — A и D (или Q и E)', 'air brakes — A and D (or Q and E)'], ['газ', 'throttle'], ['тормоз', 'brake'], ['руль', 'steer'], ['— пробел', '— Space'],
     ['открыть или нажать', 'open or press'], ['открыть', 'open'], ['счёт', 'score'], ['и стрелки', 'and arrows'], ['шаг вбок', 'strafe'], ['оружие', 'weapon'], ['карта', 'map'], ['меню', 'menu'], ['бег', 'run'],
     ['движение', 'move'], ['стрелки', 'arrows'], ['или', 'or'], ['прицел', 'aim'], ['огонь', 'fire'], ['пауза', 'pause'], ['и Start', 'and Start'],
   ]

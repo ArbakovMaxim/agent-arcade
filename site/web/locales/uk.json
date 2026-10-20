@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "рух — стрілки · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "рух — стрілки · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "рух — стрілки · вогонь — A · відкрити або натиснути — Z · біг — S · крок убік — Q/E · зброя — Tab/R · карта — V · меню — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "рух — стрілки · вогонь — Ctrl · відкрити — пробіл · біг — Shift · крок убік — Alt і стрілки · зброя — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "рух — стрілки · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "музика",
   "not played yet": "ще не грали",
@@ -125,13 +126,15 @@
   "relaxed": "без поспіху",
   "sandbox": "пісочниця",
   "score": "рахунок",
-  "scroll or Space — next": "коліщатко або Space — далі",
-  "scroll or Space — next · contents and font size — at the top": "коліщатко або Space — далі · зміст і розмір шрифту — вгорі",
+  "scroll or Space — next": "коліщатко або пробіл — далі",
+  "scroll or Space — next · contents and font size — at the top": "коліщатко або пробіл — далі · зміст і розмір шрифту — вгорі",
   "shooter": "шутер",
   "soon": "скоро",
   "source": "вихідний код",
   "sports": "спорт",
   "strategy": "стратегія",
+  "the emulator did not recognize the file.": "емулятор не розпізнав файл.",
+  "the file is damaged: the hash does not match": "файл пошкоджено: хеш не збігся",
   "white": "білі",
   "your game": "твоя гра",
   "your own file — kept only in this browser": "свій файл — зберігається лише в цьому браузері",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "Не вдалося отримати список ігор: {0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "Це архів. Розпакуй його й вибери сам файл гри: {0}",
   "This is not a {0} game: {1}": "Це не гра для {0}: {1}",
-  "No free {0} games yet. {1}": "Вільних ігор для {0} поки немає. {1}"
+  "No free {0} games yet. {1}": "Вільних ігор для {0} поки немає. {1}",
+  "Open your own file {0} with the “Open your own file” button above.": "Відкрий свій файл {0} кнопкою «Відкрити свій файл» угорі."
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "рух"
+  ],
+  [
+   "open",
+   "відкрити"
   ],
   [
    "open or press",

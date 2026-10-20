@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "hareket — oklar · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "hareket — oklar · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "hareket — oklar · ateş — A · aç veya bas — Z · koş — S · yan adım — Q/E · silah — Tab/R · harita — V · menü — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "hareket — oklar · ateş — Ctrl · aç — Boşluk · koş — Shift · yan adım — Alt ve oklar · silah — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "hareket — oklar · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "müzik",
   "not played yet": "henüz oynanmadı",
@@ -125,13 +126,15 @@
   "relaxed": "acelesiz",
   "sandbox": "sandbox",
   "score": "skor",
-  "scroll or Space — next": "kaydır veya Space — ileri",
-  "scroll or Space — next · contents and font size — at the top": "kaydır veya Space — ileri · içindekiler ve yazı boyutu — üstte",
+  "scroll or Space — next": "kaydır veya Boşluk — ileri",
+  "scroll or Space — next · contents and font size — at the top": "kaydır veya Boşluk — ileri · içindekiler ve yazı boyutu — üstte",
   "shooter": "nişancı",
   "soon": "yakında",
   "source": "kaynak kodu",
   "sports": "spor",
   "strategy": "strateji",
+  "the emulator did not recognize the file.": "emülatör dosyayı tanımadı.",
+  "the file is damaged: the hash does not match": "dosya bozuk: hash değeri eşleşmiyor",
   "white": "beyaz",
   "your game": "kendi oyunun",
   "your own file — kept only in this browser": "kendi dosyan — yalnızca bu tarayıcıda saklanır",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "Oyun listesi alınamadı: {0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "Bu bir arşiv. Arşivi çıkar ve doğrudan oyun dosyasını seç: {0}",
   "This is not a {0} game: {1}": "Bu bir {0} oyunu değil: {1}",
-  "No free {0} games yet. {1}": "Henüz ücretsiz {0} oyunu yok. {1}"
+  "No free {0} games yet. {1}": "Henüz ücretsiz {0} oyunu yok. {1}",
+  "Open your own file {0} with the “Open your own file” button above.": "Kendi {0} dosyanı yukarıdaki “Kendi dosyanı aç” düğmesiyle aç."
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "hareket"
+  ],
+  [
+   "open",
+   "aç"
   ],
   [
    "open or press",

@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "mover — setas · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "mover — setas · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "mover — setas · atirar — A · abrir ou acionar — Z · correr — S · passo lateral — Q/E · arma — Tab/R · mapa — V · menu — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "mover — setas · atirar — Ctrl · abrir — Espaço · correr — Shift · passo lateral — Alt e setas · arma — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "mover — setas · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "música",
   "not played yet": "ainda não jogado",
@@ -125,13 +126,15 @@
   "relaxed": "tranquilo",
   "sandbox": "sandbox",
   "score": "placar",
-  "scroll or Space — next": "roda do mouse ou Space — avançar",
-  "scroll or Space — next · contents and font size — at the top": "roda do mouse ou Space — avançar · sumário e tamanho da fonte — no topo",
+  "scroll or Space — next": "roda do mouse ou Espaço — avançar",
+  "scroll or Space — next · contents and font size — at the top": "roda do mouse ou Espaço — avançar · sumário e tamanho da fonte — no topo",
   "shooter": "tiro",
   "soon": "em breve",
   "source": "código-fonte",
   "sports": "esportes",
   "strategy": "estratégia",
+  "the emulator did not recognize the file.": "o emulador não reconheceu o arquivo.",
+  "the file is damaged: the hash does not match": "o arquivo está corrompido: o hash não confere",
   "white": "brancas",
   "your game": "seu jogo",
   "your own file — kept only in this browser": "seu próprio arquivo — guardado só neste navegador",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "Não foi possível obter a lista de jogos: {0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "Isto é um arquivo compactado. Descompacte-o e escolha o próprio arquivo do jogo: {0}",
   "This is not a {0} game: {1}": "Este não é um jogo de {0}: {1}",
-  "No free {0} games yet. {1}": "Ainda não há jogos gratuitos de {0}. {1}"
+  "No free {0} games yet. {1}": "Ainda não há jogos gratuitos de {0}. {1}",
+  "Open your own file {0} with the “Open your own file” button above.": "Abra seu próprio arquivo {0} com o botão “Abrir seu próprio arquivo” acima."
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "mover"
+  ],
+  [
+   "open",
+   "abrir"
   ],
   [
    "open or press",

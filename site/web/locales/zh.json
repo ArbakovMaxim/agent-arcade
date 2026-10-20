@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "移动 — 方向键 · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "移动 — 方向键 · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "移动 — 方向键 · 开火 — A · 打开或按下 — Z · 奔跑 — S · 侧移 — Q/E · 武器 — Tab/R · 地图 — V · 菜单 — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "移动 — 方向键 · 开火 — Ctrl · 打开 — 空格键 · 奔跑 — Shift · 侧移 — Alt 和方向键 · 武器 — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "移动 — 方向键 · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "音乐",
   "not played yet": "还没玩过",
@@ -125,13 +126,15 @@
   "relaxed": "休闲",
   "sandbox": "沙盒",
   "score": "得分",
-  "scroll or Space — next": "滚轮或 Space — 下一页",
-  "scroll or Space — next · contents and font size — at the top": "滚轮或 Space — 下一页 · 目录和字号 — 在顶部",
+  "scroll or Space — next": "滚轮或 空格键 — 下一页",
+  "scroll or Space — next · contents and font size — at the top": "滚轮或 空格键 — 下一页 · 目录和字号 — 在顶部",
   "shooter": "射击",
   "soon": "即将推出",
   "source": "源代码",
   "sports": "体育",
   "strategy": "策略",
+  "the emulator did not recognize the file.": "模拟器无法识别该文件。",
+  "the file is damaged: the hash does not match": "文件已损坏：哈希值不匹配",
   "white": "白方",
   "your game": "你的游戏",
   "your own file — kept only in this browser": "自己的文件——仅保存在此浏览器中",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "无法获取游戏列表：{0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "这是一个压缩包。请解压后选择游戏文件本身：{0}",
   "This is not a {0} game: {1}": "这不是 {0} 游戏：{1}",
-  "No free {0} games yet. {1}": "暂时还没有免费的 {0} 游戏。{1}"
+  "No free {0} games yet. {1}": "暂时还没有免费的 {0} 游戏。{1}",
+  "Open your own file {0} with the “Open your own file” button above.": "用上方的“打开自己的文件”按钮打开你自己的 {0} 文件。"
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "移动"
+  ],
+  [
+   "open",
+   "打开"
   ],
   [
    "open or press",

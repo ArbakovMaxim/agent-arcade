@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "移動 — 矢印キー · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "移動 — 矢印キー · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "移動 — 矢印キー · 射撃 — A · 開ける・押す — Z · ダッシュ — S · 横移動 — Q/E · 武器 — Tab/R · マップ — V · メニュー — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "移動 — 矢印キー · 射撃 — Ctrl · 開ける — スペース · ダッシュ — Shift · 横移動 — Alt と矢印キー · 武器 — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "移動 — 矢印キー · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "音楽",
   "not played yet": "未プレイ",
@@ -125,13 +126,15 @@
   "relaxed": "のんびり",
   "sandbox": "サンドボックス",
   "score": "スコア",
-  "scroll or Space — next": "スクロールまたは Space — 次へ",
-  "scroll or Space — next · contents and font size — at the top": "スクロールまたは Space — 次へ · 目次と文字サイズ — 上部",
+  "scroll or Space — next": "スクロールまたは スペース — 次へ",
+  "scroll or Space — next · contents and font size — at the top": "スクロールまたは スペース — 次へ · 目次と文字サイズ — 上部",
   "shooter": "シューティング",
   "soon": "近日公開",
   "source": "ソースコード",
   "sports": "スポーツ",
   "strategy": "ストラテジー",
+  "the emulator did not recognize the file.": "エミュレーターがファイルを認識できませんでした。",
+  "the file is damaged: the hash does not match": "ファイルが破損しています：ハッシュが一致しません",
   "white": "白",
   "your game": "自分のゲーム",
   "your own file — kept only in this browser": "自分のファイル — このブラウザにのみ保存されます",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "ゲームの一覧を取得できませんでした：{0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "これはアーカイブです。展開して、ゲームファイル本体を選んでください：{0}",
   "This is not a {0} game: {1}": "{0} のゲームではありません：{1}",
-  "No free {0} games yet. {1}": "{0} の無料ゲームはまだありません。{1}"
+  "No free {0} games yet. {1}": "{0} の無料ゲームはまだありません。{1}",
+  "Open your own file {0} with the “Open your own file” button above.": "自分の {0} ファイルは、上の「自分のファイルを開く」ボタンで開けます。"
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "移動"
+  ],
+  [
+   "open",
+   "開ける"
   ],
   [
    "open or press",

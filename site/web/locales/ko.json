@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "이동 — 방향키 · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "이동 — 방향키 · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "이동 — 방향키 · 발사 — A · 열기/누르기 — Z · 달리기 — S · 옆으로 이동 — Q/E · 무기 — Tab/R · 맵 — V · 메뉴 — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "이동 — 방향키 · 발사 — Ctrl · 열기 — 스페이스 · 달리기 — Shift · 옆으로 이동 — Alt와 방향키 · 무기 — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "이동 — 방향키 · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "음악",
   "not played yet": "아직 플레이하지 않음",
@@ -125,13 +126,15 @@
   "relaxed": "여유롭게",
   "sandbox": "샌드박스",
   "score": "점수",
-  "scroll or Space — next": "스크롤 또는 Space — 다음",
-  "scroll or Space — next · contents and font size — at the top": "스크롤 또는 Space — 다음 · 목차와 글자 크기 — 위쪽",
+  "scroll or Space — next": "스크롤 또는 스페이스 — 다음",
+  "scroll or Space — next · contents and font size — at the top": "스크롤 또는 스페이스 — 다음 · 목차와 글자 크기 — 위쪽",
   "shooter": "슈팅",
   "soon": "준비 중",
   "source": "소스 코드",
   "sports": "스포츠",
   "strategy": "전략",
+  "the emulator did not recognize the file.": "에뮬레이터가 파일을 인식하지 못했습니다.",
+  "the file is damaged: the hash does not match": "파일이 손상되었습니다: 해시가 일치하지 않습니다",
   "white": "백",
   "your game": "내 게임",
   "your own file — kept only in this browser": "내 파일 — 이 브라우저에만 보관됨",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "게임 목록을 가져오지 못했습니다: {0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "압축 파일입니다. 압축을 풀고 게임 파일 자체를 선택하세요: {0}",
   "This is not a {0} game: {1}": "{0} 게임이 아닙니다: {1}",
-  "No free {0} games yet. {1}": "아직 무료 {0} 게임이 없습니다. {1}"
+  "No free {0} games yet. {1}": "아직 무료 {0} 게임이 없습니다. {1}",
+  "Open your own file {0} with the “Open your own file” button above.": "내 {0} 파일은 위의 “내 파일 열기” 버튼으로 여세요."
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "이동"
+  ],
+  [
+   "open",
+   "열기"
   ],
   [
    "open or press",

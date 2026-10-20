@@ -150,7 +150,7 @@ const RULES = [
   [/^Агент работает (.+)$/, (m) => `Agent has been working for ${dur(m[1])}`],
   [/^(\d+) (игра|игры|игр)$/, (m) => games(m[1])],
   [/^Графика: (\S+)(.*)$/, (m) => `Graphics: ${GRAPHICS[m[1]] ?? m[1]}${m[2].replace('сейчас', 'now').replace('пиксели', 'pixels').replace('символы', 'characters')}`],
-  [/^Открывать: окно (.+?)( \(обычное окно браузера\))?$/, (m) => `Open in: ${m[1]} window${m[2] ? ' (a regular browser window)' : ''}`],
+  [/^Открывать: (окно .+)$/, (m) => `Open in: ${opener(m[1])}`],
   [/^Игры открываются (.+)\.$/, (m) => `Games open ${m[1] === 'здесь, в панели' ? 'here, in the pane' : `in ${where(m[1].replace(/^в /, ''))}`}.`],
   [/^Когда агент закончил: (.+)$/, (m) => `When the agent finishes: ${SIGNAL[m[1]] ?? m[1]}`],
   [/^Когда агент ждёт разрешения: (.+)$/, (m) => `When the agent asks for permission: ${SIGNAL[m[1]] ?? m[1]}`],
@@ -194,11 +194,14 @@ const event = (t) =>
     .replace(/^не удалось найти браузеры: (.+)$/, 'could not find browsers: $1')
     .replace(/^уведомление не показалось: (.+)$/, 'the notification did not show: $1')
     .replace(/^ошибка мода: (.+)$/, 'mod error: $1')
-const opener = (t) =>
-  t
-    .replace('окно браузера по умолчанию', 'default browser window')
-    .replace(' (обычное окно браузера)', ' (a regular browser window)')
-    .replace(/^окно (.+)$/, '$1 window')
+const opener = (t) => {
+  const note = (x) => ({ 'ищу браузеры…': 'looking for browsers…', 'обычное окно браузера': 'a regular browser window' })[x] ?? x
+  const byDefault = t.match(/^окно браузера по умолчанию(?: \((.+)\))?$/)
+  if (byDefault) return `default browser window${byDefault[1] ? ` (${note(byDefault[1])})` : ''}`
+  const named = t.match(/^окно (.+?)(?: \((обычное окно браузера|ищу браузеры…)\))?$/)
+  if (named) return `${named[1]} window${named[2] ? ` (${note(named[2])})` : ''}`
+  return t
+}
 const place = (t) =>
   t === 'играть здесь, в панели' ? 'play here, in the pane' : t.startsWith('открывать: ') ? `open in: ${where(t.slice(11).replace(/^в /, ''))}` : t
 

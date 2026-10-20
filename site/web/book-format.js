@@ -65,9 +65,38 @@
     return out
   }
 
+  // Форма книги: оглавление (три и больше заголовков подряд) схлопнуть до настоящей первой главы; при заголовках
+  // «номер + название» голые «I.», «II.» — разделы, не главы. Общая для TXT и EPUB
+  function shape(blocks) {
+    // Оглавление: три и больше заголовков подряд без текста между ними. Остаётся последний — настоящая первая глава;
+    // предпоследний — только если это часть («PART ONE») или рассказ, к которому относится раздел («I. A SCANDAL…» + «I.»)
+    const numeral = (t) => (t.match(/^([IVXLC]{1,7})\b/) || [])[1]
+    const collapsed = []
+    for (let i = 0; i < blocks.length; ) {
+      let j = i
+      while (j < blocks.length && blocks[j].head) j++
+      if (j - i >= 3) {
+        const last = blocks[j - 1]
+        const prev = blocks[j - 2]
+        // часть перед главой («PART ONE» + «I The Old Sea-dog»), но не строка оглавления того же уровня («Book II» + «BOOK I.»)
+        const partWord = /^(part|book|часть|книга|том|частина)(?=[\s.:—-]|$)/i
+        const part = partWord.test(prev.text) && !partWord.test(last.text)
+        const story = /^[IVXLC]{1,7}\.?$/.test(last.text) && /^[IVXLC]{1,7}\.?\s+\S/.test(prev.text) && numeral(prev.text) === numeral(last.text)
+        if (part || story) collapsed.push(prev)
+        collapsed.push(last)
+        i = j
+      } else collapsed.push(blocks[i++])
+    }
+    blocks = collapsed
+    // Есть заголовки «номер + название» («I. A SCANDAL IN BOHEMIA») — тогда голые «I.», «II.» внутри — разделы, не главы
+    if (blocks.some((b) => b.head && /^[IVXLC]{1,7}\.?\s+\S/.test(b.text))) blocks = blocks.filter((b) => !(b.head && /^[IVXLC]{1,7}\.?$/.test(b.text)))
+    return blocks
+  }
+
   // --- TXT ----------------------------------------------------------------------------------------------------------
   const HEADING = [
-    /^(chapter|part|book|stave|adventure|epilogue|prologue|preface|introduction|conclusion|appendix|глава|часть|книга|том|эпилог|пролог|розділ|частина|епілог|передмова)\b[\s.:—-]*[\wivxlcдмаъ.]*/i,
+    // (?=…) вместо \b: в JavaScript \b — граница слова только для латиницы, после «глава» или «розділ» она не срабатывает
+    /^(chapter|part|book|stave|adventure|epilogue|prologue|preface|introduction|conclusion|appendix|глава|часть|книга|том|эпилог|пролог|розділ|частина|епілог|передмова)(?=[\s.:—-]|$)/i,
     /^[IVXLC]{1,7}\.?$/,
     /^[IVXLC]{1,7}\.\s+\S/,
     /^[IVXLC]{1,7}\s+[A-ZА-ЯЁ“"'][^.!?]{2,80}$/, // «I The Old Sea-dog at the “Admiral Benbow”»
@@ -92,26 +121,7 @@
     // Заголовки целиком заглавными («STORY OF THE DOOR»): если таких коротких строк в книге три и больше — это главы
     const caps = (p) => p.length <= 60 && /[A-ZА-ЯЁЇІЄҐ]{3}/.test(p) && p === p.toUpperCase() && !/[.!?…]$/.test(p) && !/^THE END$/i.test(p)
     if (blocks.filter((b) => !b.head && caps(b.text)).length >= 3) blocks = blocks.map((b) => (caps(b.text) ? { ...b, head: true } : b))
-    // Оглавление: три и больше заголовков подряд без текста между ними. Остаётся последний — настоящая первая глава;
-    // предпоследний — только если это часть («PART ONE») или рассказ, к которому относится раздел («I. A SCANDAL…» + «I.»)
-    const numeral = (t) => (t.match(/^([IVXLC]{1,7})\b/) || [])[1]
-    const collapsed = []
-    for (let i = 0; i < blocks.length; ) {
-      let j = i
-      while (j < blocks.length && blocks[j].head) j++
-      if (j - i >= 3) {
-        const last = blocks[j - 1]
-        const prev = blocks[j - 2]
-        const part = /^(part|book|часть|книга|том)\b/i.test(prev.text)
-        const story = /^[IVXLC]{1,7}\.?$/.test(last.text) && /^[IVXLC]{1,7}\.?\s+\S/.test(prev.text) && numeral(prev.text) === numeral(last.text)
-        if (part || story) collapsed.push(prev)
-        collapsed.push(last)
-        i = j
-      } else collapsed.push(blocks[i++])
-    }
-    blocks = collapsed
-    // Есть заголовки «номер + название» («I. A SCANDAL IN BOHEMIA») — тогда голые «I.», «II.» внутри — разделы, не главы
-    if (blocks.some((b) => b.head && /^[IVXLC]{1,7}\.?\s+\S/.test(b.text))) blocks = blocks.filter((b) => !(b.head && /^[IVXLC]{1,7}\.?$/.test(b.text)))
+    blocks = shape(blocks)
     const lang = meta.lang || (/[а-яё]/i.test(body.slice(0, 5000)) ? 'ru' : 'en')
     const chapters = split(toChapters(blocks, meta.title || (lang === 'ru' ? 'Начало' : 'Beginning')), lang === 'ru' ? 'Часть' : 'Part')
     return { title: meta.title || '', author: meta.author || '', lang, chapters }
@@ -210,18 +220,42 @@
       if (id && href) items.set(id, resolve(opfPath, href))
     }
     const spine = [...opf.matchAll(/<itemref\b[^>]*idref\s*=\s*"([^"]+)"/gi)].map((m) => items.get(m[1])).filter(Boolean)
-    const blocks = []
+    let blocks = []
     for (const path of spine) {
       const html = await readEntry(bytes, zip, path, meta.inflateRaw)
       if (!html) continue
       const body = (html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i) || [])[1] || html
-      for (const m of body.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>|<(p|h[4-6]|li|dd)\b[^>]*>([\s\S]*?)<\/\3>/gi)) {
-        const text = clean(m[2] ?? m[4])
+      for (const m of body.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>|<div\b[^>]*class="[^"]*\b(?:stanza|verse)\b[^"]*"[^>]*>([\s\S]*?)<\/div>|<(p|h[4-6]|li|dd)\b[^>]*>([\s\S]*?)<\/\4>/gi)) {
+        // строфа Gutenberg: строки — <span> или <div class="line">, между ними — перенос
+        const raw = m[3] !== undefined ? m[3].replace(/<\/(span|div)>\s*(<br\s*\/?>)?/gi, '<br/>') : (m[2] ?? m[5])
+        const text = clean(raw)
         if (text) blocks.push({ head: Boolean(m[1]), text })
       }
     }
-    const chapters = split(toChapters(blocks, title || meta.title || 'Начало'), lang === 'ru' ? 'Часть' : 'Part')
+    // Project Gutenberg: только то, что между «*** START OF» и «*** END OF»
+    const startAt = blocks.findIndex((x) => /\*{3}\s*START OF (THE|THIS) PROJECT GUTENBERG/i.test(x.text))
+    if (startAt >= 0) blocks.splice(0, startAt + 1)
+    const endAt = blocks.findIndex((x) => /\*{3}\s*END OF (THE|THIS) PROJECT GUTENBERG/i.test(x.text))
+    if (endAt >= 0) blocks.splice(endAt)
+    // Короткий абзац «I», «Розділ II», «Дія перша», «Пісня третя» — тоже заголовок (так размечена Викитека)
+    for (const x of blocks) if (!x.head && x.text.length <= 60 && !x.text.includes('\n') && (HEADING.some((re) => re.test(x.text)) || EPUB_HEADING.test(x.text))) x.head = true
+    blocks = verse(shape(blocks))
+    const chapters = split(toChapters(blocks, title || meta.title || 'Начало'), lang === 'ru' ? 'Часть' : lang === 'uk' ? 'Частина' : 'Part')
     return { title: title || meta.title || '', author: author || meta.author || '', lang, chapters }
+  }
+  const EPUB_HEADING = /^(дія|розділ|частина|пісня|пролог|епілог|сцена|ява|глава|действие|песнь|canto|act|scene)(?=[\s.:—-]|$)[^.!?]{0,40}$/i
+  // Стихи построчными абзацами (каждая строка — свой <p>): подряд 4 и больше коротких строк — строфы по 14 строк
+  function verse(blocks) {
+    const out = []
+    for (let i = 0; i < blocks.length; ) {
+      let j = i
+      while (j < blocks.length && !blocks[j].head && blocks[j].text.length < 70 && !blocks[j].text.includes('\n') && !/^[—–-]/.test(blocks[j].text)) j++
+      if (j - i >= 4) {
+        for (let k = i; k < j; k += 14) out.push({ head: false, text: blocks.slice(k, Math.min(j, k + 14)).map((x) => x.text).join('\n') })
+        i = j
+      } else out.push(blocks[i++])
+    }
+    return out
   }
 
   // --- Общее: по расширению и содержимому -----------------------------------------------------------------------

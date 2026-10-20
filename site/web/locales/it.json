@@ -115,6 +115,7 @@
   "move — arrows · A — S · B — X · C — Z · Start — Enter": "movimento — frecce · A — S · B — X · C — Z · Start — Enter",
   "move — arrows · A — Z · B — X · Start — Enter · Select — V": "movimento — frecce · A — Z · B — X · Start — Enter · Select — V",
   "move — arrows · fire — A · open or press — Z · run — S · strafe — Q/E · weapon — Tab/R · map — V · menu — Enter": "movimento — frecce · fuoco — A · apri o attiva — Z · corsa — S · passo laterale — Q/E · arma — Tab/R · mappa — V · menu — Enter",
+  "move — arrows · fire — Ctrl · open — Space · run — Shift · strafe — Alt and arrows · weapon — 1–7": "movimento — frecce · fuoco — Ctrl · apri — Spazio · corsa — Shift · passo laterale — Alt e frecce · arma — 1–7",
   "move — arrows · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V": "movimento — frecce · ✕ — X · ○ — Z · □ — S · △ — A · L1/R1 — Q/E · Start — Enter · Select — V",
   "music": "musica",
   "not played yet": "non ancora giocato",
@@ -125,13 +126,15 @@
   "relaxed": "senza fretta",
   "sandbox": "sandbox",
   "score": "punteggio",
-  "scroll or Space — next": "rotellina o Space — avanti",
-  "scroll or Space — next · contents and font size — at the top": "rotellina o Space — avanti · indice e dimensione del carattere — in alto",
+  "scroll or Space — next": "rotellina o Spazio — avanti",
+  "scroll or Space — next · contents and font size — at the top": "rotellina o Spazio — avanti · indice e dimensione del carattere — in alto",
   "shooter": "sparatutto",
   "soon": "in arrivo",
   "source": "codice sorgente",
   "sports": "sport",
   "strategy": "strategia",
+  "the emulator did not recognize the file.": "l’emulatore non ha riconosciuto il file.",
+  "the file is damaged: the hash does not match": "il file è danneggiato: l’hash non corrisponde",
   "white": "bianco",
   "your game": "il tuo gioco",
   "your own file — kept only in this browser": "il tuo file — conservato solo in questo browser",
@@ -159,7 +162,8 @@
   "Could not get the list of games: {0}": "Impossibile ottenere l’elenco dei giochi: {0}",
   "This is an archive. Unpack it and choose the game file itself: {0}": "Questo è un archivio. Estrailo e scegli il file del gioco vero e proprio: {0}",
   "This is not a {0} game: {1}": "Questo non è un gioco per {0}: {1}",
-  "No free {0} games yet. {1}": "Non ci sono ancora giochi gratuiti per {0}. {1}"
+  "No free {0} games yet. {1}": "Non ci sono ancora giochi gratuiti per {0}. {1}",
+  "Open your own file {0} with the “Open your own file” button above.": "Apri un tuo file {0} con il pulsante «Apri un tuo file» in alto."
  },
  "words": [
   [
@@ -185,6 +189,10 @@
   [
    "move",
    "movimento"
+  ],
+  [
+   "open",
+   "apri"
   ],
   [
    "open or press",
