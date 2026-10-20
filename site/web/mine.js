@@ -11,6 +11,7 @@
     sms: '.sms',
     psx: '.chd,.pbp,.iso,.cue,.bin,.img,.zip,.7z,.m3u',
     doom: '.wad,.zip',
+    books: '.epub,.fb2,.txt',
   }
   const PSX_EXT = ['chd', 'pbp', 'iso', 'cue', 'bin', 'img', 'zip', '7z', 'm3u']
   const MAX_SMALL = 16 * 1024 * 1024 // Денди и Sega читаем целиком: проверить заголовок и посчитать хеш
@@ -120,6 +121,13 @@
       }
       const key = new TextEncoder().encode(`${file.name}:${file.size}:${file.lastModified}`)
       id = `doom-${(await sha256(key)).slice(0, 12)}`
+    } else if (consoleId === 'books') {
+      // Книга: EPUB, FB2 или TXT; разбирается при открытии, в читалке. id — по имени, размеру и дате
+      const ext = ((String(file.name).match(/\.([^.]+)$/) || [])[1] || '').toLowerCase()
+      if (!['epub', 'fb2', 'txt'].includes(ext)) throw new Error(T('Книга должна быть в EPUB, FB2 или TXT.'))
+      if (file.size > 50 * 1024 * 1024) throw new Error(T('Файл больше 50 МБ — для книги это слишком много.'))
+      const key = new TextEncoder().encode(`${file.name}:${file.size}:${file.lastModified}`)
+      id = `book-${(await sha256(key)).slice(0, 12)}`
     } else if (consoleId === 'psx') {
       const ext = (String(file.name).match(/\.([^.]+)$/) || [])[1]
       if (!ext || !PSX_EXT.includes(ext.toLowerCase())) {
@@ -130,7 +138,7 @@
     } else {
       throw new Error(T('Эта приставка пока не поддерживает свои файлы.'))
     }
-    const entry = { id, console: consoleId, title: titleOf(file.name), size: file.size, added: Date.now(), sha256: sha, file }
+    const entry = { id, console: consoleId, title: titleOf(file.name), name: file.name, size: file.size, added: Date.now(), sha256: sha, file }
     await put(entry)
     return entry
   }

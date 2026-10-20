@@ -1,5 +1,11 @@
 # Changelog · Список изменений
 
+## 0.10.0 — books and 13 languages · книги и 13 языков
+
+- **Books · книги**: 150 public-domain books — 100 in English (Project Gutenberg) and 50 in Ukrainian (Ukrainian Wikisource); a reader in the Arcade window with contents, font size, light and dark theme; the bookmark is set automatically; your own EPUB, FB2 and TXT · 150 книг из общественного достояния — 100 на английском (Project Gutenberg) и 50 на украинском (украинская Викитека); читалка в окне Arcade с оглавлением, размером шрифта, светлой и тёмной темой; закладка ставится сама; свои EPUB, FB2 и TXT.
+- **13 languages · 13 языков**: English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — from the system or browser language, English by default; a language list in the `/arcade` menu and in the window · по языку системы или браузера, по умолчанию английский; список языков в меню `/arcade` и в окне.
+- Reading right in the Claude Code panel is coming next · чтение прямо в панели Claude Code — следующим шагом.
+
 ## 0.9.0-alpha — 2026-10-19
 
 First public alpha · первая публичная альфа-версия.

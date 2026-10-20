@@ -25,15 +25,18 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
-assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
+// Игры каталога и книги из content/books/index.json — в этом порядке
+const bookIndex = path.join(ROOT, 'content', 'books', 'index.json')
+const indexed = fs.existsSync(bookIndex) ? JSON.parse(fs.readFileSync(bookIndex, 'utf8')).map((b) => b.id) : []
+assert.deepEqual(Object.keys(catalog.games), [...source.games.map((g) => g.id), ...indexed])
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
 assert.ok(Object.keys(catalog.games).length >= 12, 'в каталоге все игры')
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf8')), catalog)
 
 for (const [id, game] of Object.entries(catalog.games)) {
-  if (game.kind === 'board' || game.kind === 'web') continue // настольные и браузерные — без ROM, проверены отдельно
+  if (game.kind === 'board' || game.kind === 'web' || game.kind === 'book') continue // без ROM — проверены отдельно
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
@@ -142,7 +145,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sms'), ['balloon-master', 'skyhaul', 'food-fighter', 'escape-from-monster-dimension'])
   assert.equal(built.consoles.find((c) => c.id === 'gg'), undefined, 'Game Gear убран')
   const redirects = fs.readFileSync(path.join(dir, '_redirects'), 'utf8')
-  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
+  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
   assert.match(fs.readFileSync(path.join(dir, '.assetsignore'), 'utf8'), /_redirects/)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System \(нет метки TMR SEGA и расширение не/)
@@ -159,6 +162,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   const dir = temp('about-en')
   const built = build({ root: ROOT, out: dir })
   for (const [id, g] of Object.entries(built.games)) {
+    if (g.kind === 'book') continue // у книг описание необязательно: в карточке — автор, жанр, год
     assert.ok(typeof g.about_en === 'string' && g.about_en.length > 10, `${id}: есть английское описание`)
     assert.ok(!/[А-Яа-яЁё]/.test(g.about_en), `${id}: описание по-английски`)
   }
@@ -226,4 +230,20 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = [
   assert.match(fs.readFileSync(path.join(dir, '_redirects'), 'utf8'), /\/games \/\?tab=games 302/)
 }
 assert.throws(broken((d) => { delete d.games.find((g) => g.id === 'hexgl').shelf }), /игра hexgl: у игр группы games должна быть полка/)
+// Книги: book.json — в сайте, в каталоге — автор, язык, главы и слова; без файла книги сборка падает
+{
+  const dir = temp('books')
+  const built = build({ root: ROOT, out: dir })
+  const books = Object.entries(built.games).filter(([, g]) => g.kind === 'book')
+  assert.ok(books.length >= 2, 'книги каталога на месте — из content/books/index.json')
+  for (const [id, g] of books) {
+    assert.equal(g.console, 'books')
+    assert.equal(g.text, `books/${id}/book.json`)
+    assert.ok(g.author && g.lang && g.chapters >= 1 && g.words > 0, `${id}: автор, язык, главы, слова`)
+    const book = JSON.parse(fs.readFileSync(path.join(dir, g.text), 'utf8'))
+    assert.equal(book.chapters.length, g.chapters)
+    assert.ok(fs.existsSync(path.join(dir, 'licenses', id, 'LICENSE.txt')), `${id}: лицензия`)
+  }
+}
+assert.throws(broken((d) => { d.games.push({ id: 'nope-book', console: 'books', kind: 'book', text: 'books/nope/book.json', title: 'X', author: 'Y', lang: 'en', genre: 'роман', keys: '…', license: { name: 'общественное достояние', author: 'Y', source: 'https://example.org', files: [] } }) }), /нет файла книги/)
 console.log('Sega: все проверки прошли')

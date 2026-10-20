@@ -2,14 +2,22 @@
 // Перевод делается по готовому дереву интерфейса: точные строки — по словарю, строки с подстановками — по шаблонам.
 // Что не переведено, остаётся по-русски — интерфейс от этого не ломается.
 
-export const LANGS = ['ru', 'en']
+import { LOCALES } from './locales/index.js'
 
-// Язык по окружению: LANG, LC_ALL, LC_MESSAGES. Без подсказок — русский, как было до выбора языка.
+// Языки интерфейса: русский — исходный (строки в коде), английский — свой перевод, остальные — переводы
+// поверх английского из locales/<язык>.js. Подписи — на самом языке, чтобы найти свой, не понимая текущего
+export const LANGS = ['en', 'ru', 'uk', 'es', 'fr', 'de', 'pt', 'it', 'pl', 'tr', 'ja', 'zh', 'ko']
+export const LANG_NAMES = { en: 'English', ru: 'Русский', uk: 'Українська', es: 'Español', fr: 'Français', de: 'Deutsch', pt: 'Português', it: 'Italiano', pl: 'Polski', tr: 'Türkçe', ja: '日本語', zh: '中文', ko: '한국어' }
+
+// Язык по окружению: LC_ALL, LC_MESSAGES, LANG. Своего языка нет (или C/POSIX) — английский
 export function detectLang(...values) {
   for (const v of values) {
-    if (typeof v === 'string' && v.trim()) return /^(ru|uk|be)/i.test(v.trim()) ? 'ru' : 'en'
+    if (typeof v !== 'string' || !v.trim() || /^(c|posix)([._].*)?$/i.test(v.trim())) continue
+    const code = v.trim().toLowerCase().slice(0, 2)
+    if (code === 'be') return 'ru'
+    return LANGS.includes(code) ? code : 'en'
   }
-  return 'ru'
+  return 'en'
 }
 
 const EXACT = {
@@ -42,8 +50,6 @@ const EXACT = {
   'Открываю окно…': 'Opening the window…',
   'пока ничего': 'nothing yet',
   // Настройки
-  'Язык: русский': 'Language: Russian',
-  'Язык: English': 'Language: English',
   'Открывать: здесь, в панели': 'Open in: here, in the pane',
   'Открывать: окно браузера по умолчанию': 'Open in: default browser window',
   'символы или пиксели — зависит от терминала': 'characters or pixels — depends on the terminal',
@@ -87,6 +93,7 @@ const EXACT = {
   'Назначить заново: «Настройки» → «Назначить клавиши заново»': 'To reassign: Settings → Reassign keys',
   'Этот терминал не показывает картинки — рисую символами. Как получить пиксели — в README.': 'This terminal does not show images, so the game is drawn with characters. How to get pixels — see the README.',
   'Открыть Arcade': 'Open Arcade',
+  'Arcade · язык': 'Arcade · language',
   '☕ Поддержать проект': '☕ Support the project',
   'Открываю страницу поддержки в браузере. Спасибо!': 'Opening the support page in your browser. Thank you!',
   // Жанры каталога
@@ -136,6 +143,7 @@ const RULES = [
   [/^Агент работает (.+) — сыграть\? В сети ждут: (.+)$/, (m) => `Agent has been working for ${dur(m[1])} — play? Waiting online: ${m[2]}`],
   [/^Агент работает (.+) — сыграть\?$/, (m) => `Agent has been working for ${dur(m[1])} — play?`],
   [/^Присоединиться: (.+)$/, (m) => `Join: ${m[1]}`],
+  [/^Язык: (.+)$/, (m) => `Language: ${m[1]}`],
   [/^добровольно, на развитие Arcade — (.+)$/, (m) => `voluntary, for Arcade’s development — ${m[1]}`],
   [/^Страница поддержки: (.+)$/, (m) => `Support page: ${m[1]}`],
   [/^в сети ждут: (.+)$/, (m) => `waiting online: ${m[1]}`],
@@ -195,7 +203,13 @@ const place = (t) =>
   t === 'играть здесь, в панели' ? 'play here, in the pane' : t.startsWith('открывать: ') ? `open in: ${where(t.slice(11).replace(/^в /, ''))}` : t
 
 export function tr(text, lang = 'ru') {
-  if (lang !== 'en' || typeof text !== 'string' || !/[А-Яа-яЁё]/.test(text)) return text
+  if (lang === 'ru' || typeof text !== 'string') return text
+  const en = trEn(text)
+  return lang === 'en' ? en : fromEnglish(en, lang)
+}
+
+function trEn(text) {
+  if (!/[А-Яа-яЁё]/.test(text)) return text
   const lead = text.match(/^\s*/)[0]
   const trail = text.match(/\s*$/)[0]
   const exact = EXACT[text] ?? EXACT[text.trim()]
@@ -210,7 +224,7 @@ export function tr(text, lang = 'ru') {
 
 // Перевод готового дерева интерфейса: строки-дети, подписи кнопок, подписи и подсказки полей
 export function translateTree(node, lang) {
-  if (lang !== 'en' || node == null) return node
+  if (lang === 'ru' || node == null) return node
   if (typeof node === 'string') return tr(node, lang)
   if (Array.isArray(node)) return node.map((n) => translateTree(n, lang))
   if (typeof node !== 'object') return node
@@ -221,4 +235,54 @@ export function translateTree(node, lang) {
   }
   if (Array.isArray(node.children)) out.children = node.children.map((c) => translateTree(c, lang))
   return out
+}
+
+// --- Остальные языки: перевод английской строки ------------------------------------------------------------------
+// locales/<язык>.js: exact — английская фраза → перевод; templates — английский шаблон с {0}, {1} → перевод
+// (подставленное переводится тем же способом; {0#one=# игра;few=# игры;other=# игр} — форма числа по
+// Intl.PluralRules); words — пары для подсказок клавиш. Чего нет в переводе — остаётся по-английски.
+const compiled = new Map()
+// Для тестов и смены переводов на лету: забыть разобранные шаблоны
+export function resetLocaleCache() {
+  compiled.clear()
+}
+function templatesOf(lang) {
+  if (compiled.has(lang)) return compiled.get(lang)
+  const list = Object.entries(LOCALES[lang]?.templates ?? {})
+    .filter(([, out]) => typeof out === 'string' && out)
+    .map(([key, out]) => {
+      const parts = key.split(/(\{\d+\})/)
+      const re = new RegExp(`^${parts.map((p) => (/^\{\d+\}$/.test(p) ? '(.+?)' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('')}$`)
+      return { re, out, order: [...key.matchAll(/\{(\d+)\}/g)].map((m) => Number(m[1])), weight: key.replace(/\{\d+\}/g, '').length }
+    })
+    .sort((a, b) => b.weight - a.weight)
+  compiled.set(lang, list)
+  return list
+}
+function pluralForm(n, forms, lang) {
+  const map = Object.fromEntries(forms.split(';').map((p) => [p.slice(0, p.indexOf('=')).trim(), p.slice(p.indexOf('=') + 1)]))
+  const cat = new Intl.PluralRules(lang).select(Number(String(n).replace(/\D/g, '')) || 0)
+  return (map[cat] ?? map.other ?? '').replace(/#/g, n)
+}
+export function fromEnglish(en, lang) {
+  const L = LOCALES[lang]
+  if (!L || typeof en !== 'string' || !en.trim()) return en
+  const lead = en.match(/^\s*/)[0]
+  const trail = en.match(/\s*$/)[0]
+  const core = en.trim()
+  if (L.exact?.[core]) return lead + L.exact[core] + trail
+  const time = core.match(/^(\d\d:\d\d(?::\d\d)?) (.+)$/)
+  if (time) return `${lead}${time[1]} ${fromEnglish(time[2], lang)}${trail}`
+  for (const t of templatesOf(lang)) {
+    const m = core.match(t.re)
+    if (!m) continue
+    const values = {}
+    t.order.forEach((idx, k) => {
+      values[idx] = m[k + 1]
+    })
+    return lead + t.out.replace(/\{(\d+)(?:#([^}]*))?\}/g, (_, idx, forms) => (forms ? pluralForm(values[idx], forms, lang) : fromEnglish(values[idx], lang))) + trail
+  }
+  let out = core
+  for (const [a, b] of L.words ?? []) out = out.split(a).join(b)
+  return lead + out + trail
 }

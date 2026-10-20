@@ -30,9 +30,25 @@
       document.body.appendChild(script)
     })
 
-  // Своя игра: Денди — в JSNES, остальное — в EmulatorJS
+  // Читалка книг и разбор EPUB, FB2, TXT
+  const loadReader = async () => {
+    for (const src of ['book-format.js', 'reader.js']) {
+      await new Promise((resolve) => {
+        const script = document.createElement('script')
+        script.src = src
+        script.onload = resolve
+        document.body.appendChild(script)
+      })
+    }
+  }
+
+  // Своя игра: Денди — в JSNES, книга — в читалку, остальное — в EmulatorJS
   async function play(entry) {
     if (entry.console === 'nes') return window.ArcadeGame.startLocal(new Uint8Array(await entry.file.arrayBuffer()), entry.title)
+    if (entry.console === 'books') {
+      await loadReader()
+      return window.ArcadeReader.startMine(entry)
+    }
     await loadEJS()
     window.ArcadeEJS.startLocal(entry)
   }
@@ -76,6 +92,10 @@
     if (entry) await play(entry)
     else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || T('свою игру'))
     else overlay(T('Игра не найдена'), T('В этом браузере её нет. Вернись в библиотеку и открой файл заново.'))
+  } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'book') {
+    // Книга каталога — в читалку
+    await loadReader()
+    window.ArcadeReader.start(catalog, id)
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'web') {
     // Браузерная игра — своя страница в рамке под полосой окна
     const game = catalog.games[id]

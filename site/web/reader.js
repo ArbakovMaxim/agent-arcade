@@ -1,0 +1,171 @@
+// Читалка Arcade в окне: книга каталога (book.json) или своя (EPUB, FB2, TXT из «Моих книг»).
+// Текст — колонкой удобной ширины, глава за главой; оглавление, размер шрифта, светлая и тёмная тема.
+// Закладка ставится сама: страница запоминает абзац в начале экрана (localStorage) и при открытии возвращается к нему.
+;(function () {
+  'use strict'
+
+  const PREFS = 'arcade:reader'
+  const positionKey = (id) => `arcade:book:${id}`
+  const read = (key, fallback) => {
+    try {
+      return JSON.parse(localStorage.getItem(key)) || fallback
+    } catch {
+      return fallback
+    }
+  }
+  const write = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // браузер не даёт хранить — читать можно и без закладки
+    }
+  }
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag)
+    if (cls) node.className = cls
+    if (text !== undefined) node.textContent = text
+    return node
+  }
+
+  function prepare(title, credit) {
+    document.body.classList.remove('library-mode')
+    document.title = `${title} · Arcade`
+    document.getElementById('keys').textContent = T('колёсико или пробел — дальше · оглавление и шрифт — вверху')
+    document.getElementById('credit').textContent = credit || ''
+    for (const id of ['sound', 'restart', 'best', 'net']) {
+      const node = document.getElementById(id)
+      if (node) node.style.display = 'none'
+    }
+    const screen = document.getElementById('screen')
+    if (screen) screen.style.display = 'none'
+    document.getElementById('overlay').classList.remove('shown')
+  }
+
+  function render(book, id) {
+    const prefs = read(PREFS, { size: 19, theme: 'dark' })
+    const stage = document.getElementById('stage') || document.body
+    const root = el('div', `reader theme-${prefs.theme}`)
+    root.id = 'reader-root'
+    root.style.cssText = `--reader-size: ${prefs.size}px`
+
+    const bar = el('div', 'reader-bar')
+    const name = el('div', 'reader-name', book.author ? `${book.author} — ${book.title}` : book.title)
+    const progress = el('div', 'reader-progress', '0%')
+    const tocButton = el('button', 'reader-btn', T('Оглавление'))
+    const smaller = el('button', 'reader-btn', 'A−')
+    const bigger = el('button', 'reader-btn', 'A+')
+    const theme = el('button', 'reader-btn', prefs.theme === 'dark' ? '☀' : '☾')
+    for (const b of [tocButton, smaller, bigger, theme]) b.type = 'button'
+    bar.append(name, progress, tocButton, smaller, bigger, theme)
+
+    const toc = el('div', 'reader-toc')
+    toc.hidden = true
+    const text = el('div', 'reader-text')
+    const marks = [] // абзацы по порядку: для закладки
+    book.chapters.forEach((chapter, c) => {
+      const h = el('h2', 'reader-chapter', chapter.title)
+      h.dataset.c = c
+      text.append(h)
+      const link = el('button', 'reader-toc-item', chapter.title)
+      link.type = 'button'
+      link.addEventListener('click', () => {
+        toc.hidden = true
+        root.scrollTop = h.offsetTop - bar.offsetHeight - 8
+      })
+      toc.append(link)
+      chapter.paragraphs.forEach((paragraph, p) => {
+        const node = el('p', paragraph.includes('\n') ? 'verse' : '', paragraph)
+        node.dataset.c = c
+        node.dataset.p = p
+        text.append(node)
+        marks.push(node)
+      })
+    })
+    root.append(bar, toc, text)
+    stage.append(root)
+
+    // Закладка: первый абзац, который виден под панелью
+    const visible = () => {
+      const top = root.scrollTop + bar.offsetHeight
+      let lo = 0
+      let hi = marks.length - 1
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1
+        if (marks[mid].offsetTop + marks[mid].offsetHeight < top) lo = mid + 1
+        else hi = mid
+      }
+      return marks[lo]
+    }
+    let timer = 0
+    const save = () => {
+      const node = visible()
+      if (!node) return
+      const max = Math.max(1, root.scrollHeight - root.clientHeight)
+      const percent = Math.min(100, Math.round((root.scrollTop / max) * 100))
+      progress.textContent = `${percent}%`
+      write(positionKey(id), { c: Number(node.dataset.c), p: Number(node.dataset.p), percent, at: Date.now() })
+    }
+    root.addEventListener('scroll', () => {
+      clearTimeout(timer)
+      timer = setTimeout(save, 400)
+    })
+    if (window.addEventListener) window.addEventListener('beforeunload', save)
+
+    // Вернуться туда, где остановился
+    const at = read(positionKey(id), null)
+    if (at) {
+      const node = marks.find((n) => Number(n.dataset.c) === at.c && Number(n.dataset.p) === at.p)
+      if (node) root.scrollTop = node.offsetTop - bar.offsetHeight - 8
+      progress.textContent = `${at.percent || 0}%`
+    }
+
+    tocButton.addEventListener('click', () => {
+      toc.hidden = !toc.hidden
+    })
+    const setSize = (size) => {
+      const node = visible()
+      prefs.size = Math.max(14, Math.min(30, size))
+      root.style.cssText = `--reader-size: ${prefs.size}px`
+      write(PREFS, prefs)
+      if (node) root.scrollTop = node.offsetTop - bar.offsetHeight - 8 // после смены шрифта — тот же абзац
+    }
+    smaller.addEventListener('click', () => setSize(prefs.size - 2))
+    bigger.addEventListener('click', () => setSize(prefs.size + 2))
+    theme.addEventListener('click', () => {
+      prefs.theme = prefs.theme === 'dark' ? 'light' : 'dark'
+      root.className = `reader theme-${prefs.theme}`
+      theme.textContent = prefs.theme === 'dark' ? '☀' : '☾'
+      write(PREFS, prefs)
+    })
+    // Пробел и PageDown листают, как в книге
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'PageDown') root.scrollTop += root.clientHeight - bar.offsetHeight - 40
+      else if (e.code === 'PageUp') root.scrollTop -= root.clientHeight - bar.offsetHeight - 40
+      else return
+      e.preventDefault()
+    })
+    window.ArcadeReader.view = { root, save, visible, marks }
+    return root
+  }
+
+  // Книга каталога
+  async function start(catalog, id) {
+    const game = catalog.games[id]
+    prepare(game.title, T(game.credit))
+    const book = await (await fetch(game.text)).json()
+    render(book, id)
+  }
+
+  // Своя книга: EPUB, FB2 или TXT — разбор прямо в браузере
+  async function startMine(entry) {
+    prepare(entry.title, T('Своя книга — только в этом браузере'))
+    const bytes = new Uint8Array(await entry.file.arrayBuffer())
+    const inflateRaw = async (data) => new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())
+    const book = await window.ArcadeBookFormat.parse(bytes, entry.name || entry.title, { title: entry.title, inflateRaw })
+    window.ArcadeBookFormat.check(book)
+    render(book, entry.id)
+  }
+
+  window.ArcadeReader = { start, startMine }
+})()

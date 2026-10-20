@@ -21,7 +21,7 @@ Every game in the catalog is free and openly licensed. You can also play online 
 - **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
 - **Your own games.** Add ROMs you own; they stay on your machine.
-- **Russian and English** interface.
+- **13 interface languages:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — picked from your system or browser, English by default.
 
 ## Install
 
@@ -54,7 +54,7 @@ The plugin is installed for all sessions and apps. The VS Code extension has no 
 
 ## How to use
 
-- **`/arcade`** opens the menu at any time. **🌐 English / 🌐 Русский** in the menu switches the language in one click.
+- **`/arcade`** opens the menu at any time. **🌐** in the menu opens the list of languages, each written in its own language.
 - When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now.
 - Arrow keys or Tab to choose, Enter to open; the mouse works too. Game controls are shown under each game.
 - When the agent finishes or waits for permission, a banner appears over the game: **Back to agent** or **Keep playing**.
@@ -81,6 +81,7 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
 | **Games → Strategy** | OpenTTD — transport tycoon |
 | **Games → Board games** | Chess, Russian draughts, Reversi |
+| **Books** | 150 public-domain classics: 100 in English (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoy and Dostoyevsky in translation…) and 50 in Ukrainian (Shevchenko, Franko, Lesya Ukrainka, Kotsiubynsky…). The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window |
 
 Each game's card links to its license and source code.
 
@@ -102,7 +103,7 @@ Only add files you have the rights to.
 
 Open **Settings** in the `/arcade` menu:
 
-- **Language** — Russian or English (also right in the main menu: 🌐).
+- **Language** — one of 13 (also right in the main menu: 🌐).
 - **Open games** — here in the panel, in a browser window, or in a specific browser.
 - **Panel size** — normal or full width.
 - **When the agent finishes** — banner and keep playing, pause with a banner, or straight back to the agent.
@@ -152,5 +153,7 @@ tools/   build helpers (heretic-wasm)
 - Run the plugin from the repository: `claude --plugin-dir ./mod`
 - Plugin tests: `claude plugin validate ./mod`, then `claude plugin test` in `mod/`
 - Site tests: `npm test` in `site/`; build: `node build.mjs`; deploy happens automatically from `main` via Cloudflare Workers Builds.
+- Books: `node tools/books/build.mjs` downloads and cleans the catalog books (list — `tools/books/books.json`).
+- Translations: `node tools/i18n/collect.mjs`, then `node tools/i18n/check.mjs` — see [tools/i18n/README.md](tools/i18n/README.md).
 
 Detailed documentation (in Russian): [mod/README.md](mod/README.md) — the plugin, [site/README.md](site/README.md) — the site, adding games and network play.
