@@ -89,7 +89,8 @@
   "This is an archive. Unpack it and choose the game file itself: {0}",
   "This is not a {0} game: {1}",
   "No free {0} games yet. {1}",
-  "Open your own file {0} with the “Open your own file” button above."
+  "Open your own file {0} with the “Open your own file” button above.",
+  "read {0}%"
  ],
  "modExact": [
   "default browser window",
