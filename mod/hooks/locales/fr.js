@@ -30,6 +30,7 @@ export default {
   "Key test": "Test des touches",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "Clavier — dans la ligne 🎮 au-dessus de la zone de saisie de Claude · boutons — à la souris",
   "Library": "Bibliothèque",
+  "More": "Plus",
   "My games": "Mes jeux",
   "NES": "NES",
   "No games here yet.": "Aucun jeu ici pour l’instant.",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pause : l’agent a terminé. N’importe quelle touche du jeu — continuer à jouer, Esc — retour à l’agent",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pause : l’agent attend une autorisation. N’importe quelle touche du jeu — continuer à jouer, Esc — retour à l’agent",
   "Play": "Jouer",
+  "Read": "Lire",
   "Reassign keys": "Réattribuer les touches",
   "Reassigning the controls.": "Réattribution des commandes.",
   "Settings": "Paramètres",
@@ -86,6 +88,7 @@ export default {
   "fighting": "combat",
   "for games in the Claude pane; in a browser window you get a system notification": "pour le jeu dans le panneau de Claude ; dans une fenêtre du navigateur, vous recevez une notification système",
   "horror": "horreur",
+  "interface language — 13 to choose from": "langue de l’interface — 13 au choix",
   "left": "gauche",
   "looking for browsers…": "recherche des navigateurs…",
   "memoir": "mémoires",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0} h {1} min",
   "{0} game": "{0#one=# jeu;many=# jeux;other=# jeux}",
   "{0} games": "{0#one=# jeu;many=# jeux;other=# jeux}",
+  "{0} book": "{0#one=# livre;many=# livres;other=# livres}",
+  "{0} books": "{0#one=# livre;many=# livres;other=# livres}",
   "Join: {0}": "Rejoindre : {0}",
   "waiting online: {0}": "en attente en ligne : {0}",
   "Support page: {0}": "Page de soutien : {0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "ouvrir dans : fenêtre du navigateur par défaut ({0})",
   "Open in: {0} window ({1})": "Ouvrir dans : fenêtre {0} ({1})",
   "open in: {0} window ({1})": "ouvrir dans : fenêtre {0} ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Touches : haut {0} · gauche {1} · bas {2} · droite {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Touches : haut {0} · gauche {1} · bas {2} · droite {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [

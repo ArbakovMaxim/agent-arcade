@@ -30,6 +30,7 @@ export default {
   "Key test": "Test klawiszy",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "Klawiatura — w wierszu 🎮 nad polem wpisywania Claude · przyciski — myszą",
   "Library": "Biblioteka",
+  "More": "Więcej",
   "My games": "Moje gry",
   "NES": "NES",
   "No games here yet.": "Nie ma tu jeszcze gier.",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pauza: agent skończył. Dowolny klawisz gry — graj dalej, Esc — wróć do agenta",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pauza: agent czeka na zgodę. Dowolny klawisz gry — graj dalej, Esc — wróć do agenta",
   "Play": "Graj",
+  "Read": "Czytaj",
   "Reassign keys": "Przypisz klawisze od nowa",
   "Reassigning the controls.": "Przypisujemy sterowanie od nowa.",
   "Settings": "Ustawienia",
@@ -86,6 +88,7 @@ export default {
   "fighting": "bijatyka",
   "for games in the Claude pane; in a browser window you get a system notification": "dla gier w panelu Claude; w oknie przeglądarki dostaniesz powiadomienie systemowe",
   "horror": "horror",
+  "interface language — 13 to choose from": "język interfejsu — 13 do wyboru",
   "left": "lewo",
   "looking for browsers…": "szukam przeglądarek…",
   "memoir": "wspomnienia",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0} godz. {1} min",
   "{0} game": "{0#one=# gra;few=# gry;many=# gier;other=# gry}",
   "{0} games": "{0#one=# gra;few=# gry;many=# gier;other=# gry}",
+  "{0} book": "{0#one=# książka;few=# książki;many=# książek;other=# książki}",
+  "{0} books": "{0#one=# książka;few=# książki;many=# książek;other=# książki}",
   "Join: {0}": "Dołącz: {0}",
   "waiting online: {0}": "czekają online: {0}",
   "Support page: {0}": "Strona wsparcia: {0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "gdzie otwierać: okno domyślnej przeglądarki ({0})",
   "Open in: {0} window ({1})": "Gdzie otwierać: okno {0} ({1})",
   "open in: {0} window ({1})": "gdzie otwierać: okno {0} ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Klawisze: góra {0} · lewo {1} · dół {2} · prawo {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Klawisze: góra {0} · lewo {1} · dół {2} · prawo {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [

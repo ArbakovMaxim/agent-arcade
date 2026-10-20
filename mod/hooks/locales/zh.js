@@ -30,6 +30,7 @@ export default {
   "Key test": "按键测试",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "键盘 — 在 Claude 输入框上方的 🎮 行 · 按钮 — 用鼠标",
   "Library": "游戏库",
+  "More": "更多",
   "My games": "我的游戏",
   "NES": "NES",
   "No games here yet.": "这里还没有游戏。",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "已暂停：智能体已完成。任意游戏键——继续玩，Esc——返回智能体",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "已暂停：智能体正在等待授权。任意游戏键——继续玩，Esc——返回智能体",
   "Play": "开始游戏",
+  "Read": "阅读",
   "Reassign keys": "重新设置按键",
   "Reassigning the controls.": "正在重新设置按键。",
   "Settings": "设置",
@@ -86,6 +88,7 @@ export default {
   "fighting": "格斗",
   "for games in the Claude pane; in a browser window you get a system notification": "适用于在 Claude 面板中游戏；在浏览器窗口中则会收到系统通知",
   "horror": "恐怖",
+  "interface language — 13 to choose from": "界面语言 — 13 种可选",
   "left": "左",
   "looking for browsers…": "正在查找浏览器…",
   "memoir": "回忆录",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0} 小时 {1} 分",
   "{0} game": "{0#other=# 款游戏}",
   "{0} games": "{0#other=# 款游戏}",
+  "{0} book": "{0#other=# 本书}",
+  "{0} books": "{0#other=# 本书}",
   "Join: {0}": "加入：{0}",
   "waiting online: {0}": "在线等待中：{0}",
   "Support page: {0}": "支持页面：{0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "打开位置：默认浏览器窗口（{0}）",
   "Open in: {0} window ({1})": "打开位置：{0} 窗口（{1}）",
   "open in: {0} window ({1})": "打开位置：{0} 窗口（{1}）",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "按键：上 {0} · 左 {1} · 下 {2} · 右 {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "按键：上 {0} · 左 {1} · 下 {2} · 右 {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [

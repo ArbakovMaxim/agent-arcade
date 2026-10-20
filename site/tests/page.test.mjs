@@ -670,7 +670,12 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.ok(!/[А-Яа-яЁё]/.test(shelf.byId.library.querySelectorAll('.genre').map((g) => g.textContent.split(' · ').pop()).join(' ')), 'жанры книг по-английски')
   const stats = shelf.byId.library.querySelectorAll('.stats').map((x) => x.textContent)
   assert.ok(stats.includes('read 16%'), 'прочитано 16%')
-  assert.ok(stats.includes('not read yet'))
+  assert.ok(shelf.byId.library.querySelectorAll('.genre-head').length >= 1, 'на полке — заголовки жанров')
+  // Непрочитанная книга — на своей языковой полке
+  const other = Object.keys(catalog.games).find((id) => catalog.games[id].kind === 'book' && id !== BOOK)
+  const otherShelf = await makePage(new Map(), { search: `?tab=reading&shelf=${catalog.games[other].shelf}&lang=en` })
+  assert.ok(otherShelf.byId.library.querySelectorAll('.stats').map((x) => x.textContent).includes('not read yet'))
+  assert.deepEqual(otherShelf.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['English', 'Українська'], 'полки «Книг» — языки')
   // Украинский: описания игр — английские, а не русские
   const uk = await makePage(new Map(), { search: '?tab=nes&lang=uk' })
   assert.ok(!/[ыэъё]/i.test(uk.byId.library.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания не по-русски')

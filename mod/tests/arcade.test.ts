@@ -1687,3 +1687,54 @@ test('другие языки — поверх английского: точн�
     resetLocaleCache()
   }
 })
+
+test('книги по языкам и жанрам: «Книги» → полка-язык → книги под разделителями жанров', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'books', title: 'Книги', group: 'reading' })
+  site.groups = [{ id: 'reading', title: 'Книги' }]
+  site.shelves = [{ id: 'books-en', title: 'English' }, { id: 'books-uk', title: 'Українська' }]
+  const book = (id, title, genre, lang) => ({ console: 'books', kind: 'book', shelf: `books-${lang}`, text: `books/${id}/book.json`, title, author: 'Автор', genre, about: '', keys: '…' })
+  site.games.emma = book('emma', 'Emma', 'роман', 'en')
+  site.games.dracula = book('dracula', 'Dracula', 'ужасы', 'en')
+  site.games.jane = book('jane', 'Jane Eyre', 'роман', 'en')
+  site.games.khmary = book('khmary', 'Хмари', 'роман', 'uk')
+  const { clock } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '  4 книги' })).toBeDefined() // у книг — «книги», а не «игры»
+  expect(await ui.find({ type: 'Text', text: '  язык интерфейса — 13 на выбор' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  4 книги' })).toBeDefined() // у книг — «книги», а не «игры»
+  expect(await ui.find({ type: 'Text', text: '  язык интерфейса — 13 на выбор' })).toBeDefined()
+  expect(tr('136 книг', 'en')).toBe('136 books')
+  await ui.press({ key: 'arcade-menu-reading' })
+  expect(await ui.find({ key: 'arcade-menu-shelf-books-en' })).toMatchObject({ props: { label: 'English' } })
+  expect(await ui.find({ key: 'arcade-menu-shelf-books-uk' })).toMatchObject({ props: { label: 'Українська' } })
+  await ui.press({ key: 'arcade-menu-shelf-books-en' })
+  const texts = await drawnTexts(ui)
+  // роман — Emma и Jane Eyre вместе, потом ужасы
+  expect(texts.filter((x) => /^— .+ —$/.test(x))).toEqual(['— роман —', '— ужасы —'])
+  expect(texts.indexOf('Jane Eyre')).toBeLessThan(texts.indexOf('— ужасы —'))
+  expect(await ui.find({ key: 'arcade-game-khmary' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('дизайн главного меню: разделы «Играть» и «Ещё», плитки в рамках — кнопка с подписью вместе, значок агента цветом', async ($, on) => {
+  const { clock } = stubs(on, { env: WINDOWS })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Играть' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Ещё' })).toBeDefined()
+  const tile = await ui.find({ type: 'Box', props: { borderStyle: 'round' } })
+  expect(tile).toBeDefined()
+  // в первой плитке — кнопка Денди и её подпись
+  const inside = JSON.stringify(tile)
+  expect(inside).toContain('arcade-menu-nes')
+  expect(inside).toMatch(/игр/)
+  expect(await ui.find({ type: 'Text', text: '●' })).toBeDefined()
+  await ui.unmount()
+})
+

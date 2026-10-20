@@ -30,7 +30,7 @@
   const inGroup = (gid) => consoles.filter((c) => c.group === gid).map((c) => c.id)
   const shelvesOf = (gid) => shelves.filter((s) => Object.values(games).some((g) => g.shelf === s.id && inGroup(gid).includes(g.console)))
   // Свои файлы: у вкладки приставки — её; у полки шутеров — WAD для Doom; у остальных полок своих файлов нет
-  const OWN = { shooters: 'doom' }
+  const OWN = { shooters: 'doom', 'books-en': 'books', 'books-uk': 'books', 'books-ru': 'books' }
   const root = document.getElementById('library')
   const romInput = document.getElementById('local-rom')
   document.body.classList.add('library-mode')
@@ -170,9 +170,21 @@
 
     const current = consoles.find((c) => c.id === tab)
     const list = el('div', 'games')
-    const ids = Object.keys(games).filter((id) => (groupOf(tab) ? inGroup(tab).includes(games[id].console) && games[id].shelf === shelf : games[id].console === tab))
+    let ids = Object.keys(games).filter((id) => (groupOf(tab) ? inGroup(tab).includes(games[id].console) && games[id].shelf === shelf : games[id].console === tab))
+    // Книги на полке — по жанрам (в порядке первого появления жанра), с заголовком жанра
+    const books = ids.length > 0 && ids.every((id) => games[id].kind === 'book')
+    if (books) {
+      const order = [...new Set(ids.map((id) => games[id].genre))]
+      ids = order.flatMap((g) => ids.filter((id) => games[id].genre === g))
+    }
+    let lastGenre = null
     if (!ids.length) list.append(el('div', 'empty', T((current && (current.empty || current.soon)) || 'Здесь пока нет игр.')))
     for (const id of ids) {
+      if (books && games[id].genre !== lastGenre) {
+        lastGenre = games[id].genre
+        const head = el('div', 'genre-head', T(lastGenre))
+        list.append(head)
+      }
       const game = games[id]
       const card = el('a', 'card')
       card.href = `?game=${encodeURIComponent(id)}`

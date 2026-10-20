@@ -30,6 +30,7 @@ export default {
   "Key test": "Tuş testi",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "Klavye — Claude giriş satırının üstündeki 🎮 satırında · düğmeler — fareyle",
   "Library": "Kütüphane",
+  "More": "Diğer",
   "My games": "Oyunlarım",
   "NES": "NES",
   "No games here yet.": "Burada henüz oyun yok.",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Duraklatıldı: ajan bitirdi. Herhangi bir oyun tuşu — oynamaya devam et, Esc — ajana dön",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Duraklatıldı: ajan izin bekliyor. Herhangi bir oyun tuşu — oynamaya devam et, Esc — ajana dön",
   "Play": "Oyna",
+  "Read": "Oku",
   "Reassign keys": "Tuşları yeniden ata",
   "Reassigning the controls.": "Kontroller yeniden atanıyor.",
   "Settings": "Ayarlar",
@@ -86,6 +88,7 @@ export default {
   "fighting": "dövüş",
   "for games in the Claude pane; in a browser window you get a system notification": "Claude panelindeki oyunlar için; tarayıcı penceresinde sistem bildirimi gelir",
   "horror": "korku",
+  "interface language — 13 to choose from": "arayüz dili — 13 seçenek",
   "left": "sol",
   "looking for browsers…": "tarayıcılar aranıyor…",
   "memoir": "anı",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0} sa {1} dk",
   "{0} game": "{0#one=# oyun;other=# oyun}",
   "{0} games": "{0#one=# oyun;other=# oyun}",
+  "{0} book": "{0#one=# kitap;other=# kitap}",
+  "{0} books": "{0#one=# kitap;other=# kitap}",
   "Join: {0}": "Katıl: {0}",
   "waiting online: {0}": "çevrim içi bekleyen var: {0}",
   "Support page: {0}": "Destek sayfası: {0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "açılış yeri: varsayılan tarayıcı penceresi ({0})",
   "Open in: {0} window ({1})": "Açılış yeri: {0} penceresi ({1})",
   "open in: {0} window ({1})": "açılış yeri: {0} penceresi ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Tuşlar: yukarı {0} · sol {1} · aşağı {2} · sağ {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Tuşlar: yukarı {0} · sol {1} · aşağı {2} · sağ {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [

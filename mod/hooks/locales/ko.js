@@ -30,6 +30,7 @@ export default {
   "Key test": "키 테스트",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "키보드 — Claude 입력창 위 🎮 줄에서 · 버튼 — 마우스로",
   "Library": "라이브러리",
+  "More": "더 보기",
   "My games": "내 게임",
   "NES": "NES",
   "No games here yet.": "아직 게임이 없습니다.",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "일시정지: 에이전트 작업 완료. 아무 게임 키 — 계속 플레이, Esc — 에이전트로 돌아가기",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "일시정지: 에이전트가 권한 승인을 기다리는 중. 아무 게임 키 — 계속 플레이, Esc — 에이전트로 돌아가기",
   "Play": "플레이",
+  "Read": "읽기",
   "Reassign keys": "키 다시 지정",
   "Reassigning the controls.": "조작 키를 다시 지정합니다.",
   "Settings": "설정",
@@ -86,6 +88,7 @@ export default {
   "fighting": "격투",
   "for games in the Claude pane; in a browser window you get a system notification": "Claude 패널에서 플레이할 때 적용되며, 브라우저 창에서는 시스템 알림이 옵니다",
   "horror": "공포",
+  "interface language — 13 to choose from": "인터페이스 언어 — 13개 중 선택",
   "left": "왼쪽",
   "looking for browsers…": "브라우저 찾는 중…",
   "memoir": "회고록",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0}시간 {1}분",
   "{0} game": "{0#other=게임 #개}",
   "{0} games": "{0#other=게임 #개}",
+  "{0} book": "{0#other=책 #권}",
+  "{0} books": "{0#other=책 #권}",
   "Join: {0}": "참가: {0}",
   "waiting online: {0}": "온라인 대기: {0}",
   "Support page: {0}": "후원 페이지: {0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "열기 위치: 기본 브라우저 창 ({0})",
   "Open in: {0} window ({1})": "열기 위치: {0} 창 ({1})",
   "open in: {0} window ({1})": "열기 위치: {0} 창 ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "키: 위 {0} · 왼쪽 {1} · 아래 {2} · 오른쪽 {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "키: 위 {0} · 왼쪽 {1} · 아래 {2} · 오른쪽 {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [
