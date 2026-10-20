@@ -189,7 +189,10 @@
     [/^Это не игра для (.+?): (.+)$/, (m) => `This is not a ${m[1] === 'Денди' ? 'NES' : m[1]} game: ${m[2].replace('в файле нет заголовка iNES.', 'the file has no iNES header.').replace('в заголовке нет метки SEGA.', 'the header has no SEGA mark.').replace(/нет метки TMR SEGA и расширение не (\.\w+)\./, 'no TMR SEGA mark and the extension is not $1.')}`],
     [/^Это другой файл: .+$/, () => 'This is a different file: it does not match the one added in the mod.'],
     [/^Для PlayStation нужен образ диска: .+$/, () => 'PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.'],
-    [/^Свободных игр для (.+) пока нет\. (.+)$/, (m) => `No free ${m[1]} games yet. ${m[2].replace(/^Открой свой (файл|диск) (\S+) — кнопка «Открыть свой файл» сверху\./, 'Open your own $1 $2 with the “Open your own file” button above.').replace('файл', 'file').replace('диск', 'disc').replace('Открой свой диск — кнопка «Открыть свой файл» сверху.', 'Open your own disc with the “Open your own file” button above.').replace('BIOS Sony не нужен.', 'No Sony BIOS needed.')}`],
+    // «Свободных игр для X пока нет. Открой свой файл .ext (или диск) — кнопка «Открыть свой файл» сверху. BIOS Sony не нужен.»
+  [/^Свободных игр для (.+) пока нет\. (.+)$/, (m) => `No free ${m[1]} games yet. ${m[2]
+    .replace(/Открой свой (файл|диск) ?(\S+)? — кнопка «Открыть свой файл» сверху\./, (_, kind, ext) => `Open your own ${kind === 'диск' ? 'disc' : 'file'}${ext ? ` ${ext}` : ''} with the “Open your own file” button above.`)
+    .replace('BIOS Sony не нужен.', 'No Sony BIOS needed.')}`],
     [/графика/, (m) => m.input.split('графика').join('graphics').split('порт — ').join('port by ')],
   ]
 

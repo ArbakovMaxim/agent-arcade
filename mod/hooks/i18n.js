@@ -132,7 +132,7 @@ const reason = (t) =>
   t
     .replace(/^файл не найден: (.+)$/, 'file not found: $1')
     .replace(/^это не файл$/, 'this is not a file')
-    .replace(/^это архив\. Распакуй его и укажи путь к самому файлу игры: (.+)$/, 'this is an archive. Unpack it and give the path to the game file itself: $1')
+    .replace(/^это архив\. Распакуй его и укажи путь к самому файлу игры: (.+)$/, (_, list) => `this is an archive. Unpack it and give the path to the game file itself: ${list.replace(' или ', ' or ')}`)
     .replace(/^файл больше 4 МБ\..*$/, 'the file is larger than 4 MB. NES and Sega games are added here; PlayStation discs are added in the Arcade window: PlayStation → “Open PlayStation in a window”')
     .replace(/^это не похоже на игру.*$/, 'this does not look like a NES, Sega Mega Drive or Master System game')
     .replace(/^это игра для Game Gear.*$/, 'this is a Game Gear game — Game Gear is not supported in Arcade')
@@ -189,7 +189,7 @@ const RULES = [
 const EVENTS = { 'агент начал ход': 'the agent started a turn', 'агент закончил ход': 'the agent finished the turn', 'агент снова работает': 'the agent is working again' }
 const event = (t) =>
   t
-    .replace(/^запрос разрешения: (.+)$/, 'permission request: $1')
+    .replace(/^запрос разрешения: (.+)$/, (_, tool) => `permission request: ${tool === 'инструмент' ? 'a tool' : tool}`)
     .replace(/^каталог с сайта не получен: (.+)$/, 'could not get the catalog from the site: $1')
     .replace(/^не удалось найти браузеры: (.+)$/, 'could not find browsers: $1')
     .replace(/^уведомление не показалось: (.+)$/, 'the notification did not show: $1')

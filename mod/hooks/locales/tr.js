@@ -59,6 +59,7 @@ export default {
   "a field that shows what is pressed and what the mod thinks is held": "basılan tuşları ve modun basılı saydığı tuşları gösteren alan",
   "a regular browser window": "normal tarayıcı penceresi",
   "a system notification with sound when the agent finishes or asks for permission": "ajan bitirdiğinde veya izin istediğinde sesli sistem bildirimi",
+  "a tool": "bir araç",
   "action": "aksiyon",
   "add your own ROM file": "kendi ROM dosyanı ekle",
   "adventure": "macera",

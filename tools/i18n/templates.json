@@ -115,10 +115,12 @@
   "up",
   "down",
   "left",
-  "right"
+  "right",
+  "a tool"
  ],
  "siteExact": [
   "the emulator did not recognize the file.",
-  "the file is damaged: the hash does not match"
+  "the file is damaged: the hash does not match",
+  "Open your own disc with the “Open your own file” button above. No Sony BIOS needed."
  ]
 }

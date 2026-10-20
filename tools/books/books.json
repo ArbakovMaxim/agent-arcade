@@ -9,7 +9,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 1342
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "frankenstein",
@@ -45,7 +46,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 1661
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "moby-dick",
@@ -57,7 +59,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 2701
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "dracula",
@@ -129,7 +132,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 1837
-  }
+  },
+  "chapters": "text-loose"
  },
  {
   "id": "little-women",
@@ -165,7 +169,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 74
-  }
+  },
+  "chapters": "text-loose"
  },
  {
   "id": "treasure-island",
@@ -261,7 +266,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 46
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "oliver-twist",
@@ -357,7 +363,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 996
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "war-and-peace",
@@ -369,7 +376,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 2600
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "anna-karenina",
@@ -393,7 +401,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 2554
-  }
+  },
+  "chapters": "text-loose"
  },
  {
   "id": "brothers-karamazov",
@@ -405,7 +414,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 28054
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "les-miserables",
@@ -717,7 +727,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 21
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "grimm",
@@ -741,7 +752,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 1597
-  }
+  },
+  "chapters": "text-loose"
  },
  {
   "id": "arabian-nights",
@@ -765,7 +777,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 16328
-  }
+  },
+  "skip": "строки поэмы в издании Gutenberg размечены как <div class=\"l\">, разбор их не видит — остаются только предисловие, примечания и словарь"
  },
  {
   "id": "canterbury-tales",
@@ -777,7 +790,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 2383
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "divine-comedy",
@@ -789,7 +803,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 8800
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "paradise-lost",
@@ -849,7 +864,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 844
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "pygmalion",
@@ -885,7 +901,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 2680
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "common-sense",
@@ -897,7 +914,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 147
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "republic",
@@ -933,7 +951,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 1322
-  }
+  },
+  "skip": "стихи в издании Gutenberg набраны моноширинным блоком <div class=\"pgmonospaced\"> с <br>, разбор их не видит — остаются одни заголовки"
  },
  {
   "id": "uncle-toms-cabin",
@@ -981,7 +1000,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 599
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "tess",
@@ -993,7 +1013,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 110
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "madding-crowd",
@@ -1005,7 +1026,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 107
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "ivanhoe",
@@ -1053,7 +1075,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 583
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "phantom-of-the-opera",
@@ -1065,7 +1088,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 175
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "red-badge",
@@ -1101,7 +1125,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 541
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "ethan-frome",
@@ -1125,7 +1150,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 160
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "yellow-wallpaper",
@@ -1197,7 +1223,8 @@
   "source": {
    "kind": "gutenberg",
    "id": 139
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "z-zhurboiu-radist",
@@ -1210,7 +1237,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "З журбою радість обнялась… (збірка)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "moisei",
@@ -1223,7 +1251,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Мойсей (1930)"
-  }
+  },
+  "skip": "после поэмы в выгрузке Вікіджерел идут чужие тексты Петра Франко («Махнівська попівна», «Битва під Пилявцями»…) — 17 тыс. слов из 28"
  },
  {
   "id": "spivomovky",
@@ -1236,7 +1265,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Співомовки (1921)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "baiky-hlibova",
@@ -1249,7 +1279,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Байки (Глібов, 1918)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "zakhar-berkut",
@@ -1262,7 +1293,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/13/Захар Беркут"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "boryslav",
@@ -1275,7 +1307,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/10/Борислав сміється"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "perekhresni-stezhky",
@@ -1288,7 +1321,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/12"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "lys-mykyta",
@@ -1301,7 +1335,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/7/Лис Микита"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "ukradene-shchastia",
@@ -1314,7 +1349,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/17/Украдене щастя"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "boa-constrictor",
@@ -1327,7 +1363,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/10/Boa Constrictor"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "soichyne-krylo",
@@ -1353,7 +1390,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Лісова пісня"
-  }
+  },
+  "skip": "в выгрузке ws-export вся драма — один стихотворный блок, «ДІЯ І» в нём — просто строка, а в оглавлении одна запись: глав «Дія» не находит ни один способ"
  },
  {
   "id": "oderzhyma",
@@ -1366,7 +1404,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Одержима"
-  }
+  },
+  "chapters": "text-loose"
  },
  {
   "id": "boiarynia",
@@ -1379,7 +1418,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Бояриня (1918)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "v-katakombakh",
@@ -1444,7 +1484,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Коцюбинський, 1955)/2/Fata Morgana"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "dorohoiu-tsinoiu",
@@ -1483,7 +1524,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Інститутка (1929)"
-  }
+  },
+  "skip": "выходные данные «З друкарні Видавничої Спілки „Діло“, Львів» в начале и «Ціна» в конце — ни один способ их не убирает"
  },
  {
   "id": "dva-syny",
@@ -1496,7 +1538,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Два сини й інші оповідання"
-  }
+  },
+  "skip": "выходные данные «Накл. „Українського Видавництва”, Краків… Druck.: Nowa Drukarnia» в начале — ни один способ их не убирает"
  },
  {
   "id": "karmeliuk",
@@ -1509,7 +1552,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Кармелюк (Марко Вовчок, 1917)"
-  }
+  },
+  "skip": "в начале «Педагогичне Бюро Полтавського Губернського Земства», в конце список серии «Серія складається з творів…» — ни один способ их не убирает"
  },
  {
   "id": "dlia-domashnoho-vohnyshcha",
@@ -1522,7 +1566,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Франко, 1956–1962)/9/Для домашнього вогнища"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "dvi-moskovky",
@@ -1548,7 +1593,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Микола Джеря (1926)"
-  }
+  },
+  "skip": "в начале остаются список серии издательства и адреса складов в Харкові и Київі — ни один способ их не убирает"
  },
  {
   "id": "khmary",
@@ -1600,7 +1646,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Лихі люде"
-  }
+  },
+  "skip": "в конце каталог издательства («Хмари… стор. XI+477», «друкуються або готовляться до друку…») — ни один способ его не убирает"
  },
  {
   "id": "misto",
@@ -1613,7 +1660,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Місто"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "za-sestroiu",
@@ -1626,7 +1674,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "За сестрою"
-  }
+  },
+  "skip": "на странице Вікіджерел «За сестрою» другие книги серии «Народня бібліотека» («Перекотиполе», «Орися», «Верховина»…), самой повести нет"
  },
  {
   "id": "eneida",
@@ -1639,7 +1688,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Твори (Котляревський, 1922)/Том 1/Енеїда"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "natalka-poltavka",
@@ -1678,7 +1728,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Перекотиполе (1940)"
-  }
+  },
+  "skip": "в конце реклама серии «Народня бібліотека» («…накладом „Українського Видавництва”») — ни один способ её не убирает"
  },
  {
   "id": "chorna-rada",
@@ -1691,7 +1742,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Чорна рада (1943)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "myna-mazailo",
@@ -1704,7 +1756,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Літературний ярмарок/1929/6/Мина Мазайло"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "novyna",
@@ -1756,7 +1809,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Ніоба (1929)"
-  }
+  },
+  "skip": "ни один способ не убирает справку Вікіджерел «Ця робота перебуває в суспільному надбанні в США…» — сборка не проходит проверку"
  },
  {
   "id": "apostol-cherni",
@@ -1769,7 +1823,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Апостол черні"
-  }
+  },
+  "skip": "в выгрузке Вікіджерел каждый том повторяется дважды — 164 тыс. слов вместо ~80 тыс."
  },
  {
   "id": "liudyna",
@@ -1808,7 +1863,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Батько та дочка (1927)"
-  }
+  },
+  "skip": "в начале допуск Наркомосвіти, шифр «[89179 — 93 — 32]» и адрес «Книгоспілки» — ни один способ их не убирает"
  },
  {
   "id": "syni-etiudy",
@@ -1821,7 +1877,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Сині етюди (1923)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "martyn-borulia",
@@ -1834,7 +1891,8 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Мартин Боруля (1921)"
-  }
+  },
+  "chapters": "text"
  },
  {
   "id": "podorozh-leonardo",
@@ -1847,6 +1905,7 @@
    "kind": "wikisource",
    "lang": "uk",
    "page": "Літературний ярмарок/1928/1/Подорож ученого доктора Леонардо і його майбутньої коханки прекрасної Альцести у Слобожанську Швайцарію"
-  }
+  },
+  "chapters": "text"
  }
 ]

@@ -59,6 +59,7 @@ export default {
   "a field that shows what is pressed and what the mod thinks is held": "押したキーと、MOD が押しっぱなしと判断しているキーを表示する欄",
   "a regular browser window": "通常のブラウザウィンドウ",
   "a system notification with sound when the agent finishes or asks for permission": "エージェントの完了時や許可の要求時に、音付きのシステム通知を表示",
+  "a tool": "ツール",
   "action": "アクション",
   "add your own ROM file": "自分の ROM ファイルを追加",
   "adventure": "アドベンチャー",

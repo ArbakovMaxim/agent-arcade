@@ -567,13 +567,13 @@
   "source": "https://www.gutenberg.org/ebooks/128"
  },
  {
-  "id": "beowulf",
-  "title": "Beowulf",
-  "author": "Anonymous",
+  "id": "canterbury-tales",
+  "title": "The Canterbury Tales",
+  "author": "Geoffrey Chaucer",
   "lang": "en",
-  "year": 1000,
-  "genre": "эпос",
-  "source": "https://www.gutenberg.org/ebooks/16328"
+  "year": 1400,
+  "genre": "поэзия",
+  "source": "https://www.gutenberg.org/ebooks/2383"
  },
  {
   "id": "divine-comedy",
@@ -583,6 +583,24 @@
   "year": 1320,
   "genre": "поэма",
   "source": "https://www.gutenberg.org/ebooks/8800"
+ },
+ {
+  "id": "paradise-lost",
+  "title": "Paradise Lost",
+  "author": "John Milton",
+  "lang": "en",
+  "year": 1667,
+  "genre": "поэма",
+  "source": "https://www.gutenberg.org/ebooks/26"
+ },
+ {
+  "id": "hamlet",
+  "title": "Hamlet",
+  "author": "William Shakespeare",
+  "lang": "en",
+  "year": 1603,
+  "genre": "пьеса",
+  "source": "https://www.gutenberg.org/ebooks/1524"
  },
  {
   "id": "romeo-and-juliet",
@@ -601,6 +619,15 @@
   "year": 1623,
   "genre": "пьеса",
   "source": "https://www.gutenberg.org/ebooks/1533"
+ },
+ {
+  "id": "earnest",
+  "title": "The Importance of Being Earnest",
+  "author": "Oscar Wilde",
+  "lang": "en",
+  "year": 1895,
+  "genre": "пьеса",
+  "source": "https://www.gutenberg.org/ebooks/844"
  },
  {
   "id": "pygmalion",
@@ -639,6 +666,15 @@
   "source": "https://www.gutenberg.org/ebooks/147"
  },
  {
+  "id": "republic",
+  "title": "The Republic",
+  "author": "Plato",
+  "lang": "en",
+  "year": -375,
+  "genre": "философия",
+  "source": "https://www.gutenberg.org/ebooks/1497"
+ },
+ {
   "id": "walden",
   "title": "Walden",
   "author": "Henry David Thoreau",
@@ -646,15 +682,6 @@
   "year": 1854,
   "genre": "эссе",
   "source": "https://www.gutenberg.org/ebooks/205"
- },
- {
-  "id": "leaves-of-grass",
-  "title": "Leaves of Grass",
-  "author": "Walt Whitman",
-  "lang": "en",
-  "year": 1855,
-  "genre": "поэзия",
-  "source": "https://www.gutenberg.org/ebooks/1322"
  },
  {
   "id": "uncle-toms-cabin",
@@ -819,6 +846,15 @@
   "source": "https://www.gutenberg.org/ebooks/2814"
  },
  {
+  "id": "portrait-of-the-artist",
+  "title": "A Portrait of the Artist as a Young Man",
+  "author": "James Joyce",
+  "lang": "en",
+  "year": 1916,
+  "genre": "роман",
+  "source": "https://www.gutenberg.org/ebooks/4217"
+ },
+ {
   "id": "princess-of-mars",
   "title": "A Princess of Mars",
   "author": "Edgar Rice Burroughs",
@@ -846,6 +882,96 @@
   "source": "https://www.gutenberg.org/ebooks/139"
  },
  {
+  "id": "z-zhurboiu-radist",
+  "title": "З журбою радість обнялась…",
+  "author": "Олександр Олесь",
+  "lang": "uk",
+  "year": 1907,
+  "genre": "поэзия",
+  "source": "https://uk.wikisource.org/wiki/З_журбою_радість_обнялась…_(збірка)"
+ },
+ {
+  "id": "spivomovky",
+  "title": "Співомовки",
+  "author": "Степан Руданський",
+  "lang": "uk",
+  "year": 1880,
+  "genre": "поэзия",
+  "source": "https://uk.wikisource.org/wiki/Співомовки_(1921)"
+ },
+ {
+  "id": "baiky-hlibova",
+  "title": "Байки",
+  "author": "Леонід Глібов",
+  "lang": "uk",
+  "year": 1863,
+  "genre": "поэзия",
+  "source": "https://uk.wikisource.org/wiki/Байки_(Глібов,_1918)"
+ },
+ {
+  "id": "zakhar-berkut",
+  "title": "Захар Беркут",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1883,
+  "genre": "роман",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/13/Захар_Беркут"
+ },
+ {
+  "id": "boryslav",
+  "title": "Борислав сміється",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1882,
+  "genre": "роман",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/10/Борислав_сміється"
+ },
+ {
+  "id": "perekhresni-stezhky",
+  "title": "Перехресні стежки",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1900,
+  "genre": "роман",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/12"
+ },
+ {
+  "id": "lys-mykyta",
+  "title": "Лис Микита",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1890,
+  "genre": "поэма",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/7/Лис_Микита"
+ },
+ {
+  "id": "ukradene-shchastia",
+  "title": "Украдене щастя",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1893,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/17/Украдене_щастя"
+ },
+ {
+  "id": "boa-constrictor",
+  "title": "Boa constrictor",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1878,
+  "genre": "повесть",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/10/Boa_Constrictor"
+ },
+ {
+  "id": "soichyne-krylo",
+  "title": "Сойчине крило",
+  "author": "Іван Франко",
+  "lang": "uk",
+  "year": 1905,
+  "genre": "рассказы",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/5/Сойчине_крило"
+ },
+ {
   "id": "oderzhyma",
   "title": "Одержима",
   "author": "Леся Українка",
@@ -853,6 +979,24 @@
   "year": 1901,
   "genre": "пьеса",
   "source": "https://uk.wikisource.org/wiki/Одержима"
+ },
+ {
+  "id": "boiarynia",
+  "title": "Бояриня",
+  "author": "Леся Українка",
+  "lang": "uk",
+  "year": 1910,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Бояриня_(1918)"
+ },
+ {
+  "id": "v-katakombakh",
+  "title": "В катакомбах",
+  "author": "Леся Українка",
+  "lang": "uk",
+  "year": 1905,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/В_катакомбах_(1918)"
  },
  {
   "id": "contra-spem",
@@ -864,6 +1008,42 @@
   "source": "https://uk.wikisource.org/wiki/На_крилах_пісень/Contra_spem_spero!"
  },
  {
+  "id": "tini-zabutykh-predkiv",
+  "title": "Тіні забутих предків",
+  "author": "Михайло Коцюбинський",
+  "lang": "uk",
+  "year": 1911,
+  "genre": "повесть",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Коцюбинський,_1955)/2/Тіні_забутих_предків"
+ },
+ {
+  "id": "intermezzo",
+  "title": "Intermezzo",
+  "author": "Михайло Коцюбинський",
+  "lang": "uk",
+  "year": 1908,
+  "genre": "рассказы",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Коцюбинський,_1955)/2/Intermezzo"
+ },
+ {
+  "id": "fata-morgana",
+  "title": "Fata morgana",
+  "author": "Михайло Коцюбинський",
+  "lang": "uk",
+  "year": 1910,
+  "genre": "повесть",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Коцюбинський,_1955)/2/Fata_Morgana"
+ },
+ {
+  "id": "dorohoiu-tsinoiu",
+  "title": "Дорогою ціною",
+  "author": "Михайло Коцюбинський",
+  "lang": "uk",
+  "year": 1901,
+  "genre": "повесть",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Коцюбинський,_1955)/1/Дорогою_ціною"
+ },
+ {
   "id": "koni-ne-vynni",
   "title": "Коні не винні",
   "author": "Михайло Коцюбинський",
@@ -873,13 +1053,13 @@
   "source": "https://uk.wikisource.org/wiki/Твори_(Коцюбинський,_1955)/2/Коні_не_винні"
  },
  {
-  "id": "karmeliuk",
-  "title": "Кармелюк",
-  "author": "Марко Вовчок",
+  "id": "dlia-domashnoho-vohnyshcha",
+  "title": "Для домашнього вогнища",
+  "author": "Іван Франко",
   "lang": "uk",
-  "year": 1865,
+  "year": 1892,
   "genre": "повесть",
-  "source": "https://uk.wikisource.org/wiki/Кармелюк_(Марко_Вовчок,_1917)"
+  "source": "https://uk.wikisource.org/wiki/Твори_(Франко,_1956–1962)/9/Для_домашнього_вогнища"
  },
  {
   "id": "dvi-moskovky",
@@ -900,6 +1080,15 @@
   "source": "https://uk.wikisource.org/wiki/Хмари_(Іван_Нечуй-Левицький)"
  },
  {
+  "id": "hlytai",
+  "title": "Глитай, або ж Павук",
+  "author": "Марко Кропивницький",
+  "lang": "uk",
+  "year": 1882,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Глитай_або_ж_Павук"
+ },
+ {
   "id": "baba-palazhka",
   "title": "Баба Параска та баба Палажка",
   "author": "Іван Нечуй-Левицький",
@@ -909,13 +1098,58 @@
   "source": "https://uk.wikisource.org/wiki/Баба_Параска_та_баба_Палажка_(1940)"
  },
  {
-  "id": "perekotypole",
-  "title": "Перекотиполе",
-  "author": "Григорій Квітка-Основ'яненко",
+  "id": "misto",
+  "title": "Місто",
+  "author": "Валер'ян Підмогильний",
   "lang": "uk",
-  "year": 1840,
-  "genre": "рассказы",
-  "source": "https://uk.wikisource.org/wiki/Перекотиполе_(1940)"
+  "year": 1928,
+  "genre": "роман",
+  "source": "https://uk.wikisource.org/wiki/Місто"
+ },
+ {
+  "id": "eneida",
+  "title": "Енеїда",
+  "author": "Іван Котляревський",
+  "lang": "uk",
+  "year": 1798,
+  "genre": "поэма",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Котляревський,_1922)/Том_1/Енеїда"
+ },
+ {
+  "id": "natalka-poltavka",
+  "title": "Наталка Полтавка",
+  "author": "Іван Котляревський",
+  "lang": "uk",
+  "year": 1819,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Наталка-Полтавка_(1937)"
+ },
+ {
+  "id": "moskal-charivnyk",
+  "title": "Москаль-чарівник",
+  "author": "Іван Котляревський",
+  "lang": "uk",
+  "year": 1819,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Москаль-чарівник_(1937)"
+ },
+ {
+  "id": "chorna-rada",
+  "title": "Чорна рада",
+  "author": "Пантелеймон Куліш",
+  "lang": "uk",
+  "year": 1857,
+  "genre": "роман",
+  "source": "https://uk.wikisource.org/wiki/Чорна_рада_(1943)"
+ },
+ {
+  "id": "myna-mazailo",
+  "title": "Мина Мазайло",
+  "author": "Микола Куліш",
+  "lang": "uk",
+  "year": 1929,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Літературний_ярмарок/1929/6/Мина_Мазайло"
  },
  {
   "id": "novyna",
@@ -936,6 +1170,24 @@
   "source": "https://uk.wikisource.org/wiki/Новели_(Стефаник,_1927)/Камінний_хрест"
  },
  {
+  "id": "synia-knyzhechka",
+  "title": "Синя книжечка",
+  "author": "Василь Стефаник",
+  "lang": "uk",
+  "year": 1899,
+  "genre": "рассказы",
+  "source": "https://uk.wikisource.org/wiki/Твори_(Стефаник,_1942)/Синя_книжечка"
+ },
+ {
+  "id": "liudyna",
+  "title": "Людина",
+  "author": "Ольга Кобилянська",
+  "lang": "uk",
+  "year": 1894,
+  "genre": "повесть",
+  "source": "https://uk.wikisource.org/wiki/Людина_(Кобилянська_Ольга)"
+ },
+ {
   "id": "sama-zovsim-sama",
   "title": "Сама, зовсім сама",
   "author": "Борис Грінченко",
@@ -945,13 +1197,22 @@
   "source": "https://uk.wikisource.org/wiki/Твори_(Грінченко)/1/Сама,_зовсім_сама"
  },
  {
-  "id": "batko-ta-dochka",
-  "title": "Батько та дочка",
-  "author": "Борис Грінченко",
+  "id": "syni-etiudy",
+  "title": "Сині етюди",
+  "author": "Микола Хвильовий",
   "lang": "uk",
-  "year": 1893,
+  "year": 1923,
   "genre": "рассказы",
-  "source": "https://uk.wikisource.org/wiki/Батько_та_дочка_(1927)"
+  "source": "https://uk.wikisource.org/wiki/Сині_етюди_(1923)"
+ },
+ {
+  "id": "martyn-borulia",
+  "title": "Мартин Боруля",
+  "author": "Іван Карпенко-Карий",
+  "lang": "uk",
+  "year": 1886,
+  "genre": "пьеса",
+  "source": "https://uk.wikisource.org/wiki/Мартин_Боруля_(1921)"
  },
  {
   "id": "podorozh-leonardo",

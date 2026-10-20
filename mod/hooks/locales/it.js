@@ -59,6 +59,7 @@ export default {
   "a field that shows what is pressed and what the mod thinks is held": "un campo che mostra cosa è premuto e cosa la mod considera tenuto premuto",
   "a regular browser window": "una normale finestra del browser",
   "a system notification with sound when the agent finishes or asks for permission": "una notifica di sistema con suono quando l’agente finisce o chiede il permesso",
+  "a tool": "uno strumento",
   "action": "azione",
   "add your own ROM file": "aggiungi un tuo file ROM",
   "adventure": "avventura",

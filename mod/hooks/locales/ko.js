@@ -59,6 +59,7 @@ export default {
   "a field that shows what is pressed and what the mod thinks is held": "누른 키와 모드가 누르고 있다고 판단한 키를 보여 주는 영역",
   "a regular browser window": "일반 브라우저 창",
   "a system notification with sound when the agent finishes or asks for permission": "에이전트가 작업을 마치거나 권한을 요청하면 소리와 함께 시스템 알림 표시",
+  "a tool": "도구",
   "action": "액션",
   "add your own ROM file": "ROM 파일 직접 추가",
   "adventure": "어드벤처",

@@ -22,17 +22,21 @@ const tocLike = (c) => c.paragraphs.length >= 2 && c.paragraphs.every((p) => p.l
 const WIKISOURCE_JUNK = /^(об этом электронном издании|про це електронне видання|about this digital edition|примечани[яе]|приміт(ки|ка)|см\.\s*также|див\.\s*також|оглавление|содержание|зміст|список редакц|джерела|версії роботи)/i
 const EXPORTED = /^((Экспортировано|Загружено) из Викитеки|(Експортовано|Завантажено) з Вікіджерел|Exported from Wikisource|Downloaded from Wikisource)/i
 // Выходные данные издательства и год-дата в начале книги
-const IMPRINT = /(Головліт|Укрголовліт|Книгоспілка|Друкарня|Державне видавництво|Зам\.\s*№|Тираж|Наклад|Типографія|Типография|Бібліографічний опис|Видавництво|ВИДАННЯ|Ціна \d|^стор\.)/i
+const IMPRINT = /(Головліт|Укрголовліт|Окрліт|Окрлит|Укрліт|Книгоспілка|Друкарня|Державне видавництво|Держвидав|Зам\.\s*№|Тираж|Наклад|Типографія|Типография|Бібліографічний опис|Видавництво|ВИДАННЯ|Ціна \d|^стор\.|^\[\d{3}[\d.–-]*\]$|^\d{4,6}\.?$)/i
 // Текст Викитеки о лицензии и навигация по частям
-const WIKI_NOTE = /(суспільному надбанні|общественном достоянии|public domain|Автор помер у|Автор умер в|Ця робота|This work is)/i
-const WIKI_NAV = /^(([IVXLC]+|\d+)\s*[•·|]\s*)+([IVXLC]+|\d+)$|^(Частини|Глави|Розділи|Зміст|Части|Главы):?$/i
+const WIKI_NOTE = /(суспільному надбанні|общественном достоянии|public domain|Автор помер у|Автор умер в|Ця робота|This work is|Термін дії авторських прав|Срок действия авторских прав)/i
+const WIKI_NAV = /^[•·|]?\s*(([IVXLC]+|\d+)\s*[•·|]\s*)+([IVXLC]+|\d+)$|^(Частини|Глави|Розділи|Зміст|Части|Главы):?$/i
 const EDITORIAL = /^(Впервые напечатано|Вперше надруковано|Впервые опубликовано|Вперше опубліковано)/i
 function cleanWikisource(book) {
+  // без \b: в JavaScript он не работает рядом с кириллицей
+  const EDITION = /^(твори|зібрання творів|собрание сочинений)(?=[\s/.,—-]|$)|(^|[\s/])том\s+[ivxlc\d]/i
   let chapters = book.chapters.map((c) => ({
-    title: c.title.replace(/\.?\s*автор\s+.+$/i, '').trim() || book.title,
+    title: EDITION.test(c.title) ? book.title : c.title.replace(/\.?\s*автор\s+.+$/i, '').trim() || book.title,
     paragraphs: c.paragraphs
-      .filter((p) => !EXPORTED.test(p) && !p.startsWith('↑') && !WIKI_NAV.test(p) && !(p.length < 400 && WIKI_NOTE.test(p)) && !(p.length < 200 && IMPRINT.test(p)))
-      .map((p) => p.replace(/\[\d{1,3}\]/g, '').replace(/[ \t]+([,.;:!?»)])/g, '$1').trim())
+      // По строкам: служебные строки склеиваются со стихами титула в одну «строфу»
+      .map((p) => p.split('\n').filter((line) => !EXPORTED.test(line) && !WIKI_NAV.test(line) && !(line.length < 400 && WIKI_NOTE.test(line)) && !(line.length < 200 && IMPRINT.test(line))).join('\n').trim())
+      .filter((p) => p && !EXPORTED.test(p) && !p.startsWith('↑') && !WIKI_NAV.test(p) && !(p.length < 400 && WIKI_NOTE.test(p)) && !(p.length < 200 && IMPRINT.test(p)))
+      .map((p) => p.replace(/\[\d{1,3}\]/g, '').replace(/[ \t]+([,.;:!?»)])/g, '$1').replace(/^(\d{1,3})\.(?=\p{L})/gmu, '$1. ').trim())
       .filter(Boolean),
   }))
   // Сноска редакции в начале главы («1 Глава эта не включена… — Ред.») — и её цифра в конце заголовка
@@ -49,7 +53,9 @@ function cleanWikisource(book) {
     if (/^[-—–*\s]+$/.test(c.title) && merged.length) merged.at(-1).paragraphs.push(...c.paragraphs)
     else merged.push(c)
   }
-  while (merged.length > 1 && tocLike(merged[0])) merged.shift()
+  // Титул в начале: короткая глава из одних коротких строк (год, название, «Драма в п’яти діях»)
+  const titlePage = (c) => words(c) < 60 && c.paragraphs.every((p) => p.split('\n').every((line) => line.length < 80))
+  while (merged.length > 1 && (tocLike(merged[0]) || titlePage(merged[0]))) merged.shift()
   // Начало первой главы: год-дата («1911») и выходные данные («ХАРКІВ КНИГОСПІЛКА 1925», «Укрголовліт № …»)
   const first = merged[0]
   while (first && first.paragraphs.length > 1 && (/^\d{4}(\s*(р|г)\.?)?$/.test(first.paragraphs[0]) || IMPRINT.test(first.paragraphs[0]) || (first.paragraphs[0].length < 40 && first.paragraphs[0] === first.paragraphs[0].toUpperCase() && /[А-ЯЁЇІЄҐ]{3}/.test(first.paragraphs[0])))) first.paragraphs.shift()
@@ -61,15 +67,16 @@ function cleanWikisource(book) {
 
 // Project Gutenberg: служебные абзацы, сноски изданий, титул и оглавление до первой настоящей главы, «THE END» и
 // выходные данные типографии в конце
-const GUTENBERG_JUNK = /(Project Gutenberg|^Produced by|\btranscriber\b|^This e-?text was|^The book cover and spine|^E-?text prepared by|^Updated editions will replace|^Note:\s.*(etext|e-text|ebook)|^\S+\.(jpe?g|png|gif)(\s*\(\d+K\))?$|^Full Size$|^\d+ \(return\))/i
+const GUTENBERG_JUNK = /(Project Gutenberg|^Produced by|\btranscriber\b|estimation of the difference in the original|cover art included with this e-?book|granted to the public domain|^This e-?book (is|was)|^This e-?text was|^The book cover and spine|^E-?text prepared by|^Updated editions will replace|^Note:\s.*(etext|e-text|ebook)|^\S+\.(jpe?g|png|gif)(\s*\(\d+K\))?$|^Full Size$|^\d+ \(return\))/i
 function cleanGutenberg(book) {
   let chapters = book.chapters
-    .filter((c) => !/transcriber['’]?s? notes?|^(table of )?contents\b|^(list of )?illustrations\b/i.test(c.title))
+    // Шапка («The Project Gutenberg eBook of …») и лицензия («THE FULL PROJECT GUTENBERG™ LICENSE») главами — долой
+    .filter((c) => !/project gutenberg|transcriber['’]?s? notes?|^(table of )?contents\.?$|^(list of )?illustrations\.?$|^introduction \(one page\)$/i.test(c.title))
     .map((c) => ({
       ...c,
       paragraphs: c.paragraphs
-        .filter((p) => !GUTENBERG_JUNK.test(p) && !/^\[\d{1,3}\]/.test(p)) // сноски изданий: текст сноски — долой
-        .map((p) => p.replace(/\s*\[\d{1,3}\]/g, '').replace(/\s*\(return\)/g, '').trim()) // и её номер в тексте
+        .filter((p) => !GUTENBERG_JUNK.test(p) && !/^\[\d{1,3}\]/.test(p) && !/^(Title|Author|Release date|Language|Credits|Most recently updated|Original publication|Illustrator|Translator):/i.test(p)) // сноски изданий и строки шапки — долой
+        .map((p) => p.replace(/\s*\[\d{1,3}\]/g, '').replace(/\s*\(return\)/g, '').replace(/\s*\[Copyright \d{4}[^\]]*\]/gi, '').trim()) // номера сносок, «[Copyright 1894 by …]»
         .filter(Boolean),
     }))
     .filter((c) => c.paragraphs.length)
@@ -80,6 +87,15 @@ function cleanGutenberg(book) {
     let end = at + 1
     while (end < c.paragraphs.length && c.paragraphs[end].length < 80) end++
     c.paragraphs.splice(at, end - at)
+  }
+  // Выходные данные перед текстом («CHISWICK PRESS», «Thomas Y. Crowell & Co.», «Copyright 1887», «with a Preface by»):
+  // короткая первая глава с такими признаками — не текст книги (а предисловие автора без них остаётся)
+  const IMPRINT_EN = /(\bPRESS\b|Publisher|Copyright \d|Preface by|Illustrations by|Translated by|&\s*Co\.|Astor Place)/i
+  if (chapters.length > 1 && words(chapters[0]) < 300 && IMPRINT_EN.test(chapters[0].paragraphs.join(' '))) chapters.shift()
+  else if (chapters[0]) {
+    const p = chapters[0].paragraphs
+    while (p.length > 1 && p[0].length < 400 && IMPRINT_EN.test(p[0])) p.shift()
+    if (IMPRINT_EN.test(chapters[0].title)) chapters[0].title = book.title
   }
   // Титул в начале первой главы: название заглавными, «by …»
   if (chapters[0]) {
@@ -94,6 +110,7 @@ function cleanGutenberg(book) {
   // Выходные данные типографии («CHISWICK PRESS: …») и «THE END»
   while (last && last.paragraphs.length > 1 && last.paragraphs.at(-1).length < 200 && /(PRESS|PRINTED BY|PRINTERS|LONDON:|NEW YORK:|BOSTON:)/.test(last.paragraphs.at(-1))) last.paragraphs.pop()
   if (last && /^THE END\.?$/i.test(last.paragraphs.at(-1) || '')) last.paragraphs.pop()
+  for (const c of chapters) c.title = c.title.replace(/\b(CHAPTER|Chapter|STAVE|BOOK|PART)([IVXLC]+|\d+)\b/g, '$1 $2') // «CHAPTERXXVII.»
   return { ...book, chapters }
 }
 
@@ -127,6 +144,12 @@ let pinned = 0
 const index = []
 for (const b of list) {
   if (only.length && !only.includes(b.id)) continue
+  // «skip»: книгу решили не брать (не собирается нормально) — в каталог не идёт, причина — в books.json
+  if (b.skip) {
+    fs.rmSync(path.join(ROOT, 'site', 'content', 'books', b.id), { recursive: true, force: true })
+    console.log(`– ${b.id}: пропущена — ${b.skip}`)
+    continue
+  }
   try {
     if (b.source.kind === 'wikisource' && !b.source.page) {
       b.source.page = await findPage(b)
@@ -140,10 +163,20 @@ for (const b of list) {
   }
   const src = sourceUrl(b.source)
   try {
-    const response = await fetch(src.url, { headers: UA })
+    let response = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        response = await fetch(src.url, { headers: UA })
+      } catch (err) {
+        response = { ok: false, status: err.message }
+      }
+      if (response.ok || (typeof response.status === 'number' && response.status < 500)) break
+      console.log(`  ${b.id}: источник ответил ${response.status} — попытка ${attempt} из 3`)
+      await new Promise((r) => setTimeout(r, 5000 * attempt))
+    }
     if (!response.ok) throw new Error(`источник ответил ${response.status}`)
     const bytes = new Uint8Array(await response.arrayBuffer())
-    const parsed = await F.parse(bytes, src.name, { title: b.title, author: b.author, lang: b.lang, inflateRaw })
+    const parsed = await F.parse(bytes, src.name, { title: b.title, author: b.author, lang: b.lang, chapters: b.chapters, inflateRaw })
     // Gutenberg: название из шапки — та ли книга (номер в books.json легко перепутать)
     let mismatch = ''
     if (b.source.kind === 'gutenberg') {
@@ -163,14 +196,18 @@ for (const b of list) {
     if (mismatch) warnings.push(mismatch)
     // Проверка качества: остатки служебного текста, склеенная проза, книга без настоящих глав — в каталог не идёт
     const all = book.chapters.flatMap((c) => c.paragraphs)
-    const junk = all.find((p) => /(Project Gutenberg|transcriber|Вікіджерел|Викитек|Wikisource|суспільному надбанні|Тираж|Друкарня|\.jpe?g\b)/i.test(p))
+    // Только однозначные признаки: слово «друкарня» бывает и в самом романе. Смотрим и названия глав
+    // «license» бывает и в прозе («by his license»): LICENSE заглавными ищем только в названиях глав
+    const JUNK = /(Project Gutenberg|\btranscriber\b|Вікіджерел|Викитек|Wikisource|суспільному надбанні|Термін дії авторських прав|Укрголовліт|Зам\.\s*№|\.jpe?g\b)/i
+    const junk = book.chapters.map((c) => c.title).find((t) => /\bLICENSE\b|PROJECT GUTENBERG/.test(t)) ?? [...book.chapters.map((c) => c.title), ...all].find((p) => JUNK.test(p))
     const longest = Math.max(0, ...all.filter((p) => !p.includes('\n')).map((p) => p.length))
-    const parts = book.chapters.filter((c) => /^(Part|Частина|Часть) \d+$/.test(c.title)).length
     const fails = []
     if (junk) fails.push(`служебный текст: «${junk.slice(0, 80)}»`)
-    if (longest > 6000) fails.push(`абзац прозы на ${longest} знаков — похоже, склеены абзацы`)
+    // Длинные абзацы бывают настоящими (письмо Дарси — 14 778 знаков): ловим только явную склейку
+    if (longest > 30000) fails.push(`абзац прозы на ${longest} знаков — похоже, склеены абзацы`)
     if (stats.words > 15000 && book.chapters.length < 3) fails.push(`${stats.words} слов и всего ${book.chapters.length} глав`)
-    if (parts > book.chapters.length / 2) fails.push(`нет настоящих глав: ${parts} из ${book.chapters.length} — «Part N»`)
+    if (b.lang === 'en' && stats.words < 2000) fails.push(`всего ${stats.words} слов — книга скачалась не целиком`)
+    if (book.chapters.length > 2 && book.chapters.every((c) => c.auto)) warnings.push('глав не нашлось — книга разбита на части по объёму')
     if (fails.length) {
       fs.rmSync(path.join(ROOT, 'site', 'content', 'books', b.id), { recursive: true, force: true })
       failed++
@@ -179,7 +216,7 @@ for (const b of list) {
     }
     const dir = path.join(ROOT, 'site', 'content', 'books', b.id)
     fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, 'book.json'), JSON.stringify(book))
+    fs.writeFileSync(path.join(dir, 'book.json'), JSON.stringify({ ...book, chapters: book.chapters.map(({ auto, ...c }) => c) }))
     fs.writeFileSync(
       path.join(dir, 'LICENSE.txt'),
       [
@@ -204,7 +241,7 @@ for (const b of list) {
 // Обновляем точечно: собранные заменяем, книги, которых больше нет в books.json, убираем
 const indexPath = path.join(ROOT, 'site', 'content', 'books', 'index.json')
 const previous = fs.existsSync(indexPath) ? JSON.parse(fs.readFileSync(indexPath, 'utf8')) : []
-const merged = new Map(previous.filter((e) => list.some((b) => b.id === e.id)).map((e) => [e.id, e]))
+const merged = new Map(previous.filter((e) => list.some((b) => b.id === e.id && !b.skip)).map((e) => [e.id, e]))
 for (const e of index) merged.set(e.id, e)
 const ordered = list.map((b) => merged.get(b.id)).filter(Boolean)
 fs.mkdirSync(path.dirname(indexPath), { recursive: true })

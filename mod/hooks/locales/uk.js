@@ -59,6 +59,7 @@ export default {
   "a field that shows what is pressed and what the mod thinks is held": "поле, де видно, що натиснуто і що мод вважає затиснутим",
   "a regular browser window": "звичайне вікно браузера",
   "a system notification with sound when the agent finishes or asks for permission": "системне сповіщення зі звуком, коли агент закінчив або чекає на дозвіл",
+  "a tool": "інструмент",
   "action": "екшн",
   "add your own ROM file": "додай свій файл ROM",
   "adventure": "пригоди",

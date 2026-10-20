@@ -16,7 +16,7 @@
     })
   // Текст элемента: теги долой, переносы <br> — пробелом, пробелы — по одному
   const clean = (html) =>
-    decode(html.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(p|div|li|h[1-6]|title|subtitle|v)\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, ''))
+    decode(html.replace(/\s+/g, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(p|div|li|h[1-6]|title|subtitle|v)\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, ''))
       .split('\n')
       .map((line) => line.replace(/\s+/g, ' ').trim())
       .join('\n')
@@ -44,8 +44,11 @@
     let current = null
     for (const b of blocks) {
       if (b.head) {
-        const title = b.text.replace(/\n/g, '. ')
-        if (current && current.paragraphs.length === 0) current.title = `${current.title}. ${title}`
+        // Части заголовка — через одну точку: «CHAPTER I.» + «Down the Rabbit-Hole» → «CHAPTER I. Down the Rabbit-Hole»
+        const join = (a, b2) => `${a.replace(/[.\s]+$/, '')}. ${b2}`
+        const title = b.text.split('\n').reduce((acc, part) => (acc ? join(acc, part) : part), '')
+        const marker = (t) => /^((table of )?contents|(list of )?illustrations|зміст|оглавление|содержание)\.?$/i.test(t)
+        if (current && current.paragraphs.length === 0) current.title = marker(current.title) ? title : join(current.title, title)
         else chapters.push((current = { title, paragraphs: [] }))
       } else {
         if (!current) chapters.push((current = { title: fallbackTitle, paragraphs: [] }))
@@ -55,15 +58,33 @@
     return chapters.filter((c) => c.paragraphs.length)
   }
 
-  // Слишком длинная глава без деления (весь TXT одним куском) — режем на части по 80 абзацев
-  function split(chapters, partWord) {
+  // Длинная глава — на части по объёму текста (не по числу абзацев: в пьесе реплика — абзац). Название главы
+  // остаётся: «Act I · 2». auto — часть нарезана сборкой, а не размечена автором
+  function split(chapters) {
     const out = []
     for (const c of chapters) {
-      if (c.paragraphs.length <= 400) out.push(c)
-      else for (let i = 0; i < c.paragraphs.length; i += 80) out.push({ title: `${partWord} ${out.length + 1}`, paragraphs: c.paragraphs.slice(i, i + 80) })
+      const size = c.paragraphs.reduce((n, p) => n + p.length, 0)
+      if (size <= 60000) {
+        out.push(c)
+        continue
+      }
+      let part = []
+      let len = 0
+      let k = 1
+      for (const p of c.paragraphs) {
+        part.push(p)
+        len += p.length
+        if (len >= 30000) {
+          out.push({ title: `${c.title} · ${k++}`, paragraphs: part, auto: true })
+          part = []
+          len = 0
+        }
+      }
+      if (part.length) out.push({ title: k > 1 ? `${c.title} · ${k}` : c.title, paragraphs: part, ...(k > 1 ? { auto: true } : {}) })
     }
     return out
   }
+
 
   // Форма книги: оглавление (три и больше заголовков подряд) схлопнуть до настоящей первой главы; при заголовках
   // «номер + название» голые «I.», «II.» — разделы, не главы. Общая для TXT и EPUB
@@ -73,6 +94,11 @@
     const numeral = (t) => (t.match(/^([IVXLC]{1,7})\b/) || [])[1]
     const collapsed = []
     for (let i = 0; i < blocks.length; ) {
+      // «Contents» перед заголовками — не в счёт: «Contents», «CHAPTER I.», «Down the Rabbit-Hole» — это глава, не оглавление
+      if (blocks[i].head && /^((table of )?contents|зміст|оглавление|содержание)\.?$/i.test(blocks[i].text) && blocks[i + 1]?.head) {
+        i++
+        continue
+      }
       let j = i
       while (j < blocks.length && blocks[j].head) j++
       if (j - i >= 3) {
@@ -82,7 +108,10 @@
         const partWord = /^(part|book|часть|книга|том|частина)(?=[\s.:—-]|$)/i
         const part = partWord.test(prev.text) && !partWord.test(last.text)
         const story = /^[IVXLC]{1,7}\.?$/.test(last.text) && /^[IVXLC]{1,7}\.?\s+\S/.test(prev.text) && numeral(prev.text) === numeral(last.text)
-        if (part || story) collapsed.push(prev)
+        // номер главы перед подзаголовком: «CHAPTER I.» + «Down the Rabbit-Hole»
+        const numbered = /^(chapter|глава|розділ)(?=[\s.:—-]|$)|^[IVXLC]{1,7}\.?$/i
+        const subtitle = numbered.test(prev.text) && !numbered.test(last.text)
+        if (part || story || subtitle) collapsed.push(prev)
         collapsed.push(last)
         i = j
       } else collapsed.push(blocks[i++])
@@ -123,7 +152,7 @@
     if (blocks.filter((b) => !b.head && caps(b.text)).length >= 3) blocks = blocks.map((b) => (caps(b.text) ? { ...b, head: true } : b))
     blocks = shape(blocks)
     const lang = meta.lang || (/[а-яё]/i.test(body.slice(0, 5000)) ? 'ru' : 'en')
-    const chapters = split(toChapters(blocks, meta.title || (lang === 'ru' ? 'Начало' : 'Beginning')), lang === 'ru' ? 'Часть' : 'Part')
+    const chapters = split(toChapters(blocks, meta.title || (lang === 'ru' ? 'Начало' : 'Beginning')))
     return { title: meta.title || '', author: meta.author || '', lang, chapters }
   }
 
@@ -152,7 +181,7 @@
         if (t) blocks.push({ head: false, text: t })
       }
     }
-    const chapters = split(toChapters(blocks, title || meta.title || 'Начало'), lang === 'en' ? 'Part' : 'Часть')
+    const chapters = split(toChapters(blocks, title || meta.title || 'Начало'))
     return { title: title || meta.title || '', author: author || meta.author || '', lang, chapters }
   }
 
@@ -221,28 +250,177 @@
     }
     const spine = [...opf.matchAll(/<itemref\b[^>]*idref\s*=\s*"([^"]+)"/gi)].map((m) => items.get(m[1])).filter(Boolean)
     let blocks = []
+    const anchors = [] // места записей оглавления: { entry, doc, at }
+    const toc = await epubToc(bytes, zip, opf, opfPath, items, meta.inflateRaw)
+    let doc = -1
     for (const path of spine) {
+      doc++
       const html = await readEntry(bytes, zip, path, meta.inflateRaw)
       if (!html) continue
-      const body = (html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i) || [])[1] || html
-      for (const m of body.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>|<div\b[^>]*class="[^"]*\b(?:stanza|verse)\b[^"]*"[^>]*>([\s\S]*?)<\/div>|<(p|h[4-6]|li|dd)\b[^>]*>([\s\S]*?)<\/\4>/gi)) {
-        // строфа Gutenberg: строки — <span> или <div class="line">, между ними — перенос
-        const raw = m[3] !== undefined ? m[3].replace(/<\/(span|div)>\s*(<br\s*\/?>)?/gi, '<br/>') : (m[2] ?? m[5])
-        const text = clean(raw)
-        if (text) blocks.push({ head: Boolean(m[1]), text })
+      const verses = []
+      // Подписи к картинкам (в том числе внутри заголовков) и строки оглавления <p class="toc"> — не текст книги
+      const raw = ((html.match(/<body\b[^>]*>([\s\S]*)<\/body>/i) || [])[1] || html)
+        .replace(/<(span|div|p|figcaption)\b[^>]*class="[^"]*\b(caption|figcaption|illus\w*)\b[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<figure\b[\s\S]*?<\/figure>/gi, ' ')
+        .replace(/<p\b[^>]*class="[^"]*\btoc\b[^"]*"[^>]*>[\s\S]*?<\/p>/gi, ' ')
+      const body = poems(raw, verses)
+      const before = blocks.length
+      // Где в этом файле начинаются записи оглавления: без якоря — с начала файла, с якорем — у элемента с этим id
+      toc.forEach((e, entry) => {
+        if (e.path !== path) return
+        if (!e.frag) return anchors.push({ entry, doc, at: 0 })
+        const tag = new RegExp(`<(\\w+)\\b[^>]*\\b(id|name)\\s*=\\s*["']${e.frag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["'][^>]*>`, 'i').exec(body)
+        // запись оглавления, указывающая на картинку («Marley’s Ghost»), — не начало главы
+        if (tag && !/^(img|figure|svg|image)$/i.test(tag[1]) && !/class\s*=\s*["'][^"']*\b(fig\w*|illus\w*|image|caption)\b/i.test(tag[0])) anchors.push({ entry, doc, at: tag.index })
+      })
+      for (const m of body.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>|<div\b[^>]*class="[^"]*\b(?:stanza|verse)\b[^"]*"[^>]*>([\s\S]*?)<\/div>|<(p|h[4-6]|li|dd)\b[^>]*>([\s\S]*?)<\/\4>|<pre\b[^>]*>([\s\S]*?)<\/pre>/gi)) {
+        // строфа Gutenberg: строки — <span> или <div class="line">, между ними — перенос; в <pre> перенос исходника — строка
+        const raw = m[6] !== undefined ? m[6].replace(/\r?\n/g, '<br/>') : m[3] !== undefined ? m[3].replace(/<\/(span|div)>\s*(<br\s*\/?>)?/gi, '<br/>') : (m[2] ?? m[5])
+        const verseAt = m[4] && /data-verse="(\d+)"/.exec(m[0])
+        const text = verseAt ? verses[Number(verseAt[1])] : clean(raw)
+        if (text) blocks.push({ head: Boolean(m[1]), text, doc, end: m.index + m[0].length })
       }
+      // В файле нет заголовков — название главы из его <title> (так делает ws-export: «ДІЯ ПЕРША»)
+      const docTitle = clean((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '')
+      const mine = blocks.slice(before)
+      const sameAsBook = (t) => [title, meta.title].some((x) => x && t.toLowerCase().includes(x.toLowerCase())) || /project gutenberg|твори|зібрання|собрание|(^|[\s/])том\s+[ivxlc\d]|\//i.test(t)
+      if (docTitle && mine.length && !mine.some((x) => x.head) && !sameAsBook(docTitle) && docTitle.length <= 80) blocks.splice(before, 0, { head: true, text: docTitle })
     }
+    // Главы по оглавлению книги — надёжнее угадывания по виду строк; не вышло — прежние правила
+    const byToc = tocChapters(blocks, toc, anchors)
     // Project Gutenberg: только то, что между «*** START OF» и «*** END OF»
     const startAt = blocks.findIndex((x) => /\*{3}\s*START OF (THE|THIS) PROJECT GUTENBERG/i.test(x.text))
     if (startAt >= 0) blocks.splice(0, startAt + 1)
-    const endAt = blocks.findIndex((x) => /\*{3}\s*END OF (THE|THIS) PROJECT GUTENBERG/i.test(x.text))
+    const endAt = blocks.findIndex((x) => /\*{3}\s*END OF (THE|THIS) PROJECT GUTENBERG|THE FULL PROJECT GUTENBERG|START: FULL LICENSE/i.test(x.text))
     if (endAt >= 0) blocks.splice(endAt)
     // Короткий абзац «I», «Розділ II», «Дія перша», «Пісня третя» — тоже заголовок (так размечена Викитека)
-    for (const x of blocks) if (!x.head && x.text.length <= 60 && !x.text.includes('\n') && (HEADING.some((re) => re.test(x.text)) || EPUB_HEADING.test(x.text))) x.head = true
+    const mode = meta.chapters || 'auto'
+    const realHeadings = mode !== 'text-loose' && blocks.some((x) => x.head)
+    for (const x of blocks) if (!x.head && x.text.length <= 60 && !x.text.includes('\n') && (EPUB_HEADING.test(x.text) || (!realHeadings && HEADING.some((re) => re.test(x.text))))) x.head = true
     blocks = verse(shape(blocks))
-    const chapters = split(toChapters(blocks, title || meta.title || 'Начало'), lang === 'ru' ? 'Часть' : lang === 'uk' ? 'Частина' : 'Part')
+    const guessed = split(toChapters(blocks, title || meta.title || 'Начало'))
+    const size = (list) => list.reduce((n, c) => n + c.paragraphs.reduce((k, x) => k + x.length, 0), 0)
+    // auto: по оглавлению, если оно полное (не меньше 60% текста и не вдвое меньше глав, чем в тексте); toc — всегда по нему;
+    // text и text-loose — по заголовкам в тексте (text-loose: короткие абзацы «Chapter …» — тоже главы)
+    const fullToc = byToc && byToc.length >= 2 && size(byToc) >= 0.6 * size(guessed) && byToc.length * 2 > guessed.length
+    const chapters = mode === 'toc' ? (byToc && byToc.length ? byToc : guessed) : mode === 'auto' && fullToc ? byToc : guessed
     return { title: title || meta.title || '', author: author || meta.author || '', lang, chapters }
   }
+
+  // Оглавление EPUB: toc.ncx (EPUB 2) или nav (EPUB 3) — записи по порядку: название, файл, якорь
+  async function epubToc(bytes, zip, opf, opfPath, items, inflateRaw) {
+    const target = (base, src) => {
+      const [file, frag] = src.split('#')
+      return { path: resolve(base, file), frag: frag ? decodeURIComponent(frag) : '' }
+    }
+    const out = []
+    const ncxId = (opf.match(/<spine\b[^>]*\btoc\s*=\s*"([^"]+)"/i) || [])[1]
+    let ncxPath = ncxId && items.get(ncxId)
+    if (!ncxPath) {
+      const item = opf.match(/<item\b[^>]*media-type\s*=\s*"application\/x-dtbncx\+xml"[^>]*>/i)
+      const href = item && (item[0].match(/\bhref\s*=\s*"([^"]+)"/i) || [])[1]
+      if (href) ncxPath = resolve(opfPath, href)
+    }
+    if (ncxPath) {
+      const ncx = await readEntry(bytes, zip, ncxPath, inflateRaw)
+      if (ncx) for (const m of ncx.matchAll(/<navPoint\b[\s\S]*?<text>([\s\S]*?)<\/text>[\s\S]*?<content\b[^>]*\bsrc\s*=\s*"([^"]+)"/gi)) out.push({ label: clean(m[1]), ...target(ncxPath, m[2]) })
+    }
+    if (!out.length) {
+      const item = opf.match(/<item\b[^>]*properties\s*=\s*"[^"]*\bnav\b[^"]*"[^>]*>/i)
+      const href = item && (item[0].match(/\bhref\s*=\s*"([^"]+)"/i) || [])[1]
+      const navPath = href && resolve(opfPath, href)
+      const nav = navPath && (await readEntry(bytes, zip, navPath, inflateRaw))
+      if (nav) {
+        const list = (nav.match(/<nav\b[^>]*toc[^>]*>([\s\S]*?)<\/nav>/i) || [])[1] || nav
+        for (const a of list.matchAll(/<a\b[^>]*href\s*=\s*"([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)) out.push({ label: clean(a[2]), ...target(navPath, a[1]) })
+      }
+    }
+    return out.filter((e) => e.label)
+  }
+
+  // Записи оглавления, которые не глава: само оглавление, иллюстрации, титул, лицензия, «об этом издании»
+  const TOC_JUNK = /^(contents|table of contents|illustrations|list of illustrations|the full project gutenberg|project gutenberg|full license|title page|cover|copyright|colophon|зміст|оглавление|содержание|про це електронне видання|об этом электронном издании|about this digital edition|опис$|титульна сторінка|титульная страница)/i
+
+  // Главы по оглавлению: каждый блок — в ту запись, что начинается раньше него; до первой записи — титул, долой.
+  // Запись без своего текста (часть) — начало названия следующей главы: «Part I. Chapter I»
+  function tocChapters(blocks, toc, anchors) {
+    if (toc.filter((e) => !TOC_JUNK.test(e.label)).length < 2 || anchors.length < 2) return null
+    const byDoc = new Map()
+    for (const a of anchors) byDoc.set(a.doc, [...(byDoc.get(a.doc) ?? []), a].sort((x, y) => x.at - y.at))
+    const owned = new Map()
+    let current = -1
+    let lastDoc = -1
+    let next = []
+    for (const b of blocks) {
+      if (/\*{3}\s*END OF (THE|THIS) PROJECT GUTENBERG|THE FULL PROJECT GUTENBERG/i.test(b.text)) break
+      if (b.doc !== lastDoc) {
+        lastDoc = b.doc
+        next = [...(byDoc.get(b.doc) ?? [])]
+      }
+      while (next.length && b.end > next[0].at) current = next.shift().entry
+      if (current < 0) continue
+      owned.set(current, [...(owned.get(current) ?? []), b])
+    }
+    const chapters = []
+    let prefix = ''
+    const join = (a, b2) => (a ? `${a.replace(/[.\s]+$/, '')}. ${b2}` : b2)
+    const norm = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+    toc.forEach((e, i) => {
+      if (TOC_JUNK.test(e.label)) return
+      let own = owned.get(i) ?? []
+      // Заголовок в тексте, начинающийся с названия из оглавления («CHAPTER I.» + «Down the Rabbit-Hole»), — полнее: берём его
+      let label = e.label.replace(/^.+?\s((CHAPTER|Chapter|STAVE|BOOK|PART|ACT)\s+[IVXLC\d]+\b.*)$/, '$1')
+      // заголовок — в первых двух блоках главы, хоть h2, хоть обычный <p> («Chapter I. The birth of the Prince…»)
+      const heading = own.slice(0, 2).find((b) => (b.head || b.text.length <= 160) && norm(b.text).startsWith(norm(e.label)))
+      if (heading) {
+        label = heading.text.split('\n').reduce((acc, part) => join(acc, part), '')
+        own = own.filter((b) => b !== heading)
+      }
+      const paragraphs = verse(own.map((b) => ({ head: false, text: b.text }))).flatMap((b) => pieces(b.text))
+      if (!paragraphs.length) {
+        // без своего текста: часть, книга, акт, том — начало названия следующей главы; остальное (издание, переводчик) — долой
+        if (/^(part|book|act|volume|vol\.|canto|stave|section|частина|часть|книга|том|дія|действие)(?=[\s.:—-]|$)/i.test(label)) prefix = join(prefix, label)
+        return
+      }
+      chapters.push({ title: join(prefix, label), paragraphs })
+      prefix = ''
+    })
+    return chapters.length ? split(chapters) : null
+  }
+  // Стихи в контейнерах со вложенными <div> (Gutenberg: div.poem > div.stanza > div.line): вынимаем целиком, считая
+  // вложенность, — строки через перенос, строфы через пустую строку; на их место — <p data-verse="N">
+  function poems(html, verses) {
+    const open = /<div\b[^>]*class="[^"]*\b(poem|poetry|stanza|verse|lg)\b[^"]*"[^>]*>/gi
+    let out = ''
+    let from = 0
+    let m
+    while ((m = open.exec(html))) {
+      if (m.index < from) continue
+      const tags = /<\/?div\b[^>]*>/gi
+      tags.lastIndex = m.index
+      let depth = 0
+      let end = -1
+      let t
+      while ((t = tags.exec(html))) {
+        depth += t[0][1] === '/' ? -1 : 1
+        if (depth === 0) {
+          end = t.index + t[0].length
+          break
+        }
+      }
+      if (end < 0) break
+      const inner = html
+        .slice(m.index, end)
+        .replace(/<div\b[^>]*class="[^"]*\bstanza\b[^"]*"[^>]*>/gi, '<br/><br/>')
+        .replace(/<\/(div|p)>/gi, '<br/>')
+      out += `${html.slice(from, m.index)}<p data-verse="${verses.length}"></p>`
+      verses.push(clean(inner))
+      from = end
+      open.lastIndex = end
+    }
+    return out + html.slice(from)
+  }
+
   const EPUB_HEADING = /^(дія|розділ|частина|пісня|пролог|епілог|сцена|ява|глава|действие|песнь|canto|act|scene)(?=[\s.:—-]|$)[^.!?]{0,40}$/i
   // Стихи построчными абзацами (каждая строка — свой <p>): подряд 4 и больше коротких строк — строфы по 14 строк
   function verse(blocks) {

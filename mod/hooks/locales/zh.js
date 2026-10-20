@@ -59,6 +59,7 @@ export default {
   "a field that shows what is pressed and what the mod thinks is held": "一个区域，显示哪些键被按下、模组认为哪些键被按住",
   "a regular browser window": "普通浏览器窗口",
   "a system notification with sound when the agent finishes or asks for permission": "智能体完成或请求授权时，发出带声音的系统通知",
+  "a tool": "工具",
   "action": "动作",
   "add your own ROM file": "添加你自己的 ROM 文件",
   "adventure": "冒险",
