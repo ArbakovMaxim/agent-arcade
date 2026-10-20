@@ -30,6 +30,7 @@ export default {
   "Key test": "キーテスト",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "キーボード — Claude の入力欄の上にある 🎮 の行で · ボタン — マウスで",
   "Library": "ライブラリ",
+  "More": "その他",
   "My games": "マイゲーム",
   "NES": "NES",
   "No games here yet.": "まだゲームがありません。",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "一時停止：エージェントが完了しました。ゲームのキー — プレイを続ける、Esc — エージェントに戻る",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "一時停止：エージェントが許可を待っています。ゲームのキー — プレイを続ける、Esc — エージェントに戻る",
   "Play": "プレイ",
+  "Read": "読む",
   "Reassign keys": "キーを再設定",
   "Reassigning the controls.": "操作キーを再設定します。",
   "Settings": "設定",
@@ -86,6 +88,7 @@ export default {
   "fighting": "格闘",
   "for games in the Claude pane; in a browser window you get a system notification": "Claude のペインでプレイする場合。ブラウザウィンドウではシステム通知が届きます",
   "horror": "ホラー",
+  "interface language — 13 to choose from": "表示言語 — 13 言語から選択",
   "left": "左",
   "looking for browsers…": "ブラウザを検索中…",
   "memoir": "回想録",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0}時間{1}分",
   "{0} game": "{0#other=#本のゲーム}",
   "{0} games": "{0#other=#本のゲーム}",
+  "{0} book": "{0#other=#冊の本}",
+  "{0} books": "{0#other=#冊の本}",
   "Join: {0}": "参加：{0}",
   "waiting online: {0}": "オンライン待機中：{0}",
   "Support page: {0}": "サポートページ：{0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "開く場所：既定のブラウザウィンドウ（{0}）",
   "Open in: {0} window ({1})": "開く場所：{0} のウィンドウ（{1}）",
   "open in: {0} window ({1})": "開く場所：{0} のウィンドウ（{1}）",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "キー：上 {0} · 左 {1} · 下 {2} · 右 {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "キー：上 {0} · 左 {1} · 下 {2} · 右 {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [

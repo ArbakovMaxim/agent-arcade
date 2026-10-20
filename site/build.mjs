@@ -70,7 +70,8 @@ export function build({ root, out, now = new Date() }) {
     for (const b of JSON.parse(fs.readFileSync(bookIndex, 'utf8'))) {
       if (listed.has(b.id)) continue
       ;(source.games ??= []).push({
-        id: b.id, console: 'books', kind: 'book', text: `books/${b.id}/book.json`, title: b.title, author: b.author, lang: b.lang, year: b.year, genre: b.genre,
+        // полка — по языку книги: «Книги» → English, Українська…
+        id: b.id, console: 'books', kind: 'book', shelf: `books-${b.lang}`, text: `books/${b.id}/book.json`, title: b.title, author: b.author, lang: b.lang, year: b.year, genre: b.genre,
         about: b.about ?? '', about_en: b.about_en ?? '', keys: 'колёсико или пробел — дальше',
         license: { name: 'общественное достояние', author: b.author, source: b.source, files: [`books/${b.id}/LICENSE.txt`] },
       })
@@ -161,6 +162,7 @@ export function build({ root, out, now = new Date() }) {
       })
       const words = book.chapters.reduce((n, c) => n + c.paragraphs.reduce((k, p) => k + String(p).split(/\s+/).length, 0), 0)
       games[g.id] = {
+        ...(g.shelf ? { shelf: g.shelf } : {}), // полка — язык книги
         console: g.console, kind: 'book', text: `books/${g.id}/book.json`, title: g.title, author: g.author, lang: g.lang, year: g.year ?? null,
         genre: g.genre, about: g.about ?? '', about_en: g.about_en ?? '', keys: g.keys, chapters: book.chapters.length, words,
         credit: `${g.author} — «${g.title}»${g.year > 0 ? `, ${g.year}` : ''} · ${license.name}`,

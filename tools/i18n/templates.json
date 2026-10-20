@@ -10,6 +10,8 @@
   "{0} h {1} min",
   "{0} game",
   "{0} games",
+  "{0} book",
+  "{0} books",
   "Join: {0}",
   "waiting online: {0}",
   "Support page: {0}",
@@ -66,7 +68,8 @@
   "open in: default browser window ({0})",
   "Open in: {0} window ({1})",
   "open in: {0} window ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}",
+  "— {0} —"
  ],
  "site": [
   "Played in total: {0}",

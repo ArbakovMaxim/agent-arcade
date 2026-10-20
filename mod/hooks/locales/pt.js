@@ -30,6 +30,7 @@ export default {
   "Key test": "Teste de teclas",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "Teclado — na linha 🎮 acima do campo de entrada do Claude · botões — com o mouse",
   "Library": "Biblioteca",
+  "More": "Mais",
   "My games": "Meus jogos",
   "NES": "NES",
   "No games here yet.": "Ainda não há jogos aqui.",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pausado: o agente terminou. Qualquer tecla do jogo — continuar jogando, Esc — voltar ao agente",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pausado: o agente está aguardando permissão. Qualquer tecla do jogo — continuar jogando, Esc — voltar ao agente",
   "Play": "Jogar",
+  "Read": "Ler",
   "Reassign keys": "Reconfigurar teclas",
   "Reassigning the controls.": "Reconfigurando os controles.",
   "Settings": "Configurações",
@@ -86,6 +88,7 @@ export default {
   "fighting": "luta",
   "for games in the Claude pane; in a browser window you get a system notification": "para jogos no painel do Claude; em uma janela do navegador, você recebe uma notificação do sistema",
   "horror": "terror",
+  "interface language — 13 to choose from": "idioma da interface — 13 à escolha",
   "left": "esquerda",
   "looking for browsers…": "procurando navegadores…",
   "memoir": "memórias",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0} h {1} min",
   "{0} game": "{0#one=# jogo;many=# jogos;other=# jogos}",
   "{0} games": "{0#one=# jogo;many=# jogos;other=# jogos}",
+  "{0} book": "{0#one=# livro;many=# livros;other=# livros}",
+  "{0} books": "{0#one=# livro;many=# livros;other=# livros}",
   "Join: {0}": "Entrar: {0}",
   "waiting online: {0}": "esperando online: {0}",
   "Support page: {0}": "Página de apoio: {0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "abrir em: janela do navegador padrão ({0})",
   "Open in: {0} window ({1})": "Abrir em: janela do navegador {0} ({1})",
   "open in: {0} window ({1})": "abrir em: janela do navegador {0} ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Teclas: cima {0} · esquerda {1} · baixo {2} · direita {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Teclas: cima {0} · esquerda {1} · baixo {2} · direita {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [

@@ -6,6 +6,7 @@ import { bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restore
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { LANGS, LANG_NAMES, detectLang, tr, translateTree } from './i18n.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
+import { LOGO_SVG } from './logo.js'
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
@@ -620,7 +621,10 @@ function consoleNote(c) {
   const count = c.group === undefined && groupsList().some((g) => g.id === c.id)
     ? games().filter((g) => groupConsoles(c.id).includes(g.console) && !g.mine).length
     : games().filter((g) => g.console === c.id && !g.mine).length
-  return count ? `${count} ${plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
+  // У книг — «136 книг», а не «136 игр»
+  const list = c.group === undefined && groupsList().some((g) => g.id === c.id) ? games().filter((g) => groupConsoles(c.id).includes(g.console) && !g.mine) : games().filter((g) => g.console === c.id && !g.mine)
+  const books = list.length > 0 && list.every((g) => g.kind === 'book')
+  return count ? `${count} ${books ? plural(count, 'книга', 'книги', 'книг') : plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
 function settingsNote() {
@@ -1091,12 +1095,25 @@ export function register(on) {
     const game = gameById(view)
     remoteSurface = terminal ? null : e.surface
 
+    // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает — жёлтый, ждёт разрешения —
+    // красный, закончил — зелёный, свободен — серый
+    const statusColor = status === 'permission' ? 'red' : status === 'working' ? 'yellow' : status === 'done' ? 'green' : 'gray'
     const header = Box({
       flexDirection: 'row',
       columnGap: 2,
+      alignItems: 'center',
       children: [
+        // логотип — только в главном меню библиотеки в Desktop: над экраном игры он не нужен
+        ...(!game && menu === 'main' && e.surface === 'desktop' ? [Svg({ source: LOGO_SVG, alt: 'Arcade', width: 28, height: 28 })] : []),
         Text({ bold: true, children: [game ? `Arcade · ${game.title}` : libraryTitle()] }),
-        Text({ color: status === 'permission' ? 'yellow' : 'green', children: [statusText(now)] }),
+        Box({
+          flexDirection: 'row',
+          columnGap: 1,
+          children: [
+            Text({ color: statusColor, children: ['●'] }),
+            Text({ color: statusColor, children: [statusText(now)] }),
+          ],
+        }),
       ],
     })
     const eventLines = (events.length ? events : ['пока ничего']).slice(0, 3).map((text) => Text({ dimColor: true, children: [text] }))
@@ -1178,6 +1195,21 @@ export function register(on) {
       const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') })
       const dim = (text) => Text({ dimColor: true, children: [text] })
       const gap = Text({ children: [' '] })
+      // Разделы и плитки главного меню: кнопка с подписью — в рамке; плитки рядами, в узкой панели — колонкой
+      const section = (title) => Text({ bold: true, dimColor: true, children: [title] })
+      const tiles = (list) => {
+        const out = []
+        for (let i = 0; i < list.length; i++) {
+          const x = list[i]
+          if (!x || (x.type === 'Text' && x.props?.children?.[0] === ' ')) continue
+          const note = list[i + 1]
+          if (x.type === 'Button' && note && note.type === 'Text' && note.props?.dimColor) {
+            out.push(Box({ flexDirection: 'column', borderStyle: 'round', borderDimColor: true, paddingX: 1, minWidth: 24, children: [x, note] }))
+            i++
+          } else out.push(Box({ flexDirection: 'column', borderStyle: 'round', borderDimColor: true, paddingX: 1, minWidth: 24, children: [x] }))
+        }
+        return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 1, children: out })
+      }
       const noticeLines = libraryNotice ? [gap, Text({ color: 'yellow', children: [libraryNotice] })] : []
       const hint = [gap, dim('↑ ↓ или Tab — выбрать, Enter — открыть. Можно кликнуть мышью.')]
 
@@ -1390,7 +1422,13 @@ export function register(on) {
           shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
           ...(list.length
-            ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
+            ? (shelf && list.every((g) => g.kind === 'book')
+                ? // книги на полке — по жанрам, с разделителем жанра
+                  [...new Set(list.map((g) => g.genre))].flatMap((genre) => [
+                    dim(`— ${genre} —`),
+                    ...list.filter((g) => g.genre === genre).flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]),
+                  ])
+                : list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
           // Всё, кроме Денди, идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
           ...(c.id !== 'nes'
@@ -1421,8 +1459,8 @@ export function register(on) {
           ...hint,
         ]
       } else {
-        items = [
-          ...menuTabs().flatMap((c) => [
+        const tabItems = (list) =>
+          list.flatMap((c) => [
             Button({
               key: `arcade-menu-${c.id}`,
               label: c.title,
@@ -1430,8 +1468,14 @@ export function register(on) {
               onPress: open(c.id),
             }),
             dim(`  ${consoleNote(c)}`),
-          ]),
-          gap,
+          ])
+        const reading = menuTabs().filter((c) => c.id === 'reading' || c.id === 'books')
+        items = [
+          section('Играть'),
+          tiles(tabItems(menuTabs().filter((c) => !reading.includes(c)))),
+          ...(reading.length ? [section('Читать'), tiles(tabItems(reading))] : []),
+          section('Ещё'),
+          tiles([
           ...(windowMode() && e.surface !== 'desktop'
             ? [
                 Button({
@@ -1504,6 +1548,7 @@ export function register(on) {
               open('lang')()
             },
           }),
+          dim('  язык интерфейса — 13 на выбор'),
           // Добровольно, без напоминаний: одна строка внизу меню, ссылка открывается в обычном браузере
           Button({
             key: 'arcade-support',
@@ -1526,6 +1571,7 @@ export function register(on) {
             },
           }),
           dim(`  добровольно, на развитие Arcade — ${supportUrl().replace(/^https:\/\//, '')}`),
+          ]),
           ...noticeLines,
           ...hint,
           gap,

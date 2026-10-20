@@ -30,6 +30,7 @@ export default {
   "Key test": "Перевірка клавіш",
   "Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse": "Клавіатура — у рядку 🎮 над полем введення Claude · кнопки — мишею",
   "Library": "Бібліотека",
+  "More": "Ще",
   "My games": "Мої ігри",
   "NES": "NES",
   "No games here yet.": "Тут поки немає ігор.",
@@ -48,6 +49,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Пауза: агент закінчив. Будь-яка клавіша гри — грати далі, Esc — до агента",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Пауза: агент чекає на дозвіл. Будь-яка клавіша гри — грати далі, Esc — до агента",
   "Play": "Грати",
+  "Read": "Читати",
   "Reassign keys": "Перепризначити клавіші",
   "Reassigning the controls.": "Перепризначаємо керування.",
   "Settings": "Налаштування",
@@ -86,6 +88,7 @@ export default {
   "fighting": "файтинг",
   "for games in the Claude pane; in a browser window you get a system notification": "для гри в панелі Claude; у вікні браузера — системне сповіщення",
   "horror": "жахи",
+  "interface language — 13 to choose from": "мова інтерфейсу — 13 на вибір",
   "left": "вліво",
   "looking for browsers…": "шукаю браузери…",
   "memoir": "мемуари",
@@ -146,6 +149,8 @@ export default {
   "{0} h {1} min": "{0} год {1} хв",
   "{0} game": "{0#one=# гра;few=# гри;many=# ігор;other=# гри}",
   "{0} games": "{0#one=# гра;few=# гри;many=# ігор;other=# гри}",
+  "{0} book": "{0#one=# книга;few=# книги;many=# книг;other=# книги}",
+  "{0} books": "{0#one=# книга;few=# книги;many=# книг;other=# книги}",
   "Join: {0}": "Приєднатися: {0}",
   "waiting online: {0}": "онлайн чекають: {0}",
   "Support page: {0}": "Сторінка підтримки: {0}",
@@ -202,7 +207,8 @@ export default {
   "open in: default browser window ({0})": "відкривати: у вікні браузера за замовчуванням ({0})",
   "Open in: {0} window ({1})": "Відкривати: у вікні {0} ({1})",
   "open in: {0} window ({1})": "відкривати: у вікні {0} ({1})",
-  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Клавіші: вгору {0} · вліво {1} · вниз {2} · вправо {3} · {4}"
+  "Keys: up {0} · left {1} · down {2} · right {3} · {4}": "Клавіші: вгору {0} · вліво {1} · вниз {2} · вправо {3} · {4}",
+  "— {0} —": "— {0} —"
  },
  "words": [
   [
