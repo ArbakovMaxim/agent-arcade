@@ -81,7 +81,7 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
 | **Games → Strategy** | OpenTTD — transport tycoon |
 | **Games → Board games** | Chess, Russian draughts, Reversi |
-| **Books** | 136 public-domain classics: 98 in English (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoy and Dostoyevsky in translation…) and 38 in Ukrainian (Shevchenko, Franko, Lesya Ukrainka, Kotsiubynsky…). The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window |
+| **Books** | 136 public-domain classics: 98 in English (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoy and Dostoyevsky in translation…) and 38 in Ukrainian (Franko, Lesya Ukrainka, Kotsiubynsky, Kotliarevsky, Kulish…). The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window |
 
 Each game's card links to its license and source code.
 
