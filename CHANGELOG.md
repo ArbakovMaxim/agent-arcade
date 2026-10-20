@@ -1,5 +1,7 @@
 # Changelog · Список изменений
 
+## 0.10.1 — книги: жанры на всех языках, прогресс чтения в библиотеке; описания игр по-английски на всех языках, кроме русского
+
 ## 0.10.0 — books and 13 languages · книги и 13 языков
 
 - **Books · книги**: 136 public-domain books — 98 in English (Project Gutenberg) and 38 in Ukrainian (Ukrainian Wikisource); a reader in the Arcade window with contents, font size, light and dark theme; the bookmark is set automatically; your own EPUB, FB2 and TXT · 136 книг из общественного достояния — 98 на английском (Project Gutenberg) и 38 на украинском (украинская Викитека); читалка в окне Arcade с оглавлением, размером шрифта, светлой и тёмной темой; закладка ставится сама; свои EPUB, FB2 и TXT.

@@ -180,7 +180,17 @@
       const top = el('div', 'card-top')
       // У книги — автор рядом с жанром
       top.append(el('span', 'title', game.title), el('span', 'genre', game.author ? `${game.author} · ${T(game.genre)}` : T(game.genre)))
-      card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang === 'en' && game.about_en ? game.about_en : game.about), el('div', 'stats', ArcadeStats.summary(id, game.score)))
+      // Описание: по-английски на всех языках, кроме русского. У книги вместо «сыграно» — сколько прочитано, по закладке
+      const reading = () => {
+        let at = null
+        try {
+          at = JSON.parse(localStorage.getItem(`arcade:book:${id}`))
+        } catch {
+          // без хранилища
+        }
+        return at && typeof at.percent === 'number' ? T(`прочитано ${at.percent}%`) : T('ещё не читали')
+      }
+      card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang !== 'ru' && game.about_en ? game.about_en : game.about), el('div', 'stats', game.kind === 'book' ? reading() : ArcadeStats.summary(id, game.score)))
       list.append(card)
     }
     if (mineList.length) list.append(el('div', 'mine-head', T('Мои игры — только в этом браузере')))

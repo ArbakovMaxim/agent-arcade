@@ -665,6 +665,15 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const again = await makePage(storage, { search: `?game=${BOOK}` })
   await until(() => again.byId.stage.children.some((n) => n.id === 'reader-root'))
   assert.match(textOf(again.ctx.ArcadeReader.view.root), /42%/, 'вернулись к закладке')
+  // Библиотека книг: жанры переведены; у книги — сколько прочитано по закладке
+  const shelf = await makePage(new Map([[`arcade:book:${BOOK}`, JSON.stringify({ c: 0, p: 3, percent: 16 })]]), { search: '?tab=books&lang=en' })
+  assert.ok(!/[А-Яа-яЁё]/.test(shelf.byId.library.querySelectorAll('.genre').map((g) => g.textContent.split(' · ').pop()).join(' ')), 'жанры книг по-английски')
+  const stats = shelf.byId.library.querySelectorAll('.stats').map((x) => x.textContent)
+  assert.ok(stats.includes('read 16%'), 'прочитано 16%')
+  assert.ok(stats.includes('not read yet'))
+  // Украинский: описания игр — английские, а не русские
+  const uk = await makePage(new Map(), { search: '?tab=nes&lang=uk' })
+  assert.ok(!/[ыэъё]/i.test(uk.byId.library.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания не по-русски')
   // Своя книга (TXT) — во вкладке «Книги»: добавить и открыть в читалке
   const lib = await makePage(new Map(), { search: '?tab=books' })
   lib.byId.library.querySelectorAll('.open-rom')[0].click()
