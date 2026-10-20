@@ -4,7 +4,7 @@
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
-import { LANGS, detectLang, tr, translateTree } from './i18n.js'
+import { LANGS, LANG_NAMES, detectLang, tr, translateTree } from './i18n.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 
 const PANE = 'arcade'
@@ -95,6 +95,7 @@ let onPermission = 'pause' // агент стоит и ждёт человека
 let paused = false // игра на паузе из-за сигнала агента: снимается «Играть дальше» или любой клавишей игры
 let view = 'library' // library или id игры (field — проверка клавиш)
 let menu = 'main' // что открыто в библиотеке: main, id приставки или settings
+let langReturn = 'main' // куда вернуться из выбора языка: главное меню или настройки
 let menuFrom = null // откуда вернулись в главное меню — туда ставим фокус
 let lastGame = 'thwaite'
 let player = { x: 2, y: 3 }
@@ -141,6 +142,17 @@ function supportUrl() {
   return catalog.support?.url ?? SUPPORT_URL
 }
 
+// Пункты главного меню в порядке каталога: группа стоит там, где её первая приставка
+function menuTabs() {
+  const tabs = []
+  for (const c of consoles()) {
+    const g = c.group && groupsList().find((x) => x.id === c.group)
+    if (!g) tabs.push(c)
+    else if (!tabs.includes(g)) tabs.push(g)
+  }
+  return tabs
+}
+
 function groupsList() {
   return catalog.groups ?? []
 }
@@ -165,7 +177,10 @@ function shelfView(menuId) {
 // Игры каталога и проверка клавиш; note — строка под названием в меню
 function games() {
   return [
-    ...catalog.games.map((g) => ({ ...g, note: `${tr(g.genre, lang)} — ${lang === 'en' && g.about_en ? g.about_en : g.about}`, web: true })),
+    ...catalog.games.map((g) => {
+      const about = lang !== 'ru' && g.about_en ? g.about_en : g.about
+      return { ...g, note: `${g.author ? `${g.author} · ` : ''}${tr(g.genre, lang)}${about ? ` — ${about}` : ''}`, web: true }
+    }),
     ...mine.map((m) => ({
       id: m.id,
       console: m.console,
@@ -542,10 +557,10 @@ function windowUrl(id) {
     const m = mine.find((x) => x.id === id)
     url = m ? minePageUrl(m) : pageUrl(id)
   }
-  if (lang !== 'en') return url
+  if (lang === 'ru') return url
   // Язык передаём в адресе: после # — если своя игра там, иначе обычным параметром
-  if (url.includes('#')) return `${url}&lang=en`
-  return url.includes('?') ? `${url}&lang=en` : `${url}?lang=en`
+  if (url.includes('#')) return `${url}&lang=${lang}`
+  return url.includes('?') ? `${url}&lang=${lang}` : `${url}?lang=${lang}`
 }
 
 function windowCommand(id) {
@@ -615,6 +630,7 @@ function settingsNote() {
 
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
+  if (menu === 'lang') return 'Arcade · язык'
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
   return c ? `Arcade · ${c.title}` : 'Arcade'
@@ -1166,7 +1182,27 @@ export function register(on) {
       const hint = [gap, dim('↑ ↓ или Tab — выбрать, Enter — открыть. Можно кликнуть мышью.')]
 
       let items
-      if (menu === 'settings') {
+      if (menu === 'lang') {
+        // Выбор языка: каждый подписан на самом себе, текущий отмечен
+        items = [
+          Button({ key: 'arcade-back', label: '← Назад', onPress: open(langReturn) }),
+          gap,
+          ...LANGS.map((code) =>
+            Button({
+              key: `arcade-lang-${code}`,
+              label: `${LANG_NAMES[code]}${code === lang ? ' ✓' : ''}`,
+              ...(code === lang ? { autoFocus: true } : {}),
+              onPress: async () => {
+                lang = code
+                menu = langReturn
+                $.ui.invalidate('ui.render')
+                await $.store.set('lang', lang)
+              },
+            }),
+          ),
+          ...hint,
+        ]
+      } else if (menu === 'settings') {
         const field = FIELD
         items = [
           back,
@@ -1218,11 +1254,10 @@ export function register(on) {
               ]),
           Button({
             key: 'arcade-lang',
-            label: `Язык: ${lang === 'ru' ? 'русский' : 'English'}`,
-            onPress: async () => {
-              lang = lang === 'ru' ? 'en' : 'ru'
-              $.ui.invalidate('ui.render')
-              await $.store.set('lang', lang)
+            label: `Язык: ${LANG_NAMES[lang] ?? lang}`,
+            onPress: () => {
+              langReturn = 'settings'
+              open('lang')()
             },
           }),
           Button({
@@ -1387,7 +1422,7 @@ export function register(on) {
         ]
       } else {
         items = [
-          ...[...consoles().filter((c) => !c.group), ...groupsList()].flatMap((c) => [
+          ...menuTabs().flatMap((c) => [
             Button({
               key: `arcade-menu-${c.id}`,
               label: c.title,
@@ -1463,11 +1498,10 @@ export function register(on) {
           // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
           Button({
             key: 'arcade-lang-main',
-            label: lang === 'ru' ? '🌐 English' : '🌐 Русский',
-            onPress: async () => {
-              lang = lang === 'ru' ? 'en' : 'ru'
-              $.ui.invalidate('ui.render')
-              await $.store.set('lang', lang)
+            label: `🌐 ${LANG_NAMES[lang] ?? lang}`,
+            onPress: () => {
+              langReturn = 'main'
+              open('lang')()
             },
           }),
           // Добровольно, без напоминаний: одна строка внизу меню, ссылка открывается в обычном браузере

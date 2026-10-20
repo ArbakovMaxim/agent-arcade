@@ -9,6 +9,7 @@
     sega: T('Свой файл .md или .bin откроется только на этом устройстве и не отправится на сервер.'),
     sms: T('Свой файл .sms откроется только на этом устройстве и не отправится на сервер.'),
     doom: T('Свой файл .wad — например, купленный doom.wad — откроется только на этом устройстве и не отправится на сервер.'),
+    books: T('Своя книга — EPUB, FB2 или TXT — откроется только на этом устройстве и не отправится на сервер. Закладка ставится сама.'),
     psx: T('Свой диск .chd, .pbp, .iso или .zip с .cue и .bin откроется только на этом устройстве. BIOS Sony не нужен.'),
   }
 
@@ -18,7 +19,13 @@
   const groups = catalog.groups || []
   const shelves = catalog.shelves || []
   // Вкладки: приставки без группы и группы — у «Игр» внутри полки: шутеры, гонки, стратегии, настольные
-  const tabsList = [...consoles.filter((c) => !c.group), ...groups]
+  // Порядок — как в каталоге: группа стоит там, где её первая приставка («Игры» — после PlayStation, перед «Книгами»)
+  const tabsList = []
+  for (const c of consoles) {
+    const g = c.group && groups.find((x) => x.id === c.group)
+    if (!g) tabsList.push(c)
+    else if (!tabsList.includes(g)) tabsList.push(g)
+  }
   const groupOf = (id) => groups.find((g) => g.id === id)
   const inGroup = (gid) => consoles.filter((c) => c.group === gid).map((c) => c.id)
   const shelvesOf = (gid) => shelves.filter((s) => Object.values(games).some((g) => g.shelf === s.id && inGroup(gid).includes(g.console)))
@@ -104,10 +111,18 @@
     const actions = el('div', 'head-actions')
     actions.append(el('div', 'total', total ? T(`Всего сыграно: ${ArcadeStats.duration(total)}`) : T('Пока агент работает — сыграй')))
     // Язык окна: RU или EN — выбор запоминается
-    const langButton = el('button', 'open-rom lang', window.ArcadeI18n && window.ArcadeI18n.lang === 'en' ? 'RU' : 'EN')
-    langButton.type = 'button'
-    langButton.title = 'Русский / English'
-    langButton.addEventListener('click', () => window.ArcadeI18n.set(window.ArcadeI18n.lang === 'en' ? 'ru' : 'en'))
+    // Язык — списком: каждый подписан на самом себе
+    const i18n = window.ArcadeI18n || { lang: 'ru', LANGS: ['ru'], NAMES: { ru: 'Русский' }, set() {} }
+    const langButton = el('select', 'open-rom lang')
+    langButton.title = '🌐'
+    for (const code of i18n.LANGS || ['en', 'ru']) {
+      const option = el('option', '', `🌐 ${(i18n.NAMES || {})[code] || code}`)
+      option.value = code
+      if (code === i18n.lang) option.selected = true
+      langButton.append(option)
+    }
+    langButton.value = i18n.lang
+    langButton.addEventListener('change', () => i18n.set(langButton.value))
     const open = el('button', 'open-rom', T('Открыть свой файл'))
     open.type = 'button'
     open.addEventListener('click', () => {
@@ -163,7 +178,8 @@
       card.href = `?game=${encodeURIComponent(id)}`
       card.dataset.game = id
       const top = el('div', 'card-top')
-      top.append(el('span', 'title', game.title), el('span', 'genre', T(game.genre)))
+      // У книги — автор рядом с жанром
+      top.append(el('span', 'title', game.title), el('span', 'genre', game.author ? `${game.author} · ${T(game.genre)}` : T(game.genre)))
       card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang === 'en' && game.about_en ? game.about_en : game.about), el('div', 'stats', ArcadeStats.summary(id, game.score)))
       list.append(card)
     }

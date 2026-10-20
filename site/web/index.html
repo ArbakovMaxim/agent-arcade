@@ -61,6 +61,22 @@
   /* «Поддержать проект» — скромная ссылка в шапке библиотеки */
   .head-actions .support { font-size: 12px; color: #e0c070; text-decoration: none; margin-right: 8px; white-space: nowrap; }
   .head-actions .support:hover { text-decoration: underline; }
+  /* Читалка книг: колонка удобной ширины, тёмная и светлая тема */
+  .reader { position: absolute; inset: 0; overflow-y: auto; --reader-size: 19px; }
+  .reader.theme-dark { background: #17171c; color: #e8e4da; }
+  .reader.theme-light { background: #f7f3ea; color: #23201a; }
+  .reader-bar { position: sticky; top: 0; display: flex; gap: 8px; align-items: center; padding: 8px 14px; background: inherit; border-bottom: 1px solid rgba(128,128,128,.25); z-index: 2; font: 13px system-ui, sans-serif; }
+  .reader-name { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reader-progress { opacity: .7; min-width: 3em; text-align: right; }
+  .reader-btn { font: inherit; padding: 4px 10px; border-radius: 6px; border: 1px solid rgba(128,128,128,.4); background: transparent; color: inherit; cursor: pointer; }
+  .reader-toc { max-width: 38em; margin: 0 auto; padding: 8px 16px; display: flex; flex-direction: column; gap: 2px; }
+  .reader-toc[hidden] { display: none; }
+  .reader-toc-item { text-align: left; font: 14px system-ui, sans-serif; padding: 6px 8px; border: 0; background: transparent; color: inherit; cursor: pointer; border-radius: 4px; }
+  .reader-toc-item:hover { background: rgba(128,128,128,.15); }
+  .reader-text { max-width: 38em; margin: 0 auto; padding: 16px 20px 40vh; font: var(--reader-size)/1.6 Georgia, 'Times New Roman', serif; }
+  .reader-text p { margin: 0 0 .7em; text-indent: 1.5em; }
+  .reader-text p.verse { white-space: pre-line; text-indent: 0; margin-left: 1.5em; }
+  .reader-chapter { font: 600 calc(var(--reader-size) * 1.15)/1.3 system-ui, sans-serif; margin: 2em 0 1em; }
 </style>
 </head>
 <body>

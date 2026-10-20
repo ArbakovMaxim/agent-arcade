@@ -3,7 +3,8 @@ import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, par
 import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
 import { workedText } from '../hooks/register.js'
-import { detectLang, tr } from '../hooks/i18n.js'
+import { detectLang, tr, fromEnglish, resetLocaleCache } from '../hooks/i18n.js'
+import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
 import { installMapper28, prgBank } from '../hooks/mapper28.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
@@ -42,7 +43,8 @@ const DETECTED = JSON.stringify({
   defaultProgId: 'ChromeHTML',
   screen: { x: 0, y: 0, width: 1920, height: 1040 },
 })
-const WINDOWS = { OS: 'Windows_NT', LOCALAPPDATA: 'C:\\Users\\max\\AppData\\Local' }
+// Тесты пишутся на русском интерфейсе: язык окружения — русский (без него теперь английский)
+const WINDOWS = { OS: 'Windows_NT', LOCALAPPDATA: 'C:\\Users\\max\\AppData\\Local', LANG: 'ru_RU.UTF-8' }
 
 // Каталог, который отдаёт сайт: три игры Денди (они же лежат в моде) и сколько угодно своих
 const SHA = {
@@ -107,7 +109,8 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   const launches: any[] = []
   const toasts: string[] = []
   const clock = mock.clock(on)
-  mock.env(on, env)
+  // Тесты пишутся на русском интерфейсе: если окружение не задаёт язык, пусть он будет русским (без него теперь — английский)
+  mock.env(on, 'LANG' in env || 'LC_ALL' in env || 'LC_MESSAGES' in env ? env : { ...env, LANG: 'ru_RU.UTF-8' })
   on('process.run', ($: any, e: any) => {
     if (e.argv[0] === 'uname') return { value: { exitCode: 0, stdout: `${uname}\n`, stderr: '' } }
     if (e.init?.env?.ARCADE_TEXT || e.argv[0] === 'notify-send' || e.argv[0] === 'osascript') {
@@ -1389,7 +1392,8 @@ async function drawnTexts(ui: any) {
 }
 
 test('язык: по окружению, правила с подстановками', async () => {
-  expect([detectLang('ru_RU.UTF-8'), detectLang('uk_UA'), detectLang('en_US.UTF-8'), detectLang(undefined, 'de_DE'), detectLang()]).toEqual(['ru', 'ru', 'en', 'en', 'ru'])
+  // Свой язык, если он есть среди 13; C/POSIX и неизвестный — английский; без подсказок — английский
+  expect([detectLang('ru_RU.UTF-8'), detectLang('uk_UA'), detectLang('en_US.UTF-8'), detectLang(undefined, 'de_DE'), detectLang(), detectLang('C.UTF-8', 'zh_CN'), detectLang('sw_KE')]).toEqual(['ru', 'uk', 'en', 'de', 'en', 'zh', 'en'])
   expect(tr('Агент работает 2 мин 14 с — сыграть?', 'en')).toBe('Agent has been working for 2 min 14 s — play?')
   expect(tr('  3 игры', 'en')).toBe('  3 games')
   expect(tr('Добавлено: Моя (Денди).', 'en')).toBe('Added: Моя (NES).')
@@ -1414,13 +1418,14 @@ test('английский интерфейс: главное меню без р
   const cyrillic = (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
   expect(cyrillic).toEqual([])
   expect(await ui.find({ key: 'arcade-menu-settings' })).toMatchObject({ props: { label: 'Settings' } })
-  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 Русский' } })
+  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 English' } })
   // Игра в окне — адрес с языком
   await go(ui, 'arcade-game-thwaite')
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=thwaite&lang=en`)
-  // Переключатель: обратно на русский и запоминается
+  // Выбор языка в настройках: обратно на русский и запоминается
   await go(ui, 'arcade-lang')
-  expect(await ui.find({ key: 'arcade-lang' })).toMatchObject({ props: { label: 'Язык: русский' } })
+  await ui.press({ key: 'arcade-lang-ru' })
+  expect(await ui.find({ key: 'arcade-lang' })).toMatchObject({ props: { label: 'Язык: Русский' } })
   expect(saved.get('lang')).toBe('ru')
   expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Назад' } })
   await ui.unmount()
@@ -1605,20 +1610,80 @@ test('«Поддержать проект»: внизу главного мен�
   await ui.unmount()
 })
 
-test('язык прямо в главном меню: «🌐 English» переключает меню на английский и запоминается', async ($, on) => {
+test('язык прямо в главном меню: список из 13 языков, каждый на самом себе; выбор запоминается, «Назад» — обратно', async ($, on) => {
   const { clock, saved } = stubs(on, { env: { ...WINDOWS, LANG: 'ru_RU.UTF-8' } })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await clock.advance(300)
   await $.command.run({ command: 'arcade', args: '' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 English' } })
-  expect(await ui.find({ key: 'arcade-menu-settings' })).toMatchObject({ props: { label: 'Настройки' } })
-  await ui.press({ key: 'arcade-lang-main' })
-  expect(await ui.find({ key: 'arcade-menu-settings' })).toMatchObject({ props: { label: 'Settings' } })
   expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 Русский' } })
-  expect(saved.get('lang')).toBe('en')
   await ui.press({ key: 'arcade-lang-main' })
-  expect(await ui.find({ key: 'arcade-menu-settings' })).toMatchObject({ props: { label: 'Настройки' } })
-  expect(saved.get('lang')).toBe('ru')
+  for (const [code, name] of [['en', 'English'], ['uk', 'Українська'], ['es', 'Español'], ['ja', '日本語'], ['zh', '中文'], ['ko', '한국어']]) {
+    expect(await ui.find({ key: `arcade-lang-${code}` })).toMatchObject({ props: { label: name } })
+  }
+  expect(await ui.find({ key: 'arcade-lang-ru' })).toMatchObject({ props: { label: 'Русский ✓', autoFocus: true } })
+  await ui.press({ key: 'arcade-lang-en' })
+  expect(await ui.find({ key: 'arcade-menu-settings' })).toMatchObject({ props: { label: 'Settings' } })
+  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 English' } })
+  expect(saved.get('lang')).toBe('en')
+  // Испанский без перевода — пока по-английски, но выбран и запомнен
+  await ui.press({ key: 'arcade-lang-main' })
+  await ui.press({ key: 'arcade-lang-es' })
+  expect(saved.get('lang')).toBe('es')
+  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 Español' } })
+  // Из настроек — туда же, «Назад» возвращает в настройки
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-lang' })
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-lang' })).toBeDefined()
   await ui.unmount()
+})
+
+test('книги: мод знает книги каталога, «Книги» — после «Игр», книга открывается в окне', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'books', title: 'Книги' })
+  site.groups = [{ id: 'games', title: 'Игры' }]
+  site.shelves = [{ id: 'shooters', title: 'Шутеры' }]
+  const sha = 'f'.repeat(64)
+  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  site.games.mumu = { console: 'books', kind: 'book', text: 'books/mumu/book.json', title: 'Муму', author: 'Иван Тургенев', genre: 'рассказ', about: 'Герасим и его собака.', keys: '…' }
+  site.games.bad = { console: 'books', kind: 'book', text: '../secret.json', title: 'Плохая', author: 'x', genre: 'x', about: 'x', keys: '…' }
+  site.games.kobzar = { console: 'books', kind: 'book', text: 'books/kobzar/book.json', title: 'Кобзар', author: 'Тарас Шевченко', genre: 'поэзия', about: '', keys: '…' }
+  const parsed = parseCatalog(JSON.stringify(site))
+  expect(parsed.games.find((g: any) => g.id === 'mumu')).toMatchObject({ kind: 'book', author: 'Иван Тургенев', text: 'books/mumu/book.json' })
+  expect(parsed.games.find((g: any) => g.id === 'bad')).toBeUndefined() // путь к тексту — только books/<id>/book.json
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const labels = (await drawnTexts(ui)).filter((x) => ['Денди', 'Игры', 'Книги'].includes(x))
+  expect(labels).toEqual(['Денди', 'Игры', 'Книги'])
+  await ui.press({ key: 'arcade-menu-books' })
+  expect(await ui.find({ type: 'Text', text: '  Иван Тургенев · рассказ — Герасим и его собака.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  Тарас Шевченко · поэзия' })).toBeDefined() // без описания — без висящего тире
+  await ui.press({ key: 'arcade-game-mumu' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=mumu`)
+  await ui.unmount()
+})
+
+test('другие языки — поверх английского: точная фраза, шаблон с подстановкой внутри, форма числа, откат на английский', async () => {
+  const saved = LOCALES.de
+  LOCALES.de = {
+    exact: { Settings: 'Einstellungen' },
+    templates: { 'Agent has been working for {0} — play?': 'Der Agent arbeitet seit {0} — spielen?', '{0} s': '{0} Sek.', '{0} games': '{0#one=# Spiel;other=# Spiele}', '{0} game': '{0#one=# Spiel;other=# Spiele}' },
+    words: [],
+  }
+  resetLocaleCache()
+  try {
+    expect(tr('Настройки', 'de')).toBe('Einstellungen')
+    expect(tr('Агент работает 11 с — сыграть?', 'de')).toBe('Der Agent arbeitet seit 11 Sek. — spielen?')
+    expect(tr('28 игр', 'de')).toBe('28 Spiele')
+    expect(tr('1 игра', 'de')).toBe('1 Spiel')
+    expect(fromEnglish('Something new', 'de')).toBe('Something new') // нет в переводе — по-английски
+    expect(tr('Настройки', 'ru')).toBe('Настройки')
+  } finally {
+    LOCALES.de = saved
+    resetLocaleCache()
+  }
 })

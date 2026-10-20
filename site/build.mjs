@@ -63,6 +63,19 @@ export function build({ root, out, now = new Date() }) {
 
   // Приставки
   const consoles = source.consoles ?? []
+  // Книги каталога — из content/books/index.json, который пишет tools/books/build.mjs (150 книг вручную не перечисляем)
+  const bookIndex = path.join(content, 'books', 'index.json')
+  if (fs.existsSync(bookIndex)) {
+    const listed = new Set((source.games ?? []).map((g) => g.id))
+    for (const b of JSON.parse(fs.readFileSync(bookIndex, 'utf8'))) {
+      if (listed.has(b.id)) continue
+      ;(source.games ??= []).push({
+        id: b.id, console: 'books', kind: 'book', text: `books/${b.id}/book.json`, title: b.title, author: b.author, lang: b.lang, year: b.year, genre: b.genre,
+        about: b.about ?? '', about_en: b.about_en ?? '', keys: 'колёсико или пробел — дальше',
+        license: { name: 'общественное достояние', author: b.author, source: b.source, files: [`books/${b.id}/LICENSE.txt`] },
+      })
+    }
+  }
   const consoleIds = new Set()
   for (const c of consoles) {
     if (!ID.test(c.id ?? '')) fail(`у приставки неправильный id ${JSON.stringify(c.id)}`)
@@ -78,7 +91,7 @@ export function build({ root, out, now = new Date() }) {
     if (!ID.test(g.id ?? '')) fail(`у игры неправильный id ${JSON.stringify(g.id)}`)
     if (games[g.id]) fail(`${where} описана дважды`)
     if (!consoleIds.has(g.console)) fail(`${where}: нет приставки ${g.console}`)
-    for (const field of ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : ['rom'])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    for (const field of [...(g.kind === 'book' ? ['title', 'genre', 'keys', 'text', 'author', 'lang'] : ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : ['rom'])])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
     if (/[А-Яа-яЁё]/.test(g.about_en)) fail(`${where}: в about_en русские буквы — нужно английское описание`)
     const license = g.license ?? {}
     for (const field of ['name', 'author', 'source']) if (!license[field]) fail(`${where}: в лицензии нет поля ${field}`)
@@ -124,6 +137,34 @@ export function build({ root, out, now = new Date() }) {
         console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page) === 'index.html' ? '' : path.basename(g.page).replace(/\.html?$/i, '')}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
         credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
         license: { name: license.name, author: license.author, source: license.source, commit: license.commit ?? null, files },
+      }
+      continue
+    }
+    // Книга — book.json (главы и абзацы): его читают и окно, и панель мода; собирает его tools/books/build.mjs
+    if (g.kind === 'book') {
+      const textPath = path.join(content, g.text)
+      if (!fs.existsSync(textPath)) fail(`${where}: нет файла книги ${g.text} — собери книги: node tools/books/build.mjs`)
+      let book
+      try {
+        book = JSON.parse(fs.readFileSync(textPath, 'utf8'))
+      } catch {
+        fail(`${where}: ${g.text} — не JSON`)
+      }
+      if (!Array.isArray(book.chapters) || !book.chapters.length || !book.chapters.every((c) => typeof c.title === 'string' && Array.isArray(c.paragraphs))) fail(`${where}: в ${g.text} нет глав с текстом`)
+      if (fs.statSync(textPath).size > MAX_FILE) fail(`${where}: ${g.text} больше 25 МиБ`)
+      copy(textPath, path.join(out, 'books', g.id, 'book.json'))
+      const files = (license.files ?? []).map((file) => {
+        const from = path.join(content, file)
+        if (!fs.existsSync(from)) fail(`${where}: нет файла лицензии ${file}`)
+        copy(from, path.join(out, 'licenses', g.id, path.basename(file)))
+        return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
+      })
+      const words = book.chapters.reduce((n, c) => n + c.paragraphs.reduce((k, p) => k + String(p).split(/\s+/).length, 0), 0)
+      games[g.id] = {
+        console: g.console, kind: 'book', text: `books/${g.id}/book.json`, title: g.title, author: g.author, lang: g.lang, year: g.year ?? null,
+        genre: g.genre, about: g.about ?? '', about_en: g.about_en ?? '', keys: g.keys, chapters: book.chapters.length, words,
+        credit: `${g.author} — «${g.title}»${g.year > 0 ? `, ${g.year}` : ''} · ${license.name}`,
+        license: { name: license.name, author: license.author, source: license.source, commit: null, files },
       }
       continue
     }
@@ -218,7 +259,21 @@ export function build({ root, out, now = new Date() }) {
   fs.writeFileSync(path.join(out, 'catalog.json'), `${JSON.stringify(catalog, null, 2)}\n`)
 
   // Окно Arcade и лицензии сторонних библиотек
-  for (const file of fs.readdirSync(path.join(root, 'web'))) copy(path.join(root, 'web', file), path.join(out, file))
+  for (const file of fs.readdirSync(path.join(root, 'web'))) {
+    const from = path.join(root, 'web', file)
+    if (fs.statSync(from).isDirectory()) continue // locales/ — вставляются в i18n.js ниже
+    copy(from, path.join(out, file))
+  }
+  // Переводы окна на 11 языков — прямо в i18n.js: одна загрузка, без лишних запросов
+  const localesDir = path.join(root, 'web', 'locales')
+  const locales = {}
+  if (fs.existsSync(localesDir)) {
+    for (const f of fs.readdirSync(localesDir).filter((n) => n.endsWith('.json'))) locales[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(localesDir, f), 'utf8'))
+  }
+  const i18nOut = path.join(out, 'i18n.js')
+  const i18nText = fs.readFileSync(i18nOut, 'utf8')
+  if (!i18nText.includes('const LOCALES = {} /* LOCALES */')) fail('в web/i18n.js нет места для переводов: const LOCALES = {} /* LOCALES */')
+  fs.writeFileSync(i18nOut, i18nText.replace('const LOCALES = {} /* LOCALES */', `const LOCALES = ${JSON.stringify(locales)}`))
   copy(path.join(root, 'third_party', 'jsnes', 'LICENSE.txt'), path.join(out, 'licenses', 'jsnes', 'LICENSE.txt'))
   copyEmulatorJS(path.join(root, 'vendor', 'emulatorjs'), out)
   // Движок сетевого Doom (doom-wasm, GPL-2.0): собран в GitHub Actions; лицензия, заметка о сборке и исходники — в licenses/

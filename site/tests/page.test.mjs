@@ -32,7 +32,7 @@ function network({ override = {}, down = false } = {}) {
   }
 }
 
-async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [], net = {} } = {}) {
+async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [], net = {}, language = 'ru-RU' } = {}) {
   let now = 0
   const raf = []
   const audioNodes = []
@@ -64,7 +64,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const byId = {}
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
-    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, btoa, atob, DecompressionStream, Response,
+    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, TextDecoder, btoa, atob, DecompressionStream, Response,
     // Таймеры страницы не держат тест: отсчёт раунда и возврат в лобби — минуты
     setTimeout: (fn, ms) => { const h = setTimeout(fn, ms); h.unref?.(); return h },
     setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref?.(); return h },
@@ -81,7 +81,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     fetch: network(net),
     performance: { now: () => now },
     requestAnimationFrame: (cb) => raf.push(cb),
-    navigator: { getGamepads: () => pads },
+    navigator: { getGamepads: () => pads, language }, // браузер по-русски; другой язык — параметр language
     localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)), removeItem: (k) => storage.delete(k) },
     document: {
       title: '', hidden: false, body: element('body'), createElement: element,
@@ -100,7 +100,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js'].includes(script.src)) {
+    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'book-format.js', 'reader.js'].includes(script.src)) {
       vm.runInContext(fs.readFileSync(path.join(DIST, script.src), 'utf8'), ctx, { filename: script.src })
       setTimeout(() => script.onload && script.onload(), 0)
     }
@@ -114,7 +114,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     const library = byId.library?.children?.length ?? 0
     const overlayShown = byId.overlay?.classList.contains('shown')
     const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
-    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game') // настольные и браузерные
+    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game' || n.id === 'reader-root') // настольные, браузерные, книги
     return library > 0 || segaStarted || board || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
@@ -337,14 +337,18 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(lost.byId['overlay-title'].textContent, 'Игра не найдена')
 }
 
-// --- Язык окна: lang=en от мода — английский интерфейс; кнопка RU/EN; по умолчанию — русский -------------------
+// --- Язык окна: lang=en от мода — английский интерфейс; список из 13 языков; по умолчанию — язык браузера ----------
 {
   const en = await makePage(new Map(), { search: '?tab=nes&lang=en' })
   const lib = en.byId.library
   const button = (cls) => lib.querySelectorAll(cls)
-  assert.equal(button('.open-rom').map((b) => b.textContent).join(' | '), 'Open your own file | RU')
+  assert.equal(button('.open-rom')[0].textContent, 'Open your own file')
+  const picker = button('.lang')[0]
+  assert.equal(picker.value, 'en')
+  assert.equal(picker.children.length, 13, '13 языков')
+  assert.deepEqual(picker.children.slice(0, 3).map((o) => o.textContent), ['🌐 English', '🌐 Русский', '🌐 Українська'])
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Games'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Games', 'Books'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -352,7 +356,12 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const game = await makePage(new Map(), { search: '?game=skyhaul&lang=en' })
   assert.equal(game.byId.keys.textContent, 'move — arrows · 1 (and Start) — X · 2 — Z · pause — Enter')
   const ru = await makePage(new Map(), { search: '?tab=nes' })
-  assert.equal(ru.byId.library.querySelectorAll('.open-rom')[1].textContent, 'EN', 'без выбора — русский, кнопка предлагает английский')
+  assert.equal(ru.byId.library.querySelectorAll('.lang')[0].value, 'ru', 'браузер по-русски — русский')
+  // Браузер на языке, которого у нас нет, — английский; испанский браузер — испанский (перевод — из locales/es.json)
+  const other = await makePage(new Map(), { search: '?tab=nes', language: 'sw-KE' })
+  assert.equal(other.byId.library.querySelectorAll('.lang')[0].value, 'en')
+  const es = await makePage(new Map(), { search: '?tab=nes', language: 'es-ES' })
+  assert.equal(es.byId.library.querySelectorAll('.lang')[0].value, 'es')
 }
 
 // --- Doom: ядро PrBoom, Freedoom из каталога, свой WAD — с расширением в имени ------------------------------------
@@ -608,6 +617,63 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const dm = await makePage(new Map(), { search: '?game=blasphdm' })
   await until(() => dm.sockets.length > 0)
   assert.match(dm.sockets[0].url, /\/net\/room\/dm-blasphdm$/)
+}
+
+// --- Книги: разбор EPUB, FB2, TXT; читалка каталога и своей книги; закладка ------------------------------------------
+{
+  const BOOK = Object.keys(catalog.games).find((id) => catalog.games[id].kind === 'book')
+  const page = await makePage(new Map(), { search: '' })
+  vm.runInContext(fs.readFileSync(path.join(DIST, 'book-format.js'), 'utf8'), page.ctx)
+  const F = page.ctx.ArcadeBookFormat
+  // TXT в обёртке Project Gutenberg: обёртка срезана, главы найдены
+  const txt = F.fromTxt('Header\n*** START OF THE PROJECT GUTENBERG EBOOK X ***\n\nCHAPTER I.\nThe Start\n\nFirst paragraph\nwraps here.\n\nII.\n\nSecond.\n*** END OF THE PROJECT GUTENBERG EBOOK X ***\nLicence', { title: 'X' })
+  assert.deepEqual(Array.from(txt.chapters, (c) => c.title), ['CHAPTER I. The Start', 'II.'])
+  assert.equal(txt.chapters[0].paragraphs[0], 'First paragraph wraps here.')
+  assert.ok(!JSON.stringify(txt).includes('Licence'), 'лицензия Gutenberg срезана')
+  // Оглавление (три и больше заголовков подряд) — не главы; «I Title» без точки — глава; «I.» внутри рассказа — раздел
+  const story = (s) => Array(40).fill(s).join(' ')
+  const ti = F.fromTxt(['CONTENTS', 'PART ONE--The Old Buccaneer', 'I. The Old Sea-dog', 'II. Black Dog', 'PART ONE--The Old Buccaneer', 'I\nThe Old Sea-dog at the “Admiral Benbow”', story('Squire Trelawney'), 'II\nBlack Dog Appears and Disappears', story('It was not long')].join('\n\n'), { title: 'TI' })
+  assert.deepEqual(Array.from(ti.chapters.slice(-2), (c) => c.title), ['PART ONE--The Old Buccaneer. I The Old Sea-dog at the “Admiral Benbow”', 'II Black Dog Appears and Disappears'])
+  const sh = F.fromTxt(['Contents', 'I. A Scandal in Bohemia', 'II. The Red-Headed League', 'I. A SCANDAL IN BOHEMIA', 'I.', story('To Sherlock Holmes'), 'II.', story('At three o’clock'), 'II. THE RED-HEADED LEAGUE', story('I had called')].join('\n\n'), { title: 'SH' })
+  assert.deepEqual(Array.from(sh.chapters.slice(-2), (c) => c.title), ['I. A SCANDAL IN BOHEMIA', 'II. THE RED-HEADED LEAGUE'])
+  assert.equal(sh.chapters.at(-2).paragraphs.length, 2, 'обе части рассказа — в одной главе')
+  const tm = F.fromTxt(['CONTENTS', 'I Introduction', 'II The Machine', 'III The Time Traveller Returns', 'I.', story('The Time Traveller'), 'II.', story('I think that')].join('\n\n'), { title: 'TM' })
+  assert.deepEqual(Array.from(tm.chapters.slice(-2), (c) => c.title), ['I.', 'II.'], 'оглавление не съедает главы')
+  // FB2: заголовок секции из двух абзацев, сноски не в тексте
+  const fb2 = F.fromFb2('<FictionBook><description><title-info><author><first-name>Александр</first-name><last-name>Пушкин</last-name></author><book-title>Капитанская дочка</book-title><lang>ru</lang></title-info></description><body><section><title><p>Глава I</p><p>Сержант гвардии</p></title><p>Отец мой Андрей Петрович.</p></section></body><body name="notes"><section><p>сноска</p></section></body></FictionBook>')
+  assert.equal(fb2.author, 'Александр Пушкин')
+  assert.equal(fb2.chapters[0].title, 'Глава I. Сержант гвардии')
+  assert.ok(!JSON.stringify(fb2).includes('сноска'))
+  // EPUB: свой разбор ZIP и распаковка
+  const zipped = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'book.epub'))
+  page.ctx.__epub = new Uint8Array(zipped)
+  const epub = await vm.runInContext("ArcadeBookFormat.fromEpub(__epub, { inflateRaw: async (d) => new Uint8Array(await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()) })", page.ctx)
+  assert.equal(epub.title, 'The Time Machine')
+  assert.deepEqual(Array.from(epub.chapters, (c) => c.title), ['I', 'II'])
+  assert.equal(epub.chapters[0].paragraphs[1], 'His grey eyes shone & twinkled.')
+  // Читалка книги каталога: главы, закладка запоминается и возвращает к абзацу
+  const storage = new Map()
+  const reader = await makePage(storage, { search: `?game=${BOOK}` })
+  await until(() => reader.byId.stage.children.some((n) => n.id === 'reader-root'))
+  const view = reader.ctx.ArcadeReader.view
+  assert.equal(view.root.querySelectorAll('.reader-chapter').length, catalog.games[BOOK].chapters)
+  view.save()
+  const saved = JSON.parse(storage.get(`arcade:book:${BOOK}`))
+  assert.equal(typeof saved.c, 'number')
+  assert.equal(typeof saved.p, 'number')
+  storage.set(`arcade:book:${BOOK}`, JSON.stringify({ c: 1, p: 3, percent: 42 }))
+  const again = await makePage(storage, { search: `?game=${BOOK}` })
+  await until(() => again.byId.stage.children.some((n) => n.id === 'reader-root'))
+  assert.match(textOf(again.ctx.ArcadeReader.view.root), /42%/, 'вернулись к закладке')
+  // Своя книга (TXT) — во вкладке «Книги»: добавить и открыть в читалке
+  const lib = await makePage(new Map(), { search: '?tab=books' })
+  lib.byId.library.querySelectorAll('.open-rom')[0].click()
+  assert.equal(lib.byId['local-rom'].accept, '.epub,.fb2,.txt')
+  lib.ctx.__txt = new TextEncoder().encode('CHAPTER I.\n\nMy own book text.\n\nCHAPTER II.\n\nMore text.')
+  await vm.runInContext("(async () => ArcadePlayMine(await ArcadeMine.add(new File([__txt], 'my-book.txt'), 'books')))()", lib.ctx)
+  await until(() => lib.byId.stage.children.some((n) => n.id === 'reader-root'))
+  assert.equal(lib.ctx.ArcadeReader.view.root.querySelectorAll('.reader-chapter').length, 2)
+  await assert.rejects(vm.runInContext("ArcadeMine.add(new File([new Uint8Array(4)], 'x.pdf'), 'books')", lib.ctx), /EPUB, FB2 или TXT/)
 }
 
 // --- Маппер 28 (Action 53): в окне JSNES знает его — сборник Action 53 открывается как своя игра ---------------------
