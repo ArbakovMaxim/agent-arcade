@@ -63,6 +63,7 @@ export default {
   "action": "aksiyon",
   "add your own ROM file": "kendi ROM dosyanı ekle",
   "adventure": "macera",
+  "adventure novel": "macera romanı",
   "all games and stats in a browser window": "tüm oyunlar ve istatistikler tarayıcı penceresinde",
   "arcade": "atari",
   "at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse": "tam genişlikte ajan sohbeti dar bir şeride küçülür; genişliği fareyle ayarlayabilirsin",

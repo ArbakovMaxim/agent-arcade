@@ -111,6 +111,7 @@ const EXACT = {
   'эссе': 'essay',
   'мемуары': 'memoir',
   'рассказы': 'short stories',
+  'приключенческий роман': 'adventure novel',
   '☕ Поддержать проект': '☕ Support the project',
   'Открываю страницу поддержки в браузере. Спасибо!': 'Opening the support page in your browser. Thank you!',
   // Жанры каталога

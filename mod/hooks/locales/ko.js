@@ -63,6 +63,7 @@ export default {
   "action": "액션",
   "add your own ROM file": "ROM 파일 직접 추가",
   "adventure": "어드벤처",
+  "adventure novel": "모험 소설",
   "all games and stats in a browser window": "브라우저 창에서 모든 게임과 통계 보기",
   "arcade": "아케이드",
   "at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse": "전체 너비에서는 에이전트 대화가 좁은 띠로 줄어들며, 너비는 마우스로 조절할 수 있습니다",

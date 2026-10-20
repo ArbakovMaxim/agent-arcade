@@ -63,6 +63,7 @@ export default {
   "action": "动作",
   "add your own ROM file": "添加你自己的 ROM 文件",
   "adventure": "冒险",
+  "adventure novel": "冒险小说",
   "all games and stats in a browser window": "在浏览器窗口中查看所有游戏和统计",
   "arcade": "街机",
   "at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse": "全宽时，与智能体的对话会缩成一条窄栏；可以用鼠标调整宽度",

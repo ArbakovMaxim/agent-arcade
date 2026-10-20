@@ -128,7 +128,7 @@
   "author": "Mark Twain",
   "lang": "en",
   "year": 1881,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 1837
@@ -153,7 +153,7 @@
   "author": "Mark Twain",
   "lang": "en",
   "year": 1884,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 76
@@ -165,7 +165,7 @@
   "author": "Mark Twain",
   "lang": "en",
   "year": 1876,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 74
@@ -178,7 +178,7 @@
   "author": "Robert Louis Stevenson",
   "lang": "en",
   "year": 1883,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 120
@@ -335,7 +335,7 @@
   "author": "Alexandre Dumas",
   "lang": "en",
   "year": 1844,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 1184
@@ -347,7 +347,7 @@
   "author": "Alexandre Dumas",
   "lang": "en",
   "year": 1844,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 1257
@@ -495,7 +495,7 @@
   "author": "Jonathan Swift",
   "lang": "en",
   "year": 1726,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 829
@@ -507,7 +507,7 @@
   "author": "Daniel Defoe",
   "lang": "en",
   "year": 1719,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 521
@@ -531,7 +531,7 @@
   "author": "Jack London",
   "lang": "en",
   "year": 1903,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 215
@@ -543,7 +543,7 @@
   "author": "Jack London",
   "lang": "en",
   "year": 1906,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 910
@@ -639,7 +639,7 @@
   "author": "Jules Verne",
   "lang": "en",
   "year": 1873,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 103
@@ -1047,7 +1047,7 @@
   "author": "James Fenimore Cooper",
   "lang": "en",
   "year": 1826,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 940
@@ -1207,7 +1207,7 @@
   "author": "Edgar Rice Burroughs",
   "lang": "en",
   "year": 1912,
-  "genre": "приключения",
+  "genre": "приключенческий роман",
   "source": {
    "kind": "gutenberg",
    "id": 78

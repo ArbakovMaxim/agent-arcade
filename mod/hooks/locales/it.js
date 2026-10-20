@@ -63,6 +63,7 @@ export default {
   "action": "azione",
   "add your own ROM file": "aggiungi un tuo file ROM",
   "adventure": "avventura",
+  "adventure novel": "romanzo d’avventura",
   "all games and stats in a browser window": "tutti i giochi e le statistiche in una finestra del browser",
   "arcade": "arcade",
   "at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse": "a tutta larghezza la chat con l’agente si riduce a una striscia stretta; puoi regolare la larghezza con il mouse",

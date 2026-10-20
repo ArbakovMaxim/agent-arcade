@@ -63,6 +63,7 @@ export default {
   "action": "アクション",
   "add your own ROM file": "自分の ROM ファイルを追加",
   "adventure": "アドベンチャー",
+  "adventure novel": "冒険小説",
   "all games and stats in a browser window": "すべてのゲームと統計をブラウザウィンドウで",
   "arcade": "アーケード",
   "at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse": "全幅にするとエージェントとの会話は細い帯に縮みます。幅はマウスで調整できます",

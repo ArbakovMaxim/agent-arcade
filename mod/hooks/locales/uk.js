@@ -63,6 +63,7 @@ export default {
   "action": "екшн",
   "add your own ROM file": "додай свій файл ROM",
   "adventure": "пригоди",
+  "adventure novel": "пригодницький роман",
   "all games and stats in a browser window": "усі ігри та статистика у вікні браузера",
   "arcade": "аркада",
   "at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse": "на всю ширину розмова з агентом стискається у вузьку смугу; ширину можна підлаштувати мишею",

@@ -57,6 +57,7 @@
     'эссе': 'essay',
     'мемуары': 'memoir',
     'рассказы': 'short stories',
+    'приключенческий роман': 'adventure novel',
     'ещё не читали': 'not read yet',
     'Книги': 'Books',
     'Оглавление': 'Contents',
