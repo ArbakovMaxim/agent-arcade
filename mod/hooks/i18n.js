@@ -118,7 +118,13 @@ const EXACT = {
   'Шутеры': 'Shooters',
   'Гонки': 'Racing',
   'Стратегии': 'Strategy',
+  'Квесты': 'Adventures',
   'Настольные': 'Board games',
+  'Браузерные': 'Browser games',
+  'Аудиокниги': 'Audiobooks',
+  'Мои аудиокниги': 'My audiobooks',
+  'свои файлы': 'your files',
+  'аудиокнига': 'audiobook',
   'язык интерфейса — 13 на выбор': 'interface language — 13 to choose from',
   // жанры книг
   'роман': 'novel',
@@ -155,6 +161,8 @@ const EXACT = {
   'арканоид': 'brick breaker',
   'стратегия': 'strategy',
   'песочница': 'sandbox',
+  'квест': 'adventure',
+  'градостроитель': 'city builder',
   'Arcade: добавить свою игру — файл ROM Денди или Sega': 'Arcade: add your own game — a NES or Sega ROM file',
   'путь к файлу .nes, .md или .bin': 'path to a .nes, .md or .bin file',
 }

@@ -1934,6 +1934,7 @@ test('язык: по окружению, правила с подстановк�
   expect(['Книги', 'Игры', 'Шутеры', 'Аркады', 'Arcade · Книги', 'Открыть Шутеры в окне'].map((s) => tr(s, 'en'))).toEqual(['Books', 'Games', 'Shooters', 'Arcade games', 'Arcade · Books', 'Open Shooters in a window'])
   expect(tr('Arcade · Книги', 'de')).toBe('Arcade · Bücher')
   expect([tr('Аркады', 'de'), tr('Arcade', 'de')]).toEqual(['Arcade-Spiele', 'Arcade']) // полка переводится, а название Arcade — нет
+  expect(['Квесты', 'квест', 'градостроитель'].map((s) => tr(s, 'en'))).toEqual(['Adventures', 'adventure', 'city builder'])
 })
 
 test('английский интерфейс: главное меню без русских букв, вопрос над вводом, переключатель, окно на том же языке', async ($, on) => {
@@ -2374,6 +2375,9 @@ test('аудиокниги: своя группа — полки языков и
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=happy-prince`)
   expect(tr('2 аудиокниги', 'en')).toBe('2 audiobooks')
   expect(tr('Читать и слушать', 'en')).toBe('Read & listen')
+  // группа, полка и жанр «Моих аудиокниг» приходят с сайта по-русски
+  expect(['Аудиокниги', 'Мои аудиокниги', 'свои файлы'].map((s) => tr(s, 'en'))).toEqual(['Audiobooks', 'My audiobooks', 'your files'])
+  expect(['Аудиокниги', 'Мои аудиокниги', 'свои файлы'].map((s) => tr(s, 'de'))).toEqual(['Hörbücher', 'Meine Hörbücher', 'eigene Dateien'])
   await ui.unmount()
 })
 
