@@ -162,11 +162,14 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
         if (at < 0) fail(`${where}: в странице игры нет подключаемого скрипта — некуда вставить ${script}`)
         fs.writeFileSync(pageOut, `${html.slice(0, at)}<script src="${script}"></script>${html.slice(at)}`)
       }
-      const files = (license.files ?? []).map((file) => {
+      // В одной сборке бывает несколько игр с одноимёнными readme (ScummVM) — тогда к имени добавляется папка: sky-readme.txt
+      const names = (license.files ?? []).map((file) => path.basename(file))
+      const files = (license.files ?? []).map((file, i) => {
         const from = path.join(content, file)
         if (!fs.existsSync(from)) fail(`${where}: нет файла лицензии ${file}`)
-        copy(from, path.join(out, 'licenses', g.id, path.basename(file)))
-        return { name: path.basename(file), url: `licenses/${g.id}/${path.basename(file)}` }
+        const name = names.filter((n) => n === names[i]).length > 1 ? `${path.basename(path.dirname(file))}-${names[i]}` : names[i]
+        copy(from, path.join(out, 'licenses', g.id, name))
+        return { name, url: `licenses/${g.id}/${name}` }
       })
       games[g.id] = {
         ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные

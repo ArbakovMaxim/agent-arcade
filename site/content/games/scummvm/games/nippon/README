@@ -1,0 +1,57 @@
+[*]------------ NIPPON SAFES INC. copyright '92 Euclidea srl -------------[*]
+
+ INSTALLATION
+ ------------
+
+ 1) insert  disk 1  into drive  A
+ 2) type  a:install
+ 3) insert  disks 2 and 3 when asked for
+
+
+ TO RUN THE  PROGRAM
+ --------------------
+
+ Type GIOCA and press RETURN
+
+
+ MEMORY REQUIREMENT
+ ------------------
+ The program needs 512Kb of memory
+
+
+ ERROR MESSAGE INSUFFICENT MEMORY
+ --------------------------------
+
+ This happens if there are   installed in memory  drivers or TSR programs
+ using parts of  512 Kb needed by the game
+
+
+
+ SAVE GAME POSITION
+ ------------------
+
+ 1) press S
+ 2) select one of 10 positions with  up/down arrows
+    (ANNULLA to exit  without save )
+ 3) to edit the choosed name press right arrow and insert the new
+    name (backspace to cancel)
+ 4) press ENTER
+
+
+ RESTORE GAME POSITION
+ ---------------------
+
+ 1) press L
+ 2) select one of 10 positions with  up/down arrows
+    (ANNULLA to exit  without load )
+ 4) press ENTER
+
+
+
+
+ QUIT GAME
+ ---------
+
+ You can exit game pressing SPACE
+
+

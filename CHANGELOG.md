@@ -1,6 +1,6 @@
 # Changelog · Список изменений
 
-## 0.14.0 — аудиокниги: своя группа с полками по языкам и жанрам, проигрыватель в окне (главы, скорость, перемотка, место запоминается), свои аудиокниги — MP3, M4A, M4B, OGG, Opus, только в браузере; первые книги LibriVox; полки языков книг и аудиокниг создаются сами · audiobooks by language and genre, your own files stay in the browser, first LibriVox titles
+## 0.14.0 — аудиокниги: своя группа с полками по языкам и жанрам, проигрыватель в окне (главы, скорость, перемотка, место запоминается), свои аудиокниги — MP3, M4A, M4B, OGG, Opus, только в браузере; первые книги LibriVox; полки языков книг и аудиокниг создаются сами; Micropolis — открытый градостроитель 1989 года; классические квесты в ScummVM · audiobooks by language and genre, your own files stay in the browser, first LibriVox titles; Micropolis city builder; classic adventure games in ScummVM
 
 ## 0.13.0 — шахматы: с компьютером на Stockfish (сила 1–10, цвет, таймер, запись ходов, PGN, вернуть ход, подсказка), по сети с часами на сервере и подбором по контролю времени, счётчики «кто какой вариант ждёт»; новая игра го: 9×9, 13×13, 19×19, с компьютером, по сети и с другом · chess with Stockfish and online clocks; new game: Go
 

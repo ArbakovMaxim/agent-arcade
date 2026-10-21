@@ -239,7 +239,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = [
   const built = build({ root: ROOT, out: dir })
   assert.deepEqual(built.groups.map((g) => g.id), ['games', 'reading', 'listening'])
   assert.equal(built.support.url, 'https://ko-fi.com/agentarcade', 'ссылка «Поддержать проект» — в каталоге')
-  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'board', 'books-en', 'books-uk', ...audioShelves, 'audio-mine'])
+  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'quests', 'board', 'books-en', 'books-uk', ...audioShelves, 'audio-mine'])
   // Своя игра Flappy Arcade: вид pane, движок flappy, в окне — тот же файл движка из мода
   assert.deepEqual([built.games.flappy.kind, built.games.flappy.engine, built.games.flappy.shelf], ['pane', 'flappy', 'arcade'])
   const flappyJs = fs.readFileSync(path.join(dir, 'flappy.js'), 'utf8')

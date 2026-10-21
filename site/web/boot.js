@@ -85,14 +85,20 @@
       }
     }
     const m = w.Module
-    if (m && m.calledRun && m.pauseMainLoop) {
-      const audio = m.SDL2 && m.SDL2.audioContext
+    if (!m || !m.calledRun) return null
+    const audio = m.SDL2 && m.SDL2.audioContext
+    if (m.pauseMainLoop && w.Browser && w.Browser.mainLoop.func) {
       m.pauseMainLoop()
       if (audio) audio.suspend()
       return () => {
         if (audio) audio.resume()
         m.resumeMainLoop()
       }
+    }
+    // У ScummVM главного цикла Emscripten нет (Asyncify), и resumeMainLoop падает — останавливаем только звук
+    if (audio) {
+      audio.suspend()
+      return () => audio.resume()
     }
     return null
   }
@@ -137,6 +143,8 @@
       try {
         frame.contentWindow.addEventListener('blur', () => away())
         frame.contentWindow.addEventListener('keydown', back, true)
+        // SDL отменяет mousedown на холсте, и клик не переводит фокус в рамку: клавиши (F5 в ScummVM) уходили мимо игры
+        frame.contentWindow.addEventListener('mousedown', () => frame.focus(), true)
       } catch {
         // чужой адрес — не трогаем
       }

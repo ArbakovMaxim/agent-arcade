@@ -1,0 +1,25 @@
+ScummVM 2.9.1 для браузера — © ScummVM Team, GPL-3.0-or-later (COPYING; остальные тексты ScummVM — в doc/).
+Исходники: https://github.com/scummvm/scummvm, тег v2.9.1; тот же код архивом — https://downloads.scummvm.org/frs/scummvm/2.9.1/scummvm-2.9.1.tar.xz
+(220 МБ: на сайте не помещается, Cloudflare отдаёт файлы не больше 25 МБ).
+Собрано в GitHub Actions официальным способом из dists/emscripten/build.sh — .github/workflows/scummvm-wasm.yml
+в репозитории Arcade (https://github.com/ArbakovMaxim/agent-arcade):
+  build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction --disable-seq-midi --disable-timidity --enable-freetype2 --enable-png
+  build.sh games add-games
+Эти два ключа вшивают в scummvm.wasm библиотеки из портов Emscripten 3.1.51:
+  --enable-freetype2 — FreeType (https://github.com/emscripten-ports/FreeType, тег version_1), © The FreeType Project,
+    по выбору GPL или FTL (FreeType-LICENSE.TXT, FreeType-FTL.TXT); без него нет шрифтов меню (data/fonts.dat) и современных тем;
+  --enable-png — libpng 1.6.39 (libpng-LICENSE.txt) и zlib 1.2.13 (zlib-LICENSE.txt); без него лаунчер в большом окне
+    (сетка игр с картинками) падает.
+add-games нашёл все четыре игры, но не смог записать scummvm.ini (ошибка в его node-скрипте) —
+scummvm.ini с этими четырьмя играми записан шагом workflow.
+Код ScummVM не менялся.
+
+ИЗМЕНЕНО для Arcade: scummvm.html подключает BrowserFS 2.0.0 (MIT, BrowserFS-LICENSE.md) из browserfs.min.js рядом,
+а не с cdnjs.cloudflare.com — это тот же файл, его sha512 совпадает с integrity в исходной странице.
+
+Игры — бесплатные версии с https://www.scummvm.org/games/ (https://downloads.scummvm.org/frs/extras/), файлы без изменений;
+условия распространения — рядом с каждой игрой:
+  games/sky    — Beneath a Steel Sky, дискетная версия 1.3, © Revolution Software: readme.txt
+  games/queen  — Flight of the Amazon Queen, дискетная версия, © John Passfield и Steve Stamatiadis: readme.txt
+  games/lure   — Lure of the Temptress 1.1, © Revolution Software: LICENSE.txt, README
+  games/nippon — Nippon Safes, Inc. 1.0, © Dynabyte Software: readme.txt
