@@ -38,8 +38,9 @@ jobs:
           # build.sh сам ставит нужный Emscripten; лишние движки выключены — так WebAssembly меньше.
           # Задачи по отдельности: игры должны лечь в build-emscripten/games до индекса и поиска игр.
           # SEQ MIDI и TiMidity configure находит и под WebAssembly, а sys/soundcard.h там нет — выключаем.
-          # FreeType под WebAssembly сам не включается, а без него нет fonts.dat — и меню остаётся в старой зелёной теме
-          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction --disable-seq-midi --disable-timidity --enable-freetype2
+          # FreeType под WebAssembly сам не включается, а без него нет fonts.dat — и меню остаётся в старой зелёной теме.
+          # PNG — тоже: в большом окне лаунчер показывает игры сеткой с картинками в PNG и без libpng падает
+          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction --disable-seq-midi --disable-timidity --enable-freetype2 --enable-png
           ls -la build-emscripten
       - name: Бесплатные квесты — дискетные версии с scummvm.org
         working-directory: scummvm/build-emscripten
@@ -61,7 +62,8 @@ jobs:
           timeout 900 ./dists/emscripten/build.sh add-games || echo "Поиск игр не сработал — scummvm.ini пишем сами"
           ini=build-emscripten/scummvm.ini
           if [ "$(grep -cE '^\[(sky|queen|lure|nippon)\]' "$ini")" != 4 ]; then
-            printf '[scummvm]\ngrouping=company\ngui_launcher_chooser=grid\n' > "$ini"
+            # Без группировки по издателю: у этих игр его в базе нет, и список шёл под заголовком «Неизвестный издатель»
+            printf '[scummvm]\ngrouping=none\ngui_launcher_chooser=grid\n' > "$ini"
             add() { printf '\n[%s]\ndescription=%s\nengineid=%s\ngameid=%s\npath=/games/%s\nlanguage=en\nplatform=pc\n' "$1" "$2" "$3" "$1" "$1" >> "$ini"; }
             add sky 'Beneath a Steel Sky' sky
             add queen 'Flight of the Amazon Queen' queen
