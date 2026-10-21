@@ -326,7 +326,7 @@
     requestAnimationFrame(tick)
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {
     // Настольные игры по сети — правила и страница партии
-    for (const src of ['board-rules.js', 'board.js']) {
+    for (const src of ['board-rules.js', 'board.js', 'chess.js']) {
       await new Promise((resolve) => {
         const script = document.createElement('script')
         script.src = src

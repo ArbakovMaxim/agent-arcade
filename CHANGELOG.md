@@ -1,5 +1,7 @@
 # Changelog · Список изменений
 
+## 0.13.0 — шахматы с компьютером: Stockfish, сила от 1 до 10, выбор цвета, таймер (3, 5, 10 минут или свой), запись ходов, копирование в PGN, вернуть ход, подсказка, переворот доски · chess vs computer: Stockfish levels 1–10, colour, clock, move list, PGN, takeback, hint
+
 ## 0.12.0 — Flappy Arcade: своя игра прямо в панели Claude Code (терминал, Desktop, VS Code — без браузера) и в окне Arcade; одна кнопка, трасса дня одна для всех, свой рекорд · Flappy Arcade: an original game right in the Claude Code panel and in the Arcade window
 
 ## 0.11.1 — жанры книг: в моде — плитками на полке языка, в окне — рядом под полками; у полок «Книг» — «книг», а не «игр» · book genres as tiles in the panel and a genre row in the window

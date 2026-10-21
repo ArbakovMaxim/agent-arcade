@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import { webcrypto } from 'node:crypto'
-import { fileURLToPath } from 'node:url'
+import { pathToFileURL, fileURLToPath } from 'node:url'
 import { build } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
@@ -32,7 +32,7 @@ function network({ override = {}, down = false } = {}) {
   }
 }
 
-async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [], net = {}, language = 'ru-RU' } = {}) {
+async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [], net = {}, language = 'ru-RU', globals = {} } = {}) {
   let now = 0
   const raf = []
   const audioNodes = []
@@ -96,11 +96,12 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
       resume() { page.audioState = 'running' }
     },
   }
+  Object.assign(ctx, globals) // то, что окно в браузере подгрузило бы само (например, chess.js)
   ctx.window = ctx
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'book-format.js', 'reader.js', 'flappy.js'].includes(script.src)) {
+    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'chess.js', 'book-format.js', 'reader.js', 'flappy.js'].includes(script.src)) {
       vm.runInContext(fs.readFileSync(path.join(DIST, script.src), 'utf8'), ctx, { filename: script.src })
       setTimeout(() => script.onload && script.onload(), 0)
     }
@@ -718,6 +719,29 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(ttdCalls, ['pause', 'suspend', 'resume', 'play'])
   assert.ok(!ttd.byId.overlay.classList.contains('shown'))
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
+}
+
+// --- Шахматы с компьютером: экран выбора (сила 1–10, цвет, таймер), партия, запись ходов, вернуть ход, PGN ---------
+{
+  const { Chess } = await import(pathToFileURL(path.join(DIST, 'vendor', 'chess', 'chess.js')).href)
+  const ch = await makePage(new Map(), { search: '?game=chess&vs=bot&lang=en', globals: { ArcadeChessLib: { Chess } } })
+  await until(() => ch.byId.stage.children.some((n) => n.id === 'board-root' && n.querySelectorAll && n.querySelectorAll('.chess-level').length === 10))
+  const root = ch.byId.stage.children.find((n) => n.id === 'board-root')
+  assert.equal(root.querySelectorAll('.chess-level').length, 10, 'сила 1–10')
+  assert.deepEqual(root.querySelectorAll('.chess-minutes').map((b) => b.textContent), ['no timer', '3 min', '5 min', '10 min'])
+  root.querySelectorAll('.chess-level').find((b) => String(b.dataset.level) === '2').click()
+  root.querySelectorAll('.chess-start')[0].click()
+  await until(() => ch.ctx.ArcadeChess && ch.ctx.ArcadeChess.game)
+  const g = ch.ctx.ArcadeChess.game
+  assert.equal(g.options.level, 2)
+  g.click('e2')
+  g.click('e4')
+  // в тестовом окне нет Worker — отвечает прежний простой компьютер; ход записан
+  await until(() => g.chess.history().length === 2)
+  assert.equal(g.chess.history()[0], 'e4')
+  assert.match(root.querySelectorAll('.chess-moves')[0].children[0].textContent, /^1\. e4 \S+/)
+  g.undo()
+  assert.equal(g.chess.history().length, 0, '«Вернуть ход» снимает и свой ход, и ответ компьютера')
 }
 
 // --- Flappy Arcade: своя игра — движок flappy.js из мода, подсказка клавиш на языке окна ------------------------
