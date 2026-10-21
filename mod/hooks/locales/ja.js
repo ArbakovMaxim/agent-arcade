@@ -65,6 +65,7 @@ export default {
   "Press any button to take off": "いずれかのボタンを押して離陸",
   "Racing": "レース",
   "Read": "読む",
+  "Read & listen": "読む・聴く",
   "Reassign keys": "キーを再設定",
   "Reassigning the controls.": "操作キーを再設定します。",
   "Settings": "設定",
@@ -114,6 +115,7 @@ export default {
   "memoir": "回想録",
   "memory": "神経衰弱",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "会話の横に表示。自動モードではゲームを Claude が開きます。少しだけ作業を止めて、また作業に戻ります",
+  "no timer": "時間制限なし",
   "nothing yet": "まだありません",
   "novel": "長編小説",
   "novella": "中編小説",
@@ -237,7 +239,12 @@ export default {
   "Ask Claude to open this in the built-in browser: {0}": "Claude に内蔵ブラウザで開くよう頼んでください: {0}",
   "Score: {0} · best: {1}": "スコア：{0} · ベスト：{1}",
   "Crash! Score: {0} · best: {1} — any button to try again": "クラッシュ！ スコア：{0} · ベスト：{1} — いずれかのボタンでもう一度",
-  "flap — any button: {0} or {1}": "羽ばたき — いずれかのボタン：{0} または {1}"
+  "flap — any button: {0} or {1}": "羽ばたき — いずれかのボタン：{0} または {1}",
+  "{0} audiobook": "{0#other=#冊のオーディオブック}",
+  "{0} audiobooks": "{0#other=#冊のオーディオブック}",
+  "{0} — {1}": "{0} — {1}",
+  "{0}, {1}": "{0}, {1}",
+  "{0}: {1}": "{0}: {1}"
  },
  "words": [
   [

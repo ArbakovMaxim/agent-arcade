@@ -199,6 +199,15 @@
     // Книга каталога — в читалку
     await loadReader()
     window.ArcadeReader.start(catalog, id)
+  } else if (id && (/^my-audio-[a-z0-9]{4,24}$/.test(id) || (catalog.games && catalog.games[id] && ['audio', 'audio-mine'].includes(catalog.games[id].kind)))) {
+    // Аудиокниги: книги LibriVox и свои файлы (хранятся только в браузере)
+    await new Promise((resolve) => {
+      const script = document.createElement('script')
+      script.src = 'audio.js'
+      script.onload = resolve
+      document.body.appendChild(script)
+    })
+    window.ArcadeAudio.start(catalog, id)
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'web') {
     // Браузерная игра — своя страница в рамке под полосой окна
     const game = catalog.games[id]
@@ -326,7 +335,7 @@
     requestAnimationFrame(tick)
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {
     // Настольные игры по сети — правила и страница партии
-    for (const src of ['board-rules.js', 'board.js', 'chess.js']) {
+    for (const src of ['board-rules.js', 'board.js', 'chess.js', 'go.js']) {
       await new Promise((resolve) => {
         const script = document.createElement('script')
         script.src = src

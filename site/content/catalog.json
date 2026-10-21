@@ -63,6 +63,11 @@
       "about": "Классика из общественного достояния на английском и украинском — и свои книги",
       "emulator": "читалка Arcade",
       "group": "reading"
+    },
+    {
+      "id": "audiobooks",
+      "title": "Аудиокниги",
+      "group": "listening"
     }
   ],
   "groups": [
@@ -75,6 +80,11 @@
       "id": "reading",
       "title": "Книги",
       "about": "Книги по языкам, внутри — по жанрам"
+    },
+    {
+      "id": "listening",
+      "title": "Аудиокниги",
+      "about": "Аудиокниги по языкам, внутри — по жанрам; и свои файлы"
     }
   ],
   "shelves": [
@@ -105,6 +115,10 @@
     {
       "id": "books-uk",
       "title": "Українська"
+    },
+    {
+      "id": "audio-mine",
+      "title": "Мои аудиокниги"
     }
   ],
   "support": {
@@ -1167,6 +1181,24 @@
         "source": "https://github.com/ArbakovMaxim/agent-arcade"
       },
       "shelf": "board"
+    },
+    {
+      "id": "go",
+      "console": "board",
+      "kind": "board",
+      "board": "go",
+      "shelf": "board",
+      "title": "Го",
+      "genre": "стратегия",
+      "about": "Древняя игра камней: окружай территорию и бери чужие камни. Доска 9×9 — партия минут на десять, 13×13 и 19×19 — для долгих задач. С компьютером, по сети с теми, кто ждёт агента, или с другом по ссылке.",
+      "about_en": "The ancient game of stones: surround territory and capture stones. A 9×9 board is a ten-minute game; 13×13 and 19×19 suit longer tasks. Against the computer, online with others waiting for their agent, or with a friend by link.",
+      "keys": "клик по пересечению · «Пас» — кнопкой",
+      "license": {
+        "name": "AGPL-3.0",
+        "author": "Max Arbakov",
+        "source": "https://github.com/ArbakovMaxim/agent-arcade",
+        "files": []
+      }
     },
     {
       "id": "hexgl",

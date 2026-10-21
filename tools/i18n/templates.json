@@ -76,7 +76,12 @@
   "Ask Claude to open this in the built-in browser: {0}",
   "Score: {0} · best: {1}",
   "Crash! Score: {0} · best: {1} — any button to try again",
-  "flap — any button: {0} or {1}"
+  "flap — any button: {0} or {1}",
+  "{0} audiobook",
+  "{0} audiobooks",
+  "{0} — {1}",
+  "{0}, {1}",
+  "{0}: {1}"
  ],
  "site": [
   "Played in total: {0}",
@@ -104,7 +109,9 @@
   "Score: {0} · best: {1}",
   "Crash! Score: {0} · best: {1} — Space to try again",
   "level {0}",
-  "Computer · level {0}"
+  "Computer · level {0}",
+  "waiting: {0}",
+  "listened {0}%"
  ],
  "modExact": [
   "default browser window",
@@ -133,7 +140,8 @@
   "down",
   "left",
   "right",
-  "a tool"
+  "a tool",
+  "no timer"
  ],
  "siteExact": [
   "the emulator did not recognize the file.",

@@ -294,6 +294,25 @@ try {
   assert.deepEqual(last(back).moves, [])
   await room.alarm()
   assert.equal(store.size, 0)
+  // Часы: контроль задаёт первый; идут, когда сели двое; ход вычитает время; «флажок» — только по часам сервера
+  room = new BoardRoom(ctx, {})
+  for (let i = 0; i < 2; i++) await room.fetch({ headers: new Headers() })
+  const [w, bl] = sockets.slice(-2)
+  await room.webSocketMessage(w, JSON.stringify({ type: 'hello', token: 'tokenwhite1', game: 'chess', control: 1 }))
+  assert.equal(last(w).control, 1)
+  assert.equal(last(w).clock, undefined, 'один игрок — часы стоят')
+  await room.webSocketMessage(bl, JSON.stringify({ type: 'hello', token: 'tokenblack2', game: 'chess', control: 600 }))
+  assert.equal(last(bl).control, 1, 'контроль — тот, что задал первый')
+  assert.deepEqual(last(bl).clock.left, [1000, 1000])
+  await room.webSocketMessage(w, JSON.stringify({ type: 'flag' }))
+  assert.equal(last(w).result, undefined, 'рано: у белых ещё есть время')
+  await room.webSocketMessage(w, JSON.stringify({ type: 'move', ply: 0, move: 'e4' }))
+  assert.ok(last(w).clock.left[0] <= 1000 && last(w).clock.left[0] > 0, 'ход вычел время белых')
+  await new Promise((r) => setTimeout(r, 1100))
+  await room.webSocketMessage(w, JSON.stringify({ type: 'flag' }))
+  assert.deepEqual(last(w).result, { loser: 1, reason: 'time' }, 'у чёрных вышло время')
+  await room.webSocketMessage(bl, JSON.stringify({ type: 'move', ply: 1, move: 'e5' }))
+  assert.deepEqual(last(bl).moves, ['e4'], 'после конца партии ход не принимается')
 } finally {
   globalThis.Response = RealResponse
 }

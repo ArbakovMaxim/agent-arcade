@@ -109,6 +109,7 @@ const EXACT = {
   'Arcade · язык': 'Arcade · language',
   'Нажми любую кнопку — взлететь': 'Press any button to take off',
   'Читать': 'Read',
+  'Читать и слушать': 'Read & listen',
   'Ещё': 'More',
   // Группы и полки каталога: названия приходят с сайта по-русски
   'Игры': 'Games',
@@ -164,6 +165,8 @@ const WORDS = { вверх: 'up', вниз: 'down', влево: 'left', впра
 
 const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')
 const games = (n) => `${n} ${Number(n) === 1 ? 'game' : 'games'}`
+// Кто ждёт: варианты настольных — «7 мин», «без таймера», «9×9»
+const waiting = (t) => t.replace(/без таймера/g, 'no timer').replace(/(\d+) мин(?![а-яё])/g, '$1 min').replace(/Шахматы/g, 'Chess').replace(/Шашки/g, 'Checkers').replace(/Реверси/g, 'Reversi').replace(/Го:/g, 'Go:')
 const words = (t) => Object.entries(WORDS).reduce((s, [ru, en]) => s.split(ru).join(en), t)
 const where = (t) =>
   t
@@ -183,10 +186,11 @@ const reason = (t) =>
     .replace(/^картридж с маппером (\d+) наш эмулятор Денди пока не поддерживает$/, 'our NES emulator does not support mapper $1 yet')
 
 const RULES = [
-  [/^Агент работает (.+) — сыграть\? В сети ждут: (.+)$/, (m) => `Agent has been working for ${dur(m[1])} — play? Waiting online: ${m[2]}`],
+  [/^Агент работает (.+) — сыграть\? В сети ждут: (.+)$/, (m) => `Agent has been working for ${dur(m[1])} — play? Waiting online: ${waiting(m[2])}`],
   [/^Агент работает (.+) — сыграть\?$/, (m) => `Agent has been working for ${dur(m[1])} — play?`],
   [/^Присоединиться: (.+)$/, (m) => `Join: ${m[1]}`],
   [/^Язык: (.+)$/, (m) => `Language: ${m[1]}`],
+  [/^в сети ждут: (.+)$/, (m) => `waiting online: ${waiting(m[1])}`],
   // Flappy Arcade
   [/^Удар! Счёт: (\d+) · рекорд: (\d+) — любая кнопка, ещё раз$/, (m) => `Crash! Score: ${m[1]} · best: ${m[2]} — any button to try again`],
   [/^Счёт: (\d+) · рекорд: (\d+)$/, (m) => `Score: ${m[1]} · best: ${m[2]}`],
@@ -195,10 +199,10 @@ const RULES = [
   [/^Arcade · (.+)$/, (m) => `Arcade · ${tr(m[1], 'en')}`], // заголовок списка: «Arcade · Книги»
   [/^добровольно, на развитие Arcade — (.+)$/, (m) => `voluntary, for Arcade’s development — ${m[1]}`],
   [/^Страница поддержки: (.+)$/, (m) => `Support page: ${m[1]}`],
-  [/^в сети ждут: (.+)$/, (m) => `waiting online: ${m[1]}`],
   [/^Агент работает (.+)$/, (m) => `Agent has been working for ${dur(m[1])}`],
   [/^(\d+) (игра|игры|игр)$/, (m) => games(m[1])],
   [/^(\d+) (книга|книги|книг)$/, (m) => `${m[1]} ${m[1] === '1' ? 'book' : 'books'}`],
+  [/^(\d+) (аудиокнига|аудиокниги|аудиокниг)$/, (m) => `${m[1]} ${m[1] === '1' ? 'audiobook' : 'audiobooks'}`],
   [/^Графика: (\S+)(.*)$/, (m) => `Graphics: ${GRAPHICS[m[1]] ?? m[1]}${m[2].replace('сейчас', 'now').replace('пиксели', 'pixels').replace('символы', 'characters')}`],
   [/^Открывать: (окно .+)$/, (m) => `Open in: ${opener(m[1])}`],
   [/^Игры открываются (.+)\.$/, (m) =>

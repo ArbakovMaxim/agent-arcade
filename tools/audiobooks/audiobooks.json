@@ -1,0 +1,35 @@
+[
+  {
+    "id": "happy-prince",
+    "librivox": 9274,
+    "title": "The Happy Prince and Other Tales",
+    "author": "Oscar Wilde",
+    "lang": "en",
+    "genre": "сказки",
+    "year": 1888,
+    "about": "Пять сказок Уайльда: «Счастливый принц», «Соловей и роза», «Великан-эгоист», «Преданный друг», «Замечательная ракета».",
+    "about_en": "Five fairy tales by Wilde: The Happy Prince, The Nightingale and the Rose, The Selfish Giant, The Devoted Friend, The Remarkable Rocket."
+  },
+  {
+    "id": "five-beloved-stories",
+    "librivox": 7268,
+    "title": "Five Beloved Stories",
+    "author": "O. Henry",
+    "lang": "en",
+    "genre": "рассказы",
+    "year": 1906,
+    "about": "Пять нью-йоркских рассказов О. Генри из сборника «Четыре миллиона», среди них — «Дары волхвов» и «Фараон и хорал».",
+    "about_en": "Five New York stories by O. Henry: The Gift of the Magi, A Cosmopolitan in a Cafe, The Cop and the Anthem, Man About Town, Mammon and the Archer."
+  },
+  {
+    "id": "nich-pered-rizdvom",
+    "librivox": 16059,
+    "title": "Ніч перед Різдвом",
+    "author": "Микола Гоголь",
+    "lang": "uk",
+    "genre": "повесть",
+    "year": 1832,
+    "about": "Повесть из «Вечеров на хуторе близ Диканьки» в украинском переводе Владимира Держируки (1914).",
+    "about_en": "A story from Evenings on a Farm Near Dikanka, in Volodymyr Derzhyruka's 1914 Ukrainian translation."
+  }
+]

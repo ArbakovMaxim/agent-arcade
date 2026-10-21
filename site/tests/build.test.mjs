@@ -25,12 +25,25 @@ const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
-assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books'])
+assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books', 'audiobooks'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
 // Игры каталога и книги из content/books/index.json — в этом порядке
 const bookIndex = path.join(ROOT, 'content', 'books', 'index.json')
 const indexed = fs.existsSync(bookIndex) ? JSON.parse(fs.readFileSync(bookIndex, 'utf8')).map((b) => b.id) : []
-assert.deepEqual(Object.keys(catalog.games), [...source.games.map((g) => g.id), ...indexed])
+const audioIndex = path.join(ROOT, 'content', 'audiobooks', 'index.json')
+const audioList = fs.existsSync(audioIndex) ? JSON.parse(fs.readFileSync(audioIndex, 'utf8')) : []
+const audioIds = audioList.map((b) => b.id)
+const audioShelves = [...new Set(audioList.map((b) => `audio-${b.lang}`))]
+assert.deepEqual(Object.keys(catalog.games), [...source.games.map((g) => g.id), ...indexed, ...audioIds, 'my-audio'])
+assert.equal(catalog.games['my-audio'].kind, 'audio-mine', 'карточка своих аудиокниг — всегда')
+// Полка языка — сама: аудиокнига на новом языке даёт полку «audio-<язык>» с названием языка на нём
+{
+  const dir = temp('audio')
+  const built = build({ root: ROOT, out: dir, audiobooks: [{ id: 'test-de', title: 'Märchen', author: 'Grimm', lang: 'de', genre: 'сказки', source: 'https://librivox.org/x/', chapters: [{ title: 'Eins', url: 'https://archive.org/download/x/1.mp3', seconds: 60 }] }] })
+  assert.equal(built.games['test-de'].shelf, 'audio-de')
+  assert.deepEqual(built.shelves.find((s) => s.id === 'audio-de'), { id: 'audio-de', title: 'Deutsch' })
+  assert.ok(built.shelves.findIndex((s) => s.id === 'audio-de') < built.shelves.findIndex((s) => s.id === 'audio-mine'), 'языки — перед «Моими аудиокнигами»')
+}
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
 assert.ok(Object.keys(catalog.games).length >= 12, 'в каталоге все игры')
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf8')), catalog)
@@ -38,7 +51,7 @@ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf
 for (const file of ['vendor/stockfish/stockfish-19-lite-single.js', 'vendor/stockfish/stockfish-19-lite-single.wasm', 'licenses/stockfish/LICENSE.txt', 'chess.js']) assert.ok(fs.existsSync(path.join(out, file)), `в сборке есть ${file}`)
 
 for (const [id, game] of Object.entries(catalog.games)) {
-  if (game.kind === 'board' || game.kind === 'web' || game.kind === 'book' || game.kind === 'pane') continue // без ROM — проверены отдельно
+  if (['board', 'web', 'book', 'pane', 'audio', 'audio-mine'].includes(game.kind)) continue // без ROM — проверены отдельно
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
@@ -147,7 +160,7 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].console === 'sms'), ['balloon-master', 'skyhaul', 'food-fighter', 'escape-from-monster-dimension'])
   assert.equal(built.consoles.find((c) => c.id === 'gg'), undefined, 'Game Gear убран')
   const redirects = fs.readFileSync(path.join(dir, '_redirects'), 'utf8')
-  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
+  for (const c of ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books', 'audiobooks']) assert.ok(redirects.includes(`/${c} /?tab=${c} 302`), c)
   assert.match(fs.readFileSync(path.join(dir, '.assetsignore'), 'utf8'), /_redirects/)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 'sms' }), /игра thwaite: это не ROM Master System \(нет метки TMR SEGA и расширение не/)
@@ -191,12 +204,12 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
 {
   const dir = temp('board')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].kind === 'board'), ['chess', 'checkers', 'reversi'])
+  assert.deepEqual(Object.keys(built.games).filter((id) => built.games[id].kind === 'board'), ['chess', 'checkers', 'reversi', 'go'])
   assert.equal(built.games.chess.rom, undefined)
   assert.equal(built.games.chess.board, 'chess')
   for (const f of ['vendor/chess/chess.js', 'licenses/chess.js/LICENSE.txt', 'licenses/chess/chess.js-LICENSE.txt']) assert.ok(fs.existsSync(path.join(dir, f)), f)
 }
-assert.throws(broken((d) => { d.games.find((g) => g.id === 'chess').board = 'go' }), /неизвестная настольная игра go/)
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'chess').board = 'nim' }), /неизвестная настольная игра nim/)
 // Браузерная игра: папка игры — в web-games/<id>/, лицензии — в licenses/<id>/
 {
   const dir = temp('web')
@@ -224,9 +237,9 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = [
 {
   const dir = temp('groups')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(built.groups.map((g) => g.id), ['games', 'reading'])
+  assert.deepEqual(built.groups.map((g) => g.id), ['games', 'reading', 'listening'])
   assert.equal(built.support.url, 'https://ko-fi.com/agentarcade', 'ссылка «Поддержать проект» — в каталоге')
-  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'board', 'books-en', 'books-uk'])
+  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'board', 'books-en', 'books-uk', ...audioShelves, 'audio-mine'])
   // Своя игра Flappy Arcade: вид pane, движок flappy, в окне — тот же файл движка из мода
   assert.deepEqual([built.games.flappy.kind, built.games.flappy.engine, built.games.flappy.shelf], ['pane', 'flappy', 'arcade'])
   const flappyJs = fs.readFileSync(path.join(dir, 'flappy.js'), 'utf8')
