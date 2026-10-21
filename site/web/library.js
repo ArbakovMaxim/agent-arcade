@@ -13,7 +13,7 @@
     psx: T('Свой диск .chd, .pbp, .iso или .zip с .cue и .bin откроется только на этом устройстве. BIOS Sony не нужен.'),
   }
 
-  function start(catalog, startTab, startShelf) {
+  function start(catalog, startTab, startShelf, startGenre) {
   const consoles = catalog.consoles || []
   const games = catalog.games || {}
   const groups = catalog.groups || []
@@ -38,6 +38,7 @@
 
   let tab = startTab || localStorage.getItem('arcade:tab')
   let shelf = startShelf || localStorage.getItem('arcade:shelf')
+  let genre = startGenre || null // жанр на полке книг: null — все
   // Старые адреса (?tab=doom, ?tab=board, ?tab=web) — вкладка группы и полка этой приставки
   const legacy = consoles.find((c) => c.id === tab && c.group)
   if (legacy) {
@@ -75,9 +76,19 @@
     render()
   }
 
+  // Жанр на полке книг: свой адрес — &genre=…
+  function switchGenre(g) {
+    genre = g
+    history.pushState(null, '', `?tab=${encodeURIComponent(tab)}&shelf=${encodeURIComponent(shelf)}${g ? `&genre=${encodeURIComponent(g)}` : ''}`)
+    index = 0
+    render()
+    select(0)
+  }
+
   // Полка во вкладке группы: свой адрес, как у вкладки
   function switchShelf(id) {
     shelf = id
+    genre = null
     localStorage.setItem('arcade:shelf', shelf)
     history.pushState(null, '', `?tab=${encodeURIComponent(tab)}&shelf=${encodeURIComponent(shelf)}`)
     index = 0
@@ -90,6 +101,7 @@
 
   function switchTab(id) {
     tab = id
+    genre = null
     localStorage.setItem('arcade:tab', tab)
     if (groupOf(tab) && !shelvesOf(tab).some((s) => s.id === shelf)) shelf = shelvesOf(tab)[0] ? shelvesOf(tab)[0].id : null
     // У каждой вкладки свой адрес: его можно скопировать, сохранить в закладки, «Назад» возвращает на прошлую
@@ -176,8 +188,21 @@
     if (books) {
       const order = [...new Set(ids.map((id) => games[id].genre))]
       ids = order.flatMap((g) => ids.filter((id) => games[id].genre === g))
+      // Ряд жанров: «Все» и жанры этой полки; выбранный жанр оставляет только свои книги
+      if (!order.includes(genre)) genre = null
+      const cap = (t) => t.charAt(0).toLocaleUpperCase() + t.slice(1)
+      const row = el('div', 'tabs shelves genres')
+      for (const g of [null, ...order]) {
+        const button = el('button', g === genre ? 'tab shelf genre-chip active' : 'tab shelf genre-chip', g ? cap(T(g)) : T('Все'))
+        button.tabIndex = -1
+        button.dataset.genre = g || ''
+        button.addEventListener('click', () => switchGenre(g))
+        row.append(button)
+      }
+      root.append(row)
+      if (genre) ids = ids.filter((id) => games[id].genre === genre)
     }
-    let lastGenre = null
+    let lastGenre = genre // при выбранном жанре заголовок жанра не нужен
     if (!ids.length) list.append(el('div', 'empty', T((current && (current.empty || current.soon)) || 'Здесь пока нет игр.')))
     for (const id of ids) {
       if (books && games[id].genre !== lastGenre) {

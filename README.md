@@ -122,8 +122,7 @@ Open **Settings** in the `/arcade` menu:
 
 Arcade is in **alpha** and under active development — see the [changelog](CHANGELOG.md).
 
-- **Windows** — used and tested every day.
-- **macOS and Linux** — supported and covered by tests, but not yet tested live. If you use either, your feedback is especially welcome.
+- Checked live on Windows, macOS and Linux · проверено вживую на Windows, macOS и Linux
 
 ## Licenses
 

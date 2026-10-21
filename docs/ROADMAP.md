@@ -9,7 +9,6 @@ Ideas and next steps, roughly in order. Nothing here is a promise.
   **Чтение прямо в панели Claude Code** — вторая часть книг: читалка в панели, свои FB2 и TXT через `/arcade-add`, закладки в панели.
 - **A link instead of the Arcade window in Desktop and VS Code** — the app opens the game in the default browser itself: no browser detection, no per-OS launch commands. The Arcade window stays as an option in “Open games”; the terminal keeps the window.
   **Ссылка вместо окна Arcade в Desktop и VS Code** — игру открывает само приложение в браузере по умолчанию: без поиска браузеров и команд под каждую систему. Окно Arcade остаётся вариантом в «Где открывать игры», в терминале — как сейчас.
-- **Live check on macOS and Linux** · **живая проверка на macOS и Linux**.
 
 ## Waiting for Claude Code · ждём от Claude Code
 
