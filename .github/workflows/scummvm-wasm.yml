@@ -35,8 +35,9 @@ jobs:
           MAKEFLAGS: -j4
         run: |
           # build.sh сам ставит нужный Emscripten; лишние движки выключены — так WebAssembly меньше.
-          # Задачи по отдельности: игры должны лечь в build-emscripten/games до индекса и поиска игр
-          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction
+          # Задачи по отдельности: игры должны лечь в build-emscripten/games до индекса и поиска игр.
+          # SEQ MIDI и TiMidity configure находит и под WebAssembly, а sys/soundcard.h там нет — выключаем
+          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction --disable-seq-midi --disable-timidity
           ls -la build-emscripten
       - name: Бесплатные квесты — дискетные версии с scummvm.org
         working-directory: scummvm/build-emscripten
