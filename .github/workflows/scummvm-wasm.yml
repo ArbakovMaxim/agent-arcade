@@ -1,7 +1,8 @@
 # ScummVM в WebAssembly для окна Arcade: только движки бесплатных квестов (Beneath a Steel Sky, Flight of the Amazon
 # Queen, Lure of the Temptress, Nippon Safes, Inc.) и их бесплатные дискетные версии с scummvm.org. Готовая папка —
-# артефакт scummvm-wasm: её содержимое кладётся в site/content/games/scummvm/. Запуск — вручную (Actions → scummvm-wasm
-# → Run). Drascula не берём: её Packet.001 — 32,8 МБ одним файлом, а Cloudflare отдаёт файлы не больше 25 МБ.
+# артефакт scummvm-wasm: её содержимое кладётся в site/content/games/scummvm/, doc/COPYING — ещё и в корень, а BrowserFS
+# в scummvm.html — из browserfs.min.js рядом (см. BUILD.txt там же). Запуск — вручную (Actions → scummvm-wasm → Run).
+# Drascula не берём: её Packet.001 — 32,8 МБ одним файлом, а Cloudflare отдаёт файлы не больше 25 МБ.
 # Лицензии: ScummVM — GPL-3.0-or-later; данные игр — бесплатные (freeware) с правом распространения, тексты — рядом с играми.
 name: scummvm-wasm
 on:
@@ -36,8 +37,9 @@ jobs:
         run: |
           # build.sh сам ставит нужный Emscripten; лишние движки выключены — так WebAssembly меньше.
           # Задачи по отдельности: игры должны лечь в build-emscripten/games до индекса и поиска игр.
-          # SEQ MIDI и TiMidity configure находит и под WebAssembly, а sys/soundcard.h там нет — выключаем
-          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction --disable-seq-midi --disable-timidity
+          # SEQ MIDI и TiMidity configure находит и под WebAssembly, а sys/soundcard.h там нет — выключаем.
+          # FreeType под WebAssembly сам не включается, а без него нет fonts.dat — и меню остаётся в старой зелёной теме
+          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction --disable-seq-midi --disable-timidity --enable-freetype2
           ls -la build-emscripten
       - name: Бесплатные квесты — дискетные версии с scummvm.org
         working-directory: scummvm/build-emscripten
