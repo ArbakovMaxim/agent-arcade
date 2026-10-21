@@ -72,6 +72,12 @@ export function parseCatalog(text) {
     if (![g.title, g.genre].every((s) => typeof s === 'string' && s) || (g.kind !== 'book' && !(typeof g.about === 'string' && g.about))) continue
     const aboutEnBoard = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
     // Настольные игры (шахматы, шашки, реверси) — без ROM: только в окне браузера
+    // Своя игра прямо в панели: движок из списка известных (сейчас — Flappy Arcade)
+    if (g.kind === 'pane') {
+      if (!['flappy'].includes(g.engine)) continue
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...(typeof g.about_en === 'string' ? { about_en: g.about_en } : {}), kind: 'pane', engine: g.engine, keys: typeof g.keys === 'string' ? g.keys : '', ...shelfOf(g) })
+      continue
+    }
     if (g.kind === 'board' || g.kind === 'web' || g.kind === 'book') {
       // У книги — ещё автор и путь к тексту: читалка в окне (а потом и в панели)
       const book = g.kind === 'book' && typeof g.text === 'string' && /^books\/[\w-]+\/book\.json$/.test(g.text) ? { author: String(g.author ?? '').slice(0, 80), text: g.text } : {}

@@ -5,6 +5,7 @@
   "A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.": "Biri katılır katılmaz raunt başlar. Bu arada Freedoom’u tek başına oynayabilirsin — “Kütüphane” düğmesine bas.",
   "Against the computer": "Bilgisayara karşı",
   "All": "Tümü",
+  "Arcade games": "Arcade oyunları",
   "Arrows/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift": "Oklar/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift",
   "As soon as someone joins, you start together. Invite a friend — they open the same game and press “Online”.": "Biri katılır katılmaz birlikte başlarsınız. Bir arkadaşını davet et — aynı oyunu açıp “Çevrim içi” düğmesine bassın.",
   "Board games": "Masa oyunları",
@@ -26,6 +27,7 @@
   "Doom needs a .wad file — or a .zip that contains one.": "Doom için bir .wad dosyası gerekir — ya da onu içeren bir .zip.",
   "Draw": "Berabere",
   "Find an opponent": "Rakip bul",
+  "Flappy Arcade — an original Arcade game": "Flappy Arcade — Arcade’in kendi oyunu",
   "Game not found": "Oyun bulunamadı",
   "Games": "Oyunlar",
   "Go back to the library and pick a game.": "Kütüphaneye dön ve bir oyun seç.",
@@ -58,6 +60,7 @@
   "Paused": "Duraklatıldı",
   "Picking up where you left off — click or press any key": "Kaldığın yerden devam — tıkla veya herhangi bir tuşa bas",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation için disk imajı gerekir: .chd, .pbp, .iso ya da içinde .cue ve .bin olan bir .zip.",
+  "Press Space, ↑ or click to take off": "Havalanmak için Boşluk, ↑ tuşuna bas ya da tıkla",
   "Racing": "Yarış",
   "Remove from this browser": "Bu tarayıcıdan kaldır",
   "Restart": "Yeniden başlat",
@@ -115,6 +118,7 @@
   "fables": "fabller",
   "fairy tales": "masallar",
   "fighting": "dövüş",
+  "flap — Space, ↑, W or click": "kanat çırp — Boşluk, ↑, W veya tık",
   "game": "oyun",
   "horror": "korku",
   "less than a minute": "bir dakikadan az",
@@ -184,7 +188,9 @@
   "This is not a {0} game: {1}": "Bu bir {0} oyunu değil: {1}",
   "No free {0} games yet. {1}": "Henüz ücretsiz {0} oyunu yok. {1}",
   "Open your own file {0} with the “Open your own file” button above.": "Kendi {0} dosyanı yukarıdaki “Kendi dosyanı aç” düğmesiyle aç.",
-  "read {0}%": "%{0} okundu"
+  "read {0}%": "%{0} okundu",
+  "Score: {0} · best: {1}": "Skor: {0} · rekor: {1}",
+  "Crash! Score: {0} · best: {1} — Space to try again": "Çarptın! Skor: {0} · rekor: {1} — tekrar denemek için Boşluk"
  },
  "words": [
   [

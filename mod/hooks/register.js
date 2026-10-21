@@ -7,6 +7,7 @@ import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetecti
 import { LANGS, LANG_NAMES, detectLang, tr, translateTree } from './i18n.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { LOGO_SVG } from './logo.js'
+import { createFlappy } from './flappy.js'
 
 const PANE = 'arcade'
 const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
@@ -492,7 +493,24 @@ function launch(id, romBase64) {
   view = id
   lastGame = id
   notice = ''
-  if (romBase64 && nesGame !== id) {
+  // Своя игра (Flappy Arcade) — движок с тем же устройством, что у эмулятора: кадр, шаг, кнопки
+  if (gameById(id)?.engine === 'flappy' && nesGame !== id) {
+    nes = createFlappy(
+      (f) => {
+        frame = f
+      },
+      {
+        best: flappyBest,
+        onGameOver: (score, best) => {
+          if (best === flappyBest) return
+          flappyBest = best
+          flappyDirty = true
+        },
+      },
+    )
+    nesGame = id
+    nes.frame()
+  } else if (romBase64 && nesGame !== id) {
     nes = createNes(romBase64, (f) => {
       frame = f
     })
@@ -501,9 +519,20 @@ function launch(id, romBase64) {
   }
 }
 
-// Сейчас в панели игра для Денди
+// Рекорд Flappy Arcade: хранится в моде, сохраняется при следующем сообщении от экрана игры
+let flappyBest = 0
+let flappyDirty = false
+
+// Строка под экраном Flappy Arcade: что делать и счёт
+function flappyLine() {
+  if (!nes || nes.state === 'ready') return 'Нажми любую кнопку — взлететь'
+  if (nes.state === 'over') return `Удар! Счёт: ${nes.score} · рекорд: ${nes.best} — любая кнопка, ещё раз`
+  return `Счёт: ${nes.score} · рекорд: ${nes.best}`
+}
+
+// Сейчас в панели игра для Денди или своя (Flappy Arcade)
 function nesView() {
-  return Boolean(gameById(view)?.rom)
+  return Boolean(gameById(view)?.rom || gameById(view)?.engine)
 }
 
 // Отмечает панель открытой; саму панель открывает вызывающий код через $.ui.open
@@ -963,6 +992,7 @@ export function register(on) {
         dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(sep)
       }
       catalog = restoreCatalog(await $.store.get('catalog')) ?? catalog
+      flappyBest = Number(await $.store.get('flappyBest')) || 0
       const savedGame = await $.store.get('lastGame')
       if (games().some((g) => g.id === savedGame)) lastGame = savedGame
       const savedGraphics = await $.store.get('graphics')
@@ -1251,6 +1281,10 @@ export function register(on) {
     const { save, redraw } = readInput(e.data)
     if (redraw) $.ui.invalidate('ui.render')
     if (save) await $.store.set('keys', keymap)
+    if (flappyDirty) {
+      flappyDirty = false
+      await $.store.set('flappyBest', flappyBest)
+    }
     return {}
   })
 
@@ -1314,6 +1348,10 @@ export function register(on) {
               const save = typedFrom(value)
               $.ui.invalidate('ui.render')
               if (save) await $.store.set('keys', keymap)
+              if (flappyDirty) {
+                flappyDirty = false
+                await $.store.set('flappyBest', flappyBest)
+              }
             },
             onSubmit: () => {
               pressStart()
@@ -1468,8 +1506,8 @@ export function register(on) {
           label: g.title,
           ...(focus ? { autoFocus: true } : {}),
           onPress: async () => {
-            // Всё, кроме Денди, идёт только в окне браузера (EmulatorJS на сайте): в панели показать нечем
-            const sega = Boolean(g.console) && g.console !== 'nes' // у «Проверки клавиш» приставки нет — она в панели
+            // Всё, кроме Денди и своих игр, идёт только в окне браузера (EmulatorJS на сайте): в панели показать нечем
+            const sega = Boolean(g.console) && g.console !== 'nes' && !g.engine // у «Проверки клавиш» приставки нет, а своя игра (Flappy Arcade) — в панели
             if (sega && builtinBrowser(e.surface, mouseGame(g.id))) {
               lastGame = g.id
               await desktopWindow($, g.id, `${g.title} открыт во встроенном браузере Claude.`)
@@ -1800,14 +1838,15 @@ export function register(on) {
         const list = shelf ? shelf.list : games().filter((g) => g.console === c.id && !g.mine)
         const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
         const builtin = builtinBrowser(e.surface, list.some((g) => mouseGame(g.id)))
+        const own = c.id === 'nes' || (list.length > 0 && list.every((g) => g.engine)) // Денди и свои игры (Flappy Arcade) — в панели
         items = [
           shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
           ...(list.length
             ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
-          // Всё, кроме Денди, идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
-          ...(c.id !== 'nes'
+          // Всё, кроме Денди и своих игр (Flappy Arcade), идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
+          ...(!own
             ? platform || e.surface === 'desktop'
               ? [
                   gap,
@@ -1832,7 +1871,7 @@ export function register(on) {
               : [gap, dim(`${c.title} идёт в окне браузера, а здесь его открыть нельзя.`)]
             : []),
           ...(list.length
-            ? [gap, dim(`Игры открываются ${builtin && c.id !== 'nes' ? 'во встроенном браузере Claude' : opensWindow(e.surface) || (e.surface === 'desktop' && c.id !== 'nes') ? whereText() : 'здесь, в панели'}.`)]
+            ? [gap, dim(`Игры открываются ${builtin && !own ? 'во встроенном браузере Claude' : opensWindow(e.surface) || (e.surface === 'desktop' && !own) ? whereText() : 'здесь, в панели'}.`)]
             : []),
           // Шутеры в Desktop идут окном и при выбранном встроенном браузере — объясняем почему
           ...(list.length && !builtin && builtinBrowser(e.surface)
@@ -1975,7 +2014,9 @@ export function register(on) {
     })
     const moves = `${first('up')} ${first('left')} ${first('down')} ${first('right')} или стрелки`
     const legend =
-      game.id === 'thwaite'
+      game.engine === 'flappy'
+        ? `взмах — любая кнопка: ${first('up')}, ${first('a')} или ${first('b')}`
+        : game.id === 'thwaite'
         ? `прицел ${moves} · огонь ${first('b')} ${first('a')} · Start ${first('start')}`
         : `движение ${moves} · A ${first('a')} · B ${first('b')} · Start ${first('start')}`
     // Назначение клавиш или сообщение мода; иначе — подсказка для этой поверхности
@@ -1988,11 +2029,13 @@ export function register(on) {
         ? Text({ color: 'yellow', children: [`${notice} Нажми клавишу для «${ACTIONS[assignStep].label}» (${assignStep + 1} из ${ACTIONS.length})`] })
         : notice
           ? Text({ color: 'yellow', children: [notice] })
-          : null
+          : game.engine === 'flappy'
+            ? Text({ color: nes?.state === 'over' ? 'yellow' : 'green', children: [flappyLine()] })
+            : null
 
     // Desktop и VS Code: кадр Денди — PNG внутри Svg, панель перерисовывается каждый шаг игры
     if (!terminal) {
-      if (!game.rom) {
+      if (!game.rom && !game.engine) {
         return Box({
           flexDirection: 'column',
           children: [header, Text({ children: ['Проверка клавиш работает только в терминале.'] }), libraryButton],
@@ -2113,7 +2156,7 @@ export function register(on) {
         ],
       })
 
-    if (game.rom) {
+    if (game.rom || game.engine) {
       const pixels = pixelMode()
       screen = screenSize(e.props.bodyColumns ?? 60, freeRows(e.props), pixels ? MAX_IMAGE_COLUMNS : MAX_SYMBOL_COLUMNS)
       const content = screenContent()

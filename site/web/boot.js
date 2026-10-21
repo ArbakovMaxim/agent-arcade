@@ -233,6 +233,97 @@
     pauseFrameWhenAway(frame)
     ;(document.getElementById('stage') || document.body).appendChild(frame)
     frame.focus()
+  } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'pane') {
+    // Своя игра (Flappy Arcade): тот же движок, что в панели мода, — на холсте окна, кадр 256×240 как у Денди
+    const game = catalog.games[id]
+    document.body.classList.remove('library-mode')
+    document.title = `${game.title} · Arcade`
+    document.getElementById('keys').textContent = T(game.keys)
+    document.getElementById('credit').textContent = T('Flappy Arcade — своя игра Arcade')
+    document.getElementById('license').href = 'https://github.com/ArbakovMaxim/agent-arcade/blob/main/LICENSE'
+    document.getElementById('source').href = 'https://github.com/ArbakovMaxim/agent-arcade'
+    for (const el of ['sound', 'restart', 'net']) {
+      const node = document.getElementById(el)
+      if (node) node.style.display = 'none'
+    }
+    document.getElementById('overlay').classList.remove('shown')
+    await new Promise((resolve) => {
+      const script = document.createElement('script')
+      script.src = 'flappy.js'
+      script.onload = resolve
+      document.body.appendChild(script)
+    })
+    const canvas = document.getElementById('screen')
+    const context = canvas.getContext && canvas.getContext('2d')
+    if (!context) return
+    const image = context.createImageData(256, 240)
+    const pixels = new Uint32Array(image.data.buffer)
+    const status = document.getElementById('best')
+    let best = 0
+    try {
+      best = Number(localStorage.getItem('arcade:flappy:best')) || 0
+    } catch {
+      // без хранилища — рекорд только до закрытия окна
+    }
+    const engine = window.ArcadeFlappy.createFlappy(
+      (frame) => {
+        for (let i = 0; i < frame.length; i++) pixels[i] = 0xff000000 | frame[i]
+      },
+      {
+        best,
+        onGameOver: (score, record) => {
+          try {
+            localStorage.setItem('arcade:flappy:best', String(record))
+          } catch {
+            // без хранилища
+          }
+        },
+      },
+    )
+    const line = () =>
+      engine.state === 'ready' ? T('Нажми пробел, ↑ или кликни — взлететь') : engine.state === 'over' ? T(`Удар! Счёт: ${engine.score} · рекорд: ${engine.best} — ещё раз: пробел`) : T(`Счёт: ${engine.score} · рекорд: ${engine.best}`)
+    // Экран — в целое число раз, чтобы пиксели были одинаковыми
+    const fit = () => {
+      const stage = document.getElementById('stage') || document.body
+      const scale = Math.max(1, Math.floor(Math.min(stage.clientWidth / 256, (stage.clientHeight - 40) / 240)))
+      canvas.style.width = `${256 * scale}px`
+      canvas.style.height = `${240 * scale}px`
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    const FLAP_KEYS = new Set(['Space', 'ArrowUp', 'KeyW', 'Enter'])
+    window.addEventListener('keydown', (e) => {
+      if (!FLAP_KEYS.has(e.code)) return
+      e.preventDefault()
+      engine.buttonDown(1, e.code)
+    })
+    window.addEventListener('keyup', (e) => {
+      if (FLAP_KEYS.has(e.code)) engine.buttonUp(1, e.code)
+    })
+    canvas.addEventListener('pointerdown', () => {
+      engine.buttonDown(1, 'pointer')
+      engine.buttonUp(1, 'pointer')
+    })
+    // 60 шагов в секунду; окно не в фокусе — пауза, как у Денди
+    let last = performance.now()
+    let behind = 0
+    const tick = (now) => {
+      if (document.hasFocus()) {
+        behind = Math.min(behind + now - last, 200)
+        while (behind >= 1000 / 60) {
+          engine.frame()
+          behind -= 1000 / 60
+        }
+        context.putImageData(image, 0, 0)
+        if (status) status.textContent = line()
+      }
+      last = now
+      requestAnimationFrame(tick)
+    }
+    engine.frame()
+    context.putImageData(image, 0, 0)
+    if (status) status.textContent = line()
+    requestAnimationFrame(tick)
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {
     // Настольные игры по сети — правила и страница партии
     for (const src of ['board-rules.js', 'board.js']) {

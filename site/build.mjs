@@ -92,7 +92,7 @@ export function build({ root, out, now = new Date() }) {
     if (!ID.test(g.id ?? '')) fail(`у игры неправильный id ${JSON.stringify(g.id)}`)
     if (games[g.id]) fail(`${where} описана дважды`)
     if (!consoleIds.has(g.console)) fail(`${where}: нет приставки ${g.console}`)
-    for (const field of [...(g.kind === 'book' ? ['title', 'genre', 'keys', 'text', 'author', 'lang'] : ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : ['rom'])])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    for (const field of [...(g.kind === 'book' ? ['title', 'genre', 'keys', 'text', 'author', 'lang'] : ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : g.kind === 'pane' ? ['engine'] : ['rom'])])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
     if (/[А-Яа-яЁё]/.test(g.about_en)) fail(`${where}: в about_en русские буквы — нужно английское описание`)
     const license = g.license ?? {}
     for (const field of ['name', 'author', 'source']) if (!license[field]) fail(`${where}: в лицензии нет поля ${field}`)
@@ -171,6 +171,18 @@ export function build({ root, out, now = new Date() }) {
       continue
     }
     // Настольная игра — без ROM: доска, правила и сеть — страница board.js
+    // Своя игра (Flappy Arcade): движок — файл мода hooks/<engine>.js, в окне — тот же файл (dist/<engine>.js)
+    if (g.kind === 'pane') {
+      if (!['flappy'].includes(g.engine)) fail(`${where}: неизвестный движок ${g.engine}`)
+      games[g.id] = {
+        ...(g.shelf ? { shelf: g.shelf } : {}),
+        console: g.console, kind: 'pane', engine: g.engine, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
+        credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,
+        license: { name: license.name, author: license.author, source: license.source, files: [] },
+      }
+      continue
+    }
+
     if (g.kind === 'board') {
       if (!['chess', 'checkers', 'reversi'].includes(g.board)) fail(`${where}: неизвестная настольная игра ${g.board}`)
       const files = (license.files ?? []).map((file) => {
@@ -261,6 +273,12 @@ export function build({ root, out, now = new Date() }) {
   fs.writeFileSync(path.join(out, 'catalog.json'), `${JSON.stringify(catalog, null, 2)}\n`)
 
   // Окно Arcade и лицензии сторонних библиотек
+  // Движки своих игр — из мода, как есть: export убирается, движок — в window.ArcadeFlappy
+  const flappySource = path.join(root, '..', 'mod', 'hooks', 'flappy.js')
+  if (fs.existsSync(flappySource)) {
+    const code = fs.readFileSync(flappySource, 'utf8').replace(/^export \{[^}]*\}\s*$/m, '')
+    fs.writeFileSync(path.join(out, 'flappy.js'), `// Собрано из mod/hooks/flappy.js\n;(() => {\n${code}\nwindow.ArcadeFlappy = { createFlappy, daySeed }\n})()\n`)
+  }
   for (const file of fs.readdirSync(path.join(root, 'web'))) {
     const from = path.join(root, 'web', file)
     if (fs.statSync(from).isDirectory()) continue // locales/ — вставляются в i18n.js ниже

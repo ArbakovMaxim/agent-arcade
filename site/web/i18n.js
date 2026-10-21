@@ -60,6 +60,10 @@
     'приключенческий роман': 'adventure novel',
     'ещё не читали': 'not read yet',
     'Все': 'All',
+    'Аркады': 'Arcade games',
+    'Flappy Arcade — своя игра Arcade': 'Flappy Arcade — an original Arcade game',
+    'Нажми пробел, ↑ или кликни — взлететь': 'Press Space, ↑ or click to take off',
+    'взмах — пробел, ↑, W или клик': 'flap — Space, ↑, W or click',
     'Книги': 'Books',
     'Оглавление': 'Contents',
     'колёсико или пробел — дальше · оглавление и шрифт — вверху': 'scroll or Space — next · contents and font size — at the top',
@@ -188,6 +192,9 @@
   const RULES = [
     [/^Всего сыграно: (.+)$/, (m) => `Played in total: ${tEn(m[1])}`],
   [/^прочитано (\d+)%$/, (m) => `read ${m[1]}%`],
+  // Flappy Arcade
+  [/^Удар! Счёт: (\d+) · рекорд: (\d+) — ещё раз: пробел$/, (m) => `Crash! Score: ${m[1]} · best: ${m[2]} — Space to try again`],
+  [/^Счёт: (\d+) · рекорд: (\d+)$/, (m) => `Score: ${m[1]} · best: ${m[2]}`],
     [/^сыграно (.+)$/, (m) => `played ${tEn(m[1])}`],
     [/^(\d+) мин$/, (m) => `${m[1]} min`],
     [/^(\d+) ч (\d+) мин$/, (m) => `${m[1]} h ${m[2]} min`],

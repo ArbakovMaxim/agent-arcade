@@ -5,6 +5,7 @@
   "A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.": "Runda zacznie się, gdy tylko ktoś dołączy. Na razie możesz zagrać we Freedoom w pojedynkę — przycisk „Biblioteka”.",
   "Against the computer": "Z komputerem",
   "All": "Wszystkie",
+  "Arcade games": "Gry zręcznościowe",
   "Arrows/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift": "Strzałki/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift",
   "As soon as someone joins, you start together. Invite a friend — they open the same game and press “Online”.": "Gdy tylko ktoś dołączy, zaczniecie razem. Zaproś znajomego — niech otworzy tę samą grę i naciśnie „Online”.",
   "Board games": "Gry planszowe",
@@ -26,6 +27,7 @@
   "Doom needs a .wad file — or a .zip that contains one.": "Doom potrzebuje pliku .wad — albo archiwum .zip, które go zawiera.",
   "Draw": "Remis",
   "Find an opponent": "Znajdź przeciwnika",
+  "Flappy Arcade — an original Arcade game": "Flappy Arcade — własna gra Arcade",
   "Game not found": "Nie znaleziono gry",
   "Games": "Gry",
   "Go back to the library and pick a game.": "Wróć do biblioteki i wybierz grę.",
@@ -58,6 +60,7 @@
   "Paused": "Pauza",
   "Picking up where you left off — click or press any key": "Wznawiamy od miejsca przerwania — kliknij lub naciśnij dowolny klawisz",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation potrzebuje obrazu płyty: .chd, .pbp, .iso albo .zip z plikami .cue i .bin w środku.",
+  "Press Space, ↑ or click to take off": "Naciśnij Spację, ↑ lub kliknij, aby wystartować",
   "Racing": "Wyścigi",
   "Remove from this browser": "Usuń z tej przeglądarki",
   "Restart": "Od początku",
@@ -115,6 +118,7 @@
   "fables": "bajki",
   "fairy tales": "baśnie",
   "fighting": "bijatyka",
+  "flap — Space, ↑, W or click": "machnięcie — Spacja, ↑, W lub kliknięcie",
   "game": "partia",
   "horror": "horror",
   "less than a minute": "mniej niż minuta",
@@ -184,7 +188,9 @@
   "This is not a {0} game: {1}": "To nie jest gra na {0}: {1}",
   "No free {0} games yet. {1}": "Na razie nie ma darmowych gier na {0}. {1}",
   "Open your own file {0} with the “Open your own file” button above.": "Otwórz własny plik {0} przyciskiem „Otwórz własny plik” u góry.",
-  "read {0}%": "przeczytano {0}%"
+  "read {0}%": "przeczytano {0}%",
+  "Score: {0} · best: {1}": "Wynik: {0} · rekord: {1}",
+  "Crash! Score: {0} · best: {1} — Space to try again": "Zderzenie! Wynik: {0} · rekord: {1} — Spacja, aby spróbować ponownie"
  },
  "words": [
   [

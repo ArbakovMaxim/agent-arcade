@@ -16,8 +16,8 @@ Every game in the catalog is free and openly licensed. You can also play online 
 
 - **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt; it never steals focus unless you ask it to.
 - **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings).
-- **54 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with shooters, racing, strategy and board games.
-- **NES right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
+- **55 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy and board games.
+- **NES and Flappy Arcade right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
 - **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
 - **Your own games.** Add ROMs you own; they stay on your machine.
@@ -61,7 +61,7 @@ The plugin is installed for all sessions and apps. The VS Code extension has no 
 
 ### Where games run
 
-| | NES (Dendy) | Sega, Master System, PlayStation, Games |
+| | NES (Dendy), Flappy Arcade | Sega, Master System, PlayStation, other Games |
 |---|---|---|
 | **Terminal** | in the panel (pixel graphics where the terminal supports them, otherwise text blocks) | browser window |
 | **VS Code** | in the panel | browser window |
@@ -77,6 +77,7 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Sega** | 11 Mega Drive games: Miniplanets, Tank Battle, Battle 4Tris, Pong and more |
 | **Master System** | 4 games: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
+| **Games → Arcade games** | Flappy Arcade — Arcade's own one-button game: plays right in the panel and in the Arcade window; the course of the day is the same for everyone, your best score is kept |
 | **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch |
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
 | **Games → Strategy** | OpenTTD — transport tycoon |

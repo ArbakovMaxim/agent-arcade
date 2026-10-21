@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "智能体正在等待授权——按 Esc 去回应",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "输入法（日文、中文或韩文）似乎处于开启状态。游戏时请先关闭它。",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade 已请 Claude 在内置浏览器中打开链接。",
+  "Arcade games": "街机",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade 已打断 Claude：它会在内置浏览器中打开游戏，然后继续工作。",
   "Arcade is open in Claude's built-in browser.": "Arcade 已在 Claude 的内置浏览器中打开。",
   "Arcade window": "Arcade 窗口",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "已暂停：智能体已完成。任意游戏键——继续玩，Esc——返回智能体",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "已暂停：智能体正在等待授权。任意游戏键——继续玩，Esc——返回智能体",
   "Play": "开始游戏",
+  "Press any button to take off": "按任意按钮起飞",
   "Racing": "竞速",
   "Read": "阅读",
   "Reassign keys": "重新设置按键",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} 已在 Claude 的内置浏览器中打开。",
   "Open in the built-in browser: {0}": "请在内置浏览器中打开：{0}",
-  "Ask Claude to open this in the built-in browser: {0}": "请让 Claude 在内置浏览器中打开：{0}"
+  "Ask Claude to open this in the built-in browser: {0}": "请让 Claude 在内置浏览器中打开：{0}",
+  "Score: {0} · best: {1}": "得分：{0} · 最高：{1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "撞上了！得分：{0} · 最高：{1} — 按任意按钮重来",
+  "flap — any button: {0} or {1}": "扇动翅膀 — 任意按钮：{0} 或 {1}"
  },
  "words": [
   [

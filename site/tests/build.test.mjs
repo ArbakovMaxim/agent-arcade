@@ -36,7 +36,7 @@ assert.ok(Object.keys(catalog.games).length >= 12, 'в каталоге все �
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf8')), catalog)
 
 for (const [id, game] of Object.entries(catalog.games)) {
-  if (game.kind === 'board' || game.kind === 'web' || game.kind === 'book') continue // без ROM — проверены отдельно
+  if (game.kind === 'board' || game.kind === 'web' || game.kind === 'book' || game.kind === 'pane') continue // без ROM — проверены отдельно
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
@@ -224,7 +224,11 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = [
   const built = build({ root: ROOT, out: dir })
   assert.deepEqual(built.groups.map((g) => g.id), ['games', 'reading'])
   assert.equal(built.support.url, 'https://ko-fi.com/agentarcade', 'ссылка «Поддержать проект» — в каталоге')
-  assert.deepEqual(built.shelves.map((s) => s.id), ['shooters', 'racing', 'strategy', 'board', 'books-en', 'books-uk'])
+  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'board', 'books-en', 'books-uk'])
+  // Своя игра Flappy Arcade: вид pane, движок flappy, в окне — тот же файл движка из мода
+  assert.deepEqual([built.games.flappy.kind, built.games.flappy.engine, built.games.flappy.shelf], ['pane', 'flappy', 'arcade'])
+  const flappyJs = fs.readFileSync(path.join(dir, 'flappy.js'), 'utf8')
+  assert.ok(flappyJs.includes('window.ArcadeFlappy') && !/^export /m.test(flappyJs), 'flappy.js в окне — без export, движок в window.ArcadeFlappy')
   // книга — на полке своего языка
   for (const g of Object.values(built.games).filter((x) => x.kind === 'book')) assert.equal(g.shelf, `books-${g.lang}`)
   assert.equal(built.games.hexgl.shelf, 'racing')

@@ -1,5 +1,7 @@
 # Changelog · Список изменений
 
+## 0.12.0 — Flappy Arcade: своя игра прямо в панели Claude Code (терминал, Desktop, VS Code — без браузера) и в окне Arcade; одна кнопка, трасса дня одна для всех, свой рекорд · Flappy Arcade: an original game right in the Claude Code panel and in the Arcade window
+
 ## 0.11.1 — жанры книг: в моде — плитками на полке языка, в окне — рядом под полками; у полок «Книг» — «книг», а не «игр» · book genres as tiles in the panel and a genre row in the window
 
 - The panel now translates “Books”, “Games” and the shelf names · в панели переведены «Книги», «Игры» и названия полок

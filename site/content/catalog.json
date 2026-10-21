@@ -79,6 +79,10 @@
   ],
   "shelves": [
     {
+      "id": "arcade",
+      "title": "Аркады"
+    },
+    {
       "id": "shooters",
       "title": "Шутеры"
     },
@@ -1211,6 +1215,23 @@
         ]
       },
       "shelf": "strategy"
+    },
+    {
+      "id": "flappy",
+      "console": "web",
+      "kind": "pane",
+      "engine": "flappy",
+      "shelf": "arcade",
+      "title": "Flappy Arcade",
+      "genre": "аркада",
+      "about": "Птичка между трубами — одна кнопка, раунд на полминуты. Трасса дня одна для всех: соревнуйся с теми, кто тоже ждёт агента. Играется прямо в панели Claude Code.",
+      "about_en": "A bird between pipes — one button, half-minute rounds. The course of the day is the same for everyone: compete with others waiting for their agent. Plays right in the Claude Code panel.",
+      "keys": "взмах — пробел, ↑, W или клик",
+      "license": {
+        "name": "AGPL-3.0",
+        "author": "Max Arbakov",
+        "source": "https://github.com/ArbakovMaxim/agent-arcade"
+      }
     }
   ]
 }

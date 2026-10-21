@@ -5,6 +5,7 @@
   "A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.": "只要有人加入，回合就会开始。在此之前，你可以先单人玩 Freedoom——点击“游戏库”按钮。",
   "Against the computer": "人机对战",
   "All": "全部",
+  "Arcade games": "街机",
   "Arrows/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift": "方向键/WASD · A：X/K · B：Z/J · Start：Enter · Select：Shift",
   "As soon as someone joins, you start together. Invite a friend — they open the same game and press “Online”.": "只要有人加入，你们就一起开始。邀请好友吧——让对方打开同一款游戏，然后点击“联网”。",
   "Board games": "棋类",
@@ -26,6 +27,7 @@
   "Doom needs a .wad file — or a .zip that contains one.": "Doom 需要 .wad 文件，或包含它的 .zip。",
   "Draw": "平局",
   "Find an opponent": "寻找对手",
+  "Flappy Arcade — an original Arcade game": "Flappy Arcade — Arcade 原创游戏",
   "Game not found": "找不到游戏",
   "Games": "游戏",
   "Go back to the library and pick a game.": "请返回游戏库选择一款游戏。",
@@ -58,6 +60,7 @@
   "Paused": "已暂停",
   "Picking up where you left off — click or press any key": "从上次中断的地方继续——点击或按任意键",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation 需要光盘镜像：.chd、.pbp、.iso，或内含 .cue 和 .bin 的 .zip。",
+  "Press Space, ↑ or click to take off": "按空格键、↑ 或点击起飞",
   "Racing": "竞速",
   "Remove from this browser": "从此浏览器中移除",
   "Restart": "重新开始",
@@ -115,6 +118,7 @@
   "fables": "寓言",
   "fairy tales": "童话",
   "fighting": "格斗",
+  "flap — Space, ↑, W or click": "扇动翅膀 — 空格键、↑、W 或点击",
   "game": "对局",
   "horror": "恐怖",
   "less than a minute": "不到一分钟",
@@ -184,7 +188,9 @@
   "This is not a {0} game: {1}": "这不是 {0} 游戏：{1}",
   "No free {0} games yet. {1}": "暂时还没有免费的 {0} 游戏。{1}",
   "Open your own file {0} with the “Open your own file” button above.": "用上方的“打开自己的文件”按钮打开你自己的 {0} 文件。",
-  "read {0}%": "已读 {0}%"
+  "read {0}%": "已读 {0}%",
+  "Score: {0} · best: {1}": "得分：{0} · 最高：{1}",
+  "Crash! Score: {0} · best: {1} — Space to try again": "撞上了！得分：{0} · 最高：{1} — 按空格键重来"
  },
  "words": [
   [

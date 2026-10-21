@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "エージェントが許可を待っています — Esc で応答します",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "IME（日本語・中国語・韓国語入力）がオンになっているようです。プレイ中はオフにしてください。",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade が Claude に、リンクを内蔵ブラウザで開くよう頼みました。",
+  "Arcade games": "アーケード",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade が Claude を中断しました。内蔵ブラウザでゲームを開いてから作業に戻ります。",
   "Arcade is open in Claude's built-in browser.": "Arcade を Claude の内蔵ブラウザで開きました。",
   "Arcade window": "Arcade ウィンドウ",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "一時停止：エージェントが完了しました。ゲームのキー — プレイを続ける、Esc — エージェントに戻る",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "一時停止：エージェントが許可を待っています。ゲームのキー — プレイを続ける、Esc — エージェントに戻る",
   "Play": "プレイ",
+  "Press any button to take off": "いずれかのボタンを押して離陸",
   "Racing": "レース",
   "Read": "読む",
   "Reassign keys": "キーを再設定",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} を Claude の内蔵ブラウザで開きました。",
   "Open in the built-in browser: {0}": "内蔵ブラウザで開いてください: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Claude に内蔵ブラウザで開くよう頼んでください: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Claude に内蔵ブラウザで開くよう頼んでください: {0}",
+  "Score: {0} · best: {1}": "スコア：{0} · ベスト：{1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "クラッシュ！ スコア：{0} · ベスト：{1} — いずれかのボタンでもう一度",
+  "flap — any button: {0} or {1}": "羽ばたき — いずれかのボタン：{0} または {1}"
  },
  "words": [
   [

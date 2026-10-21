@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "Agent czeka na zgodę — Esc, aby odpowiedzieć",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Wygląda na to, że włączona jest metoda wprowadzania (japońska, chińska lub koreańska). Wyłącz ją na czas gry.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade poprosił Claude o otwarcie linku we wbudowanej przeglądarce.",
+  "Arcade games": "Gry zręcznościowe",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade przerwał Claude: otworzy grę we wbudowanej przeglądarce i wróci do pracy.",
   "Arcade is open in Claude's built-in browser.": "Arcade jest otwarty we wbudowanej przeglądarce Claude.",
   "Arcade window": "Okno Arcade",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pauza: agent skończył. Dowolny klawisz gry — graj dalej, Esc — wróć do agenta",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pauza: agent czeka na zgodę. Dowolny klawisz gry — graj dalej, Esc — wróć do agenta",
   "Play": "Graj",
+  "Press any button to take off": "Naciśnij dowolny przycisk, aby wystartować",
   "Racing": "Wyścigi",
   "Read": "Czytaj",
   "Reassign keys": "Przypisz klawisze od nowa",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "Otwarto {0} we wbudowanej przeglądarce Claude.",
   "Open in the built-in browser: {0}": "Otwórz we wbudowanej przeglądarce: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Poproś Claude, aby otworzył to we wbudowanej przeglądarce: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Poproś Claude, aby otworzył to we wbudowanej przeglądarce: {0}",
+  "Score: {0} · best: {1}": "Wynik: {0} · rekord: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Zderzenie! Wynik: {0} · rekord: {1} — dowolny przycisk, aby spróbować ponownie",
+  "flap — any button: {0} or {1}": "machnięcie — dowolny przycisk: {0} lub {1}"
  },
  "words": [
   [

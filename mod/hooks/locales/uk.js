@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "Агент чекає на дозвіл — Esc, щоб відповісти",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Схоже, увімкнено метод введення (японська, китайська чи корейська). Вимкни його на час гри.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade попросив Claude відкрити посилання у вбудованому браузері.",
+  "Arcade games": "Аркади",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade перервав Claude: він відкриє гру у вбудованому браузері й повернеться до роботи.",
   "Arcade is open in Claude's built-in browser.": "Arcade відкрито у вбудованому браузері Claude.",
   "Arcade window": "Вікно Arcade",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Пауза: агент закінчив. Будь-яка клавіша гри — грати далі, Esc — до агента",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Пауза: агент чекає на дозвіл. Будь-яка клавіша гри — грати далі, Esc — до агента",
   "Play": "Грати",
+  "Press any button to take off": "Натисни будь-яку кнопку — злетіти",
   "Racing": "Перегони",
   "Read": "Читати",
   "Reassign keys": "Перепризначити клавіші",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} відкрито у вбудованому браузері Claude.",
   "Open in the built-in browser: {0}": "Відкрий у вбудованому браузері: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Попроси Claude відкрити це у вбудованому браузері: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Попроси Claude відкрити це у вбудованому браузері: {0}",
+  "Score: {0} · best: {1}": "Рахунок: {0} · рекорд: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Удар! Рахунок: {0} · рекорд: {1} — будь-яка кнопка, ще раз",
+  "flap — any button: {0} or {1}": "змах — будь-яка кнопка: {0} або {1}"
  },
  "words": [
   [
