@@ -12,6 +12,7 @@ export default {
   "Agent is waiting for permission": "Agent czeka na zgodę",
   "Agent is waiting for permission · paused": "Agent czeka na zgodę · pauza",
   "Agent is waiting for permission — Esc to answer": "Agent czeka na zgodę — Esc, aby odpowiedzieć",
+  "Agent log": "Dziennik agenta",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Wygląda na to, że włączona jest metoda wprowadzania (japońska, chińska lub koreańska). Wyłącz ją na czas gry.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade poprosił Claude o otwarcie linku we wbudowanej przeglądarce.",
   "Arcade games": "Gry zręcznościowe",
@@ -122,7 +123,6 @@ export default {
   "memory": "memory",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "obok rozmowy; w trybie auto grę otwiera Claude — na chwilę przerwie pracę i do niej wróci",
   "no timer": "bez zegara",
-  "nothing yet": "na razie nic",
   "novel": "powieść",
   "novella": "mikropowieść",
   "open in: Claude's built-in browser": "gdzie otwierać: wbudowana przeglądarka Claude",
@@ -167,6 +167,7 @@ export default {
   "your files": "własne pliki",
   "← Back": "← Wstecz",
   "↑ ↓ or Tab — select, Enter — open. You can click with the mouse too.": "↑ ↓ lub Tab — wybierz, Enter — otwórz. Możesz też klikać myszą.",
+  "▶ Continue": "▶ Kontynuuj",
   "☕ Support the project": "☕ Wesprzyj projekt"
  },
  "templates": {

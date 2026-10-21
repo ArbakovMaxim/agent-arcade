@@ -12,6 +12,7 @@ export default {
   "Agent is waiting for permission": "에이전트가 권한 승인을 기다리는 중",
   "Agent is waiting for permission · paused": "에이전트가 권한 승인을 기다리는 중 · 일시정지",
   "Agent is waiting for permission — Esc to answer": "에이전트가 권한 승인을 기다리는 중 — Esc로 응답하기",
+  "Agent log": "에이전트 로그",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "입력기(일본어, 중국어 또는 한국어)가 켜져 있는 것 같습니다. 플레이하는 동안에는 꺼 주세요.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade가 Claude에게 내장 브라우저에서 링크를 열도록 요청했습니다.",
   "Arcade games": "아케이드",
@@ -122,7 +123,6 @@ export default {
   "memory": "짝 맞추기",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "대화 옆에 열립니다. 자동 모드에서는 Claude가 게임을 엽니다. 잠시 멈췄다가 다시 작업으로 돌아갑니다",
   "no timer": "시간 제한 없음",
-  "nothing yet": "아직 없음",
   "novel": "장편소설",
   "novella": "중편소설",
   "open in: Claude's built-in browser": "열기 위치: Claude 내장 브라우저",
@@ -167,6 +167,7 @@ export default {
   "your files": "내 파일",
   "← Back": "← 뒤로",
   "↑ ↓ or Tab — select, Enter — open. You can click with the mouse too.": "↑ ↓ 또는 Tab — 선택, Enter — 열기. 마우스로 클릭해도 됩니다.",
+  "▶ Continue": "▶ 계속하기",
   "☕ Support the project": "☕ 프로젝트 후원하기"
  },
  "templates": {

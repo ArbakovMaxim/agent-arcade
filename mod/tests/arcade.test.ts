@@ -2279,7 +2279,35 @@ test('дизайн главного меню: разделы «Играть» и
   expect(inside).toContain('arcade-menu-nes')
   expect(inside).toMatch(/игр/)
   expect(await ui.find({ type: 'Text', text: '●' })).toBeDefined()
+  // ещё ни во что не играли — «Продолжить» нет; агент молчал — журнала тоже нет
+  expect(await ui.find({ key: 'arcade-continue' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Журнал агента' })).toBeUndefined()
   await ui.unmount()
+})
+
+test('«Продолжить»: последняя игра — первой плиткой и с фокусом; журнал агента — с подписью, когда в нём что-то есть', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS, stored: { lastGame: 'thwaite' } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-continue' })).toMatchObject({ props: { label: '▶ Продолжить', autoFocus: true } })
+  expect((await ui.find({ key: 'arcade-menu-nes' })).props.autoFocus).toBeUndefined()
+  // кнопка с названием игры — первая плитка
+  const tile = JSON.stringify(await ui.find({ type: 'Box', props: { borderStyle: 'round' } }))
+  expect(tile).toContain('arcade-continue')
+  expect(tile).toContain('Thwaite')
+  expect(await ui.find({ type: 'Text', text: 'Журнал агента' })).toBeUndefined()
+  await ui.unmount()
+  await $.turn.start({ turnId: 't1' })
+  const menu = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await menu.find({ type: 'Text', text: 'Журнал агента' })).toBeDefined()
+  expect(await menu.find({ type: 'Text', text: /агент начал ход/ })).toBeDefined()
+  // в терминале Windows игра открывается в окне браузера
+  await menu.press({ key: 'arcade-continue' })
+  expect(launches.map((l) => l.env.ARCADE_URL)).toEqual([`${SITE}/?game=thwaite`])
+  await menu.unmount()
+  expect([tr('▶ Продолжить', 'en'), tr('Журнал агента', 'en'), tr('Журнал агента', 'de')]).toEqual(['▶ Continue', 'Agent log', 'Agent-Protokoll'])
 })
 
 test('Flappy Arcade в Desktop: игра прямо в панели, кадр картинкой, взлёт по кнопке, счёт под экраном', async ($, on) => {

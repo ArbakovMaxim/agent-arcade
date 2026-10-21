@@ -101,6 +101,7 @@ let menu = 'main' // что открыто в библиотеке: main, id п�
 let langReturn = 'main' // куда вернуться из выбора языка: главное меню или настройки
 let menuFrom = null // откуда вернулись в главное меню — туда ставим фокус
 let lastGame = 'thwaite'
+let played = false // во что-то уже играли (или читали, слушали) — тогда первой плиткой главного меню идёт «Продолжить»
 let player = { x: 2, y: 3 }
 let pressed = []
 let events = []
@@ -1010,7 +1011,8 @@ export function register(on) {
       catalog = restoreCatalog(await $.store.get('catalog')) ?? catalog
       flappyBest = Number(await $.store.get('flappyBest')) || 0
       const savedGame = await $.store.get('lastGame')
-      if (games().some((g) => g.id === savedGame)) lastGame = savedGame
+      played = games().some((g) => g.id === savedGame)
+      if (played) lastGame = savedGame
       const savedGraphics = await $.store.get('graphics')
       if (GRAPHICS.includes(savedGraphics)) graphics = savedGraphics
       const savedOpener = await $.store.get('opener')
@@ -1481,7 +1483,10 @@ export function register(on) {
         }),
       ],
     })
-    const eventLines = (events.length ? events : ['пока ничего']).slice(0, 3).map((text) => Text({ dimColor: true, children: [text] }))
+    // Журнал агента — с подписью и только когда в нём что-то есть: одинокое «пока ничего» внизу меню выглядело обломком
+    const eventLines = events.length
+      ? [Text({ bold: true, dimColor: true, children: ['Журнал агента'] }), ...events.slice(0, 3).map((text) => Text({ dimColor: true, children: [text] }))]
+      : []
 
     if (!game) {
       // ROM для игры в панели: встроенный, из кеша мода или скачанный с сайта — всегда сверяется с хешем каталога
@@ -1516,46 +1521,49 @@ export function register(on) {
         }
       }
       // Игра открывается в окне браузера или здесь, в панели
+      const playGame = async (g) => {
+        // Всё, кроме Денди и своих игр, идёт только в окне браузера (EmulatorJS на сайте): в панели показать нечем
+        const sega = Boolean(g.console) && g.console !== 'nes' && !g.engine // у «Проверки клавиш» приставки нет, а своя игра (Flappy Arcade) — в панели
+        if (sega && builtinBrowser(e.surface, mouseGame(g.id))) {
+          lastGame = g.id
+          played = true
+          await desktopWindow($, g.id, `${g.title} открыт во встроенном браузере Claude.`)
+          await $.store.set('lastGame', g.id)
+          return
+        }
+        if (sega && !platform) {
+          libraryNotice = `Игры ${consoleTitle(g.console)} идут в окне браузера, а здесь его открыть нельзя.`
+          $.ui.invalidate('ui.render')
+          return
+        }
+        lastGame = g.id
+        played = true
+        if ((opensWindow(e.surface) || sega) && g.web) {
+          libraryNotice = 'Открываю окно…'
+          $.ui.invalidate('ui.render')
+          const command = windowCommand(g.id)
+          try {
+            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+            windowNotice($, launchNotice(result, g.id))
+            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+          } catch (err) {
+            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+          }
+        } else if (g.rom) {
+          const rom = await obtainRom(g)
+          if (rom) launch(g.id, rom)
+        } else {
+          launch(g.id)
+        }
+        $.ui.invalidate('ui.render')
+        await $.store.set('lastGame', g.id)
+      }
       const gameButton = (g, focus) =>
         Button({
           key: `arcade-game-${g.id}`,
           label: g.title,
           ...(focus ? { autoFocus: true } : {}),
-          onPress: async () => {
-            // Всё, кроме Денди и своих игр, идёт только в окне браузера (EmulatorJS на сайте): в панели показать нечем
-            const sega = Boolean(g.console) && g.console !== 'nes' && !g.engine // у «Проверки клавиш» приставки нет, а своя игра (Flappy Arcade) — в панели
-            if (sega && builtinBrowser(e.surface, mouseGame(g.id))) {
-              lastGame = g.id
-              await desktopWindow($, g.id, `${g.title} открыт во встроенном браузере Claude.`)
-              await $.store.set('lastGame', g.id)
-              return
-            }
-            if (sega && !platform) {
-              libraryNotice = `Игры ${consoleTitle(g.console)} идут в окне браузера, а здесь его открыть нельзя.`
-              $.ui.invalidate('ui.render')
-              return
-            }
-            lastGame = g.id
-            if ((opensWindow(e.surface) || sega) && g.web) {
-              libraryNotice = 'Открываю окно…'
-              $.ui.invalidate('ui.render')
-              const command = windowCommand(g.id)
-              try {
-                const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                windowNotice($, launchNotice(result, g.id))
-                if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
-              } catch (err) {
-                libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
-              }
-            } else if (g.rom) {
-              const rom = await obtainRom(g)
-              if (rom) launch(g.id, rom)
-            } else {
-              launch(g.id)
-            }
-            $.ui.invalidate('ui.render')
-            await $.store.set('lastGame', g.id)
-          },
+          onPress: () => playGame(g),
         })
       const open = (id) => () => {
         menuFrom = menu
@@ -1898,12 +1906,14 @@ export function register(on) {
           ...hint,
         ]
       } else {
+        // Последнее, во что играли (или что читали и слушали), — одной кнопкой: при открытии меню фокус на ней
+        const resume = played ? gameById(lastGame) : null
         const tabItems = (list) =>
           list.flatMap((c) => [
             Button({
               key: `arcade-menu-${c.id}`,
               label: c.title,
-              ...((menuFrom ?? consoles()[0]?.id) === c.id ? { autoFocus: true } : {}),
+              ...((menuFrom ?? (resume ? null : consoles()[0]?.id)) === c.id ? { autoFocus: true } : {}),
               onPress: open(c.id),
             }),
             dim(`  ${consoleNote(c)}`),
@@ -1911,7 +1921,15 @@ export function register(on) {
         const reading = menuTabs().filter((c) => ['reading', 'books', 'listening', 'audiobooks'].includes(c.id))
         items = [
           section('Играть'),
-          tiles(tabItems(menuTabs().filter((c) => !reading.includes(c)))),
+          tiles([
+            ...(resume
+              ? [
+                  Button({ key: 'arcade-continue', label: '▶ Продолжить', ...(menuFrom ? {} : { autoFocus: true }), onPress: () => playGame(resume) }),
+                  dim(`  ${resume.title}`),
+                ]
+              : []),
+            ...tabItems(menuTabs().filter((c) => !reading.includes(c))),
+          ]),
           ...(reading.length ? [section(reading.some((c) => ['listening', 'audiobooks'].includes(c.id)) ? 'Читать и слушать' : 'Читать'), tiles(tabItems(reading))] : []),
           section('Ещё'),
           tiles([
@@ -2014,8 +2032,7 @@ export function register(on) {
           ]),
           ...noticeLines,
           ...hint,
-          gap,
-          ...eventLines,
+          ...(eventLines.length ? [gap, ...eventLines] : []),
         ]
       }
       return Box({ flexDirection: 'column', children: [header, gap, ...items] })
