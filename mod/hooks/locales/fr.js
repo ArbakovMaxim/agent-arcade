@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "L’agent attend une autorisation — Esc pour répondre",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Une méthode de saisie (japonais, chinois ou coréen) semble activée. Désactivez-la pendant que vous jouez.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade a demandé à Claude d’ouvrir le lien dans le navigateur intégré.",
+  "Arcade games": "Jeux d’arcade",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade a interrompu Claude : il ouvrira le jeu dans le navigateur intégré et reprendra son travail.",
   "Arcade is open in Claude's built-in browser.": "Arcade est ouvert dans le navigateur intégré de Claude.",
   "Arcade window": "Fenêtre Arcade",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pause : l’agent a terminé. N’importe quelle touche du jeu — continuer à jouer, Esc — retour à l’agent",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pause : l’agent attend une autorisation. N’importe quelle touche du jeu — continuer à jouer, Esc — retour à l’agent",
   "Play": "Jouer",
+  "Press any button to take off": "Appuyez sur n’importe quel bouton pour décoller",
   "Racing": "Jeux de course",
   "Read": "Lire",
   "Reassign keys": "Réattribuer les touches",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} est ouvert dans le navigateur intégré de Claude.",
   "Open in the built-in browser: {0}": "Ouvre dans le navigateur intégré : {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Demandez à Claude de l’ouvrir dans le navigateur intégré : {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Demandez à Claude de l’ouvrir dans le navigateur intégré : {0}",
+  "Score: {0} · best: {1}": "Score : {0} · record : {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Crash ! Score : {0} · record : {1} — n’importe quel bouton pour réessayer",
+  "flap — any button: {0} or {1}": "battre des ailes — n’importe quel bouton : {0} ou {1}"
  },
  "words": [
   [

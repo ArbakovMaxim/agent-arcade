@@ -5,6 +5,7 @@
   "A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.": "Щойно хтось зайде, почнеться раунд. А поки можна зіграти у Freedoom наодинці — кнопка «Бібліотека».",
   "Against the computer": "Проти комп’ютера",
   "All": "Усі",
+  "Arcade games": "Аркади",
   "Arrows/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift": "Стрілки/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift",
   "As soon as someone joins, you start together. Invite a friend — they open the same game and press “Online”.": "Щойно хтось зайде, почнете разом. Поклич друга — хай відкриє цю саму гру й натисне «Онлайн».",
   "Board games": "Настільні",
@@ -26,6 +27,7 @@
   "Doom needs a .wad file — or a .zip that contains one.": "Для Doom потрібен файл .wad — або .zip, у якому він є.",
   "Draw": "Нічия",
   "Find an opponent": "Знайти суперника",
+  "Flappy Arcade — an original Arcade game": "Flappy Arcade — власна гра Arcade",
   "Game not found": "Гру не знайдено",
   "Games": "Ігри",
   "Go back to the library and pick a game.": "Повернися до бібліотеки й вибери гру.",
@@ -58,6 +60,7 @@
   "Paused": "Пауза",
   "Picking up where you left off — click or press any key": "Продовжуємо з місця зупинки — клацни або натисни будь-яку клавішу",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "Для PlayStation потрібен образ диска: .chd, .pbp, .iso або .zip, у якому лежать .cue і .bin.",
+  "Press Space, ↑ or click to take off": "Натисни пробіл, ↑ або клацни — злетіти",
   "Racing": "Перегони",
   "Remove from this browser": "Видалити з цього браузера",
   "Restart": "Спочатку",
@@ -115,6 +118,7 @@
   "fables": "байки",
   "fairy tales": "казки",
   "fighting": "файтинг",
+  "flap — Space, ↑, W or click": "змах — пробіл, ↑, W або клік",
   "game": "партія",
   "horror": "жахи",
   "less than a minute": "менше хвилини",
@@ -184,7 +188,9 @@
   "This is not a {0} game: {1}": "Це не гра для {0}: {1}",
   "No free {0} games yet. {1}": "Вільних ігор для {0} поки немає. {1}",
   "Open your own file {0} with the “Open your own file” button above.": "Відкрий свій файл {0} кнопкою «Відкрити свій файл» угорі.",
-  "read {0}%": "прочитано {0}%"
+  "read {0}%": "прочитано {0}%",
+  "Score: {0} · best: {1}": "Рахунок: {0} · рекорд: {1}",
+  "Crash! Score: {0} · best: {1} — Space to try again": "Удар! Рахунок: {0} · рекорд: {1} — пробіл, ще раз"
  },
  "words": [
   [

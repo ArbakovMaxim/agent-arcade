@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "Agent wartet auf Erlaubnis — Esc zum Antworten",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Anscheinend ist eine Eingabemethode (Japanisch, Chinesisch oder Koreanisch) aktiv. Schalte sie beim Spielen aus.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade hat Claude gebeten, den Link im integrierten Browser zu öffnen.",
+  "Arcade games": "Arcade-Spiele",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade hat Claude unterbrochen: Er öffnet das Spiel im integrierten Browser und arbeitet dann weiter.",
   "Arcade is open in Claude's built-in browser.": "Arcade ist im integrierten Browser von Claude geöffnet.",
   "Arcade window": "Arcade-Fenster",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pause: Der Agent ist fertig. Beliebige Spieltaste — weiterspielen, Esc — zurück zum Agenten",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pause: Der Agent wartet auf Erlaubnis. Beliebige Spieltaste — weiterspielen, Esc — zurück zum Agenten",
   "Play": "Spielen",
+  "Press any button to take off": "Drücke eine beliebige Taste zum Abheben",
   "Racing": "Rennspiele",
   "Read": "Lesen",
   "Reassign keys": "Tasten neu belegen",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} ist im integrierten Browser von Claude geöffnet.",
   "Open in the built-in browser: {0}": "Öffne im integrierten Browser: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Bitte Claude, das im integrierten Browser zu öffnen: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Bitte Claude, das im integrierten Browser zu öffnen: {0}",
+  "Score: {0} · best: {1}": "Punkte: {0} · Rekord: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Crash! Punkte: {0} · Rekord: {1} — beliebige Taste für einen neuen Versuch",
+  "flap — any button: {0} or {1}": "flattern — beliebige Taste: {0} oder {1}"
  },
  "words": [
   [

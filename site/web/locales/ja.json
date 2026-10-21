@@ -5,6 +5,7 @@
   "A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.": "誰かが参加するとすぐにラウンドが始まります。それまでは Freedoom を一人で遊べます —「ライブラリ」ボタンからどうぞ。",
   "Against the computer": "CPU と対戦",
   "All": "すべて",
+  "Arcade games": "アーケード",
   "Arrows/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift": "矢印キー/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift",
   "As soon as someone joins, you start together. Invite a friend — they open the same game and press “Online”.": "誰かが参加したらすぐに一緒に始まります。友達を招待しましょう — 同じゲームを開いて「オンライン」を押してもらってください。",
   "Board games": "ボードゲーム",
@@ -26,6 +27,7 @@
   "Doom needs a .wad file — or a .zip that contains one.": "Doom には .wad ファイル（または .wad を含む .zip）が必要です。",
   "Draw": "引き分け",
   "Find an opponent": "対戦相手を探す",
+  "Flappy Arcade — an original Arcade game": "Flappy Arcade — Arcade オリジナルゲーム",
   "Game not found": "ゲームが見つかりません",
   "Games": "ゲーム",
   "Go back to the library and pick a game.": "ライブラリに戻ってゲームを選んでください。",
@@ -58,6 +60,7 @@
   "Paused": "一時停止中",
   "Picking up where you left off — click or press any key": "前回の続きから再開します — クリックするか、いずれかのキーを押してください",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation にはディスクイメージが必要です：.chd、.pbp、.iso、または .cue と .bin を含む .zip。",
+  "Press Space, ↑ or click to take off": "スペース、↑ またはクリックで離陸",
   "Racing": "レース",
   "Remove from this browser": "このブラウザから削除",
   "Restart": "リスタート",
@@ -115,6 +118,7 @@
   "fables": "寓話",
   "fairy tales": "童話",
   "fighting": "格闘",
+  "flap — Space, ↑, W or click": "羽ばたき — スペース、↑、W またはクリック",
   "game": "対局",
   "horror": "ホラー",
   "less than a minute": "1分未満",
@@ -184,7 +188,9 @@
   "This is not a {0} game: {1}": "{0} のゲームではありません：{1}",
   "No free {0} games yet. {1}": "{0} の無料ゲームはまだありません。{1}",
   "Open your own file {0} with the “Open your own file” button above.": "自分の {0} ファイルは、上の「自分のファイルを開く」ボタンで開けます。",
-  "read {0}%": "{0}%読了"
+  "read {0}%": "{0}%読了",
+  "Score: {0} · best: {1}": "スコア：{0} · ベスト：{1}",
+  "Crash! Score: {0} · best: {1} — Space to try again": "クラッシュ！ スコア：{0} · ベスト：{1} — スペースでもう一度"
  },
  "words": [
   [

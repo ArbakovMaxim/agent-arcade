@@ -8,6 +8,7 @@ import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
 import { installMapper28, prgBank } from '../hooks/mapper28.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
+import { createFlappy } from '../hooks/flappy.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -1930,8 +1931,9 @@ test('язык: по окружению, правила с подстановк�
   expect(tr('Когда агент закончил: пауза и плашка', 'en')).toBe('When the agent finishes: pause and banner')
   expect(tr('Настройки', 'ru')).toBe('Настройки')
   // Группы и полки каталога приходят с сайта по-русски — и в кнопках, и в заголовке, и внутри фраз
-  expect(['Книги', 'Игры', 'Шутеры', 'Arcade · Книги', 'Открыть Шутеры в окне'].map((s) => tr(s, 'en'))).toEqual(['Books', 'Games', 'Shooters', 'Arcade · Books', 'Open Shooters in a window'])
+  expect(['Книги', 'Игры', 'Шутеры', 'Аркады', 'Arcade · Книги', 'Открыть Шутеры в окне'].map((s) => tr(s, 'en'))).toEqual(['Books', 'Games', 'Shooters', 'Arcade games', 'Arcade · Books', 'Open Shooters in a window'])
   expect(tr('Arcade · Книги', 'de')).toBe('Arcade · Bücher')
+  expect([tr('Аркады', 'de'), tr('Arcade', 'de')]).toEqual(['Arcade-Spiele', 'Arcade']) // полка переводится, а название Arcade — нет
 })
 
 test('английский интерфейс: главное меню без русских букв, вопрос над вводом, переключатель, окно на том же языке', async ($, on) => {
@@ -2277,5 +2279,53 @@ test('дизайн главного меню: разделы «Играть» и
   expect(inside).toMatch(/игр/)
   expect(await ui.find({ type: 'Text', text: '●' })).toBeDefined()
   await ui.unmount()
+})
+
+test('Flappy Arcade в Desktop: игра прямо в панели, кадр картинкой, взлёт по кнопке, счёт под экраном', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'web', title: 'Браузерные', group: 'games' })
+  site.groups = [{ id: 'games', title: 'Игры' }]
+  site.shelves = [{ id: 'arcade', title: 'Аркады' }]
+  site.games.flappy = { console: 'web', kind: 'pane', engine: 'flappy', shelf: 'arcade', title: 'Flappy Arcade', genre: 'аркада', about: 'Птичка между трубами: трасса дня одна для всех.', keys: 'взмах — любая кнопка' }
+  const { clock } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-games' })
+  await ui.press({ key: 'arcade-menu-shelf-arcade' })
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются здесь, в панели.' })).toBeDefined() // не во встроенном браузере, как остальные игры в Desktop
+  await ui.press({ key: 'arcade-game-flappy' })
+  expect(await ui.find({ type: 'Svg' })).toMatchObject({ type: 'Svg', props: { alt: 'Flappy Arcade' } }) // кадр — картинкой, как у Денди
+  expect(await ui.find({ type: 'Text', text: 'Нажми любую кнопку — взлететь' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^взмах — любая кнопка: / })).toBeDefined()
+  await ui.post({ held: ['w'], counts: { w: 1 } })
+  await clock.advance(300)
+  expect(await ui.find({ type: 'Text', text: /^Счёт: \d+ · рекорд: \d+$/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Flappy Arcade: движок — падение без взмахов, трасса дня одинаковая', async () => {
+  const fly = () => {
+    const g = createFlappy(() => {}, { seed: 20261021 })
+    g.buttonDown(1, 0)
+    g.buttonUp(1, 0)
+    let n = 0
+    while (g.state === 'play' && n < 3000) {
+      g.frame()
+      if (g.birdY > 120 && n % 2 === 0) {
+        g.buttonDown(1, 0)
+        g.buttonUp(1, 0)
+      }
+      n++
+    }
+    return [g.state, g.score, n]
+  }
+  expect(fly()).toEqual(fly()) // один день — одна трасса, один и тот же исход
+  const idle = createFlappy(() => {}, { seed: 1 })
+  idle.buttonDown(1, 0)
+  for (let i = 0; i < 120; i++) idle.frame()
+  expect(idle.state).toBe('over')
+  expect(idle.score).toBe(0)
 })
 

@@ -5,6 +5,7 @@
   "A round starts as soon as someone joins. Meanwhile you can play Freedoom alone — use the “Library” button.": "누군가 참가하면 바로 라운드가 시작됩니다. 그동안 Freedoom을 혼자 플레이할 수 있습니다 — “라이브러리” 버튼을 누르세요.",
   "Against the computer": "컴퓨터와 대전",
   "All": "전체",
+  "Arcade games": "아케이드",
   "Arrows/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift": "방향키/WASD · A: X/K · B: Z/J · Start: Enter · Select: Shift",
   "As soon as someone joins, you start together. Invite a friend — they open the same game and press “Online”.": "누군가 참가하면 바로 함께 시작합니다. 친구를 초대하세요 — 친구가 같은 게임을 열고 “온라인”을 누르면 됩니다.",
   "Board games": "보드게임",
@@ -26,6 +27,7 @@
   "Doom needs a .wad file — or a .zip that contains one.": "Doom에는 .wad 파일이 필요합니다 — 또는 그 파일이 든 .zip.",
   "Draw": "무승부",
   "Find an opponent": "상대 찾기",
+  "Flappy Arcade — an original Arcade game": "Flappy Arcade — Arcade 오리지널 게임",
   "Game not found": "게임을 찾을 수 없습니다",
   "Games": "게임",
   "Go back to the library and pick a game.": "라이브러리로 돌아가 게임을 선택하세요.",
@@ -58,6 +60,7 @@
   "Paused": "일시정지",
   "Picking up where you left off — click or press any key": "중단한 곳부터 이어서 합니다 — 클릭하거나 아무 키나 누르세요",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation에는 디스크 이미지가 필요합니다: .chd, .pbp, .iso 또는 .cue와 .bin이 든 .zip.",
+  "Press Space, ↑ or click to take off": "스페이스, ↑ 또는 클릭으로 이륙",
   "Racing": "레이싱",
   "Remove from this browser": "이 브라우저에서 삭제",
   "Restart": "다시 시작",
@@ -115,6 +118,7 @@
   "fables": "우화",
   "fairy tales": "동화",
   "fighting": "격투",
+  "flap — Space, ↑, W or click": "날갯짓 — 스페이스, ↑, W 또는 클릭",
   "game": "대국",
   "horror": "공포",
   "less than a minute": "1분 미만",
@@ -184,7 +188,9 @@
   "This is not a {0} game: {1}": "{0} 게임이 아닙니다: {1}",
   "No free {0} games yet. {1}": "아직 무료 {0} 게임이 없습니다. {1}",
   "Open your own file {0} with the “Open your own file” button above.": "내 {0} 파일은 위의 “내 파일 열기” 버튼으로 여세요.",
-  "read {0}%": "{0}% 읽음"
+  "read {0}%": "{0}% 읽음",
+  "Score: {0} · best: {1}": "점수: {0} · 최고: {1}",
+  "Crash! Score: {0} · best: {1} — Space to try again": "충돌! 점수: {0} · 최고: {1} — 스페이스로 다시"
  },
  "words": [
   [

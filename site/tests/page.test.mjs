@@ -100,7 +100,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'book-format.js', 'reader.js'].includes(script.src)) {
+    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'book-format.js', 'reader.js', 'flappy.js'].includes(script.src)) {
       vm.runInContext(fs.readFileSync(path.join(DIST, script.src), 'utf8'), ctx, { filename: script.src })
       setTimeout(() => script.onload && script.onload(), 0)
     }
@@ -114,8 +114,9 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     const library = byId.library?.children?.length ?? 0
     const overlayShown = byId.overlay?.classList.contains('shown')
     const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
+    const flappy = page.appended.some((s) => s.src === 'flappy.js') // своя игра: движок подключён
     const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game' || n.id === 'reader-root') // настольные, браузерные, книги
-    return library > 0 || segaStarted || board || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
+    return library > 0 || segaStarted || board || flappy || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
   assert.ok(settled(), 'окно так и не загрузилось')
@@ -675,7 +676,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   // Вкладка «Игры»: полки; старый адрес ?tab=web открывает полку первой его игры — гонки
   const lib = await makePage(new Map(), { search: '?tab=web' })
   assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
-  assert.deepEqual(lib.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['Шутеры', 'Гонки', 'Стратегии', 'Настольные'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['Аркады', 'Шутеры', 'Гонки', 'Стратегии', 'Настольные'])
   assert.equal(lib.byId.library.querySelectorAll('.shelf').find((b) => /\bactive\b/.test(b.className)).textContent, 'Гонки')
   // «☕ Поддержать» в шапке — новой вкладкой, без лишних прав для открытой страницы
   const support = lib.byId.library.querySelectorAll('.support')[0]
@@ -684,8 +685,11 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(support.rel, 'noopener')
   const strategy = await makePage(new Map(), { search: '?tab=games&shelf=strategy' })
   assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd'])
-  const shooters = await makePage(new Map(), { search: '?tab=games' })
-  assert.deepEqual(shooters.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'], 'по умолчанию — первая полка, шутеры')
+  // по умолчанию — первая полка, аркады: Flappy Arcade
+  const arcade = await makePage(new Map(), { search: '?tab=games' })
+  assert.deepEqual(arcade.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['flappy'], 'по умолчанию — первая полка, аркады')
+  const shooters = await makePage(new Map(), { search: '?tab=games&shelf=shooters' })
+  assert.deepEqual(shooters.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'], 'полка шутеров')
   assert.equal(shooters.byId.library.querySelectorAll('.open-rom').length, 2, 'у шутеров — «Открыть свой файл» (WAD) и язык')
   // Переключение полки — свой адрес
   strategy.byId.library.querySelectorAll('.shelf').find((b) => b.dataset.shelf === 'board').click()
@@ -714,6 +718,13 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(ttdCalls, ['pause', 'suspend', 'resume', 'play'])
   assert.ok(!ttd.byId.overlay.classList.contains('shown'))
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
+}
+
+// --- Flappy Arcade: своя игра — движок flappy.js из мода, подсказка клавиш на языке окна ------------------------
+{
+  const fl = await makePage(new Map(), { search: '?game=flappy&lang=en' })
+  await until(() => fl.appended.some((s) => s.src === 'flappy.js'))
+  assert.equal(fl.byId.keys.textContent, 'flap — Space, ↑, W or click')
 }
 
 // --- Blasphemer: движок Heretic — одному без лобби, кооператив и BlasphDM в своих лобби ---------------------------

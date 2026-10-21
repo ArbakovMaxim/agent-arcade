@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "O agente está aguardando permissão — Esc para responder",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Parece que um método de entrada (japonês, chinês ou coreano) está ativado. Desative-o enquanto joga.",
   "Arcade asked Claude to open the link in the built-in browser.": "O Arcade pediu ao Claude para abrir o link no navegador integrado.",
+  "Arcade games": "Jogos de arcade",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "O Arcade interrompeu o Claude: ele vai abrir o jogo no navegador integrado e voltar ao trabalho.",
   "Arcade is open in Claude's built-in browser.": "O Arcade está aberto no navegador integrado do Claude.",
   "Arcade window": "Janela do Arcade",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pausado: o agente terminou. Qualquer tecla do jogo — continuar jogando, Esc — voltar ao agente",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pausado: o agente está aguardando permissão. Qualquer tecla do jogo — continuar jogando, Esc — voltar ao agente",
   "Play": "Jogar",
+  "Press any button to take off": "Pressione qualquer botão para decolar",
   "Racing": "Corrida",
   "Read": "Ler",
   "Reassign keys": "Reconfigurar teclas",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} está aberto no navegador integrado do Claude.",
   "Open in the built-in browser: {0}": "Abra no navegador integrado: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Peça ao Claude para abrir isto no navegador integrado: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Peça ao Claude para abrir isto no navegador integrado: {0}",
+  "Score: {0} · best: {1}": "Pontos: {0} · recorde: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Batida! Pontos: {0} · recorde: {1} — qualquer botão para tentar de novo",
+  "flap — any button: {0} or {1}": "bater asas — qualquer botão: {0} ou {1}"
  },
  "words": [
   [

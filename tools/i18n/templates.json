@@ -73,7 +73,10 @@
   "— {0} —",
   "{0} is open in Claude's built-in browser.",
   "Open in the built-in browser: {0}",
-  "Ask Claude to open this in the built-in browser: {0}"
+  "Ask Claude to open this in the built-in browser: {0}",
+  "Score: {0} · best: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again",
+  "flap — any button: {0} or {1}"
  ],
  "site": [
   "Played in total: {0}",
@@ -97,7 +100,9 @@
   "This is not a {0} game: {1}",
   "No free {0} games yet. {1}",
   "Open your own file {0} with the “Open your own file” button above.",
-  "read {0}%"
+  "read {0}%",
+  "Score: {0} · best: {1}",
+  "Crash! Score: {0} · best: {1} — Space to try again"
  ],
  "modExact": [
   "default browser window",

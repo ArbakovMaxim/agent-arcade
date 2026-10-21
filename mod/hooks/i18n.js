@@ -107,11 +107,13 @@ const EXACT = {
   'Этот терминал не показывает картинки — рисую символами. Как получить пиксели — в README.': 'This terminal does not show images, so the game is drawn with characters. How to get pixels — see the README.',
   'Открыть Arcade': 'Open Arcade',
   'Arcade · язык': 'Arcade · language',
+  'Нажми любую кнопку — взлететь': 'Press any button to take off',
   'Читать': 'Read',
   'Ещё': 'More',
   // Группы и полки каталога: названия приходят с сайта по-русски
   'Игры': 'Games',
   'Книги': 'Books',
+  'Аркады': 'Arcade games',
   'Шутеры': 'Shooters',
   'Гонки': 'Racing',
   'Стратегии': 'Strategy',
@@ -185,6 +187,10 @@ const RULES = [
   [/^Агент работает (.+) — сыграть\?$/, (m) => `Agent has been working for ${dur(m[1])} — play?`],
   [/^Присоединиться: (.+)$/, (m) => `Join: ${m[1]}`],
   [/^Язык: (.+)$/, (m) => `Language: ${m[1]}`],
+  // Flappy Arcade
+  [/^Удар! Счёт: (\d+) · рекорд: (\d+) — любая кнопка, ещё раз$/, (m) => `Crash! Score: ${m[1]} · best: ${m[2]} — any button to try again`],
+  [/^Счёт: (\d+) · рекорд: (\d+)$/, (m) => `Score: ${m[1]} · best: ${m[2]}`],
+  [/^взмах — любая кнопка: (.+) или (.+)$/, (m) => `flap — any button: ${m[1]} or ${m[2]}`],
   [/^— (.+) —$/, (m) => `— ${tr(m[1], 'en')} —`], // разделитель жанра на полке книг
   [/^Arcade · (.+)$/, (m) => `Arcade · ${tr(m[1], 'en')}`], // заголовок списка: «Arcade · Книги»
   [/^добровольно, на развитие Arcade — (.+)$/, (m) => `voluntary, for Arcade’s development — ${m[1]}`],

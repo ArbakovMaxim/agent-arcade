@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "El agente espera permiso — Esc para responder",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Parece que hay un método de entrada activado (japonés, chino o coreano). Desactívalo mientras juegas.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade pidió a Claude que abra el enlace en el navegador integrado.",
+  "Arcade games": "Juegos arcade",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade interrumpió a Claude: abrirá el juego en el navegador integrado y volverá al trabajo.",
   "Arcade is open in Claude's built-in browser.": "Arcade está abierto en el navegador integrado de Claude.",
   "Arcade window": "Ventana de Arcade",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pausa: el agente terminó. Cualquier tecla del juego — seguir jugando, Esc — volver al agente",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pausa: el agente espera permiso. Cualquier tecla del juego — seguir jugando, Esc — volver al agente",
   "Play": "Jugar",
+  "Press any button to take off": "Pulsa cualquier botón para despegar",
   "Racing": "Carreras",
   "Read": "Leer",
   "Reassign keys": "Reasignar teclas",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} está abierto en el navegador integrado de Claude.",
   "Open in the built-in browser: {0}": "Abre en el navegador integrado: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Pide a Claude que lo abra en el navegador integrado: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Pide a Claude que lo abra en el navegador integrado: {0}",
+  "Score: {0} · best: {1}": "Puntos: {0} · récord: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "¡Choque! Puntos: {0} · récord: {1} — cualquier botón para reintentar",
+  "flap — any button: {0} or {1}": "aletear — cualquier botón: {0} o {1}"
  },
  "words": [
   [

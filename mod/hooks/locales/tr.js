@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "Ajan izin bekliyor — yanıtlamak için Esc",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Bir giriş yöntemi (Japonca, Çince veya Korece) açık görünüyor. Oynarken kapat.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade, Claude’dan bağlantıyı yerleşik tarayıcıda açmasını istedi.",
+  "Arcade games": "Arcade oyunları",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade, Claude’u durdurdu: oyunu yerleşik tarayıcıda açıp işine geri dönecek.",
   "Arcade is open in Claude's built-in browser.": "Arcade, Claude'un yerleşik tarayıcısında açık.",
   "Arcade window": "Arcade penceresi",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Duraklatıldı: ajan bitirdi. Herhangi bir oyun tuşu — oynamaya devam et, Esc — ajana dön",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Duraklatıldı: ajan izin bekliyor. Herhangi bir oyun tuşu — oynamaya devam et, Esc — ajana dön",
   "Play": "Oyna",
+  "Press any button to take off": "Havalanmak için herhangi bir tuşa bas",
   "Racing": "Yarış",
   "Read": "Oku",
   "Reassign keys": "Tuşları yeniden ata",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0}, Claude'un yerleşik tarayıcısında açıldı.",
   "Open in the built-in browser: {0}": "Yerleşik tarayıcıda aç: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Claude'dan bunu yerleşik tarayıcıda açmasını iste: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Claude'dan bunu yerleşik tarayıcıda açmasını iste: {0}",
+  "Score: {0} · best: {1}": "Skor: {0} · rekor: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Çarptın! Skor: {0} · rekor: {1} — tekrar denemek için herhangi bir tuş",
+  "flap — any button: {0} or {1}": "kanat çırp — herhangi bir tuş: {0} veya {1}"
  },
  "words": [
   [

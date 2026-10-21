@@ -13,6 +13,7 @@ export default {
   "Agent is waiting for permission — Esc to answer": "L’agente attende il permesso — Esc per rispondere",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Sembra attivo un metodo di input (giapponese, cinese o coreano). Disattivalo mentre giochi.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade ha chiesto a Claude di aprire il link nel browser integrato.",
+  "Arcade games": "Giochi arcade",
   "Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.": "Arcade ha interrotto Claude: aprirà il gioco nel browser integrato e tornerà al lavoro.",
   "Arcade is open in Claude's built-in browser.": "Arcade è aperto nel browser integrato di Claude.",
   "Arcade window": "Finestra di Arcade",
@@ -61,6 +62,7 @@ export default {
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "In pausa: l’agente ha finito. Qualsiasi tasto del gioco — continua a giocare, Esc — torna all’agente",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "In pausa: l’agente attende il permesso. Qualsiasi tasto del gioco — continua a giocare, Esc — torna all’agente",
   "Play": "Gioca",
+  "Press any button to take off": "Premi un tasto qualsiasi per decollare",
   "Racing": "Corse",
   "Read": "Leggi",
   "Reassign keys": "Riassegna i tasti",
@@ -232,7 +234,10 @@ export default {
   "— {0} —": "— {0} —",
   "{0} is open in Claude's built-in browser.": "{0} è aperto nel browser integrato di Claude.",
   "Open in the built-in browser: {0}": "Apri nel browser integrato: {0}",
-  "Ask Claude to open this in the built-in browser: {0}": "Chiedi a Claude di aprirlo nel browser integrato: {0}"
+  "Ask Claude to open this in the built-in browser: {0}": "Chiedi a Claude di aprirlo nel browser integrato: {0}",
+  "Score: {0} · best: {1}": "Punti: {0} · record: {1}",
+  "Crash! Score: {0} · best: {1} — any button to try again": "Schianto! Punti: {0} · record: {1} — un tasto qualsiasi per riprovare",
+  "flap — any button: {0} or {1}": "battito d’ali — un tasto qualsiasi: {0} o {1}"
  },
  "words": [
   [
