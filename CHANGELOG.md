@@ -3,6 +3,7 @@
 ## 0.11.1 — жанры книг: в моде — плитками на полке языка, в окне — рядом под полками; у полок «Книг» — «книг», а не «игр» · book genres as tiles in the panel and a genre row in the window
 
 - The panel now translates “Books”, “Games” and the shelf names · в панели переведены «Книги», «Игры» и названия полок
+- Checked live on macOS and Linux · проверено вживую на macOS и Linux
 
 ## 0.11.0 — книги на полках-языках, внутри — по жанрам; новый вид главного меню мода: разделы «Играть», «Читать», «Ещё», плитки, цветной значок агента, логотип в Desktop · books on language shelves by genre; a new main menu: sections, tiles, a coloured agent badge, the logo in Desktop
 

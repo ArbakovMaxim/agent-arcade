@@ -122,8 +122,7 @@ claude plugin install arcade@agent-arcade
 
 Arcade — в **альфа-версии** и активно развивается; что нового — в [списке изменений](CHANGELOG.md).
 
-- **Windows** — каждый день в работе и проверяется вживую.
-- **macOS и Linux** — поддерживаются и покрыты тестами, но вживую ещё не проверены. Если ты на одной из них, твой отзыв особенно ценен.
+- Checked live on Windows, macOS and Linux · проверено вживую на Windows, macOS и Linux
 
 ## Лицензии
 
