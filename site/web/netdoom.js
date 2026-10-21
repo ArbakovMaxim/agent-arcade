@@ -68,6 +68,9 @@
     document.title = `${game.title} · Arcade`
     // Сетевой движок — классический Doom: у кооператива свои клавиши, не PrBoom из одиночной игры
     document.getElementById('keys').textContent = T(coop && !game.engine ? NET_KEYS : game.keys)
+    // Экран Денди в области игры не нужен: рядом с холстом движка он сдвигал бы его вбок
+    const screen = document.getElementById('screen')
+    if (screen) screen.style.display = 'none'
     // Одному (Blasphemer): без лобби — сразу игра; «По сети» — кооператив
     if (mode === 'solo') {
       const netLink = document.getElementById('net')
@@ -88,8 +91,6 @@
       const node = document.getElementById(el)
       if (node) node.style.display = 'none'
     }
-    const screen = document.getElementById('screen')
-    if (screen) screen.style.display = 'none'
 
     overlay(T(coop ? 'Кооператив' : 'Сетевой deathmatch'), T('Подключаюсь к лобби…'))
     // Лобби: у FreeDM общее, у кооператива — своё для каждой игры
@@ -175,6 +176,8 @@
     canvas.tabIndex = -1
     canvas.style.width = '100%'
     canvas.style.height = '100%'
+    canvas.style.objectFit = 'contain' // картинка 4:3 — целиком и без растяжения, по бокам или сверху и снизу чёрные поля
+    canvas.style.background = '#000'
     stage.appendChild(canvas)
     const url = room ? wsUrl(`/net/doom/${room}`) : null
     window.Module = {
@@ -196,6 +199,7 @@
         const main = window.Module.callMain || window.callMain // в сборках Emscripten бывает и так, и так
         main(doomArgs(wad, url, isHost, mode))
         canvas.focus()
+        quietWhenAway(canvas, mode === 'solo')
         // Движок ставит вкладке своё название («Websockets Doom») — возвращаем наше
         // Движок ставит своё название не сразу, а при загрузке уровня — возвращаем наше первую минуту
         const ours = `${game.title} · Arcade`
@@ -216,14 +220,73 @@
     document.body.appendChild(script)
   }
 
+  // Окно не в фокусе — во встроенном браузере Claude «крестик» только прячет панель, и страница теряет фокус.
+  // Одному (Blasphemer) — пауза, как у Денди: клавиша Pause самого движка и приостановленный AudioContext. Главный цикл
+  // Emscripten не трогаем: движок ждёт через Asyncify и сам останавливает и запускает этот цикл — чужая пауза его вешает.
+  // Сетевую игру не останавливаем — пауза у одного остановила бы матч у всех: она идёт дальше без звука,
+  // звук возвращается вместе с фокусом
+  function quietWhenAway(canvas, solo) {
+    let thaw = null // чем вернуть игру, когда человек вернулся
+    function away() {
+      if (thaw) return
+      if (solo) {
+        press(canvas, 'Pause', 'Pause', 19)
+        overlay(T('Пауза'), T('Кликни или нажми любую клавишу, чтобы продолжить'))
+      }
+      let audio = null
+      thaw = () => {
+        if (audio) audio.resume()
+        if (solo) press(canvas, 'Pause', 'Pause', 19) // та же клавиша снимает паузу
+      }
+      // Звук движок открывает не сразу: игру открыли в фоне — глушим его, как только появится
+      const hush = () => {
+        if (!thaw) return
+        const sdl = window.Module.SDL2
+        audio = sdl && sdl.audioContext
+        if (audio) audio.suspend()
+        else setTimeout(hush, 500)
+      }
+      hush()
+    }
+    function back() {
+      if (!thaw) return
+      document.getElementById('overlay').classList.remove('shown')
+      const go = thaw
+      thaw = null
+      go()
+      canvas.focus()
+    }
+    window.addEventListener('blur', away)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) away()
+    })
+    if (solo) {
+      document.getElementById('overlay').addEventListener('click', back)
+      // Клавиша только продолжает игру и в движок не попадает: Esc открыл бы меню
+      window.addEventListener(
+        'keydown',
+        (e) => {
+          if (!thaw || e.ctrlKey || e.metaKey || e.altKey) return
+          e.preventDefault()
+          e.stopPropagation()
+          if (!e.repeat) back()
+        },
+        true
+      )
+    } else window.addEventListener('focus', back)
+    // Игра запустилась, а окно уже не в фокусе (открыли в фоне, пока работал Claude)
+    if (!document.hasFocus()) away()
+  }
+
   // Как в странице Cloudflare: обычное событие с keyCode — у KeyboardEvent это поле только для чтения, и SDL получил бы 0
-  function pressSpace(canvas) {
+  function press(canvas, key, code, keyCode) {
     for (const type of ['keydown', 'keyup']) {
       const e = new Event(type, { bubbles: true })
-      Object.assign(e, { key: ' ', code: 'Space', keyCode: 32, which: 32 })
+      Object.assign(e, { key, code, keyCode, which: keyCode })
       canvas.dispatchEvent(e)
     }
   }
+  const pressSpace = (canvas) => press(canvas, ' ', 'Space', 32)
 
-  window.ArcadeNetDoom = { start, leaderOf, doomArgs, wadFrom }
+  window.ArcadeNetDoom = { start, leaderOf, doomArgs, wadFrom, quietWhenAway }
 })()

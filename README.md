@@ -17,7 +17,7 @@ Every game in the catalog is free and openly licensed. You can also play online 
 - **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt; it never steals focus unless you ask it to.
 - **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings).
 - **54 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with shooters, racing, strategy and board games.
-- **NES right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window.
+- **NES right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
 - **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
 - **Your own games.** Add ROMs you own; they stay on your machine.
@@ -65,7 +65,7 @@ The plugin is installed for all sessions and apps. The VS Code extension has no 
 |---|---|---|
 | **Terminal** | in the panel (pixel graphics where the terminal supports them, otherwise text blocks) | browser window |
 | **VS Code** | in the panel | browser window |
-| **Claude Desktop** | in the panel | browser window |
+| **Claude Desktop** | in the panel | Claude's built-in browser, or a browser window (pick in settings); shooters — always a browser window |
 
 The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing.
 
@@ -104,7 +104,7 @@ Only add files you have the rights to.
 Open **Settings** in the `/arcade` menu:
 
 - **Language** — one of 13 (also right in the main menu: 🌐).
-- **Open games** — here in the panel, in a browser window, or in a specific browser.
+- **Open games** — here in the panel, in a browser window, or in a specific browser; in Claude Desktop — in Claude's built-in browser or in a browser window.
 - **Panel size** — normal or full width.
 - **When the agent finishes** — banner and keep playing, pause with a banner, or straight back to the agent.
 - **When the agent asks for permission** — the same three options.

@@ -64,7 +64,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   const byId = {}
   const ctx = {
     location: { get search() { return search }, set search(v) { page.navigated = v }, get hash() { return hash }, set hash(v) { page.navigated = `#${v}` }, reload() { page.reloaded = true } },
-    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, TextDecoder, btoa, atob, DecompressionStream, Response,
+    URLSearchParams, console, crypto: webcrypto, URL, Blob, File, TextEncoder, TextDecoder, btoa, atob, DecompressionStream, Response, Event,
     // Таймеры страницы не держат тест: отсчёт раунда и возврат в лобби — минуты
     setTimeout: (fn, ms) => { const h = setTimeout(fn, ms); h.unref?.(); return h },
     setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref?.(); return h },
@@ -240,6 +240,38 @@ assert.match(unknown.byId['overlay-title'].textContent, /не найдена/)
   assert.equal(sega.byId.screen.style.display, 'none', 'экран Денди спрятан')
   assert.ok(sega.byId.stage.children.some((c) => c.id === 'sega-player'), 'эмулятор — внутри области игры, а не поверх полосы')
   for (const id of ['sound', 'restart', 'best']) assert.equal(sega.byId[id].style.display, 'none', `${id}: кнопка Денди спрятана`)
+  // Окно потеряло фокус (так прячется встроенный браузер Claude) — эмулятор на паузе, его звук приостановлен
+  const calls = []
+  const audioCtx = { suspend() { calls.push('suspend') }, resume() { calls.push('resume') } }
+  sega.ctx.EJS_emulator = {
+    started: true, paused: false, Module: { AL: { currentCtx: { audioCtx } } },
+    pause() { this.paused = true; calls.push('pause') },
+    play() { this.paused = false; calls.push('play') },
+  }
+  sega.fire('blur')
+  sega.fire('blur')
+  assert.deepEqual(calls, ['pause', 'suspend'])
+  assert.equal(sega.byId['overlay-title'].textContent, 'Пауза')
+  assert.ok(sega.byId.overlay.classList.contains('shown'))
+  sega.fire('keydown', { code: 'KeyX' })
+  assert.deepEqual(calls, ['pause', 'suspend', 'resume', 'play'])
+  assert.ok(!sega.byId.overlay.classList.contains('shown'))
+  sega.fire('keydown', { code: 'KeyX' }) // игра идёт — клавиши её
+  // Пауза с панели эмулятора — не наша: потеря фокуса её не трогает
+  sega.ctx.EJS_emulator.paused = true
+  sega.fire('blur')
+  assert.equal(calls.length, 4)
+  sega.ctx.EJS_emulator.paused = false
+  // Игра запустилась, когда окно уже не в фокусе, — сразу на паузу; клик по заставке продолжает
+  sega.ctx.document.hasFocus = () => false
+  sega.ctx.EJS_onGameStart()
+  assert.equal(calls.at(-1), 'suspend')
+  sega.byId.overlay.click()
+  assert.equal(calls.at(-1), 'play')
+  // Сетевую игру не останавливаем: пауза у одного остановила бы партию у всех
+  sega.ctx.EJS_emulator.isNetplay = true
+  sega.fire('blur')
+  assert.equal(calls.at(-1), 'play')
   // Подменённый файл Sega до эмулятора не доходит
   const rom = catalog.games.miniplanets.rom.url
   const bad = await makePage(new Map(), { search: '?game=miniplanets', net: { override: { [rom]: (b) => Buffer.concat([b.subarray(0, 300), Buffer.from([1]), b.subarray(301)]) } } })
@@ -424,6 +456,37 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   late.sockets[0].emit('message', JSON.stringify({ type: 'welcome', id: 'z9', peers: ['a1', 'b2'] }))
   late.sockets[0].emit('message', JSON.stringify({ type: 'round', room: 'dm-x', host: 'a1', players: ['a1', 'b2', 'c3', 'd4'] }))
   assert.equal(late.byId['overlay-title'].textContent, 'Идёт раунд')
+  // Окно потеряло фокус посреди матча — игра идёт дальше (пауза остановила бы её у всех), но без звука до возвращения
+  const calls = []
+  other.ctx.Module = {
+    SDL2: { audioContext: { suspend() { calls.push('suspend') }, resume() { calls.push('resume') } } },
+    pauseMainLoop: () => calls.push('pause'),
+  }
+  other.ctx.document.hasFocus = () => true
+  other.ctx.ArcadeNetDoom.quietWhenAway(other.ctx.document.createElement('canvas'), false)
+  other.fire('blur')
+  other.fire('blur')
+  assert.deepEqual(calls, ['suspend'])
+  assert.equal(other.byId['overlay-title'].textContent, 'Раунд начинается', 'без заставки «Пауза»')
+  other.fire('focus')
+  assert.deepEqual(calls, ['suspend', 'resume'])
+}
+
+// --- Браузер не дал захватить мышь (встроенный браузер Claude): один раз — заметка, как играть -----------------------
+{
+  const page = await makePage(new Map(), { search: '?game=blasphemer' })
+  const note = page.byId['mouse-note']
+  assert.ok(!note.classList.contains('shown'))
+  page.fire('doc:pointerlockerror')
+  assert.ok(note.classList.contains('shown'))
+  assert.match(note.textContent, /не даёт игре захватить мышь — поворачивай стрелками/)
+  note.click()
+  assert.ok(!note.classList.contains('shown'), 'клик убирает заметку')
+  page.fire('doc:pointerlockerror') // движок просит мышь на каждый клик — заметка не возвращается
+  assert.ok(!note.classList.contains('shown'))
+  const en = await makePage(new Map(), { search: '?game=blasphemer', language: 'en-US' })
+  en.fire('doc:pointerlockerror')
+  assert.match(en.byId['mouse-note'].textContent, /^This browser doesn't let the game capture the mouse/)
 }
 
 // --- Сетевая игра EmulatorJS: наш сервер вместо netplay.emulatorjs.org, прослойка вместо socket.io ------------------
@@ -576,6 +639,39 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(frame.src, 'web-games/hexgl/')
   assert.match(page.byId.keys.textContent, /воздушные тормоза — A и D/)
   assert.match(page.byId.license.href, /licenses\/hexgl\/LICENSE$/)
+  // Окно потеряло фокус (так прячется встроенный браузер Claude) — гонка в рамке на паузе, её звук приостановлен
+  const pause = () => new Promise((r) => setTimeout(r, 20)) // проверка фокуса — после того, как он перешёл
+  const hexCalls = []
+  const frames = []
+  const time = { start: 1000, previous: 5000 }
+  const hex = { active: true, gameplay: { timer: { time } }, manager: { time: 0 }, update() { hexCalls.push('update') } }
+  frame.contentWindow = {
+    hexGL: hex, bkcore: { Audio: { _ctx: { suspend() { hexCalls.push('suspend') }, resume() { hexCalls.push('resume') } } } },
+    perfNow: () => 42, requestAnimationFrame: (f) => frames.push(f), listeners: {},
+    addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
+  }
+  page.ctx.document.hasFocus = () => true // фокус ушёл внутрь рамки — это игра, не пауза
+  for (const f of frame.listeners.load) f()
+  frame.contentWindow.listeners.blur[0]()
+  await pause()
+  assert.equal(hex.active, true)
+  page.ctx.document.hasFocus = () => false
+  page.fire('blur')
+  await pause()
+  assert.equal(hex.active, false)
+  assert.deepEqual(hexCalls, ['suspend'])
+  assert.equal(page.byId['overlay-title'].textContent, 'Пауза')
+  assert.ok(page.byId.overlay.classList.contains('shown'))
+  // Клавиша в рамке продолжает гонку и в игру не попадает (Esc начал бы её заново); пауза не попадает во время круга
+  let stopped = false
+  frame.contentWindow.listeners.keydown[0]({ preventDefault() {}, stopPropagation() { stopped = true } })
+  assert.ok(stopped)
+  assert.equal(hex.active, true)
+  assert.deepEqual(hexCalls, ['suspend', 'resume', 'update'])
+  assert.equal(frames.length, 1, 'цикл кадров снова идёт')
+  assert.ok(time.start > 1000 && time.start - 1000 === time.previous - 5000)
+  assert.equal(hex.manager.time, 42)
+  assert.ok(!page.byId.overlay.classList.contains('shown'))
   // Вкладка «Игры»: полки; старый адрес ?tab=web открывает полку первой его игры — гонки
   const lib = await makePage(new Map(), { search: '?tab=web' })
   assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
@@ -596,7 +692,27 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi'])
   const ttd = await makePage(new Map(), { search: '?game=openttd' })
   await until(() => ttd.byId.stage.children.some((n) => n.id === 'web-game'))
-  assert.equal(ttd.byId.stage.children.find((n) => n.id === 'web-game').src, 'web-games/openttd/openttd', 'без .html — сразу конечный адрес')
+  const ttdFrame = ttd.byId.stage.children.find((n) => n.id === 'web-game')
+  assert.equal(ttdFrame.src, 'web-games/openttd/openttd', 'без .html — сразу конечный адрес')
+  // OpenTTD (Emscripten) открыли в фоне: пока он грузит данные, останавливать нечего; запустился — на паузе главный
+  // цикл и звук SDL; клик по заставке — продолжить
+  const ttdCalls = []
+  const ttdModule = {
+    calledRun: false, SDL2: { audioContext: { suspend() { ttdCalls.push('suspend') }, resume() { ttdCalls.push('resume') } } },
+    pauseMainLoop: () => ttdCalls.push('pause'), resumeMainLoop: () => ttdCalls.push('play'),
+  }
+  ttdFrame.contentWindow = { Module: ttdModule, addEventListener() {} }
+  ttd.ctx.document.hasFocus = () => false
+  for (const f of ttdFrame.listeners.load) f()
+  await pause()
+  assert.deepEqual(ttdCalls, [])
+  ttdModule.calledRun = true
+  for (let i = 0; i < 100 && !ttdCalls.length; i++) await pause() // следующая проверка — через секунду
+  assert.deepEqual(ttdCalls, ['pause', 'suspend'])
+  assert.equal(ttd.byId['overlay-title'].textContent, 'Пауза')
+  ttd.byId.overlay.click()
+  assert.deepEqual(ttdCalls, ['pause', 'suspend', 'resume', 'play'])
+  assert.ok(!ttd.byId.overlay.classList.contains('shown'))
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
 }
 
@@ -607,10 +723,34 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(solo.sockets.length, 0, 'одному — без лобби')
   assert.equal(solo.ctx.Module.locateFile('websockets-heretic.wasm'), 'heretic-wasm/websockets-heretic.wasm')
   assert.equal(solo.byId.net.href, '?game=blasphemer&net=coop')
+  // Холст движка — на всю область игры: экран Денди спрятан и не сдвигает его вбок, картинка 4:3 без растяжения
+  assert.equal(solo.byId.screen.style.display, 'none')
+  assert.equal(solo.ctx.Module.canvas.style.objectFit, 'contain')
   assert.match(solo.byId.keys.textContent, /предметы — \[ \] и Enter/)
   const args = Array.from(vm.runInContext("ArcadeNetDoom.doomArgs('heretic.wad', null, false, 'solo')", solo.ctx))
   assert.deepEqual(args.slice(0, 2), ['-iwad', 'heretic.wad'])
   for (const a of ['-server', '-connect', '-wss', '-nodes']) assert.ok(!args.includes(a), `одному — без ${a}`)
+  // Игру открыли в фоне, пока работал Claude: одному — пауза клавишей Pause самого движка (главный цикл Emscripten
+  // не трогаем — им управляет Asyncify движка), звук стоит
+  const calls = []
+  Object.assign(solo.ctx.Module, { callMain: () => calls.push('main'), SDL2: {} })
+  solo.ctx.Module.canvas.dispatchEvent = (e) => calls.push(`${e.type} ${e.keyCode}`)
+  solo.ctx.document.hasFocus = () => false
+  solo.ctx.Module.onRuntimeInitialized()
+  assert.deepEqual(calls, ['main', 'keydown 19', 'keyup 19'])
+  assert.equal(solo.byId['overlay-title'].textContent, 'Пауза')
+  // Звук движок открывает позже — его глушат, как только он появился
+  solo.ctx.Module.SDL2.audioContext = { suspend() { calls.push('suspend') }, resume() { calls.push('resume') } }
+  await until(() => calls.includes('suspend'))
+  // Клавиша продолжает игру и в движок не попадает
+  let stopped = false
+  solo.fire('keydown', { code: 'Escape', stopPropagation() { stopped = true } })
+  assert.ok(stopped)
+  assert.deepEqual(calls.slice(4), ['resume', 'keydown 19', 'keyup 19'])
+  assert.ok(!solo.byId.overlay.classList.contains('shown'))
+  solo.fire('blur')
+  solo.fire('blur')
+  assert.deepEqual(calls.slice(7), ['keydown 19', 'keyup 19', 'suspend'])
   const coop = await makePage(new Map(), { search: '?game=blasphemer&net=coop' })
   await until(() => coop.sockets.length > 0)
   assert.match(coop.sockets[0].url, /\/net\/room\/coop-blasphemer$/)

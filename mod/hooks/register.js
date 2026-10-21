@@ -2,7 +2,7 @@
 // Правило мода: каждый обработчик событий Claude Code только наблюдает и всегда возвращает next(e).
 // Требования проверки модов: обработчик в on(...) — сама функция, а $ всегда пишется как $.ui.open(...) и т. п.
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
-import { bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
+import { SITE, bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { LANGS, LANG_NAMES, detectLang, tr, translateTree } from './i18n.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
@@ -35,6 +35,7 @@ const PLAYER_COLOR = 0x2e7d32
 
 const NOTIFY_WINDOW_MS = 30 * 60_000 // уведомлять, если окно игры открывали за последние полчаса
 const LAUNCH_TIMEOUT_MS = 20_000 // сколько ждать PowerShell, который ищет браузеры или открывает окно
+const CUT_TOOL_MS = 10_000 // сколько ждать конца инструмента агента, прежде чем оборвать его ради игры (Desktop)
 
 const ROM_CACHE_LIMIT = 8 // сколько скачанных игр держать в хранилище мода (у него предел 4 МиБ на всё)
 const REMOTE_MAX_WIDTH = 768 // в Desktop и VS Code экран Денди не шире ×3
@@ -121,7 +122,13 @@ let profileRoot = '' // папка для отдельного профиля б
 let detection = null // что нашёл поиск браузеров: { browsers, defaultId, screen }; null — ещё ищем
 let opener = null // где открывать игры: 'window' или 'pane'; null — по умолчанию (на Windows — окно)
 let browserChoice = 'default' // каким браузером: 'default' или id найденного
+let desktopOpener = 'builtin' // в Desktop: 'builtin' — встроенный браузер приложения, 'window' — окно браузера, как в терминале
 let libraryNotice = '' // что случилось при последнем запуске окна
+let opening = false // игру во встроенном браузере Desktop по просьбе Arcade открывает Claude
+let agentTurn = null // ход агента (главного цикла), который идёт сейчас: его id для $.turn.abort
+let toolsRunning = 0 // сколько инструментов агента работает сейчас
+let pendingOpen = null // адрес игры, которую откроем, когда закончится текущий инструмент агента
+let interrupting = false // ход оборвал Arcade: его конец — не «агент закончил»
 let catalog = bundledCatalog() // каталог: с сайта, из сохранённой копии или запас из самого мода
 let platform = null // windows | mac | linux; null — пока не знаем, окно браузера не предлагаем
 let remoteSurface = null // панель с игрой нарисована в Desktop или VS Code — кадры идут перерисовкой, а не blit
@@ -531,12 +538,25 @@ function windowMode() {
 }
 
 // Открывать ли игру окном браузера на этой поверхности. В терминале — по выбору в настройках (по умолчанию да).
-// В VS Code по умолчанию игра в панели, окно — только если его выбрали явно. В Desktop мод не запускает программы.
+// В VS Code по умолчанию игра в панели, окно — только если его выбрали явно. В Desktop Денди всегда в панели,
+// остальное — по своей настройке (builtinBrowser).
 function opensWindow(surface) {
   if (!windowMode()) return false
   if (surface === 'terminal') return true
   return surface === 'vscode' && opener === 'window'
 }
+
+// Desktop: игра не Денди открывается во встроенном браузере приложения (desktopWindow) — по умолчанию — или окном
+// браузера, как в терминале, если так выбрано в настройках. Окно — только когда ОС уже определена. Шутерам (mouse)
+// нужна захваченная мышь, а встроенный браузер её не отдаёт — они идут окном и при выбранном встроенном браузере
+function builtinBrowser(surface, mouse = false) {
+  return surface === 'desktop' && (!platform || (desktopOpener === 'builtin' && !mouse))
+}
+
+function mouseGame(id) {
+  return gameById(id)?.console === 'doom'
+}
+const MOUSE_NOTE = 'Встроенный браузер Claude не даёт игре захватить мышь, поэтому шутеры открываются окном браузера.'
 
 function webGame(id) {
   return gameById(id)?.web === true
@@ -591,6 +611,215 @@ function launchNotice(result, id) {
   return `Не получилось открыть окно: ${reason}`
 }
 
+// В Desktop окно — встроенный браузер приложения, его MCP-сервер. Его инструменты Arcade зовёт тем же путём, что
+// и Claude ($.tool.call, через проверку разрешений), и свои вызовы разрешает сам — хук tool.check в register:
+// прямой $.mcp.call авто-режим не пропускал, просил ведь не человек. В авто-режиме не выходит и так: вызовы мода
+// классификатор не судит, а разрешение мода движок там не слушает (как и субагента мода) — тогда игру открывает Claude
+// по просьбе Arcade: его вызовы классификатор оценит. Просьба мода ждёт, пока Claude освободится, поэтому работающего
+// агента Arcade прерывает: дожидается конца текущего инструмента (не дольше CUT_TOOL_MS — потом обрывает и его, и
+// просит Claude проверить, что тот успел), обрывает ход ($.turn.abort) и сразу просит открыть игру и вернуться к
+// работе. Не прервался — просьба ждёт конца хода. Не приняли просьбу или браузер ответил ошибкой —
+// кладём её в поле ввода, и по Enter её выполнит Claude. Черновик в поле не стираем: просьба встаёт после него. Поле
+// может и не взять текст: под вопросом Claude Code — 'dialog'; где поле рисует само приложение — 'manual', просьбу
+// человек отправит сам. Игру открыл Claude — панель Arcade закрываем, как и после своего открытия.
+const BROWSER = 'mcp__Claude_Browser__'
+// Боковые панели приложения: скрытую панель браузера показывает он
+const SHOW_PANE = 'mcp__ccd_view__show_pane'
+// Инструменты приложения, которые Arcade зовёт сам
+const DESKTOP_TOOLS = [`${BROWSER}tabs_context`, `${BROWSER}navigate`, `${BROWSER}tabs_select`, `${BROWSER}preview_start`, SHOW_PANE]
+
+// Вызов, который Arcade разрешает себе без вопроса: вкладки браузера, адрес только на сайте Arcade, панель браузера
+export function ownDesktopCall(tool, input) {
+  if (tool === `${BROWSER}tabs_context` || tool === `${BROWSER}tabs_select`) return true
+  if (tool === `${BROWSER}navigate` || tool === `${BROWSER}preview_start`) return typeof input?.url === 'string' && input.url.startsWith(`${SITE}/`)
+  return tool === SHOW_PANE && input?.pane === 'preview'
+}
+
+// Вызов инструмента приложения. Отказ — исключение с пометкой denied, неизвестный инструмент — исключение без неё.
+// consent — что нажал человек: если решать всё же будет классификатор авто-режима, он прочтёт это как просьбу человека
+async function desktopCall($, tool, args, consent) {
+  const result = await $.tool.call({ tool, ...args, consent })
+  if (result?.deny) throw Object.assign(new Error(result.deny), { denied: true })
+  return result
+}
+
+// Ответ инструмента одной строкой — для журнала
+function toolText(result) {
+  return result?.text ?? (typeof result?.result === 'string' ? result.result : '')
+}
+
+// Вкладки встроенного браузера: tabs_context отвечает JSON-ом, а за ним строкой — виден ли браузер
+async function browserTabs($, consent) {
+  const text = toolText(await desktopCall($, `${BROWSER}tabs_context`, {}, consent))
+  try {
+    return JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)).tabs ?? []
+  } catch {
+    return []
+  }
+}
+
+// Вкладка Arcade, если она уже открыта: активная, иначе последняя
+async function arcadeTab($, consent) {
+  const ours = (await browserTabs($, consent)).filter((t) => t.origin === SITE)
+  return ours.find((t) => t.isActive) ?? ours.pop() ?? null
+}
+
+// Адрес — во вкладку Arcade, если она уже открыта: новая вкладка на каждое нажатие упирается в предел вкладок
+// браузера, а прошлые игры так и играют в фоне. Своей вкладки нет — открываем новую
+async function browse($, url, tab, consent) {
+  if (tab) {
+    const result = await desktopCall($, `${BROWSER}navigate`, { url, tabId: tab.tabId }, consent)
+    if (!result?.isError) {
+      await desktopCall($, `${BROWSER}tabs_select`, { tabId: tab.tabId }, consent)
+      return result
+    }
+  }
+  return desktopCall($, `${BROWSER}preview_start`, { url }, consent)
+}
+
+// Скрытая панель браузера сама не появляется — показываем. Не вышло — игра всё равно открыта, пишем в журнал
+async function showBrowser($, consent) {
+  try {
+    const result = await desktopCall($, SHOW_PANE, { pane: 'preview' }, consent)
+    if (result?.isError) log(`панель браузера не показалась: ${toolText(result).slice(0, 200)}`)
+  } catch (err) {
+    log(`панель браузера не показалась: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+}
+
+// Нажатие человека для вызовов инструментов приложения: если решать будет классификатор авто-режима, он прочтёт его
+// как просьбу человека
+function desktopConsent(url) {
+  return `The user pressed a button in the Arcade pane to open ${url} in the built-in browser.`
+}
+
+async function openDesktopBrowser($, id) {
+  const url = windowUrl(id)
+  const consent = desktopConsent(url)
+  let denied = false
+  try {
+    const result = await browse($, url, await arcadeTab($, consent), consent)
+    if (!result?.isError) {
+      await showBrowser($, consent)
+      return 'opened'
+    }
+    log(`встроенный браузер ответил ошибкой: ${toolText(result).slice(0, 200)}`)
+  } catch (err) {
+    denied = err?.denied === true
+    log(`встроенный браузер не открылся: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  // Отказ в разрешении — просим Claude; работает он — сначала прерываем, иначе просьба ждёт конца его хода
+  if (denied && agentTurn) {
+    // Идёт инструмент или Claude Code спрашивает разрешение (прерванный ход унёс бы и вопрос) — ждём
+    if (toolsRunning > 0 || status === 'permission') {
+      pendingOpen = url // прервём, когда закончится текущий инструмент: хук tool.call в register
+      $.clock.after(CUT_TOOL_MS, () => cutPending($, url).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
+      return 'waiting'
+    }
+    return interruptAgent($, url)
+  }
+  return askClaude($, url, denied)
+}
+
+// Прервать ход агента и сразу попросить открыть игру и вернуться к работе; cut — оборван и идущий инструмент.
+// Не прервался — просьба ждёт конца хода
+async function interruptAgent($, url, cut) {
+  pendingOpen = null
+  const turnId = agentTurn
+  if (!turnId) return askClaude($, url, true)
+  interrupting = true
+  try {
+    await $.turn.abort({ turnId })
+  } catch (err) {
+    interrupting = false
+    log(`ход агента не прервался: ${String(err?.message ?? err).slice(0, 200)}`)
+    return askClaude($, url, true)
+  }
+  log(cut ? 'Arcade оборвал инструмент и ход агента' : 'Arcade прервал ход агента')
+  // Об оборванном инструменте Claude больше никто не скажет: маркера прерывания нет
+  const then = [
+    tr('Потом вернись к работе, которую делал до этого.', lang),
+    cut ? tr('Твой последний инструмент оборван на полпути: проверь, что он успел сделать, прежде чем продолжать.', lang) : null,
+  ]
+  const outcome = await askClaude($, url, true, then.filter(Boolean).join('\n'))
+  return outcome === 'sent' ? 'interrupted' : outcome
+}
+
+// Инструмент агента идёт дольше CUT_TOOL_MS, а игра всё ждёт — обрываем и его. Пока Claude Code спрашивает
+// разрешение, не обрываем: ход унёс бы и вопрос
+async function cutPending($, url) {
+  if (pendingOpen !== url || toolsRunning === 0 || status === 'permission' || !agentTurn) return
+  pendingOpen = null
+  desktopNotice($, await interruptAgent($, url, true), '', url)
+}
+
+// Текущий инструмент агента закончился, а игра ждёт — прерываем ход. Ход уже кончился сам — просьба уходит как обычно
+async function openPending($) {
+  if (!pendingOpen || toolsRunning > 0) return
+  const url = pendingOpen
+  pendingOpen = null
+  desktopNotice($, agentTurn ? await interruptAgent($, url) : await askClaude($, url, true), '', url)
+}
+
+// Просьба открыть адрес — Claude: сразу (submit) или в поле ввода; then — что сделать после. Откроет — панель закроет
+// хук tool.call в register
+async function askClaude($, url, submit, then) {
+  const ask = [tr(`Открой во встроенном браузере: ${url}`, lang), then].filter(Boolean).join('\n')
+  opening = true
+  if (submit) {
+    const sent = await $.prompt.submit({ text: ask }).catch((err) => ({ drop: String(err?.message ?? err) }))
+    if (!sent.drop) return 'sent'
+    log(`просьба Claude не ушла: ${sent.drop.slice(0, 200)}`)
+  }
+  const { text: draft } = await $.prompt.read()
+  if (draft.includes(url)) return 'filled'
+  const filled = await $.prompt.fill({ text: draft.trim() ? `\n${ask}` : ask, mode: 'append' })
+  if (filled.isFilled) return 'filled'
+  return filled.refusal === 'dialog' ? 'dialog' : 'manual'
+}
+
+// Что сказать о попытке открыть встроенный браузер; opened — если он открылся сразу
+function desktopNotice($, outcome, opened, url) {
+  // Адрес для ручной просьбы не убираем через 15 секунд: его ещё надо переписать. Ожидание — пока не кончится
+  // инструмент агента, сколько бы он ни шёл
+  if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
+  else if (outcome === 'waiting') libraryNotice = 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.'
+  else
+    windowNotice(
+      $,
+      outcome === 'opened'
+        ? opened
+        : outcome === 'interrupted'
+          ? 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.'
+          : outcome === 'sent'
+            ? 'Arcade попросил Claude открыть ссылку во встроенном браузере.'
+            : outcome === 'filled'
+              ? 'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.'
+              : 'Не получилось открыть встроенный браузер: сначала ответь на вопрос Claude Code.',
+    )
+  $.ui.invalidate('ui.render')
+}
+
+// Открыть во встроенном браузере и сказать, что вышло; opened — что сказать, если он открылся сразу
+async function desktopWindow($, id, opened) {
+  opening = false
+  pendingOpen = null
+  libraryNotice = 'Открываю встроенный браузер…'
+  $.ui.invalidate('ui.render')
+  const outcome = await openDesktopBrowser($, id)
+  desktopNotice($, outcome, opened, windowUrl(id))
+  // Браузер встаёт под панелью Arcade, и игре тесно — панель закрываем. Назад — /arcade или «Библиотека» на сайте
+  if (outcome === 'opened') await $.ui.close({ id: PANE })
+}
+
+// Игру открыл Claude по просьбе Arcade: панель Arcade закрываем. Вызов Claude панель браузера не показывает —
+// показываем сами (в авто-режиме может и не выйти)
+async function openedForArcade($, e) {
+  opening = false
+  await showBrowser($, desktopConsent(e.url))
+  if (paneOpen) await $.ui.close({ id: PANE })
+}
+
 // Варианты «где открывать» по кругу: браузер по умолчанию, каждый найденный браузер, панель
 function openerOptions() {
   const browsers = platform === 'windows' ? detection?.browsers ?? [] : []
@@ -601,8 +830,21 @@ function openerOptions() {
   ]
 }
 
+// В Desktop: встроенный браузер приложения, окно браузера по умолчанию, окно каждого найденного браузера.
+// Каким браузером открывать окно — общий выбор с терминалом
+function desktopOptions() {
+  return [{ opener: 'builtin', browser: browserChoice }, ...openerOptions().filter((o) => o.opener === 'window')]
+}
+
+function desktopLabel() {
+  return builtinBrowser('desktop') ? 'Открывать: встроенный браузер Claude' : windowLabel()
+}
+
 function openerLabel() {
-  if (!windowMode()) return 'Открывать: здесь, в панели'
+  return windowMode() ? windowLabel() : 'Открывать: здесь, в панели'
+}
+
+function windowLabel() {
   if (platform !== 'windows') return 'Открывать: окно браузера по умолчанию'
   const searching = detection === null ? ' (ищу браузеры…)' : ''
   const browsers = detection?.browsers ?? []
@@ -633,7 +875,8 @@ function consoleNote(c) {
   return count ? `${count} ${books ? plural(count, 'книга', 'книги', 'книг') : plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
-function settingsNote() {
+function settingsNote(surface) {
+  if (surface === 'desktop') return desktopLabel().replace('Открывать: ', 'открывать: ')
   const where = windowMode() ? openerLabel().replace('Открывать: ', 'открывать: ') : 'играть здесь, в панели'
   return windowMode() ? where : `${where} · графика: ${GRAPHICS_LABEL[graphics]}`
 }
@@ -725,10 +968,10 @@ export function register(on) {
       const savedGraphics = await $.store.get('graphics')
       if (GRAPHICS.includes(savedGraphics)) graphics = savedGraphics
       const savedOpener = await $.store.get('opener')
-      if (savedOpener?.opener === 'window' || savedOpener?.opener === 'pane') {
-        opener = savedOpener.opener
-        browserChoice = typeof savedOpener.browser === 'string' ? savedOpener.browser : 'default'
-      }
+      if (savedOpener?.opener === 'window' || savedOpener?.opener === 'pane') opener = savedOpener.opener
+      // Браузер Desktop сохраняет и без выбора терминала (opener — null)
+      if (typeof savedOpener?.browser === 'string') browserChoice = savedOpener.browser
+      if ((await $.store.get('desktopOpener')) === 'window') desktopOpener = 'window'
       const localAppData = await $.env.get('LOCALAPPDATA')
       profileRoot = localAppData ? `${localAppData}\\claude-arcade` : ''
       if ((await $.env.get('OS')) === 'Windows_NT') platform = 'windows'
@@ -841,7 +1084,11 @@ export function register(on) {
   })
 
   on('turn.start', async ($, e, next) => {
+    if (e.agentId) return next(e) // ход субагента — не ход агента: Claude как работал, так и работает
     try {
+      agentTurn = e.turnId
+      toolsRunning = 0
+      interrupting = false
       status = 'working'
       turnStartedAt = await $.clock.now()
       asked = false
@@ -903,7 +1150,21 @@ export function register(on) {
   })
 
   on('turn.complete', async ($, e, next) => {
+    if (e.agentId) return next(e) // субагент закончил — агент ещё нет: «агент закончил» не про него
+    agentTurn = null
+    toolsRunning = 0
+    // Ход оборвал Arcade, чтобы открыть игру: агент сейчас же продолжит по просьбе Arcade
+    if (interrupting) {
+      interrupting = false
+      return next(e)
+    }
     try {
+      // Игра ждала конца инструмента, а ход кончился сам — прерывать нечего, просим как обычно
+      if (pendingOpen) {
+        const url = pendingOpen
+        pendingOpen = null
+        desktopNotice($, await askClaude($, url, true), '', url)
+      }
       status = 'done'
       askVisible = false
       if (paneOpen && view !== 'library') {
@@ -947,6 +1208,43 @@ export function register(on) {
     return next(e)
   })
 
+  // Встроенный браузер Desktop по нажатию в панели: свои вызовы Arcade разрешает сам, иначе авто-режим отдаёт их
+  // классификатору, и тот отказывает — просил не человек словами. Только вызовы самого Arcade и только то, что
+  // пропускает ownDesktopCall; эти же инструменты у Claude решаются как обычно
+  on('tool.check', { tool: DESKTOP_TOOLS }, async ($, e, next) => {
+    if (next.origin.plugin === $.plugin.name && ownDesktopCall(e.tool, e.input))
+      return { decision: 'allow', reason: 'Arcade открывает игру во встроенном браузере по нажатию в своей панели' }
+    return next(e)
+  })
+
+  // Инструменты агента (главного цикла; свои вызовы Arcade — нет): игру, которую надо открыть, пока агент работает,
+  // открываем, когда закончится текущий — оборванный посреди инструмент может оставить работу недоделанной. Дольше
+  // CUT_TOOL_MS не ждём: обрываем (cutPending)
+  on('tool.call', async ($, e, next) => {
+    if (e.agentId !== undefined || next.origin?.plugin === $.plugin.name) return next(e)
+    toolsRunning++
+    try {
+      return await next(e)
+    } finally {
+      toolsRunning = Math.max(0, toolsRunning - 1)
+      // Ход прерываем после того, как результат инструмента дойдёт до агента
+      if (pendingOpen && toolsRunning === 0)
+        $.clock.after(0, () => openPending($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
+    }
+  })
+
+  // Игру, которую Arcade попросил открыть Claude, открыли — браузеру нужно место
+  on('tool.call', { tool: [`${BROWSER}preview_start`, `${BROWSER}navigate`] }, async ($, e, next) => {
+    const result = await next(e)
+    try {
+      if (opening && typeof e.url === 'string' && e.url.startsWith(`${SITE}/`) && !result?.deny && !result?.isError)
+        await openedForArcade($, e)
+    } catch (err) {
+      log(`ошибка мода: ${err?.message ?? err}`)
+    }
+    return result
+  })
+
   // Сообщения от экрана игры (hooks/input.js): нажатия и зажатые клавиши
   on('ui.message', async ($, e) => {
     if (e.element !== INPUT) return {}
@@ -977,6 +1275,7 @@ export function register(on) {
 
   // Полоса над полем ввода: «1» — играть, «2» — не сейчас (цифра в пустом поле ввода и пауза).
   // Пока вопрос виден, полоса занята целиком: то, что рисуют там другие моды, скрыто.
+  // Вопрос самого Claude Code (опрос, «включить моды?») важнее: пока он в полосе, «сыграть?» ждёт.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) =>
     translateTree(
       await (async () => {
@@ -1026,17 +1325,17 @@ export function register(on) {
       const below = await next(e)
       return below ? Box({ flexDirection: 'column', children: [ours, below] }) : ours
     }
-    if (!askVisible) return next(e)
+    if (!askVisible || e.props.hasSurvey) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
     const now = await $.clock.now()
-    const canWindow = platform !== null && e.surface !== 'desktop' && webGame(lastGame)
+    const canWindow = (platform !== null || e.surface === 'desktop') && webGame(lastGame)
     return Box({
       flexDirection: 'row',
       columnGap: 2,
       children: [
         Text({ children: [`Агент работает ${workedText(workedSeconds(now))} — сыграть?${netWaiting.length ? ` В сети ждут: ${waitingText()}` : ''}`] }),
         // «Здесь» — панель Claude Code: в VS Code и Desktop картинкой, в терминале символами или пикселями.
-        // «В окне» — браузер; его нет в Desktop (там мод не запускает программы) и пока ОС не определена.
+        // «В окне» — браузер: в Desktop по настройке встроенный, иначе — программа браузера, когда ОС уже определена.
         Button({
           key: 'arcade-play',
           label: canWindow ? 'Здесь' : 'Играть',
@@ -1058,6 +1357,11 @@ export function register(on) {
                 onPress: async () => {
                   asked = true
                   askVisible = false
+                  if (builtinBrowser(e.surface, mouseGame(lastGame))) {
+                    await desktopWindow($, lastGame, `${gameById(lastGame)?.title ?? lastGame} открыт во встроенном браузере Claude.`)
+                    await $.ui.toast(tr(libraryNotice, lang))
+                    return
+                  }
                   const command = windowCommand(lastGame)
                   try {
                     const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
@@ -1166,7 +1470,13 @@ export function register(on) {
           onPress: async () => {
             // Всё, кроме Денди, идёт только в окне браузера (EmulatorJS на сайте): в панели показать нечем
             const sega = Boolean(g.console) && g.console !== 'nes' // у «Проверки клавиш» приставки нет — она в панели
-            if (sega && (!platform || e.surface === 'desktop')) {
+            if (sega && builtinBrowser(e.surface, mouseGame(g.id))) {
+              lastGame = g.id
+              await desktopWindow($, g.id, `${g.title} открыт во встроенном браузере Claude.`)
+              await $.store.set('lastGame', g.id)
+              return
+            }
+            if (sega && !platform) {
               libraryNotice = `Игры ${consoleTitle(g.console)} идут в окне браузера, а здесь его открыть нельзя.`
               $.ui.invalidate('ui.render')
               return
@@ -1246,7 +1556,36 @@ export function register(on) {
         items = [
           back,
           gap,
-          ...(platform
+          // Desktop: встроенный браузер приложения или окно браузера; Денди там всегда в панели, графика — картинкой
+          ...(e.surface === 'desktop' && platform
+            ? [
+                Button({
+                  key: 'arcade-opener',
+                  label: desktopLabel(),
+                  autoFocus: true,
+                  onPress: async () => {
+                    const options = desktopOptions()
+                    const current = options.findIndex((o) =>
+                      builtinBrowser(e.surface) ? o.opener === 'builtin' : o.opener === 'window' && o.browser === browserChoice,
+                    )
+                    const nextOption = options[(current + 1) % options.length]
+                    desktopOpener = nextOption.opener
+                    browserChoice = nextOption.browser
+                    libraryNotice = ''
+                    $.ui.invalidate('ui.render')
+                    await $.store.set('desktopOpener', desktopOpener)
+                    await $.store.set('opener', { opener, browser: browserChoice })
+                  },
+                }),
+                dim(
+                  builtinBrowser(e.surface)
+                    ? '  рядом с разговором; в авто-режиме игру открывает Claude — он прервётся и вернётся к работе'
+                    : '  игра откроется в браузере; пауза, пока окно не в фокусе; прогресс сохраняется',
+                ),
+                ...(builtinBrowser(e.surface) ? [dim(`  ${MOUSE_NOTE}`)] : []),
+              ]
+            : []),
+          ...(e.surface !== 'desktop' && platform
             ? [
                 Button({
                   key: 'arcade-opener',
@@ -1274,7 +1613,7 @@ export function register(on) {
                 ),
               ]
             : []),
-          ...(windowMode()
+          ...(windowMode() || e.surface === 'desktop'
             ? []
             : [
                 Button({
@@ -1460,6 +1799,7 @@ export function register(on) {
         const c = shelf ?? consoles().find((x) => x.id === menu) ?? consoles()[0]
         const list = shelf ? shelf.list : games().filter((g) => g.console === c.id && !g.mine)
         const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
+        const builtin = builtinBrowser(e.surface, list.some((g) => mouseGame(g.id)))
         items = [
           shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
@@ -1468,7 +1808,7 @@ export function register(on) {
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
           // Всё, кроме Денди, идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
           ...(c.id !== 'nes'
-            ? platform && e.surface !== 'desktop'
+            ? platform || e.surface === 'desktop'
               ? [
                   gap,
                   Button({
@@ -1476,6 +1816,7 @@ export function register(on) {
                     label: `Открыть ${c.title} в окне`,
                     ...(!list.length ? { autoFocus: true } : {}),
                     onPress: async () => {
+                      if (builtin) return desktopWindow($, `tab:${shelf ? shelf.tab : c.id}`, `Окно Arcade открыто на вкладке ${c.title}.`)
                       const command = windowCommand(`tab:${shelf ? shelf.tab : c.id}`)
                       try {
                         const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
@@ -1490,7 +1831,13 @@ export function register(on) {
                 ]
               : [gap, dim(`${c.title} идёт в окне браузера, а здесь его открыть нельзя.`)]
             : []),
-          ...(list.length ? [gap, dim(`Игры открываются ${opensWindow(e.surface) ? whereText() : 'здесь, в панели'}.`)] : []),
+          ...(list.length
+            ? [gap, dim(`Игры открываются ${builtin && c.id !== 'nes' ? 'во встроенном браузере Claude' : opensWindow(e.surface) || (e.surface === 'desktop' && c.id !== 'nes') ? whereText() : 'здесь, в панели'}.`)]
+            : []),
+          // Шутеры в Desktop идут окном и при выбранном встроенном браузере — объясняем почему
+          ...(list.length && !builtin && builtinBrowser(e.surface)
+            ? [dim(MOUSE_NOTE)]
+            : []),
           ...noticeLines,
           ...hint,
         ]
@@ -1512,12 +1859,13 @@ export function register(on) {
           ...(reading.length ? [section('Читать'), tiles(tabItems(reading))] : []),
           section('Ещё'),
           tiles([
-          ...(windowMode() && e.surface !== 'desktop'
+          ...(windowMode() || e.surface === 'desktop'
             ? [
                 Button({
                   key: 'arcade-open-library',
                   label: 'Окно Arcade',
                   onPress: async () => {
+                    if (builtinBrowser(e.surface)) return desktopWindow($, null, 'Arcade открыт во встроенном браузере Claude.')
                     libraryNotice = 'Открываю окно…'
                     $.ui.invalidate('ui.render')
                     const command = windowCommand(null)
@@ -1541,11 +1889,11 @@ export function register(on) {
                         onPress: async () => {
                           const target = netWaiting[0]
                           lastGame = target.id
+                          const where = target.console === 'nes' ? `net:${target.id}` : target.coop ? `coop:${target.id}` : target.id
+                          if (builtinBrowser(e.surface, mouseGame(target.id))) return desktopWindow($, where, `${target.title} открыт во встроенном браузере Claude.`)
                           libraryNotice = 'Открываю окно…'
                           $.ui.invalidate('ui.render')
-                          const command = windowCommand(
-                            target.console === 'nes' ? `net:${target.id}` : target.coop ? `coop:${target.id}` : target.id,
-                          )
+                          const command = windowCommand(where)
                           try {
                             const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
                             windowNotice($, launchNotice(result, target.id))
@@ -1574,7 +1922,7 @@ export function register(on) {
             ...(menuFrom === 'settings' ? { autoFocus: true } : {}),
             onPress: open('settings'),
           }),
-          dim(`  ${settingsNote()}`),
+          dim(`  ${settingsNote(e.surface)}`),
           // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
           Button({
             key: 'arcade-lang-main',

@@ -74,6 +74,7 @@
   "The file is larger than 16 MB — that is not a game for this console.": "Dosya boyutu 16 MB sınırını aşıyor — bu konsola ait bir oyun olamaz.",
   "The file is larger than 50 MB — too much for a book.": "Dosya boyutu 50 MB sınırını aşıyor — bir kitap için fazla büyük.",
   "The round is starting": "Raunt başlıyor",
+  "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Bu tarayıcı oyunun fareyi yakalamasına izin vermiyor — ok tuşlarıyla dön. Fareyle oynamak için oyun normal bir tarayıcı penceresinde çalışır.",
   "This console does not support your own files yet.": "Bu konsolda henüz kendi dosyanı açamazsın.",
   "This is a different file: it does not match the one added in the mod.": "Bu farklı bir dosya: modda eklenenle eşleşmiyor.",
   "This is an archive. Unpack it and choose the game file itself: .sms.": "Bu bir arşiv. Arşivi çıkar ve doğrudan oyun dosyasını seç: .sms.",

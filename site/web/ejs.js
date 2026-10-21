@@ -52,7 +52,52 @@
   // Номер игры для сетевой игры EmulatorJS — из хеша ROM: у всех игроков один и тот же
   const netId = (game) => parseInt(game.rom.sha256.slice(0, 7), 16)
 
+  // Пауза, пока окно не в фокусе, — как у Денди: иначе игра со звуком идёт в фоне. Во встроенном браузере Claude
+  // «крестик» только прячет панель: страница остаётся видимой (visibilitychange не приходит), но теряет фокус.
+  // Пауза эмулятора останавливает только кадры — звук глушим, приостанавливая его AudioContext. Сетевую игру не
+  // трогаем: пауза у одного остановила бы партию у всех
+  let away = false // на паузе из-за фокуса — продолжаем только такую, не нажатую на панели эмулятора
+  const audioOf = (emulator) => {
+    const al = emulator.Module && emulator.Module.AL
+    return al && al.currentCtx && al.currentCtx.audioCtx
+  }
+  function pauseAway() {
+    const emulator = window.EJS_emulator
+    if (away || !emulator || !emulator.started || emulator.paused || emulator.isNetplay) return
+    away = true
+    emulator.pause()
+    const audio = audioOf(emulator)
+    if (audio) audio.suspend()
+    overlay(T('Пауза'), T('Кликни или нажми любую клавишу, чтобы продолжить'))
+  }
+  function resumeAway() {
+    if (!away) return
+    away = false
+    document.getElementById('overlay').classList.remove('shown')
+    const emulator = window.EJS_emulator
+    const audio = audioOf(emulator)
+    if (audio) audio.resume()
+    emulator.play()
+  }
+  function pauseWhenAway() {
+    window.addEventListener('blur', pauseAway)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) pauseAway()
+    })
+    document.getElementById('overlay').addEventListener('click', resumeAway)
+    window.addEventListener('keydown', (e) => {
+      if (!away || e.ctrlKey || e.metaKey || e.altKey) return
+      e.preventDefault()
+      if (!e.repeat) resumeAway()
+    })
+    // Игра запустилась, а окно уже не в фокусе (открыли в фоне, пока работал Claude) — сразу на паузу
+    window.EJS_onGameStart = () => {
+      if (!document.hasFocus()) pauseAway()
+    }
+  }
+
   function launch(core, url, name, net) {
+    pauseWhenAway()
     window.EJS_player = '#sega-player'
     if (net) {
       // Сетевая игра — кнопка на панели эмулятора: создать комнату или войти в чужую; сервер — наш (/net/ejs)

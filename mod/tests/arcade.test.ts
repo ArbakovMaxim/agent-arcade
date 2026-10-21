@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
-import { workedText } from '../hooks/register.js'
+import { ownDesktopCall, workedText } from '../hooks/register.js'
 import { detectLang, tr, fromEnglish, resetLocaleCache } from '../hooks/i18n.js'
 import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
@@ -75,7 +75,7 @@ async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {} }: any = {}) {
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS }: any = {}) {
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
@@ -171,10 +171,58 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('turn.complete', () => ({ text: '' }))
   on('classic.PermissionRequest', () => ({}))
   on('classic.PostToolUse', () => ({}))
+  // Встроенный браузер Desktop: в разрешении отказали (browser: 'deny'), сервер открыл ('ok') или ответил ошибкой ('error').
+  // Отказ — как в авто-режиме: вкладки читать можно, остальные вызовы Arcade (с нажатием человека, consent) — нет;
+  // вызовы Claude (из теста они без consent) проходят. tabs — уже открытые вкладки. mcpCalls — все вызовы инструментов
+  // приложения как { server, tool, args, consent }, browserCalls — только те, что открывают страницу
+  const mcpCalls: any[] = []
+  const browserCalls: any[] = []
+  const submits: any[] = []
+  const fills: any[] = []
+  const aborts: any[] = []
+  // Инструмент агента, который идёт не сразу: Bash заканчивается через пару секунд по часам теста (часы теста идут
+  // медленно — игровой цикл Arcade тикает каждые 33 мс, — так что минуту тест не дождался бы)
+  on('tool.call', ($: any, e: any) => {
+    if (e.tool === 'Bash') return clock.sleep(bashMs).then(() => ({ result: 'ok', text: 'ok' }))
+    const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(e.tool) ?? []
+    const { tool: _name, tool_use_id: _id, consent, ...args } = e
+    const call = { server, tool, args, consent }
+    mcpCalls.push(call)
+    if (browser === 'deny' && consent !== undefined && tool !== 'tabs_context') return { deny: 'The auto mode classifier gave no verdict' }
+    if (tool === 'tabs_context') {
+      const text = `${JSON.stringify({ browserOpen: tabs.length > 0, tabs }, null, 2)}\nThe Browser pane is currently hidden.`
+      return { result: text, text }
+    }
+    if (tool === 'preview_start' || tool === 'navigate') browserCalls.push(call)
+    const answer = browser === 'deny' ? 'ok' : browser
+    return answer === 'error' ? { isError: true, result: answer, text: answer } : { result: answer, text: answer }
+  })
+  // Ход агента, который Arcade обрывает, чтобы Claude открыл игру: оборвался (abort: true) или нет
+  on('turn.abort', ($: any, e: any) => {
+    aborts.push(e)
+    if (!abort) throw new Error('stub: ход не прерван')
+    return { value: undefined }
+  })
+  // Решение по разрешениям без плагинов: спросить человека
+  on('tool.check', () => ({ decision: 'ask' }))
+  // Просьба от мода Claude: принята (submit: true) или нет — тогда, как и без отказа в разрешении, поле ввода
+  on('prompt.submit', ($: any, e: any) => {
+    submits.push(e)
+    return submit ? { text: e.text } : { drop: 'stub: не принята' }
+  })
+  on('prompt.read', () => ({ value: { text: draft, cursor: draft.length } }))
+  // Поле ввода берёт текст или нет. Причину отказа ('dialog', 'no_composer') пишет только сам Claude Code:
+  // из хука её не передать, мод получает отказ без причины
+  on('prompt.fill', ($: any, e: any) => {
+    fills.push(e)
+    return { isFilled: fill }
+  })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches, notifies, disk, diskFile, widths, closed }
+  return { saved, opened, blits, clock, launches, toasts, fetches, notifies, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills }
 }
+
+const BASH_MS = 2_000
 
 async function start($: any) {
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
@@ -426,6 +474,19 @@ test('через 10 секунд работы агента появляется 
   await band.unmount()
 })
 
+test('пока в полосе вопрос Claude Code, «сыграть?» уступает ему место и возвращается после', HEAVY, async ($, on) => {
+  const { clock } = stubs(on)
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(11_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, hasSurvey: true } })
+  expect(await band.find({ type: 'Text', text: /сыграть\?/ })).toBeUndefined()
+  expect(await band.find({ key: 'arcade-play' })).toBeUndefined() // цифры достаются вопросу Claude Code
+  await band.redraw({ ...BAND.props, hasSurvey: false })
+  expect(await band.find({ type: 'Text', text: /сыграть\?/ })).toBeDefined()
+  await band.unmount()
+})
+
 test('запрос разрешения виден в панели, а событие уходит дальше без изменений', async ($, on) => {
   stubs(on)
   await start($)
@@ -504,10 +565,10 @@ test('Windows: в вопросе выбор — «Здесь» (1), «В окн�
   expect(await band.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Здесь', hotkey: '1' } })
   expect(await band.find({ key: 'arcade-play-window' })).toMatchObject({ props: { label: 'В окне', hotkey: '2' } })
   expect(await band.find({ key: 'arcade-later' })).toMatchObject({ props: { label: 'Не сейчас', hotkey: '3' } })
-  // В Desktop окна браузера нет — там одна кнопка
+  // В Desktop «В окне» — встроенный браузер приложения
   const desktop = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await desktop.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Играть' } })
-  expect(await desktop.find({ key: 'arcade-play-window' })).toBeUndefined()
+  expect(await desktop.find({ key: 'arcade-play' })).toMatchObject({ props: { label: 'Здесь' } })
+  expect(await desktop.find({ key: 'arcade-play-window' })).toMatchObject({ props: { label: 'В окне', hotkey: '2' } })
   await desktop.unmount()
   await band.press({ key: 'arcade-play-window' })
   expect(launches.length).toBe(1)
@@ -832,14 +893,15 @@ test('VS Code на Windows: по умолчанию игра в панели, о
   await ui.unmount()
 })
 
-test('Desktop: окна браузера нет вовсе — только игра в панели', async ($, on) => {
-  const { clock, launches } = stubs(on, { env: WINDOWS })
+test('Desktop: Денди — в панели, программ браузера мод не запускает; «Окно Arcade» — во встроенном браузере', async ($, on) => {
+  const { clock, launches, mcpCalls } = stubs(on, { env: WINDOWS })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ key: 'arcade-open-library' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-open-library' })).toMatchObject({ props: { label: 'Окно Arcade' } })
   await go(ui, 'arcade-game-thwaite')
   expect(launches.length).toBe(0)
+  expect(mcpCalls).toEqual([])
   expect(await ui.find({ type: 'Svg' })).toBeDefined()
   await ui.unmount()
 })
@@ -1059,19 +1121,485 @@ test('Sega из каталога: в VS Code на Windows открывается
   await ui.unmount()
 })
 
-test('Sega из каталога: в Desktop и без определённой ОС — понятное сообщение вместо окна', async ($, on) => {
+test('Sega из каталога: в терминале без определённой ОС — понятное сообщение вместо окна', async ($, on) => {
   const { clock, launches } = stubs(on, { site: segaCatalog() })
   await start($)
   await clock.advance(200)
-  for (const surface of ['desktop', 'terminal']) {
-    const ui = await $.ui.mount({ ...PANE, surface })
-    await go(ui, 'arcade-menu-sega')
-    await ui.press({ key: 'arcade-game-miniplanets' })
-    expect(await ui.find({ type: 'Text', text: 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
-    await ui.press({ key: 'arcade-back' })
-    await ui.unmount()
-  }
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(await ui.find({ type: 'Text', text: 'Игры Sega идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
+  await ui.unmount()
   expect(launches.length).toBe(0)
+})
+
+test('Desktop: игра Sega — во встроенном браузере приложения, мод сам просит его сервер', async ($, on) => {
+  const { clock, launches, mcpCalls, browserCalls, fills, saved, closed } = stubs(on, { site: segaCatalog(), browser: 'ok' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются во встроенном браузере Claude.' })).toBeDefined()
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(browserCalls.length).toBe(1)
+  expect(browserCalls[0]).toMatchObject({ server: 'Claude_Browser', tool: 'preview_start', args: { url: `${SITE}/?game=miniplanets` } })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start', 'show_pane'])
+  expect(mcpCalls[2]).toMatchObject({ server: 'ccd_view', args: { pane: 'preview' } })
+  // Каждый вызов несёт нажатие человека — на случай, если решать будет классификатор авто-режима
+  const consent = `The user pressed a button in the Arcade pane to open ${SITE}/?game=miniplanets in the built-in browser.`
+  expect(mcpCalls.map((c) => c.consent)).toEqual([consent, consent, consent])
+  expect(closed).toEqual(['arcade']) // браузер встаёт на место панели Arcade
+  expect(fills).toEqual([])
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Text', text: 'Miniplanets открыт во встроенном браузере Claude.' })).toBeDefined()
+  expect(saved.get('lastGame')).toBe('miniplanets')
+  await clock.advance(15_000) // сообщение уходит, как после окна
+  expect(await ui.find({ type: 'Text', text: 'Miniplanets открыт во встроенном браузере Claude.' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Desktop: в настройках — встроенный браузер или окно браузера; окно открывается, как в терминале', async ($, on) => {
+  const { clock, launches, mcpCalls, saved } = stubs(on, { env: WINDOWS, site: segaCatalog(), browser: 'ok' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: '  открывать: встроенный браузер Claude' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: встроенный браузер Claude' } })
+  expect(await ui.find({ key: 'arcade-graphics' })).toBeUndefined() // Денди в Desktop — картинкой
+  await ui.press({ key: 'arcade-opener' })
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: окно браузера по умолчанию (Google Chrome)' } })
+  expect(saved.get('desktopOpener')).toBe('window')
+  expect(saved.get('opener')).toEqual({ opener: null, browser: 'default' }) // выбор терминала не трогаем
+  await go(ui, 'arcade-menu-sega')
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются в окне браузера по умолчанию (Google Chrome).' })).toBeDefined()
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=miniplanets`)
+  expect(mcpCalls).toEqual([])
+  // Денди и в окне браузера Desktop — здесь, в панели
+  await go(ui, 'arcade-menu-nes')
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются здесь, в панели.' })).toBeDefined()
+  // По кругу: окно Chrome, окно Firefox и снова встроенный браузер
+  await go(ui, 'arcade-opener')
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: окно Google Chrome' } })
+  await ui.press({ key: 'arcade-opener' })
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: окно Firefox (обычное окно браузера)' } })
+  expect(saved.get('opener')).toEqual({ opener: null, browser: 'firefox' })
+  await ui.press({ key: 'arcade-opener' })
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: встроенный браузер Claude' } })
+  expect(saved.get('desktopOpener')).toBe('builtin')
+  await ui.unmount()
+})
+
+test('Desktop: окно браузера выбрано в прошлый раз — «Окно Arcade» и «В окне» открывают его', async ($, on) => {
+  // Каталог и последняя игра — из прошлого сеанса, как в жизни
+  const copy = JSON.parse(segaCatalog())
+  const catalog = { consoles: copy.consoles, games: Object.entries(copy.games).map(([id, g]: any) => ({ id, ...g })) }
+  const { clock, launches, mcpCalls } = stubs(on, { env: WINDOWS, site: segaCatalog(), browser: 'ok', stored: { desktopOpener: 'window', lastGame: 'miniplanets', catalog } })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(21_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await band.press({ key: 'arcade-play-window' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=miniplanets`)
+  await band.unmount()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-open-library' })
+  expect(launches.length).toBe(2)
+  expect(launches[1].env.ARCADE_URL).toBe(`${SITE}/`)
+  expect(mcpCalls).toEqual([])
+  await ui.unmount()
+})
+
+// Полки «Шутеры» и «Гонки»: FreeDM просит захваченную мышь, HexGL — нет
+function shooterCatalog() {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'web', title: 'Браузерные', group: 'games' })
+  site.groups = [{ id: 'games', title: 'Игры' }]
+  site.shelves = [{ id: 'shooters', title: 'Шутеры' }, { id: 'racing', title: 'Гонки' }]
+  const sha = 'e'.repeat(64)
+  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  site.games.hexgl = { console: 'web', kind: 'web', shelf: 'racing', page: 'web-games/hexgl/', title: 'HexGL', genre: 'гонки', about: 'гонки', keys: '…' }
+  return JSON.stringify(site)
+}
+const MOUSE_NOTE = 'Встроенный браузер Claude не даёт игре захватить мышь, поэтому шутеры открываются окном браузера.'
+
+test('Desktop: шутеры — окном браузера и при встроенном браузере (там мышь не захватывается), остальное — во встроенном', async ($, on) => {
+  const { clock, launches, mcpCalls } = stubs(on, { env: WINDOWS, site: shooterCatalog(), browser: 'ok' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-games' })
+  await ui.press({ key: 'arcade-menu-shelf-shooters' })
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются в окне браузера по умолчанию (Google Chrome).' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: MOUSE_NOTE })).toBeDefined()
+  await ui.press({ key: 'arcade-game-freedm' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=freedm`)
+  await ui.press({ key: 'arcade-open-tab-shelf-shooters' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=games&shelf=shooters`)
+  expect(mcpCalls).toEqual([])
+  // Гонки мышь не захватывают — встроенный браузер, без пометки
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-shelf-racing' })
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются во встроенном браузере Claude.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: MOUSE_NOTE })).toBeUndefined()
+  await ui.press({ key: 'arcade-game-hexgl' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start', 'show_pane'])
+  expect(launches.length).toBe(2)
+  await ui.unmount()
+})
+
+test('Desktop: «В окне» на плашке для шутера — окно браузера; без ОС шутер всё же во встроенном браузере', async ($, on) => {
+  const copy = JSON.parse(shooterCatalog())
+  const catalog = { consoles: copy.consoles, groups: copy.groups, shelves: copy.shelves, games: Object.entries(copy.games).map(([id, g]: any) => ({ id, ...g })) }
+  const { clock, launches, mcpCalls } = stubs(on, { env: WINDOWS, site: shooterCatalog(), browser: 'ok', stored: { lastGame: 'freedm', catalog } })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(21_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await band.press({ key: 'arcade-play-window' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=freedm`)
+  expect(mcpCalls).toEqual([])
+  await band.unmount()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: встроенный браузер Claude' } })
+  expect(await ui.find({ type: 'Text', text: `  ${MOUSE_NOTE}` })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop без определённой ОС: шутер — во встроенном браузере, окна нет', async ($, on) => {
+  const { clock, launches, mcpCalls } = stubs(on, { site: shooterCatalog(), browser: 'ok' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-games' })
+  await ui.press({ key: 'arcade-menu-shelf-shooters' })
+  expect(await ui.find({ type: 'Text', text: 'Игры открываются во встроенном браузере Claude.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: MOUSE_NOTE })).toBeUndefined()
+  await ui.press({ key: 'arcade-game-freedm' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start', 'show_pane'])
+  expect(launches.length).toBe(0)
+  await ui.unmount()
+})
+
+test('Desktop: вкладка Arcade уже открыта — игра открывается в ней, новой вкладки нет', async ($, on) => {
+  const tabs = [
+    { tabId: 'seed', origin: 'https://example.com', isActive: true },
+    { tabId: 'tab-1', origin: SITE, isActive: false },
+    { tabId: 'tab-2', origin: SITE, isActive: false },
+  ]
+  const { clock, mcpCalls, fills } = stubs(on, { site: segaCatalog(), browser: 'ok', tabs })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'navigate', 'tabs_select', 'show_pane'])
+  expect(mcpCalls[1]).toMatchObject({ server: 'Claude_Browser', args: { url: `${SITE}/?game=miniplanets`, tabId: 'tab-2' } })
+  expect(mcpCalls[2]).toMatchObject({ args: { tabId: 'tab-2' } })
+  expect(fills).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Miniplanets открыт во встроенном браузере Claude.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: свои вызовы браузера Arcade разрешает только на своём сайте и только инструментам браузера', () => {
+  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: `${SITE}/?game=miniplanets` })).toBe(true)
+  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: `${SITE}/`, tabId: 'tab-1' })).toBe(true)
+  expect(ownDesktopCall('mcp__Claude_Browser__tabs_context', {})).toBe(true)
+  expect(ownDesktopCall('mcp__Claude_Browser__tabs_select', { tabId: 'tab-1' })).toBe(true)
+  expect(ownDesktopCall('mcp__ccd_view__show_pane', { pane: 'preview' })).toBe(true)
+  // Чужой сайт, сайт с похожим началом, другая панель, другой инструмент — нет
+  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: 'https://example.com/' })).toBe(false)
+  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: `${SITE}.example.com/` })).toBe(false)
+  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', {})).toBe(false)
+  expect(ownDesktopCall('mcp__ccd_view__show_pane', { pane: 'terminal' })).toBe(false)
+  expect(ownDesktopCall('mcp__Claude_Browser__javascript_tool', { text: '1' })).toBe(false)
+  expect(ownDesktopCall('Bash', { command: 'ls' })).toBe(false)
+})
+
+test('Desktop: те же инструменты браузера у Claude Arcade не разрешает — решение остаётся обычным', async ($, on) => {
+  const { clock } = stubs(on)
+  await start($)
+  await clock.advance(200)
+  // Вызов из теста идёт от движка, как вызов самого Claude; вызов от Arcade тест поднять не может
+  const { decision } = await $.tool.check({ tool: 'mcp__Claude_Browser__preview_start', input: { url: `${SITE}/?game=miniplanets` } })
+  expect(decision).toBe('ask')
+})
+
+const BACK_TO_WORK = 'Потом вернись к работе, которую делал до этого.'
+
+test('Desktop: авто-режим не пускает мод к браузеру, агент работает — Arcade прерывает ход, Claude открывает игру и возвращается к работе', async ($, on) => {
+  const { clock, mcpCalls, aborts, submits, fills, closed, toasts } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const url = `${SITE}/?game=miniplanets`
+  // Claude открывает сайт Arcade сам по себе — панель Arcade остаётся
+  await $.tool.call({ tool: 'mcp__Claude_Browser__preview_start', url: `${SITE}/` })
+  expect(closed).toEqual([])
+  mcpCalls.length = 0
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start'])
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits.length).toBe(1)
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${url}\n${BACK_TO_WORK}`, origin: { kind: 'plugin' } })
+  expect(fills).toEqual([])
+  expect(closed).toEqual([]) // пока игра не открылась, панель остаётся с подсказкой
+  expect(await ui.find({ type: 'Text', text: 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.' })).toBeDefined()
+  // Оборванный ход — не «агент закончил»: Claude сейчас же продолжит
+  await $.turn.complete({ turnId: 't1', reason: 'aborted', answer: '' })
+  expect(toasts).not.toContain('Агент закончил — Esc, чтобы вернуться')
+  // Игра открылась — панель Arcade закрывается, браузеру нужно место
+  await $.turn.start({ turnId: 't2', text: submits[0].text })
+  await $.tool.call({ tool: 'mcp__Claude_Browser__preview_start', url })
+  expect(closed).toEqual(['arcade'])
+  await ui.unmount()
+})
+
+test('Desktop: агент выполняет инструмент — Arcade ждёт его конца и только потом прерывает ход', async ($, on) => {
+  const { clock, aborts, submits } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const running = $.tool.call({ tool: 'Bash', command: 'npm test' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(aborts).toEqual([])
+  expect(submits).toEqual([])
+  const waiting = 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.'
+  expect(await ui.find({ type: 'Text', text: waiting })).toBeDefined()
+  await clock.advance(BASH_MS / 2) // инструмент ещё идёт — сообщение не пропадает
+  expect(await ui.find({ type: 'Text', text: waiting })).toBeDefined()
+  expect(aborts).toEqual([])
+  await clock.advance(BASH_MS / 2)
+  await running
+  await clock.settle()
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets\n${BACK_TO_WORK}` })
+  expect(await ui.find({ type: 'Text', text: 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: инструмент агента идёт дольше 10 секунд — Arcade обрывает его и просит Claude проверить, что тот успел', async ($, on) => {
+  const { clock, aborts, submits } = stubs(on, { site: segaCatalog(), abort: true, submit: true, bashMs: 11_000 })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const running = $.tool.call({ tool: 'Bash', command: 'npm run build' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  await clock.advance(9_000)
+  expect(aborts).toEqual([])
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  const cut = 'Твой последний инструмент оборван на полпути: проверь, что он успел сделать, прежде чем продолжать.'
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets\n${BACK_TO_WORK}\n${cut}` })
+  expect(await ui.find({ type: 'Text', text: 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.' })).toBeDefined()
+  // Инструмент кончился уже после обрыва — второй раз не прерываем
+  await clock.advance(1_000)
+  await running
+  await clock.settle()
+  expect(aborts.length).toBe(1)
+  expect(submits.length).toBe(1)
+  await ui.unmount()
+})
+
+test('Desktop: игра ждала конца инструмента, а ход кончился сам — прерывать нечего, просьба уходит как обычно', async ($, on) => {
+  const { clock, aborts, submits } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const running = $.tool.call({ tool: 'Bash', command: 'npm test' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  await $.turn.complete({ turnId: 't1', reason: 'aborted', answer: '' }) // человек нажал Esc
+  expect(submits.length).toBe(1)
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets` })
+  await clock.advance(BASH_MS)
+  await running
+  await clock.settle()
+  expect(aborts).toEqual([])
+  expect(submits.length).toBe(1)
+  expect(await ui.find({ type: 'Text', text: 'Arcade попросил Claude открыть ссылку во встроенном браузере.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: ход агента не прервался — просьба ждёт конца хода', async ($, on) => {
+  const { clock, aborts, submits, fills } = stubs(on, { site: segaCatalog(), submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits.length).toBe(1)
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets` })
+  expect(fills).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Arcade попросил Claude открыть ссылку во встроенном браузере.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: Claude Code спрашивает разрешение — ход не прерываем, ждём конца инструмента', async ($, on) => {
+  const { clock, aborts, submits } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  await $.classic.PermissionRequest({ tool_name: 'Bash' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(aborts).toEqual([])
+  expect(submits).toEqual([])
+  await ui.unmount()
+})
+
+test('Desktop: работает субагент, а не агент — его ход Arcade не прерывает, «агент закончил» про него не пишет', async ($, on) => {
+  const { clock, aborts, submits, closed, toasts } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 's1', agentId: 'explore-1', text: 'find it' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(aborts).toEqual([])
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets` })
+  await $.turn.complete({ turnId: 's1', agentId: 'explore-1', answer: 'found it' })
+  expect(submits.length).toBe(1)
+  expect(closed).toEqual([])
+  expect(toasts).not.toContain('Агент закончил — Esc, чтобы вернуться')
+  await ui.unmount()
+})
+
+test('Desktop: Claude открыл игру по просьбе Arcade — Arcade пробует показать браузер и закрывает панель', async ($, on) => {
+  const { clock, mcpCalls, submits, closed } = stubs(on, { site: segaCatalog(), submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(submits.length).toBe(1)
+  expect(closed).toEqual([])
+  await $.tool.call({ tool: 'mcp__Claude_Browser__navigate', url: `${SITE}/?game=miniplanets`, tabId: 'tab-1' })
+  expect(mcpCalls.at(-1)).toMatchObject({ tool: 'show_pane', args: { pane: 'preview' } })
+  expect(closed).toEqual(['arcade'])
+  await ui.unmount()
+})
+
+test('Desktop: агент свободен — просьба с адресом сразу уходит Claude, прерывать нечего', async ($, on) => {
+  const { clock, mcpCalls, aborts, submits, fills, closed } = stubs(on, { site: segaCatalog(), abort: true, submit: true, draft: 'поправь тесты' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start'])
+  expect(aborts).toEqual([])
+  expect(submits.length).toBe(1)
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets`, origin: { kind: 'plugin' } })
+  expect(fills).toEqual([]) // черновик в поле не трогаем
+  expect(closed).toEqual([]) // браузер откроет Claude, когда ответит — панель пока остаётся с подсказкой
+  expect(await ui.find({ type: 'Text', text: 'Arcade попросил Claude открыть ссылку во встроенном браузере.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: просьбу Claude не приняли — она встаёт в поле ввода после черновика', async ($, on) => {
+  const { clock, mcpCalls, submits, fills, closed } = stubs(on, { site: segaCatalog(), draft: 'поправь тесты' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start'])
+  expect(submits.length).toBe(1)
+  expect(closed).toEqual([]) // браузер не открылся — панель остаётся с подсказкой
+  expect(fills.length).toBe(1)
+  expect(fills[0]).toMatchObject({ text: `\nОткрой во встроенном браузере: ${SITE}/?game=miniplanets`, mode: 'append' })
+  expect(await ui.find({ type: 'Text', text: 'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: сервер браузера ответил ошибкой — Claude не просим, просьба в поле ввода, в пустом поле без пустой строки', async ($, on) => {
+  const { clock, browserCalls, submits, fills } = stubs(on, { browser: 'error', submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-open-library' })
+  expect(browserCalls[0]).toMatchObject({ args: { url: `${SITE}/` } })
+  expect(submits).toEqual([])
+  expect(fills.length).toBe(1)
+  expect(fills[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/`, mode: 'append' })
+  expect(await ui.find({ type: 'Text', text: 'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: ссылка уже в поле ввода — второй раз её не дописываем', async ($, on) => {
+  const { clock, fills } = stubs(on, { draft: `Открой во встроенном браузере: ${SITE}/` })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-open-library' })
+  expect(fills).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: поле ввода не взяло просьбу, а почему — неизвестно: просьба с адресом остаётся на экране, пока её не перепишут', async ($, on) => {
+  const { clock, fills } = stubs(on, { fill: false })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-open-library' })
+  expect(fills.length).toBe(1)
+  const ask = `Попроси Claude открыть во встроенном браузере: ${SITE}/`
+  expect(await ui.find({ type: 'Text', text: ask })).toBeDefined()
+  await clock.advance(20_000)
+  expect(await ui.find({ type: 'Text', text: ask })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: «В окне» в вопросе над вводом — встроенный браузер, итог — тостом', async ($, on) => {
+  const { clock, mcpCalls, fills, toasts } = stubs(on)
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(21_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await band.press({ key: 'arcade-play-window' })
+  expect(mcpCalls[0]).toMatchObject({ server: 'Claude_Browser', tool: 'tabs_context' })
+  expect(fills[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=thwaite` })
+  expect(toasts.at(-1)).toBe('Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.')
+  expect(await band.find({ key: 'arcade-play-window' })).toBeUndefined() // вопрос ушёл
+  await band.unmount()
+})
+
+test('Desktop по-английски: просьба в поле ввода и сообщения — на языке интерфейса, адрес — с языком', async ($, on) => {
+  const { clock, fills } = stubs(on, { env: { LANG: 'en_US.UTF-8' } })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await clock.advance(200)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-open-library' })
+  expect(fills[0]).toMatchObject({ text: `Open in the built-in browser: ${SITE}/?lang=en` })
+  expect(await ui.find({ type: 'Text', text: 'The link is in the prompt box: press Enter, and Claude will open it in the built-in browser.' })).toBeDefined()
+  await ui.unmount()
+  expect(tr('Miniplanets открыт во встроенном браузере Claude.', 'en')).toBe("Miniplanets is open in Claude's built-in browser.")
+  expect(tr('Arcade попросил Claude открыть ссылку во встроенном браузере.', 'en')).toBe('Arcade asked Claude to open the link in the built-in browser.')
+  expect(tr('Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.', 'en')).toBe('Arcade interrupted Claude: it will open the game in the built-in browser and get back to work.')
+  expect(tr(BACK_TO_WORK, 'en')).toBe('Then get back to the work you were doing before.')
+  expect(tr(BACK_TO_WORK, 'de')).not.toMatch(/[А-Яа-яЁё]/)
+  expect(tr(`Попроси Claude открыть во встроенном браузере: ${SITE}/`, 'en')).toBe(`Ask Claude to open this in the built-in browser: ${SITE}/`)
+  expect(tr('Не получилось открыть встроенный браузер: сначала ответь на вопрос Claude Code.', 'de')).not.toMatch(/[А-Яа-яЁё]/)
 })
 
 test('свои игры в окне: Sega из «Моих игр» на Windows открывается окном с адресом #mine=…&sha=… (не уходит на сервер)', async ($, on) => {
@@ -1091,7 +1619,7 @@ test('свои игры в окне: Sega из «Моих игр» на Windows 
 test('PlayStation в меню мода: подсказка из каталога и кнопка «Открыть PlayStation в окне»', async ($, on) => {
   const withPsx = JSON.parse(siteCatalog())
   withPsx.consoles.push({ id: 'psx', title: 'PlayStation', empty: 'Свободных игр для PlayStation пока нет. Открой свой диск.' })
-  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
+  const { clock, launches, fills } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -1102,11 +1630,12 @@ test('PlayStation в меню мода: подсказка из каталога
   expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?tab=psx`)
   expect(await ui.find({ type: 'Text', text: 'Окно Arcade открыто на вкладке PlayStation.' })).toBeDefined()
   await ui.unmount()
-  // В Desktop окна нет — честная подсказка вместо кнопки
+  // В Desktop вкладка открывается во встроенном браузере приложения
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await go(desk, 'arcade-menu-psx')
-  expect(await desk.find({ key: 'arcade-open-tab-psx' })).toBeUndefined()
-  expect(await desk.find({ type: 'Text', text: 'PlayStation идёт в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
+  await desk.press({ key: 'arcade-open-tab-psx' })
+  expect(launches.length).toBe(1)
+  expect(fills[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?tab=psx` })
   await desk.unmount()
 })
 
@@ -1115,7 +1644,7 @@ test('PlayStation из каталога: игра в терминале на Win
   withPsx.consoles.push({ id: 'psx', title: 'PlayStation' })
   const sha = 'd'.repeat(64)
   withPsx.games['psx-demo'] = { console: 'psx', title: 'PSX Demo', genre: 'аркада', about: 'проверка', keys: '…', rom: { url: `files/${sha}.zip`, base64: `files/${sha}.zip.b64`, sha256: sha, size: 1 } }
-  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
+  const { clock, launches, fills } = stubs(on, { env: WINDOWS, site: JSON.stringify(withPsx) })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -1126,11 +1655,12 @@ test('PlayStation из каталога: игра в терминале на Win
   expect(launches.length).toBe(1)
   expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=psx-demo`)
   await ui.unmount()
-  // В Desktop окна нет — понятное сообщение
+  // В Desktop — встроенный браузер приложения
   const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await go(desk, 'arcade-menu-psx')
   await desk.press({ key: 'arcade-game-psx-demo' })
-  expect(await desk.find({ type: 'Text', text: 'Игры PlayStation идут в окне браузера, а здесь его открыть нельзя.' })).toBeDefined()
+  expect(launches.length).toBe(1)
+  expect(fills[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=psx-demo` })
   await desk.unmount()
 })
 

@@ -15,6 +15,11 @@
   #overlay.shown { display: flex; }
   #overlay-title { font-size: 22px; font-weight: 600; color: #fff; }
   #overlay-hint { font-size: 14px; color: #c9c9d1; }
+  /* Браузер не дал игре захватить мышь — заметка сверху, игру не закрывает */
+  #mouse-note { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); max-width: min(560px, calc(100% - 32px)); display: none;
+    padding: 8px 14px; background: rgba(22, 22, 25, 0.92); border: 1px solid #34343a; border-radius: 6px; color: #e8e8ec;
+    font-size: 13px; text-align: center; cursor: pointer; z-index: 1000; }
+  #mouse-note.shown { display: block; }
   #bar { position: fixed; left: 0; right: 0; bottom: 0; height: 28px; display: flex; align-items: center; gap: 12px;
     padding: 0 10px; background: #161619; color: #9a9aa3; font-size: 12px; white-space: nowrap; overflow: hidden; }
   #bar .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; }
@@ -86,6 +91,7 @@
 <input id="local-rom" type="file" accept=".nes" hidden>
 <div id="stage"><canvas id="screen" width="256" height="240"></canvas></div>
 <div id="overlay"><div id="overlay-title"></div><div id="overlay-hint"></div></div>
+<div id="mouse-note" role="status"></div>
 <div id="library"></div>
 <div id="bar">
   <a id="to-library" href="?" tabindex="-1">← Библиотека</a>
