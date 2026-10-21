@@ -76,7 +76,7 @@ async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS }: any = {}) {
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes }: any = {}) {
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
@@ -161,6 +161,8 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
     closed.push(e.id)
     return { value: undefined }
   })
+  // Панели мода, которые движок помнит открытыми: остаются и после перезагрузки модуля
+  if (panes) on('ui.panes', () => ({ value: panes }))
   on('ui.blit', ($: any, e: any) => {
     blits.push(e)
     // Терминал без картинок отказывает показывать Image: вместо картинки там её alt
@@ -1493,6 +1495,26 @@ test('Desktop: Claude открыл игру по просьбе Arcade — Arcad
   expect(submits.length).toBe(1)
   expect(closed).toEqual([])
   await $.tool.call({ tool: 'mcp__Claude_Browser__navigate', url: `${SITE}/?game=miniplanets`, tabId: 'tab-1' })
+  expect(mcpCalls.at(-1)).toMatchObject({ tool: 'show_pane', args: { pane: 'preview' } })
+  expect(closed).toEqual(['arcade'])
+  await ui.unmount()
+})
+
+test('Desktop: мод перезагрузили (/reload-plugins), панель осталась открытой — Claude открыл игру, панель всё равно закрывается', async ($, on) => {
+  const { clock, mcpCalls, submits, closed, opened } = stubs(on, {
+    site: segaCatalog(),
+    submit: true,
+    panes: [{ id: 'arcade', title: 'Arcade', isShown: true, isFocused: false, isPlaced: true }],
+  })
+  // После перезагрузки — только session.start: /arcade никто не набирал, панель открыта с прошлого раза
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(opened).toEqual([])
+  expect(submits.length).toBe(1)
+  await $.tool.call({ tool: 'mcp__Claude_Browser__preview_start', url: `${SITE}/?game=miniplanets` })
   expect(mcpCalls.at(-1)).toMatchObject({ tool: 'show_pane', args: { pane: 'preview' } })
   expect(closed).toEqual(['arcade'])
   await ui.unmount()

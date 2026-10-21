@@ -1,5 +1,7 @@
 # Changelog · Список изменений
 
+## 0.15.1 — Desktop: после перезагрузки мода (`/reload-plugins`, обновление) панель Arcade снова закрывается, когда Claude открыл игру во встроенном браузере, и браузер разворачивается на всё окно; правило из настроек (разрешить или запретить) Arcade больше не переписывает, и встроенная защита Claude Code не пишет об этом в чат · Desktop: after a mod reload the Arcade pane closes again once Claude opens the game in the built-in browser, which then takes the whole window; Arcade no longer rewrites allow or deny rules from settings
+
 ## 0.15.0 — «Продолжить» в главном меню мода: последняя игра (или книга, аудиокнига) — первой плиткой и с фокусом, одним нажатием; журнал агента внизу меню — с подписью «Журнал агента» и только когда в нём что-то есть, без одинокого «пока ничего» · “Continue” in the mod's main menu: the last game, book or audiobook as the first, focused tile; the agent log at the bottom is labelled and shows only when it has entries
 
 ## 0.14.1 — меню мода на всех языках: «Аудиокниги», «Мои аудиокниги», «Квесты», «Браузерные» и жанры «квест» и «градостроитель» больше не остаются по-русски · the mod menu translates audiobooks, adventures, browser games and the adventure and city builder genres into every language

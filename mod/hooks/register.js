@@ -993,6 +993,9 @@ async function addMine($, rawPath) {
 export function register(on) {
   on('session.start', async ($, e, next) => {
     try {
+      // Модуль перезагрузили (/reload-plugins, обновление), а панель осталась открытой: движок её помнит, а наш флаг — нет.
+      // Без этого после перезагрузки панель не закрывалась, когда Claude открывал игру во встроенном браузере
+      paneOpen = (await $.ui.panes().catch(() => [])).some((p) => p.id === PANE)
       keymap = restoreKeymap(await $.store.get('keys'))
       osNotify = (await $.store.get('notify')) !== false
       wide = (await $.store.get('wide')) === true
@@ -1258,11 +1261,14 @@ export function register(on) {
 
   // Встроенный браузер Desktop по нажатию в панели: свои вызовы Arcade разрешает сам, иначе авто-режим отдаёт их
   // классификатору, и тот отказывает — просил не человек словами. Только вызовы самого Arcade и только то, что
-  // пропускает ownDesktopCall; эти же инструменты у Claude решаются как обычно
+  // пропускает ownDesktopCall; эти же инструменты у Claude решаются как обычно. Разрешаем только то, о чём спросили бы
+  // человека: правило в настройках (разрешить или запретить) отдаём как есть — встроенная защита Claude Code
+  // (cc-plugin-sec-default, на Team и Enterprise) переписанное модом правило считает обходом и пишет об этом в чат
   on('tool.check', { tool: DESKTOP_TOOLS }, async ($, e, next) => {
-    if (next.origin.plugin === $.plugin.name && ownDesktopCall(e.tool, e.input))
-      return { decision: 'allow', reason: 'Arcade открывает игру во встроенном браузере по нажатию в своей панели' }
-    return next(e)
+    if (next.origin.plugin !== $.plugin.name || !ownDesktopCall(e.tool, e.input)) return next(e)
+    const decided = await next(e)
+    if (decided?.decision !== 'ask') return decided
+    return { decision: 'allow', reason: 'Arcade открывает игру во встроенном браузере по нажатию в своей панели' }
   })
 
   // Инструменты агента (главного цикла; свои вызовы Arcade — нет): игру, которую надо открыть, пока агент работает,
