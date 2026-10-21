@@ -105,6 +105,10 @@
       "title": "Стратегии"
     },
     {
+      "id": "quests",
+      "title": "Квесты"
+    },
+    {
       "id": "board",
       "title": "Настольные"
     },
@@ -1247,6 +1251,60 @@
         ]
       },
       "shelf": "strategy"
+    },
+    {
+      "id": "micropolis",
+      "console": "web",
+      "kind": "web",
+      "page": "games/micropolis/index.html",
+      "shelf": "strategy",
+      "title": "Micropolis",
+      "genre": "градостроитель",
+      "about": "Строй город с нуля: дороги, дома, заводы, электростанции — и следи за налогами, пробками и катастрофами. Открытый код классического градостроителя 1989 года; город сохраняется в браузере.",
+      "about_en": "Build a city from scratch: roads, homes, factories, power plants — and watch taxes, traffic and disasters. The open code of the classic 1989 city builder; your city is saved in the browser.",
+      "keys": "мышь — строить · инструменты — на панели слева",
+      "license": {
+        "name": "GPL-3.0 с дополнительными условиями · Micropolis Public Name License",
+        "author": "Graeme McCutcheon (micropolisJS); Micropolis GmbH; Electronic Arts (исходный код)",
+        "source": "https://github.com/graememcc/micropolisJS",
+        "files": [
+          "games/micropolis/LICENSE",
+          "games/micropolis/COPYING",
+          "games/micropolis/name_license.html",
+          "games/micropolis/NOTICE.txt"
+        ]
+      }
+    },
+    {
+      "id": "scummvm",
+      "console": "web",
+      "kind": "web",
+      "page": "games/scummvm/scummvm.html",
+      "shelf": "quests",
+      "title": "Классические квесты",
+      "genre": "квест",
+      "about": "Четыре бесплатных классических квеста 90-х в ScummVM: Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress и Nippon Safes, Inc. Сохраняйся в любой момент — вернёшься к агенту и продолжишь.",
+      "about_en": "Four free classic 90s adventure games in ScummVM: Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress and Nippon Safes, Inc. Save at any moment — go back to your agent and carry on.",
+      "keys": "мышь — ходить, смотреть, брать · F5 — меню и сохранение",
+      "license": {
+        "name": "GPL-3.0-or-later (ScummVM) · бесплатные данные игр",
+        "author": "ScummVM Team; Revolution Software; John Passfield и Steve Stamatiadis; Dynabyte",
+        "source": "https://github.com/scummvm/scummvm",
+        "files": [
+          "games/scummvm/COPYING",
+          "games/scummvm/BUILD.txt",
+          "games/scummvm/games/sky/readme.txt",
+          "games/scummvm/games/queen/readme.txt",
+          "games/scummvm/games/lure/LICENSE.txt",
+          "games/scummvm/games/lure/README",
+          "games/scummvm/games/nippon/readme.txt",
+          "games/scummvm/BrowserFS-LICENSE.md",
+          "games/scummvm/FreeType-LICENSE.TXT",
+          "games/scummvm/FreeType-FTL.TXT",
+          "games/scummvm/libpng-LICENSE.txt",
+          "games/scummvm/zlib-LICENSE.txt"
+        ]
+      }
     },
     {
       "id": "flappy",

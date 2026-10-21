@@ -80,7 +80,8 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Games → Arcade games** | Flappy Arcade — Arcade's own one-button game: plays right in the panel and in the Arcade window; the course of the day is the same for everyone, your best score is kept |
 | **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch |
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
-| **Games → Strategy** | OpenTTD — transport tycoon |
+| **Games → Strategy** | OpenTTD — transport tycoon (GPL-2.0); Micropolis — the open-source code of the classic 1989 city builder, your city is saved in the browser (micropolisJS, GPL-3.0 with additional terms and the Micropolis Public Name License) |
+| **Games → Adventures** | Four free classic 90s adventures in ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress and Nippon Safes, Inc. — freeware game data with permission to redistribute; save at any moment with F5 |
 | **Games → Board games** | Chess — against people or the computer (Stockfish, levels 1–10), online with clocks; Go on 9×9, 13×13 and 19×19 boards; Russian draughts, Reversi |
 | **Books** | 136 public-domain classics: 98 in English (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoy and Dostoyevsky in translation…) and 38 in Ukrainian (Franko, Lesya Ukrainka, Kotsiubynsky, Kotliarevsky, Kulish…). The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window |
 | **Audiobooks** | Public-domain recordings from LibriVox on language shelves, by genre: Oscar Wilde and O. Henry in English, Gogol in Ukrainian. The player in the Arcade window remembers where you stopped; your own MP3, M4A, M4B, OGG and Opus files open there too and stay in your browser |
@@ -129,7 +130,7 @@ Arcade is in **alpha** and under active development — see the [changelog](CHAN
 ## Licenses
 
 - **Games:** every game has its own free license (MIT, GPL, BSD, Apache, Creative Commons and others) — the license text and source live next to the game and are linked from its card.
-- **Emulators and engines:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) with its cores, PrBoom (GPL-2.0), doom-wasm by Cloudflare and Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), Stockfish (GPL-3.0) — the chess computer. The Genesis Plus GX core used for Sega and Master System is for non-commercial use only.
+- **Emulators and engines:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) with its cores, PrBoom (GPL-2.0), doom-wasm by Cloudflare and Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 with additional terms), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — the chess computer. The Genesis Plus GX core used for Sega and Master System is for non-commercial use only.
 - **Arcade's own code** (the plugin and the site) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. You are free to use, study and change it. If you distribute a modified version — or run it as an online service for other people — you must publish your full source code under the same license and keep the copyright notices. Third-party components keep their own licenses.
 
 ## Support the project
@@ -148,7 +149,7 @@ Pull requests are welcome. By sending one you agree that your contribution is li
 mod/     the Claude Code plugin (hooks, panel UI, tests)
 site/    the website on Cloudflare Workers: catalog, Arcade window, network rooms
 tools/   build helpers (heretic-wasm)
-.github/ GitHub Actions that build doom-wasm, heretic-wasm and OpenTTD for the browser
+.github/ GitHub Actions that build doom-wasm, heretic-wasm, OpenTTD and ScummVM for the browser
 ```
 
 - Run the plugin from the repository: `claude --plugin-dir ./mod`

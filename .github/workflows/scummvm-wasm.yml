@@ -11,10 +11,6 @@ on:
       ref:
         description: Тег ScummVM
         default: v2.9.1
-  # Временно: кнопка Run workflow появляется только для файлов из main, а сборку проверяем в ветке
-  push:
-    branches: [boards-audio]
-    paths: ['.github/workflows/scummvm-wasm.yml']
 jobs:
   build:
     runs-on: ubuntu-24.04

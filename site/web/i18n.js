@@ -60,6 +60,11 @@
     'приключенческий роман': 'adventure novel',
     'ещё не читали': 'not read yet',
     'Все': 'All',
+    'градостроитель': 'city builder',
+    'мышь — строить · инструменты — на панели слева': 'mouse — build · tools — on the left panel',
+    'Квесты': 'Adventures',
+    'квест': 'adventure',
+    'мышь — ходить, смотреть, брать · F5 — меню и сохранение': 'mouse — walk, look, take · F5 — menu and saving',
     // аудиокниги
     'Аудиокниги': 'Audiobooks',
     'Мои аудиокниги': 'My audiobooks',

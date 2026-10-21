@@ -677,7 +677,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   // Вкладка «Игры»: полки; старый адрес ?tab=web открывает полку первой его игры — гонки
   const lib = await makePage(new Map(), { search: '?tab=web' })
   assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['hexgl'])
-  assert.deepEqual(lib.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['Аркады', 'Шутеры', 'Гонки', 'Стратегии', 'Настольные'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['Аркады', 'Шутеры', 'Гонки', 'Стратегии', 'Квесты', 'Настольные'])
   assert.equal(lib.byId.library.querySelectorAll('.shelf').find((b) => /\bactive\b/.test(b.className)).textContent, 'Гонки')
   // «☕ Поддержать» в шапке — новой вкладкой, без лишних прав для открытой страницы
   const support = lib.byId.library.querySelectorAll('.support')[0]
@@ -685,7 +685,9 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(support.target, '_blank')
   assert.equal(support.rel, 'noopener')
   const strategy = await makePage(new Map(), { search: '?tab=games&shelf=strategy' })
-  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd'])
+  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd', 'micropolis'])
+  const quests = await makePage(new Map(), { search: '?tab=games&shelf=quests' })
+  assert.deepEqual(quests.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['scummvm'], 'полка квестов — ScummVM')
   // по умолчанию — первая полка, аркады: Flappy Arcade
   const arcade = await makePage(new Map(), { search: '?tab=games' })
   assert.deepEqual(arcade.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['flappy'], 'по умолчанию — первая полка, аркады')
@@ -706,7 +708,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
     calledRun: false, SDL2: { audioContext: { suspend() { ttdCalls.push('suspend') }, resume() { ttdCalls.push('resume') } } },
     pauseMainLoop: () => ttdCalls.push('pause'), resumeMainLoop: () => ttdCalls.push('play'),
   }
-  ttdFrame.contentWindow = { Module: ttdModule, addEventListener() {} }
+  ttdFrame.contentWindow = { Module: ttdModule, Browser: { mainLoop: { func: () => {} } }, addEventListener() {} }
   ttd.ctx.document.hasFocus = () => false
   for (const f of ttdFrame.listeners.load) f()
   await pause()
@@ -718,6 +720,21 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   ttd.byId.overlay.click()
   assert.deepEqual(ttdCalls, ['pause', 'suspend', 'resume', 'play'])
   assert.ok(!ttd.byId.overlay.classList.contains('shown'))
+  // У ScummVM (Asyncify) главного цикла Emscripten нет — resumeMainLoop упал бы; на паузе только звук
+  const vmCalls = []
+  ttdFrame.contentWindow = {
+    Module: {
+      calledRun: true, SDL2: { audioContext: { suspend() { vmCalls.push('suspend') }, resume() { vmCalls.push('resume') } } },
+      pauseMainLoop: () => vmCalls.push('pause'), resumeMainLoop: () => vmCalls.push('play'),
+    },
+    Browser: { mainLoop: { func: null } }, addEventListener() {},
+  }
+  ttd.fire('blur')
+  for (let i = 0; i < 10 && !vmCalls.length; i++) await pause()
+  assert.deepEqual(vmCalls, ['suspend'])
+  assert.equal(ttd.byId['overlay-title'].textContent, 'Пауза')
+  ttd.byId.overlay.click()
+  assert.deepEqual(vmCalls, ['suspend', 'resume'])
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
 }
 

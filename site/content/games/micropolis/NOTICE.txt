@@ -1,0 +1,10 @@
+micropolisJS — Graeme McCutcheon, https://github.com/graememcc/micropolisJS (ветка gh-pages, собранная версия).
+Основан на Micropolis — открытом коде градостроителя 1989 года, выпущенном под GNU GPL v3 с дополнительными условиями (LICENSE, COPYING).
+
+ИЗМЕНЕНО для Arcade (это не исходная версия): из index.html убраны виджет и ссылка Twitter (внешний скрипт platform.twitter.com);
+в описании страниц (meta description в index.html, about.html, name_license.html) упоминание чужой торговой марки заменено
+на «the open-source city simulator from 1989». Других изменений нет.
+
+Micropolis is a registered trademark of Micropolis Corporation (Micropolis GmbH) and is licensed here as a courtesy of the owner
+under the Micropolis Public Name License (name_license.html, https://www.micropolis.com).
+Это не продукт Electronic Arts; Arcade не связан с Electronic Arts.
