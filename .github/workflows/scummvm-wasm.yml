@@ -1,0 +1,79 @@
+# ScummVM в WebAssembly для окна Arcade: только движки бесплатных квестов (Beneath a Steel Sky, Flight of the Amazon
+# Queen, Lure of the Temptress, Nippon Safes, Inc.) и их бесплатные дискетные версии с scummvm.org. Готовая папка —
+# артефакт scummvm-wasm: её содержимое кладётся в site/content/games/scummvm/. Запуск — вручную (Actions → scummvm-wasm
+# → Run). Drascula не берём: её Packet.001 — 32,8 МБ одним файлом, а Cloudflare отдаёт файлы не больше 25 МБ.
+# Лицензии: ScummVM — GPL-3.0-or-later; данные игр — бесплатные (freeware) с правом распространения, тексты — рядом с играми.
+name: scummvm-wasm
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Тег ScummVM
+        default: v2.9.1
+  # Временно: кнопка Run workflow появляется только для файлов из main, а сборку проверяем в ветке
+  push:
+    branches: [boards-audio]
+    paths: ['.github/workflows/scummvm-wasm.yml']
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: scummvm/scummvm
+          ref: ${{ inputs.ref || 'v2.9.1' }}
+          path: scummvm
+      - name: Как устроена сборка под Emscripten (для журнала)
+        working-directory: scummvm
+        run: |
+          ls dists/emscripten
+          sed -n '1,80p' dists/emscripten/build.sh
+      - name: Сборка ScummVM — только движки бесплатных квестов
+        working-directory: scummvm
+        env:
+          MAKEFLAGS: -j4
+        run: |
+          # build.sh сам ставит нужный Emscripten; лишние движки выключены — так WebAssembly меньше.
+          # Задачи по отдельности: игры должны лечь в build-emscripten/games до индекса и поиска игр
+          ./dists/emscripten/build.sh configure make dist --disable-all-engines --enable-engine=sky,queen,lure,parallaction
+          ls -la build-emscripten
+      - name: Бесплатные квесты — дискетные версии с scummvm.org
+        working-directory: scummvm/build-emscripten
+        run: |
+          mkdir -p games && cd games
+          # -j: файлы игры (с readme и условиями распространения) — прямо в папку игры, без вложенной папки архива
+          get() { curl -fL --retry 3 -o "$1.zip" "$2" && mkdir -p "$1" && unzip -q -o -j "$1.zip" -d "$1" && rm "$1.zip"; }
+          get sky "https://downloads.scummvm.org/frs/extras/Beneath%20a%20Steel%20Sky/BASS-Floppy-1.3.zip"
+          get queen "https://downloads.scummvm.org/frs/extras/Flight%20of%20the%20Amazon%20Queen/FOTAQ_Floppy.zip"
+          get lure "https://downloads.scummvm.org/frs/extras/Lure%20of%20the%20Temptress/lure-1.1.zip"
+          get nippon "https://downloads.scummvm.org/frs/extras/Nippon%20Safes/nippon-1.0.zip"
+          find . -type f | sort
+      - name: Индекс файлов и список игр (scummvm.ini)
+        working-directory: scummvm
+        run: |
+          ./dists/emscripten/build.sh games
+          # Поиск игр — ScummVM в безголовом Chrome; на ubuntu-24.04 песочнице Chrome нужны user namespaces
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          timeout 900 ./dists/emscripten/build.sh add-games || echo "Поиск игр не сработал — scummvm.ini пишем сами"
+          ini=build-emscripten/scummvm.ini
+          if [ "$(grep -cE '^\[(sky|queen|lure|nippon)\]' "$ini")" != 4 ]; then
+            printf '[scummvm]\ngrouping=company\ngui_launcher_chooser=grid\n' > "$ini"
+            add() { printf '\n[%s]\ndescription=%s\nengineid=%s\ngameid=%s\npath=/games/%s\nlanguage=en\nplatform=pc\n' "$1" "$2" "$3" "$1" "$1" >> "$ini"; }
+            add sky 'Beneath a Steel Sky' sky
+            add queen 'Flight of the Amazon Queen' queen
+            add lure 'Lure of the Temptress' lure
+            add nippon 'Nippon Safes, Inc.' parallaction
+          fi
+          rm -f build-emscripten/example.png
+          cat "$ini"
+      - name: Ни одного файла больше 24 МБ (лимит Cloudflare — 25 МБ на файл)
+        run: |
+          big=$(find scummvm/build-emscripten -type f -size +24M)
+          if [ -n "$big" ]; then echo "Слишком большие файлы:"; ls -la $big; exit 1; fi
+          du -sh scummvm/build-emscripten
+          find scummvm/build-emscripten -maxdepth 1 | sort
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scummvm-wasm
+          path: scummvm/build-emscripten
