@@ -675,7 +675,19 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const other = Object.keys(catalog.games).find((id) => catalog.games[id].kind === 'book' && id !== BOOK)
   const otherShelf = await makePage(new Map(), { search: `?tab=reading&shelf=${catalog.games[other].shelf}&lang=en` })
   assert.ok(otherShelf.byId.library.querySelectorAll('.stats').map((x) => x.textContent).includes('not read yet'))
-  assert.deepEqual(otherShelf.byId.library.querySelectorAll('.shelf').map((b) => b.textContent), ['English', 'Українська'], 'полки «Книг» — языки')
+  assert.deepEqual(otherShelf.byId.library.querySelectorAll('.shelf').filter((b) => !/genre-chip/.test(b.className)).map((b) => b.textContent), ['English', 'Українська'], 'полки «Книг» — языки')
+  // Ряд жанров на полке книг: «All» и жанры полки; выбор жанра оставляет его книги; адрес с &genre= открывает жанр
+  const shelfId = catalog.games[BOOK].shelf
+  const g0 = catalog.games[BOOK].genre
+  const genres = await makePage(new Map(), { search: `?tab=reading&shelf=${shelfId}&lang=en` })
+  const chips = genres.byId.library.querySelectorAll('.genre-chip')
+  assert.equal(chips[0].textContent, 'All')
+  assert.match(chips[0].className, /\bactive\b/)
+  chips.find((c) => c.dataset.genre === g0).click()
+  const shown = genres.byId.library.querySelectorAll('.card').map((c) => c.dataset.game)
+  assert.ok(shown.length >= 1 && shown.every((id) => catalog.games[id].genre === g0), 'только книги выбранного жанра')
+  const direct = await makePage(new Map(), { search: `?tab=reading&shelf=${shelfId}&genre=${encodeURIComponent(g0)}&lang=en` })
+  assert.match(direct.byId.library.querySelectorAll('.genre-chip').find((c) => c.dataset.genre === g0).className, /\bactive\b/)
   // Украинский: описания игр — английские, а не русские
   const uk = await makePage(new Map(), { search: '?tab=nes&lang=uk' })
   assert.ok(!/[ыэъё]/i.test(uk.byId.library.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания не по-русски')

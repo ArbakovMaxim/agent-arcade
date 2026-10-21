@@ -154,6 +154,12 @@ function menuTabs() {
   return tabs
 }
 
+// Жанр книги для плитки и заголовка: перевод на язык интерфейса и с заглавной буквы («роман» → «Роман», «Novel»)
+function genreLabel(genre) {
+  const t = tr(genre, lang)
+  return t.charAt(0).toLocaleUpperCase() + t.slice(1)
+}
+
 function groupsList() {
   return catalog.groups ?? []
 }
@@ -403,7 +409,7 @@ function usableKey(key) {
 function toLibrary() {
   releaseAll()
   const g = gameById(view)
-  menu = g?.mine ? 'mine' : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
+  menu = g?.mine ? 'mine' : g?.kind === 'book' && g?.shelf ? `genre:${g.shelf}:${g.genre}` : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
   view = 'library'
   mode = 'play'
   notice = ''
@@ -635,6 +641,7 @@ function settingsNote() {
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
+  if (menu.startsWith('genre:')) return `Arcade · ${shelfView(`shelf:${menu.split(':')[1]}`)?.title ?? ''} · ${genreLabel(menu.split(':').slice(2).join(':'))}`
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
   return c ? `Arcade · ${c.title}` : 'Arcade'
@@ -1407,12 +1414,47 @@ export function register(on) {
             const n = shelfGames(s.id).length
             return [
               Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
-              dim(`  ${n} ${plural(n, 'игра', 'игры', 'игр')}`),
+              dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : plural(n, 'игра', 'игры', 'игр')}`),
             ]
           }),
           ...noticeLines,
           ...hint,
         ]
+      } else if (menu.startsWith('genre:') || (shelfView(menu) && shelfView(menu).list.length && shelfView(menu).list.every((g) => g.kind === 'book'))) {
+        // Книги: на полке языка — плитки жанров («Роман · 26 книг»); в жанре — его книги. «Назад» — к жанрам, потом к языкам
+        const inGenre = menu.startsWith('genre:')
+        const shelfMenu = inGenre ? `shelf:${menu.split(':')[1]}` : menu
+        const shelf = shelfView(shelfMenu)
+        const genre = inGenre ? menu.split(':').slice(2).join(':') : null
+        const books = shelf ? shelf.list : []
+        if (!inGenre) {
+          const genres = [...new Set(books.map((g) => g.genre))]
+          items = [
+            Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }),
+            gap,
+            tiles(
+              genres.flatMap((g, i) => {
+                const n = books.filter((b) => b.genre === g).length
+                return [
+                  Button({ key: `arcade-genre-${i}`, label: genreLabel(g), ...((menuFrom ? menuFrom === `genre:${shelfMenu.slice(6)}:${g}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`genre:${shelfMenu.slice(6)}:${g}`) }),
+                  dim(`  ${n} ${plural(n, 'книга', 'книги', 'книг')}`),
+                ]
+              }),
+            ),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else {
+          const list = books.filter((g) => g.genre === genre)
+          const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
+          items = [
+            Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelfMenu) }),
+            gap,
+            ...list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]),
+            ...noticeLines,
+            ...hint,
+          ]
+        }
       } else if (menu !== 'main') {
         const shelf = shelfView(menu)
         const c = shelf ?? consoles().find((x) => x.id === menu) ?? consoles()[0]
@@ -1422,13 +1464,7 @@ export function register(on) {
           shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
           ...(list.length
-            ? (shelf && list.every((g) => g.kind === 'book')
-                ? // книги на полке — по жанрам, с разделителем жанра
-                  [...new Set(list.map((g) => g.genre))].flatMap((genre) => [
-                    dim(`— ${genre} —`),
-                    ...list.filter((g) => g.genre === genre).flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]),
-                  ])
-                : list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))
+            ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
           // Всё, кроме Денди, идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
           ...(c.id !== 'nes'

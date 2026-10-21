@@ -1399,6 +1399,9 @@ test('язык: по окружению, правила с подстановк�
   expect(tr('Добавлено: Моя (Денди).', 'en')).toBe('Added: Моя (NES).')
   expect(tr('Когда агент закончил: пауза и плашка', 'en')).toBe('When the agent finishes: pause and banner')
   expect(tr('Настройки', 'ru')).toBe('Настройки')
+  // Группы и полки каталога приходят с сайта по-русски — и в кнопках, и в заголовке, и внутри фраз
+  expect(['Книги', 'Игры', 'Шутеры', 'Arcade · Книги', 'Открыть Шутеры в окне'].map((s) => tr(s, 'en'))).toEqual(['Books', 'Games', 'Shooters', 'Arcade · Books', 'Open Shooters in a window'])
+  expect(tr('Arcade · Книги', 'de')).toBe('Arcade · Bücher')
 })
 
 test('английский интерфейс: главное меню без русских букв, вопрос над вводом, переключатель, окно на том же языке', async ($, on) => {
@@ -1711,12 +1714,20 @@ test('книги по языкам и жанрам: «Книги» → полк�
   await ui.press({ key: 'arcade-menu-reading' })
   expect(await ui.find({ key: 'arcade-menu-shelf-books-en' })).toMatchObject({ props: { label: 'English' } })
   expect(await ui.find({ key: 'arcade-menu-shelf-books-uk' })).toMatchObject({ props: { label: 'Українська' } })
+  expect(await ui.find({ type: 'Text', text: '  3 книги' })).toBeDefined() // у полки языка — «книги», а не «игры»
   await ui.press({ key: 'arcade-menu-shelf-books-en' })
-  const texts = await drawnTexts(ui)
-  // роман — Emma и Jane Eyre вместе, потом ужасы
-  expect(texts.filter((x) => /^— .+ —$/.test(x))).toEqual(['— роман —', '— ужасы —'])
-  expect(texts.indexOf('Jane Eyre')).toBeLessThan(texts.indexOf('— ужасы —'))
+  // на полке — плитки жанров с числом книг, жанр с заглавной буквы
+  expect(await ui.find({ key: 'arcade-genre-0' })).toMatchObject({ props: { label: 'Роман' } })
+  expect(await ui.find({ key: 'arcade-genre-1' })).toMatchObject({ props: { label: 'Ужасы' } })
+  expect(await ui.find({ type: 'Text', text: '  2 книги' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-emma' })).toBeUndefined() // книги — уже внутри жанра
+  await ui.press({ key: 'arcade-genre-0' })
+  expect(await ui.find({ key: 'arcade-game-emma' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-jane' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-dracula' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-game-khmary' })).toBeUndefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-genre-1' })).toBeDefined() // «Назад» — к жанрам
   await ui.unmount()
 })
 

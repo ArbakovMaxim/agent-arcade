@@ -59,6 +59,7 @@
     'рассказы': 'short stories',
     'приключенческий роман': 'adventure novel',
     'ещё не читали': 'not read yet',
+    'Все': 'All',
     'Книги': 'Books',
     'Оглавление': 'Contents',
     'колёсико или пробел — дальше · оглавление и шрифт — вверху': 'scroll or Space — next · contents and font size — at the top',
