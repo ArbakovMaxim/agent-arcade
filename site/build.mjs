@@ -307,6 +307,9 @@ export function build({ root, out, now = new Date() }) {
   // Шахматы — правила chess.js (BSD-2-Clause), модуль для страницы board.js
   copy(path.join(root, 'vendor', 'chess.js', 'chess.js'), path.join(out, 'vendor', 'chess', 'chess.js'))
   copy(path.join(root, 'vendor', 'chess.js', 'LICENSE.txt'), path.join(out, 'licenses', 'chess.js', 'LICENSE.txt'))
+  // Stockfish 19 lite (GPL-3.0) — компьютер в шахматах: загрузчик и WebAssembly рядом, лицензия — к остальным
+  for (const file of ['stockfish-19-lite-single.js', 'stockfish-19-lite-single.wasm']) copy(path.join(root, 'vendor', 'stockfish', file), path.join(out, 'vendor', 'stockfish', file))
+  copy(path.join(root, 'vendor', 'stockfish', 'LICENSE.txt'), path.join(out, 'licenses', 'stockfish', 'LICENSE.txt'))
   // Сетевая игра EmulatorJS — через наш сервер: вместо socket.io эмулятор получает нашу прослойку (web/netplay-io.js)
   copy(path.join(root, 'web', 'netplay-io.js'), path.join(out, 'emulatorjs', 'src', 'socket.io.min.js'))
   // Маппер 28 (Action 53) — общий с модом: из модуля мода делаем обычный скрипт для страницы

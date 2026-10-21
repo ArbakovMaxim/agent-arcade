@@ -81,7 +81,7 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch |
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
 | **Games → Strategy** | OpenTTD — transport tycoon |
-| **Games → Board games** | Chess, Russian draughts, Reversi |
+| **Games → Board games** | Chess — against people or the computer (Stockfish, levels 1–10), Russian draughts, Reversi |
 | **Books** | 136 public-domain classics: 98 in English (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoy and Dostoyevsky in translation…) and 38 in Ukrainian (Franko, Lesya Ukrainka, Kotsiubynsky, Kotliarevsky, Kulish…). The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window |
 
 Each game's card links to its license and source code.
@@ -128,7 +128,7 @@ Arcade is in **alpha** and under active development — see the [changelog](CHAN
 ## Licenses
 
 - **Games:** every game has its own free license (MIT, GPL, BSD, Apache, Creative Commons and others) — the license text and source live next to the game and are linked from its card.
-- **Emulators and engines:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) with its cores, PrBoom (GPL-2.0), doom-wasm by Cloudflare and Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0). The Genesis Plus GX core used for Sega and Master System is for non-commercial use only.
+- **Emulators and engines:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) with its cores, PrBoom (GPL-2.0), doom-wasm by Cloudflare and Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), Stockfish (GPL-3.0) — the chess computer. The Genesis Plus GX core used for Sega and Master System is for non-commercial use only.
 - **Arcade's own code** (the plugin and the site) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. You are free to use, study and change it. If you distribute a modified version — or run it as an online service for other people — you must publish your full source code under the same license and keep the copyright notices. Third-party components keep their own licenses.
 
 ## Support the project

@@ -213,6 +213,8 @@
     const params = new URLSearchParams(location.search)
     const code = params.get('room')
     if (code && /^[a-z0-9]{6,16}$/.test(code)) play(game, id, code, root)
+    // шахматы с компьютером — свой экран: сила 1–10, цвет, таймер, запись ходов (chess.js)
+    else if (params.get('vs') === 'bot' && game.board === 'chess' && window.ArcadeChess) window.ArcadeChess.start(game, id, root)
     else if (params.get('vs') === 'bot') playBot(game, id, root)
     else menu(game, id, root)
   }

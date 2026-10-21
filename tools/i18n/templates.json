@@ -102,7 +102,9 @@
   "Open your own file {0} with the “Open your own file” button above.",
   "read {0}%",
   "Score: {0} · best: {1}",
-  "Crash! Score: {0} · best: {1} — Space to try again"
+  "Crash! Score: {0} · best: {1} — Space to try again",
+  "level {0}",
+  "Computer · level {0}"
  ],
  "modExact": [
   "default browser window",

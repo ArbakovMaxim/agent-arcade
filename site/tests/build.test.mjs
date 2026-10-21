@@ -34,6 +34,8 @@ assert.deepEqual(Object.keys(catalog.games), [...source.games.map((g) => g.id), 
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
 assert.ok(Object.keys(catalog.games).length >= 12, 'в каталоге все игры')
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf8')), catalog)
+// Stockfish 19 lite (GPL-3.0) для шахмат с компьютером — загрузчик, WebAssembly и лицензия в сборке
+for (const file of ['vendor/stockfish/stockfish-19-lite-single.js', 'vendor/stockfish/stockfish-19-lite-single.wasm', 'licenses/stockfish/LICENSE.txt', 'chess.js']) assert.ok(fs.existsSync(path.join(out, file)), `в сборке есть ${file}`)
 
 for (const [id, game] of Object.entries(catalog.games)) {
   if (game.kind === 'board' || game.kind === 'web' || game.kind === 'book' || game.kind === 'pane') continue // без ROM — проверены отдельно
