@@ -12,6 +12,7 @@ export default {
   "Agent is waiting for permission": "智能体正在等待授权",
   "Agent is waiting for permission · paused": "智能体正在等待授权 · 已暂停",
   "Agent is waiting for permission — Esc to answer": "智能体正在等待授权——按 Esc 去回应",
+  "Agent log": "智能体日志",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "输入法（日文、中文或韩文）似乎处于开启状态。游戏时请先关闭它。",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade 已请 Claude 在内置浏览器中打开链接。",
   "Arcade games": "街机",
@@ -122,7 +123,6 @@ export default {
   "memory": "翻牌配对",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "在对话旁边；自动模式下由 Claude 打开游戏——它会短暂停下，然后继续工作",
   "no timer": "不计时",
-  "nothing yet": "暂无",
   "novel": "长篇小说",
   "novella": "中篇小说",
   "open in: Claude's built-in browser": "打开位置：Claude 的内置浏览器",
@@ -167,6 +167,7 @@ export default {
   "your files": "自己的文件",
   "← Back": "← 返回",
   "↑ ↓ or Tab — select, Enter — open. You can click with the mouse too.": "↑ ↓ 或 Tab — 选择，Enter — 打开。也可以用鼠标点击。",
+  "▶ Continue": "▶ 继续",
   "☕ Support the project": "☕ 支持本项目"
  },
  "templates": {

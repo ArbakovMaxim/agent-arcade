@@ -12,6 +12,7 @@ export default {
   "Agent is waiting for permission": "Агент чекає на дозвіл",
   "Agent is waiting for permission · paused": "Агент чекає на дозвіл · пауза",
   "Agent is waiting for permission — Esc to answer": "Агент чекає на дозвіл — Esc, щоб відповісти",
+  "Agent log": "Журнал агента",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Схоже, увімкнено метод введення (японська, китайська чи корейська). Вимкни його на час гри.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade попросив Claude відкрити посилання у вбудованому браузері.",
   "Arcade games": "Аркади",
@@ -122,7 +123,6 @@ export default {
   "memory": "знайди пару",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "поруч із розмовою; в авто-режимі гру відкриває Claude — він ненадовго зупиниться й повернеться до роботи",
   "no timer": "без таймера",
-  "nothing yet": "поки нічого",
   "novel": "роман",
   "novella": "повість",
   "open in: Claude's built-in browser": "відкривати: вбудований браузер Claude",
@@ -167,6 +167,7 @@ export default {
   "your files": "свої файли",
   "← Back": "← Назад",
   "↑ ↓ or Tab — select, Enter — open. You can click with the mouse too.": "↑ ↓ або Tab — вибрати, Enter — відкрити. Можна й клацнути мишею.",
+  "▶ Continue": "▶ Продовжити",
   "☕ Support the project": "☕ Підтримати проєкт"
  },
  "templates": {

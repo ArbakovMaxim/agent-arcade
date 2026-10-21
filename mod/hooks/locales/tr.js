@@ -12,6 +12,7 @@ export default {
   "Agent is waiting for permission": "Ajan izin bekliyor",
   "Agent is waiting for permission · paused": "Ajan izin bekliyor · duraklatıldı",
   "Agent is waiting for permission — Esc to answer": "Ajan izin bekliyor — yanıtlamak için Esc",
+  "Agent log": "Ajan günlüğü",
   "An input method (Japanese, Chinese or Korean) seems to be on. Turn it off while playing.": "Bir giriş yöntemi (Japonca, Çince veya Korece) açık görünüyor. Oynarken kapat.",
   "Arcade asked Claude to open the link in the built-in browser.": "Arcade, Claude’dan bağlantıyı yerleşik tarayıcıda açmasını istedi.",
   "Arcade games": "Arcade oyunları",
@@ -122,7 +123,6 @@ export default {
   "memory": "eşini bul",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "sohbetin yanında; otomatik modda oyunu Claude açar — kısa bir süre durur ve işine geri döner",
   "no timer": "süresiz",
-  "nothing yet": "henüz yok",
   "novel": "roman",
   "novella": "uzun öykü",
   "open in: Claude's built-in browser": "açılış yeri: Claude'un yerleşik tarayıcısı",
@@ -167,6 +167,7 @@ export default {
   "your files": "kendi dosyaların",
   "← Back": "← Geri",
   "↑ ↓ or Tab — select, Enter — open. You can click with the mouse too.": "↑ ↓ veya Tab — seç, Enter — aç. Fareyle de tıklayabilirsin.",
+  "▶ Continue": "▶ Devam et",
   "☕ Support the project": "☕ Projeye destek ol"
  },
  "templates": {

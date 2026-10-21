@@ -57,7 +57,8 @@ const EXACT = {
   'Arcade попросил Claude открыть ссылку во встроенном браузере.': 'Arcade asked Claude to open the link in the built-in browser.',
   'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.': 'The link is in the prompt box: press Enter, and Claude will open it in the built-in browser.',
   'Не получилось открыть встроенный браузер: сначала ответь на вопрос Claude Code.': "Could not open the built-in browser: answer Claude Code's question first.",
-  'пока ничего': 'nothing yet',
+  'Журнал агента': 'Agent log',
+  '▶ Продолжить': '▶ Continue',
   // Настройки
   'Открывать: здесь, в панели': 'Open in: here, in the pane',
   'Открывать: окно браузера по умолчанию': 'Open in: default browser window',
