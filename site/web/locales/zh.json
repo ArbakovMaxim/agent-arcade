@@ -74,6 +74,7 @@
   "The file is larger than 16 MB — that is not a game for this console.": "文件大于 16 MB——这不是该主机的游戏。",
   "The file is larger than 50 MB — too much for a book.": "文件大于 50 MB——作为书籍太大了。",
   "The round is starting": "回合即将开始",
+  "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "此浏览器不允许游戏捕获鼠标 —— 请用方向键转向。要用鼠标，请在普通浏览器窗口中运行游戏。",
   "This console does not support your own files yet.": "该主机暂不支持打开自己的文件。",
   "This is a different file: it does not match the one added in the mod.": "这是另一个文件：与模组中添加的文件不一致。",
   "This is an archive. Unpack it and choose the game file itself: .sms.": "这是一个压缩包。请解压后选择游戏文件本身：.sms。",

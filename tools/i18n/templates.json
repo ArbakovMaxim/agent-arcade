@@ -70,7 +70,10 @@
   "Open in: {0} window ({1})",
   "open in: {0} window ({1})",
   "Keys: up {0} · left {1} · down {2} · right {3} · {4}",
-  "— {0} —"
+  "— {0} —",
+  "{0} is open in Claude's built-in browser.",
+  "Open in the built-in browser: {0}",
+  "Ask Claude to open this in the built-in browser: {0}"
  ],
  "site": [
   "Played in total: {0}",
@@ -103,6 +106,8 @@
   "the default browser",
   "the default browser window",
   "Games open here, in the pane.",
+  "Games open in Claude's built-in browser.",
+  "open in: Claude's built-in browser",
   "play here, in the pane",
   "auto",
   "pixels",

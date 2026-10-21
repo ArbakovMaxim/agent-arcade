@@ -135,6 +135,7 @@
     'Звук: выкл': 'Sound: off',
     'Пауза': 'Paused',
     'Кликни или нажми любую клавишу, чтобы продолжить': 'Click or press any key to continue',
+    'Этот браузер не даёт игре захватить мышь — поворачивай стрелками. С мышью игра идёт в обычном окне браузера.': "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.",
     'Продолжаем с места остановки — кликни или нажми любую клавишу': 'Picking up where you left off — click or press any key',
     'Кликни или нажми любую клавишу, чтобы начать': 'Click or press any key to start',
     'Не удалось прочитать файл.': 'Could not read the file.',

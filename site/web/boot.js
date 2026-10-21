@@ -21,6 +21,19 @@
     document.getElementById('overlay-hint').textContent = hint
     document.getElementById('overlay').classList.add('shown')
   }
+
+  // Встроенный браузер Claude не даёт игре захватить мышь (pointer lock): шутер просит её по клику и остаётся без
+  // мыши. Один раз подсказываем, как играть, — заметкой сверху: игра идёт дальше, клик по заметке её убирает
+  const mouseNote = document.getElementById('mouse-note')
+  let mouseNoted = false
+  document.addEventListener('pointerlockerror', () => {
+    if (!mouseNote || mouseNoted) return
+    mouseNoted = true
+    mouseNote.textContent = T('Этот браузер не даёт игре захватить мышь — поворачивай стрелками. С мышью игра идёт в обычном окне браузера.')
+    mouseNote.classList.add('shown')
+    mouseNote.addEventListener('click', () => mouseNote.classList.remove('shown'))
+    setTimeout(() => mouseNote.classList.remove('shown'), 15000)
+  })
   const loadEJS = () =>
     new Promise((resolve) => {
       if (window.ArcadeEJS) return resolve()
@@ -40,6 +53,96 @@
         document.body.appendChild(script)
       })
     }
+  }
+
+  // Браузерная игра в рамке — на паузе, пока окно не в фокусе, как Денди: иначе она идёт в фоне со звуком (во
+  // встроенном браузере Claude «крестик» только прячет панель, и страница теряет фокус). Своей паузы у этих игр нет,
+  // поэтому останавливаем их изнутри рамки — страница наша, адрес тот же: у HexGL цикл кадров и таймер гонки, у сборок
+  // Emscripten (OpenTTD) главный цикл; звук — их AudioContext. Возвращает «продолжить» или null, если нечего останавливать
+  function freeze(w) {
+    const hex = w.hexGL
+    if (hex && hex.gameplay) {
+      const audio = w.bkcore && w.bkcore.Audio._ctx
+      const running = hex.active // после финиша цикл уже стоит, на экране счёт — там только звук
+      const since = Date.now()
+      hex.active = false // цикл кадров HexGL сам не просит следующий кадр, когда игра неактивна
+      if (audio) audio.suspend()
+      return () => {
+        if (audio) audio.resume()
+        if (!running) return
+        // Пауза не попадает во время круга, а первый кадр после неё — без скачка
+        const gap = Date.now() - since
+        const time = hex.gameplay.timer.time
+        time.start += gap
+        time.previous += gap
+        hex.manager.time = w.perfNow()
+        hex.active = true
+        const raf = () => {
+          if (hex.active) w.requestAnimationFrame(raf)
+          hex.update()
+        }
+        raf()
+      }
+    }
+    const m = w.Module
+    if (m && m.calledRun && m.pauseMainLoop) {
+      const audio = m.SDL2 && m.SDL2.audioContext
+      m.pauseMainLoop()
+      if (audio) audio.suspend()
+      return () => {
+        if (audio) audio.resume()
+        m.resumeMainLoop()
+      }
+    }
+    return null
+  }
+  function pauseFrameWhenAway(frame) {
+    let thaw = null
+    let check = 0
+    // Фокус ушёл внутрь рамки — это игра, а не уход из окна: проверяем, когда он уже перешёл. Останавливать пока
+    // нечего (OpenTTD ещё грузит данные, HexGL в меню) — проверяем снова, пока окно не в фокусе
+    const away = (ms = 0) => {
+      clearTimeout(check)
+      check = setTimeout(() => {
+        if (thaw || document.hasFocus()) return
+        try {
+          thaw = freeze(frame.contentWindow)
+        } catch {
+          thaw = null // чужой адрес — не трогаем
+        }
+        if (thaw) overlay(T('Пауза'), T('Кликни или нажми любую клавишу, чтобы продолжить'))
+        else away(1000)
+      }, ms)
+    }
+    const back = (e) => {
+      if (!thaw || (e && (e.ctrlKey || e.metaKey || e.altKey))) return
+      // Клавиша только продолжает игру и в неё не попадает: Esc в HexGL начал бы гонку заново
+      if (e) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+      document.getElementById('overlay').classList.remove('shown')
+      const go = thaw
+      thaw = null
+      go()
+      frame.focus()
+    }
+    window.addEventListener('blur', () => away())
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) away()
+    })
+    document.getElementById('overlay').addEventListener('click', () => back())
+    window.addEventListener('keydown', back, true)
+    frame.addEventListener('load', () => {
+      try {
+        frame.contentWindow.addEventListener('blur', () => away())
+        frame.contentWindow.addEventListener('keydown', back, true)
+      } catch {
+        // чужой адрес — не трогаем
+      }
+      // Игру открыли, когда окно уже не в фокусе (в фоне, пока работал Claude)
+      away()
+    })
   }
 
   // Своя игра: Денди — в JSNES, книга — в читалку, остальное — в EmulatorJS
@@ -127,6 +230,7 @@
         // чужой адрес — не трогаем
       }
     })
+    pauseFrameWhenAway(frame)
     ;(document.getElementById('stage') || document.body).appendChild(frame)
     frame.focus()
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'board') {

@@ -74,6 +74,7 @@
   "The file is larger than 16 MB — that is not a game for this console.": "Le fichier dépasse 16 Mo — ce n’est pas un jeu pour cette console.",
   "The file is larger than 50 MB — too much for a book.": "Le fichier dépasse 50 Mo — c’est trop pour un livre.",
   "The round is starting": "La manche commence",
+  "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Ce navigateur ne laisse pas le jeu capturer la souris — tourne avec les flèches. Avec la souris, le jeu tourne dans une fenêtre de navigateur normale.",
   "This console does not support your own files yet.": "Cette console ne prend pas encore en charge vos propres fichiers.",
   "This is a different file: it does not match the one added in the mod.": "C’est un autre fichier : il ne correspond pas à celui ajouté dans le mod.",
   "This is an archive. Unpack it and choose the game file itself: .sms.": "C’est une archive. Décompressez-la et choisissez le fichier du jeu lui-même : .sms.",
