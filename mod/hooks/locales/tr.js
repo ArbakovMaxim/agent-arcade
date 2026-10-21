@@ -65,6 +65,7 @@ export default {
   "Press any button to take off": "Havalanmak için herhangi bir tuşa bas",
   "Racing": "Yarış",
   "Read": "Oku",
+  "Read & listen": "Oku ve dinle",
   "Reassign keys": "Tuşları yeniden ata",
   "Reassigning the controls.": "Kontroller yeniden atanıyor.",
   "Settings": "Ayarlar",
@@ -114,6 +115,7 @@ export default {
   "memoir": "anı",
   "memory": "eşini bul",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "sohbetin yanında; otomatik modda oyunu Claude açar — kısa bir süre durur ve işine geri döner",
+  "no timer": "süresiz",
   "nothing yet": "henüz yok",
   "novel": "roman",
   "novella": "uzun öykü",
@@ -237,7 +239,12 @@ export default {
   "Ask Claude to open this in the built-in browser: {0}": "Claude'dan bunu yerleşik tarayıcıda açmasını iste: {0}",
   "Score: {0} · best: {1}": "Skor: {0} · rekor: {1}",
   "Crash! Score: {0} · best: {1} — any button to try again": "Çarptın! Skor: {0} · rekor: {1} — tekrar denemek için herhangi bir tuş",
-  "flap — any button: {0} or {1}": "kanat çırp — herhangi bir tuş: {0} veya {1}"
+  "flap — any button: {0} or {1}": "kanat çırp — herhangi bir tuş: {0} veya {1}",
+  "{0} audiobook": "{0#one=# sesli kitap;other=# sesli kitap}",
+  "{0} audiobooks": "{0#one=# sesli kitap;other=# sesli kitap}",
+  "{0} — {1}": "{0} — {1}",
+  "{0}, {1}": "{0}, {1}",
+  "{0}: {1}": "{0}: {1}"
  },
  "words": [
   [

@@ -17,6 +17,7 @@
     { skill: 20, depth: 22, ms: 1500 },
   ]
   const TIMERS = [0, 3, 5, 10] // минуты; 0 — без таймера; плюс «свой»
+  const NET_TIMERS = [0, 3, 5, 7, 10] // по сети: контроль времени на партию каждому
   const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }
   const SETUP_KEY = 'arcade:chess:setup'
 
@@ -41,6 +42,22 @@
     }
     return { level: 3, color: 'w', minutes: 0 }
   }
+  const loadMode = () => {
+    try {
+      const m = JSON.parse(localStorage.getItem(`${SETUP_KEY}:net`))
+      if (m && ['bot', 'net', 'friend'].includes(m.mode)) return { mode: m.mode, control: Math.max(0, Math.min(180, Number(m.control) || 0)) }
+    } catch {
+      // без хранилища
+    }
+    return { mode: 'bot', control: 5 }
+  }
+  const saveMode = (m) => {
+    try {
+      localStorage.setItem(`${SETUP_KEY}:net`, JSON.stringify(m))
+    } catch {
+      // без хранилища
+    }
+  }
   const saveSetup = (s) => {
     try {
       localStorage.setItem(SETUP_KEY, JSON.stringify(s))
@@ -48,9 +65,57 @@
       // без хранилища
     }
   }
-  const clock = (ms) => {
+  const clockText = (ms) => {
     const s = Math.max(0, Math.ceil(ms / 1000))
     return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  }
+
+  // Доска: клетки-кнопки, фигуры, выбранная клетка, куда можно пойти, последний ход, подсказка
+  function paintBoard(grid, chess, flipped, selected, hint, onClick) {
+    grid.replaceChildren()
+    const board = chess.board()
+    const targets = selected ? chess.moves({ square: selected, verbose: true }).map((m) => m.to) : []
+    const last = chess.history({ verbose: true }).slice(-1)[0]
+    for (let i = 0; i < 64; i++) {
+      const r = flipped ? 7 - Math.floor(i / 8) : Math.floor(i / 8)
+      const c = flipped ? 7 - (i % 8) : i % 8
+      const sq = 'abcdefgh'[c] + (8 - r)
+      const dark = (r + c) % 2 === 1
+      const lastMove = last && (last.from === sq || last.to === sq)
+      const hinted = hint && (hint.from === sq || hint.to === sq)
+      const bg = selected === sq ? '#6d6a2c' : targets.includes(sq) ? '#2f6d3b' : hinted ? '#2c5b8a' : lastMove ? (dark ? '#8a7a3a' : '#cdbf6e') : dark ? '#6b4f36' : '#d8c3a0'
+      const cell = el('button', `aspect-ratio:1;border:0;margin:0;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${bg};font-size:min(8vw,5.4vh,46px);line-height:1`)
+      cell.type = 'button'
+      cell.dataset.square = sq
+      const p = board[r][c]
+      if (p) cell.append(el('span', `color:${p.color === 'w' ? '#fafafa' : '#141414'};text-shadow:${p.color === 'w' ? '0 0 2px #000,0 0 1px #000' : '0 0 2px #fff6'}`, GLYPH[p.type]))
+      cell.addEventListener('click', () => onClick(sq))
+      grid.append(cell)
+    }
+  }
+  // Запись ходов: «1. e4 e5 2. Nf3 …»
+  function paintMoves(box, chess) {
+    const history = chess.history()
+    box.replaceChildren()
+    for (let i = 0; i < history.length; i += 2) box.append(el('div', '', `${i / 2 + 1}. ${history[i]}${history[i + 1] ? ` ${history[i + 1]}` : ''}`))
+    if (!history.length) box.append(el('div', 'color:#6f6f78', T('ходов пока нет')))
+    box.scrollTop = box.scrollHeight
+  }
+  function layoutParts(root, titleText) {
+    const title = el('h2', 'margin:8px 0', titleText)
+    const status = el('p', 'min-height:1.4em;color:#e0c070', '')
+    const top = el('div', 'font:600 18px ui-monospace,monospace;margin:6px 0;color:#c9c9cf', '')
+    const bottom = el('div', 'font:600 18px ui-monospace,monospace;margin:6px 0;color:#c9c9cf', '')
+    const grid = el('div', 'display:grid;grid-template-columns:repeat(8,1fr);width:min(92vw,62vh,480px);border:2px solid #3a3a44')
+    const moves = el('div', 'min-width:180px;max-width:260px;max-height:62vh;overflow:auto;font:14px ui-monospace,monospace;line-height:1.6;color:#c9c9cf;padding:6px 10px;border:1px solid #3a3a44;border-radius:8px')
+    moves.className = 'chess-moves'
+    const tools = el('div', 'margin-top:10px')
+    const boardBox = el('div')
+    boardBox.append(top, grid, bottom)
+    const layout = el('div', 'display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap')
+    layout.append(boardBox, moves)
+    root.append(title, status, layout, tools)
+    return { title, status, top, bottom, grid, moves, tools }
   }
 
   // Stockfish в Worker по протоколу UCI: best(fen, level) → ход вида e2e4 или null
@@ -105,7 +170,11 @@
 
   async function start(game, id, root) {
     const Chess = (window.ArcadeChessLib && window.ArcadeChessLib.Chess) || (await import('./vendor/chess/chess.js')).Chess
-    setupScreen(game, id, root, Chess, { bot: fallbackMove })
+    const params = new URLSearchParams(location.search)
+    const code = params.get('room')
+    // ссылка на партию по сети (и старые ссылки без контроля времени — без таймера)
+    if (code && /^[a-z0-9]{6,16}$/.test(code)) return playNet(game, id, root, Chess, code, Math.max(0, Math.min(180, Math.round(Number(params.get('control')) || 0))))
+    setupScreen(game, id, root, Chess, { bot: fallbackMove }, params.get('vs') === 'bot' ? 'bot' : null)
   }
 
   // Запасной компьютер (если Stockfish не загрузился): перебор на два хода по материалу, равные — случайно
@@ -141,16 +210,77 @@
   }
 
   // Экран выбора: сила 1–10, цвет, таймер
-  function setupScreen(game, id, root, Chess, rules) {
+  function setupScreen(game, id, root, Chess, rules, forced) {
     root.replaceChildren()
     const setup = loadSetup()
+    const net = loadMode()
+    if (forced) net.mode = forced
+    let waiting = {}
     const draw = () => {
       root.replaceChildren()
-      root.append(el('h2', 'margin:8px 0', `${game.title} · ${T('с компьютером')}`))
+      root.append(el('h2', 'margin:8px 0', game.title))
       const row = (label, children) => {
         const r = el('div', 'margin:10px 0')
         r.append(el('div', 'color:#9a9aa3;margin-bottom:4px', label), ...children)
         return r
+      }
+      const modes = [['bot', T('С компьютером')], ['net', T('По сети')], ['friend', T('С другом')]].map(([m, label]) => {
+        const b = button(label, () => {
+          net.mode = m
+          saveMode(net)
+          draw()
+        }, net.mode === m)
+        b.className = 'chess-mode'
+        b.dataset.mode = m
+        return b
+      })
+      root.append(row(T('Партия'), modes))
+      if (net.mode !== 'bot') {
+        // По сети и с другом: контроль времени; у каждого варианта — сколько человек его ждут
+        const controls = NET_TIMERS.map((m) => {
+          const count = waiting[`${id}-${m}`] || 0
+          const b = button(`${m ? T(`${m} мин`) : T('без таймера')}${net.mode === 'net' && count ? ` · ${T(`ждут: ${count}`)}` : ''}`, () => {
+            net.control = m
+            saveMode(net)
+            draw()
+          }, net.control === m)
+          b.className = 'chess-control'
+          b.dataset.control = m
+          return b
+        })
+        const custom = el('input', 'width:64px;margin:4px;padding:7px;border-radius:8px;border:1px solid #3a3a44;background:#1c1c22;color:#e6e6ea')
+        custom.type = 'number'
+        custom.min = '1'
+        custom.max = '180'
+        custom.placeholder = T('свой')
+        if (net.control && !NET_TIMERS.includes(net.control)) custom.value = String(net.control)
+        custom.addEventListener('change', () => {
+          const v = Math.round(Number(custom.value))
+          if (v >= 1 && v <= 180) {
+            net.control = v
+            saveMode(net)
+            draw()
+          }
+        })
+        const status = el('p', 'min-height:1.4em;color:#e0c070', '')
+        const go = button(net.mode === 'net' ? T('Найти игрока') : T('Пригласить друга'), () => {
+          const where = (c) => `?game=${encodeURIComponent(id)}&room=${c}&control=${net.control}`
+          if (net.mode === 'friend') return (location.search = where(window.ArcadeBoard.randomCode()))
+          // подбор — среди тех, кто выбрал тот же контроль: у каждого варианта своё лобби
+          window.ArcadeBoard.seek(`${id}-${net.control}`, status, (c) => (location.search = where(c)))
+        }, true)
+        go.className = 'chess-find'
+        root.append(row(T('Контроль времени — каждому'), [...controls, custom, el('span', 'color:#9a9aa3', T('мин'))]), go, status)
+        const mine = window.ArcadeBoard.myGames().filter((g) => g.game === id)
+        if (mine.length) {
+          root.append(el('h3', 'margin:18px 0 6px;color:#9a9aa3;font-size:14px', T('Мои партии')))
+          for (const g of mine.slice(0, 8)) {
+            const a = el('a', 'display:block;color:#7fb2ff;margin:4px', `${T('партия')} ${g.code.slice(0, 6)} · ${new Date(g.at).toLocaleString()}`)
+            a.href = `?game=${encodeURIComponent(id)}&room=${g.code}`
+            root.append(a)
+          }
+        }
+        return
       }
       const levels = []
       for (let l = 1; l <= 10; l++) {
@@ -201,18 +331,179 @@
       }, true)
       startButton.dataset.start = '1'
       startButton.className = 'chess-start'
-      const back = el('a', 'display:inline-block;margin-top:14px;color:#7fb2ff', T('← Шахматы по сети и с другом'))
-      back.href = `?game=${encodeURIComponent(id)}`
       root.append(
         row(T('Сила компьютера'), [...levels, levelHint]),
         row(T('Цвет'), colors),
         row(T('Таймер на партию'), [...timers, custom, el('span', 'color:#9a9aa3', T('мин'))]),
         startButton,
-        el('br'),
-        back,
       )
     }
     draw()
+    // Кто какой контроль ждёт — раз в 15 секунд
+    const poll = async () => {
+      try {
+        const r = await fetch('/api/lobbies')
+        const data = await r.json()
+        waiting = (data && data.board) || {}
+        if (net.mode === 'net') draw()
+      } catch {
+        // без сети — без счётчиков
+      }
+    }
+    poll()
+    setInterval(poll, 15000)
+  }
+
+  // Партия по сети и с другом: комната на сервере, часы — тоже на сервере. Сторона 0 — белые
+  function playNet(game, id, root, Chess, code, minutes) {
+    const B = window.ArcadeBoard
+    B.remember(code, id)
+    root.replaceChildren()
+    const { title, status, top, bottom, grid, moves, tools } = layoutParts(root, game.title)
+    let chess = new Chess()
+    let list = []
+    let seat = -1
+    let seats = 0
+    let selected = null
+    let flipped = false
+    let clock = null
+    let offset = 0
+    let result = null
+    let control = minutes * 60
+    let flaggedAt = 0
+    const link = `${location.origin}${location.pathname}?game=${encodeURIComponent(id)}&room=${code}${minutes ? `&control=${minutes}` : ''}`
+    const ws = new WebSocket(B.wsUrl(`/net/board/${code}`))
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: B.tokenFor(code), game: id, ...(control ? { control } : {}) })))
+    ws.addEventListener('close', () => {
+      status.textContent = T('Связь с партией прервалась — открой ссылку ещё раз, ходы сохранены')
+    })
+    const replay = () => {
+      chess = new Chess()
+      for (const m of list) {
+        try {
+          chess.move(m)
+        } catch {
+          break
+        }
+      }
+    }
+    const setClock = (c) => {
+      clock = c || null
+      if (c && c.now) offset = Date.now() - c.now
+    }
+    ws.addEventListener('message', (e) => {
+      let m
+      try {
+        m = JSON.parse(e.data)
+      } catch {
+        return
+      }
+      if (m.type === 'state') {
+        seat = m.seat
+        seats = m.seats
+        list = Array.isArray(m.moves) ? m.moves : []
+        control = m.control || 0
+        setClock(m.clock)
+        result = m.result || null
+        flipped = seat === 1
+        replay()
+      } else if (m.type === 'move' && m.ply === list.length) {
+        list.push(m.move)
+        try {
+          chess.move(m.move)
+        } catch {
+          // неверный ход — дальше не идём
+        }
+        if (m.clock) setClock(m.clock)
+      } else if (m.type === 'seats') seats = m.seats
+      selected = null
+      render()
+    })
+    const mySide = () => (seat === 0 ? 'w' : seat === 1 ? 'b' : null)
+    const leftOf = (side) => {
+      if (!clock) return null
+      const idx = side === 'w' ? 0 : 1
+      let ms = clock.left[idx]
+      if (idx === list.length % 2 && !result && !chess.isGameOver()) ms -= Date.now() - offset - clock.since
+      return Math.max(0, ms)
+    }
+    const send = (frame) => ws.send(JSON.stringify(frame))
+    function verdict() {
+      if (result) {
+        const lost = result.loser === seat
+        if (result.reason === 'time') return lost ? T('Время вышло — поражение') : seat >= 0 ? T('У соперника вышло время — победа!') : T('Партия окончена: время вышло')
+        return lost ? T('Ты сдался — поражение') : seat >= 0 ? T('Соперник сдался — победа!') : T('Партия окончена: сдались')
+      }
+      if (chess.isCheckmate()) return chess.turn() === mySide() ? T('Мат — поражение') : seat >= 0 ? T('Мат — победа!') : T('Мат')
+      if (chess.isGameOver()) return T('Ничья')
+      return null
+    }
+    function render() {
+      title.textContent = `${game.title}${control ? ` · ${T(`${Math.round(control / 60)} мин`)}` : ''}`
+      paintBoard(grid, chess, flipped, selected, null, click)
+      paintMoves(moves, chess)
+      const down = flipped ? 'b' : 'w'
+      const up = down === 'w' ? 'b' : 'w'
+      const label = (side) => `${side === mySide() ? T('Ты') : T('Соперник')} (${side === 'w' ? T('белые') : T('чёрные')})${clock ? ` · ${clock ? (leftOf(side) === null ? '' : clockText(leftOf(side))) : ''}` : ''}`
+      top.textContent = label(up)
+      bottom.textContent = label(down)
+      const done = verdict()
+      if (done) status.textContent = done
+      else if (seats < 2) status.textContent = T('Ждём соперника — отправь ему ссылку на эту партию')
+      else if (seat < 0) status.textContent = T('Ты смотришь партию: в ней уже двое')
+      else if (chess.turn() === mySide()) status.textContent = `${T('Твой ход')}${chess.inCheck() ? ` · ${T('шах')}` : ''}`
+      else status.textContent = T('Ход соперника — можно вернуться к агенту, партия сохранится')
+      // Время у того, кто ходит, кончилось — сообщаем серверу; решает он, по своим часам
+      if (clock && !done && seats >= 2) {
+        const mover = list.length % 2 === 0 ? 'w' : 'b'
+        if (leftOf(mover) <= 0 && Date.now() - flaggedAt > 2000) {
+          flaggedAt = Date.now()
+          send({ type: 'flag' })
+        }
+      }
+      tools.replaceChildren()
+      if (!done && seat >= 0 && seats >= 2) tools.append(button(T('Сдаться'), () => send({ type: 'resign' })))
+      if (done && seat >= 0) tools.append(button(T('Новая партия'), () => send({ type: 'reset' }), true))
+      tools.append(
+        button(T('Перевернуть доску'), () => {
+          flipped = !flipped
+          render()
+        }),
+        button(T('Скопировать партию (PGN)'), async () => {
+          const pgn = chess.pgn()
+          try {
+            await navigator.clipboard.writeText(pgn)
+          } catch {
+            prompt('PGN', pgn)
+          }
+        }),
+        button(T('Скопировать ссылку на партию'), async () => {
+          try {
+            await navigator.clipboard.writeText(link)
+          } catch {
+            prompt(T('Ссылка на партию'), link)
+          }
+        }),
+      )
+    }
+    function click(sq) {
+      if (seat < 0 || seats < 2 || verdict() || chess.turn() !== mySide()) return
+      const piece = chess.get(sq)
+      if (piece && piece.color === mySide()) {
+        selected = sq
+        return render()
+      }
+      if (!selected) return
+      const move = chess.moves({ square: selected, verbose: true }).find((m) => m.to === sq && (!m.promotion || m.promotion === 'q'))
+      selected = null
+      if (move) send({ type: 'move', ply: list.length, move: move.san })
+      render()
+    }
+    setInterval(() => {
+      if (clock && !result) render()
+    }, 250)
+    render()
+    window.ArcadeChess.game = { get chess() { return chess }, click, get seat() { return seat }, ws, get clock() { return clock } }
   }
 
   // Партия с компьютером
@@ -230,19 +521,7 @@
     const left = { w: options.minutes * 60000, b: options.minutes * 60000 }
     let turnStarted = Date.now()
 
-    const title = el('h2', 'margin:8px 0', `${game.title} · ${T('с компьютером')} · ${T(`сила ${options.level}`)}`)
-    const status = el('p', 'min-height:1.4em;color:#e0c070', '')
-    const top = el('div', 'font:600 18px ui-monospace,monospace;margin:6px 0;color:#c9c9cf', '')
-    const bottom = el('div', 'font:600 18px ui-monospace,monospace;margin:6px 0;color:#c9c9cf', '')
-    const grid = el('div', 'display:grid;grid-template-columns:repeat(8,1fr);width:min(92vw,62vh,480px);border:2px solid #3a3a44')
-    const moves = el('div', 'min-width:180px;max-width:260px;max-height:62vh;overflow:auto;font:14px ui-monospace,monospace;line-height:1.6;color:#c9c9cf;padding:6px 10px;border:1px solid #3a3a44;border-radius:8px')
-    moves.className = 'chess-moves'
-    const tools = el('div', 'margin-top:10px')
-    const boardBox = el('div')
-    boardBox.append(top, grid, bottom)
-    const layout = el('div', 'display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap')
-    layout.append(boardBox, moves)
-    root.append(title, status, layout, tools)
+    const { status, top, bottom, grid, moves, tools } = layoutParts(root, `${game.title} · ${T('с компьютером')} · ${T(`сила ${options.level}`)}`)
 
     const now = () => Date.now()
     const spend = () => {
@@ -263,44 +542,14 @@
     const toSquare = (r, c) => 'abcdefgh'[c] + (8 - r)
 
     function render() {
-      grid.replaceChildren()
-      const board = chess.board()
-      const targets = selected ? chess.moves({ square: selected, verbose: true }).map((m) => m.to) : []
-      const last = chess.history({ verbose: true }).slice(-1)[0]
-      for (let i = 0; i < 64; i++) {
-        const r = flipped ? 7 - Math.floor(i / 8) : Math.floor(i / 8)
-        const c = flipped ? 7 - (i % 8) : i % 8
-        const sq = toSquare(r, c)
-        const dark = (r + c) % 2 === 1
-        const lastMove = last && (last.from === sq || last.to === sq)
-        const hinted = hint && (hint.from === sq || hint.to === sq)
-        const bg = selected === sq ? '#6d6a2c' : targets.includes(sq) ? '#2f6d3b' : hinted ? '#2c5b8a' : lastMove ? (dark ? '#8a7a3a' : '#cdbf6e') : dark ? '#6b4f36' : '#d8c3a0'
-        const cell = el('button', `aspect-ratio:1;border:0;margin:0;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${bg};font-size:min(8vw,5.4vh,46px);line-height:1`)
-        cell.type = 'button'
-        cell.dataset.square = sq
-        const p = board[r][c]
-        if (p) {
-          const s = el('span', `color:${p.color === 'w' ? '#fafafa' : '#141414'};text-shadow:${p.color === 'w' ? '0 0 2px #000,0 0 1px #000' : '0 0 2px #fff6'}`, GLYPH[p.type])
-          cell.append(s)
-        }
-        cell.addEventListener('click', () => click(sq))
-        grid.append(cell)
-      }
-      // Запись ходов: «1. e4 e5 2. Nf3 …»
-      const history = chess.history()
-      moves.replaceChildren()
-      for (let i = 0; i < history.length; i += 2) {
-        const line = el('div', '', `${i / 2 + 1}. ${history[i]}${history[i + 1] ? ` ${history[i + 1]}` : ''}`)
-        moves.append(line)
-      }
-      if (!history.length) moves.append(el('div', 'color:#6f6f78', T('ходов пока нет')))
-      moves.scrollTop = moves.scrollHeight
+      paintBoard(grid, chess, flipped, selected, hint, click)
+      paintMoves(moves, chess)
       // Часы: сверху — соперник, снизу — тот, чья сторона внизу доски
       const downSide = flipped ? 'b' : 'w'
       const upSide = downSide === 'w' ? 'b' : 'w'
       const name = (side) => (side === me ? T('Ты') : T(`Компьютер · сила ${options.level}`))
-      top.textContent = `${name(upSide)}${timed ? ` · ${clock(left[upSide])}` : ''}`
-      bottom.textContent = `${name(downSide)}${timed ? ` · ${clock(left[downSide])}` : ''}`
+      top.textContent = `${name(upSide)}${timed ? ` · ${clockText(left[upSide])}` : ''}`
+      bottom.textContent = `${name(downSide)}${timed ? ` · ${clockText(left[downSide])}` : ''}`
       // Состояние и кнопки
       if (over) status.textContent = over.text
       else if (thinking) status.textContent = T('Компьютер думает…')

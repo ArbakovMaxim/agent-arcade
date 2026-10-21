@@ -101,7 +101,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
   vm.createContext(ctx)
   // Скрипт, который страница подгружает сама: sega.js — выполнить, как браузер; loader.js эмулятора — только запомнить
   page.onScript = (script) => {
-    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'chess.js', 'book-format.js', 'reader.js', 'flappy.js'].includes(script.src)) {
+    if (['ejs.js', 'netdoom.js', 'board-rules.js', 'board.js', 'chess.js', 'go.js', 'book-format.js', 'reader.js', 'flappy.js', 'audio.js'].includes(script.src)) {
       vm.runInContext(fs.readFileSync(path.join(DIST, script.src), 'utf8'), ctx, { filename: script.src })
       setTimeout(() => script.onload && script.onload(), 0)
     }
@@ -116,7 +116,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     const overlayShown = byId.overlay?.classList.contains('shown')
     const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
     const flappy = page.appended.some((s) => s.src === 'flappy.js') // своя игра: движок подключён
-    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game' || n.id === 'reader-root') // настольные, браузерные, книги
+    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game' || n.id === 'reader-root' || (n.id === 'audio-root' && n.children?.length)) // настольные, браузерные, книги, аудиокниги
     return library > 0 || segaStarted || board || flappy || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
@@ -382,7 +382,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(picker.children.length, 13, '13 языков')
   assert.deepEqual(picker.children.slice(0, 3).map((o) => o.textContent), ['🌐 English', '🌐 Русский', '🌐 Українська'])
   assert.match(textOf(lib), /Your \.nes file opens only on this device/)
-  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Games', 'Books'])
+  assert.deepEqual(lib.querySelectorAll('.tab').map((b) => b.textContent), ['NES', 'Sega', 'Master System', 'PlayStation', 'Games', 'Books', 'Audiobooks'])
   assert.match(textOf(lib), /↑ ↓ — pick a game · ← → — console · Enter — play/)
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.genre').map((g) => g.textContent).join(' ')), 'жанры переведены')
   assert.ok(!/[А-Яа-яЁё]/.test(lib.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания игр по-английски')
@@ -597,7 +597,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   }
   // Вкладка «Настольные» — без кнопки своих файлов
   const lib = await makePage(new Map(), { search: '?tab=board' })
-  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi', 'go'])
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
   // Меню игры
   const menu = await makePage(new Map(), { search: '?game=reversi' })
@@ -694,7 +694,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(shooters.byId.library.querySelectorAll('.open-rom').length, 2, 'у шутеров — «Открыть свой файл» (WAD) и язык')
   // Переключение полки — свой адрес
   strategy.byId.library.querySelectorAll('.shelf').find((b) => b.dataset.shelf === 'board').click()
-  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi'])
+  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['chess', 'checkers', 'reversi', 'go'])
   const ttd = await makePage(new Map(), { search: '?game=openttd' })
   await until(() => ttd.byId.stage.children.some((n) => n.id === 'web-game'))
   const ttdFrame = ttd.byId.stage.children.find((n) => n.id === 'web-game')
@@ -742,6 +742,96 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(root.querySelectorAll('.chess-moves')[0].children[0].textContent, /^1\. e4 \S+/)
   g.undo()
   assert.equal(g.chess.history().length, 0, '«Вернуть ход» снимает и свой ход, и ответ компьютера')
+}
+
+// --- Шахматы по сети: контроль времени, лобби варианта, часы с сервера, флажок ------------------------------------
+{
+  const { Chess } = await import(pathToFileURL(path.join(DIST, 'vendor', 'chess', 'chess.js')).href)
+  const lobby = await makePage(new Map(), { search: '?game=chess&lang=en', globals: { ArcadeChessLib: { Chess } } })
+  await until(() => lobby.byId.stage.children.some((n) => n.id === 'board-root' && n.querySelectorAll('.chess-mode').length === 3))
+  const root = lobby.byId.stage.children.find((n) => n.id === 'board-root')
+  root.querySelectorAll('.chess-mode').find((b) => b.dataset.mode === 'net').click()
+  root.querySelectorAll('.chess-control').find((b) => String(b.dataset.control) === '7').click()
+  root.querySelectorAll('.chess-find')[0].click()
+  await until(() => lobby.sockets.some((s) => /\/net\/room\/board-chess-7$/.test(s.url)))
+  assert.ok(lobby.sockets.some((s) => /\/net\/room\/board-chess-7$/.test(s.url)), 'подбор — в лобби выбранного контроля')
+  // Партия по ссылке: приветствие с контролем, часы с сервера, ход уходит на сервер, флажок — когда время вышло
+  const net = await makePage(new Map(), { search: '?game=chess&room=abcdef5678&control=7&lang=en', globals: { ArcadeChessLib: { Chess } } })
+  await until(() => net.sockets.some((s) => /\/net\/board\/abcdef5678$/.test(s.url)))
+  const ws = net.sockets.find((s) => /\/net\/board\/abcdef5678$/.test(s.url))
+  ws.emit('open')
+  assert.deepEqual([JSON.parse(ws.sent[0]).type, JSON.parse(ws.sent[0]).control], ['hello', 420])
+  const now = Date.now()
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'chess', seat: 0, seats: 2, moves: [], control: 420, clock: { left: [420000, 420000], since: now, now } }))
+  const g = net.ctx.ArcadeChess.game
+  g.click('e2')
+  g.click('e4')
+  assert.deepEqual(JSON.parse(ws.sent.at(-1)), { type: 'move', ply: 0, move: 'e4' })
+  ws.emit('message', JSON.stringify({ type: 'move', ply: 0, move: 'e4', clock: { left: [419000, 1], since: now - 10, now } }))
+  await until(() => ws.sent.some((f) => JSON.parse(f).type === 'flag'))
+  assert.ok(ws.sent.some((f) => JSON.parse(f).type === 'flag'), 'у соперника вышло время — флажок серверу')
+}
+
+// --- Го: с компьютером на 9×9, «Найти игрока» — в лобби своей доски ----------------------------------------------
+{
+  const go = await makePage(new Map(), { search: '?game=go&lang=en' })
+  await until(() => go.byId.stage.children.some((n) => n.id === 'board-root' && n.querySelectorAll('.go-start').length === 1))
+  const root = go.byId.stage.children.find((n) => n.id === 'board-root')
+  root.querySelectorAll('.go-start')[0].click()
+  await until(() => go.ctx.ArcadeGo.game && go.ctx.ArcadeGo.game.go)
+  const g = go.ctx.ArcadeGo.game
+  assert.equal(g.go.size, 9)
+  g.click(40) // центр 9×9
+  await until(() => g.go.moves === 2, 600)
+  assert.equal(g.go.moves, 2, 'компьютер ответил')
+  const net = await makePage(new Map(), { search: '?game=go&lang=en' })
+  await until(() => net.byId.stage.children.some((n) => n.id === 'board-root' && n.querySelectorAll('.go-mode').length === 3))
+  const r2 = net.byId.stage.children.find((n) => n.id === 'board-root')
+  r2.querySelectorAll('.go-mode')[1].click()
+  r2.querySelectorAll('.go-size').find((b) => String(b.dataset.size) === '13').click()
+  r2.querySelectorAll('.go-start')[0].click()
+  await until(() => net.sockets.some((s) => /\/net\/room\/board-go-13$/.test(s.url)))
+  assert.ok(net.sockets.some((s) => /\/net\/room\/board-go-13$/.test(s.url)), 'подбор — среди выбравших ту же доску')
+}
+
+// --- Аудиокниги: проигрыватель (главы, скорость, место прослушивания), свои файлы, полка «Аудиокниги» -------------
+{
+  const withAudio = (bytes) => {
+    const c = JSON.parse(bytes.toString('utf8'))
+    // только тестовая книга: аудиокниги каталога и полки их языков убираем
+    for (const [id, g] of Object.entries(c.games)) if (g.kind === 'audio') delete c.games[id]
+    c.shelves = c.shelves.filter((s) => !/^audio-/.test(s.id) || s.id === 'audio-mine')
+    c.shelves.splice(c.shelves.findIndex((s) => s.id === 'audio-mine'), 0, { id: 'audio-en', title: 'English' }) // как в сборке: языки — перед «Моими аудиокнигами»
+    c.games['test-audio'] = { console: 'audiobooks', kind: 'audio', shelf: 'audio-en', title: 'The Test Tale', author: 'A. Author', reader: 'R. Reader', genre: 'сказки', keys: '…', chapters: [{ title: 'Chapter 1', url: 'https://archive.org/download/x/1.mp3', seconds: 600 }, { title: 'Chapter 2', url: 'https://archive.org/download/x/2.mp3', seconds: 540 }] }
+    return JSON.stringify(c)
+  }
+  const store = new Map()
+  const page = await makePage(store, { search: '?game=test-audio&lang=en', net: { override: { 'catalog.json': withAudio } } })
+  await until(() => page.ctx.ArcadeAudio && page.ctx.ArcadeAudio.player)
+  const p = page.ctx.ArcadeAudio.player
+  const root = page.byId.stage.children.find((n) => n.id === 'audio-root')
+  assert.equal(root.querySelectorAll('.audio-chapter').length, 2, 'главы списком')
+  assert.equal(p.audio.src, 'https://archive.org/download/x/1.mp3', 'звук — прямо с archive.org')
+  root.querySelectorAll('.audio-speed').find((b) => String(b.dataset.speed) === '1.5').click()
+  assert.equal(p.speed, 1.5)
+  root.querySelectorAll('.audio-next')[0].click()
+  assert.equal(p.chapter, 1)
+  assert.equal(p.audio.src, 'https://archive.org/download/x/2.mp3')
+  assert.deepEqual([JSON.parse(store.get('arcade:audio:test-audio')).chapter, JSON.parse(store.get('arcade:audio:test-audio')).speed], [1, 1.5], 'место и скорость запомнились')
+  // Свои аудиокниги: файлы глав — одна книга, по порядку имён; хранятся в браузере; «Удалить»
+  const A = page.ctx.ArcadeAudio
+  const entry = await A.addFiles([{ name: 'Book 02.mp3', type: 'audio/mpeg', size: 10 }, { name: 'Book 01.mp3', type: 'audio/mpeg', size: 12 }])
+  assert.deepEqual(JSON.parse(JSON.stringify([entry.title, entry.files.map((f) => f.name)])), ['Book', ['Book 01.mp3', 'Book 02.mp3']])
+  assert.equal((await A.listMine()).length, 1)
+  await A.removeMine(entry.id)
+  assert.equal((await A.listMine()).length, 0)
+  await assert.rejects(A.addFiles([{ name: 'notes.txt', type: 'text/plain', size: 5 }]), /not audio files/)
+  // Вкладка «Аудиокниги»: полки языков и «Мои аудиокниги»; на полке языка — жанры, как у книг
+  const tab = await makePage(new Map(), { search: '?tab=listening&shelf=audio-en&lang=en', net: { override: { 'catalog.json': withAudio } } })
+  assert.deepEqual(tab.byId.library.querySelectorAll('.shelf').filter((b) => !/genre-chip/.test(b.className)).map((b) => b.textContent), ['English', 'My audiobooks'])
+  assert.deepEqual(tab.byId.library.querySelectorAll('.genre-chip').map((b) => b.textContent), ['All', 'Fairy tales'], 'жанры аудиокниг — как у книг')
+  const mineShelf = await makePage(new Map(), { search: '?tab=listening&shelf=audio-mine&lang=en' })
+  assert.deepEqual(mineShelf.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['my-audio'])
 }
 
 // --- Flappy Arcade: своя игра — движок flappy.js из мода, подсказка клавиш на языке окна ------------------------

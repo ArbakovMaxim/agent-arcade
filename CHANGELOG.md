@@ -1,6 +1,8 @@
 # Changelog · Список изменений
 
-## 0.13.0 — шахматы с компьютером: Stockfish, сила от 1 до 10, выбор цвета, таймер (3, 5, 10 минут или свой), запись ходов, копирование в PGN, вернуть ход, подсказка, переворот доски · chess vs computer: Stockfish levels 1–10, colour, clock, move list, PGN, takeback, hint
+## 0.14.0 — аудиокниги: своя группа с полками по языкам и жанрам, проигрыватель в окне (главы, скорость, перемотка, место запоминается), свои аудиокниги — MP3, M4A, M4B, OGG, Opus, только в браузере; первые книги LibriVox; полки языков книг и аудиокниг создаются сами · audiobooks by language and genre, your own files stay in the browser, first LibriVox titles
+
+## 0.13.0 — шахматы: с компьютером на Stockfish (сила 1–10, цвет, таймер, запись ходов, PGN, вернуть ход, подсказка), по сети с часами на сервере и подбором по контролю времени, счётчики «кто какой вариант ждёт»; новая игра го: 9×9, 13×13, 19×19, с компьютером, по сети и с другом · chess with Stockfish and online clocks; new game: Go
 
 ## 0.12.0 — Flappy Arcade: своя игра прямо в панели Claude Code (терминал, Desktop, VS Code — без браузера) и в окне Arcade; одна кнопка, трасса дня одна для всех, свой рекорд · Flappy Arcade: an original game right in the Claude Code panel and in the Arcade window
 

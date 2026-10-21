@@ -65,6 +65,7 @@ export default {
   "Press any button to take off": "Pressione qualquer botão para decolar",
   "Racing": "Corrida",
   "Read": "Ler",
+  "Read & listen": "Ler e ouvir",
   "Reassign keys": "Reconfigurar teclas",
   "Reassigning the controls.": "Reconfigurando os controles.",
   "Settings": "Configurações",
@@ -114,6 +115,7 @@ export default {
   "memoir": "memórias",
   "memory": "jogo da memória",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "ao lado da conversa; no modo automático o Claude abre o jogo — ele para por um momento e volta ao trabalho",
+  "no timer": "sem relógio",
   "nothing yet": "nada ainda",
   "novel": "romance",
   "novella": "novela",
@@ -237,7 +239,12 @@ export default {
   "Ask Claude to open this in the built-in browser: {0}": "Peça ao Claude para abrir isto no navegador integrado: {0}",
   "Score: {0} · best: {1}": "Pontos: {0} · recorde: {1}",
   "Crash! Score: {0} · best: {1} — any button to try again": "Batida! Pontos: {0} · recorde: {1} — qualquer botão para tentar de novo",
-  "flap — any button: {0} or {1}": "bater asas — qualquer botão: {0} ou {1}"
+  "flap — any button: {0} or {1}": "bater asas — qualquer botão: {0} ou {1}",
+  "{0} audiobook": "{0#one=# audiolivro;many=# audiolivros;other=# audiolivros}",
+  "{0} audiobooks": "{0#one=# audiolivro;many=# audiolivros;other=# audiolivros}",
+  "{0} — {1}": "{0} — {1}",
+  "{0}, {1}": "{0}, {1}",
+  "{0}: {1}": "{0}: {1}"
  },
  "words": [
   [

@@ -251,21 +251,36 @@ function waitingFrom(data) {
   const list = []
   for (const g of catalog.games) {
     let count = 0
+    let variants = []
     if (g.net === 'doom') count = Number(data?.doom) || 0
     else if (g.net === 'heretic-dm') count = Number(data?.dm?.[g.id]) || 0 // BlasphDM
     else if (g.net === 'heretic') count = Number(data?.coop?.[g.id]) || 0 // Blasphemer по сети — кооператив
     else if (g.console === 'doom') count = Number(data?.coop?.[g.id]) || 0 // кооператив Freedoom
-    else if (g.kind === 'board') count = Number(data?.board?.[g.id]) || 0 // настольные: ждут в лобби поиска соперника
+    else if (g.kind === 'board') {
+      // настольные: у каждого варианта своё лобби — «chess-7» (7 минут), «chess-0» (без таймера), «go-9» (доска 9×9)
+      variants = Object.entries(data?.board ?? {})
+        .filter(([k]) => k === g.id || k.startsWith(`${g.id}-`))
+        .map(([k, v]) => ({ key: k.slice(g.id.length + 1), count: Number(v) || 0 }))
+        .filter((v) => v.count > 0)
+      count = variants.reduce((n, v) => n + v.count, 0)
+    }
     else if (['nes', 'sega', 'sms', 'psx'].includes(g.console) && g.rom?.sha256) count = Number(data?.games?.[parseInt(g.rom.sha256.slice(0, 7), 16)]) || 0
-    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, coop: g.console === 'doom' && g.net !== 'doom' && g.net !== 'heretic-dm', count })
+    if (count > 0) list.push({ id: g.id, title: g.title, console: g.console, coop: g.console === 'doom' && g.net !== 'doom' && g.net !== 'heretic-dm', count, ...(variants.some((v) => v.key) ? { variants } : {}) })
   }
   return list.sort((a, b) => b.count - a.count)
+}
+
+// Вариант партии: го — размер доски, остальное — контроль времени в минутах (0 — без таймера)
+function variantLabel(id, key) {
+  if (id === 'go' && /^\d+$/.test(key)) return `${key}×${key}`
+  if (key === '0') return 'без таймера'
+  return /^\d+$/.test(key) ? `${key} мин` : key
 }
 
 function waitingText() {
   return netWaiting
     .slice(0, 2)
-    .map((w) => `${w.title} (${w.count})`)
+    .map((w) => (w.variants ? `${w.title}: ${w.variants.map((v) => `${variantLabel(w.id, v.key)} — ${v.count}`).join(', ')}` : `${w.title} (${w.count})`))
     .join(', ')
 }
 
@@ -417,7 +432,7 @@ function usableKey(key) {
 function toLibrary() {
   releaseAll()
   const g = gameById(view)
-  menu = g?.mine ? 'mine' : g?.kind === 'book' && g?.shelf ? `genre:${g.shelf}:${g.genre}` : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
+  menu = g?.mine ? 'mine' : (g?.kind === 'book' || g?.kind === 'audio') && g?.shelf ? `genre:${g.shelf}:${g.genre}` : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
   view = 'library'
   mode = 'play'
   notice = ''
@@ -900,8 +915,9 @@ function consoleNote(c) {
     : games().filter((g) => g.console === c.id && !g.mine).length
   // У книг — «136 книг», а не «136 игр»
   const list = c.group === undefined && groupsList().some((g) => g.id === c.id) ? games().filter((g) => groupConsoles(c.id).includes(g.console) && !g.mine) : games().filter((g) => g.console === c.id && !g.mine)
-  const books = list.length > 0 && list.every((g) => g.kind === 'book')
-  return count ? `${count} ${books ? plural(count, 'книга', 'книги', 'книг') : plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
+  const audio = list.length > 0 && list.every((g) => ['audio', 'audio-mine'].includes(g.kind))
+  const books = list.length > 0 && list.every((g) => ['book', 'audio', 'audio-mine'].includes(g.kind)) // книги и аудиокниги
+  return count ? `${count} ${audio ? plural(count, 'аудиокнига', 'аудиокниги', 'аудиокниг') : books ? plural(count, 'книга', 'книги', 'книг') : plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
 function settingsNote(surface) {
@@ -1791,13 +1807,13 @@ export function register(on) {
             const n = shelfGames(s.id).length
             return [
               Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
-              dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : plural(n, 'игра', 'игры', 'игр')}`),
+              dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : shelfGames(s.id).every((g) => ['audio', 'audio-mine'].includes(g.kind)) ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'игра', 'игры', 'игр')}`),
             ]
           }),
           ...noticeLines,
           ...hint,
         ]
-      } else if (menu.startsWith('genre:') || (shelfView(menu) && shelfView(menu).list.length && shelfView(menu).list.every((g) => g.kind === 'book'))) {
+      } else if (menu.startsWith('genre:') || (shelfView(menu) && shelfView(menu).list.length && (shelfView(menu).list.every((g) => g.kind === 'book') || shelfView(menu).list.every((g) => g.kind === 'audio')))) {
         // Книги: на полке языка — плитки жанров («Роман · 26 книг»); в жанре — его книги. «Назад» — к жанрам, потом к языкам
         const inGenre = menu.startsWith('genre:')
         const shelfMenu = inGenre ? `shelf:${menu.split(':')[1]}` : menu
@@ -1812,9 +1828,10 @@ export function register(on) {
             tiles(
               genres.flatMap((g, i) => {
                 const n = books.filter((b) => b.genre === g).length
+                const audio = books.every((b) => b.kind === 'audio')
                 return [
                   Button({ key: `arcade-genre-${i}`, label: genreLabel(g), ...((menuFrom ? menuFrom === `genre:${shelfMenu.slice(6)}:${g}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`genre:${shelfMenu.slice(6)}:${g}`) }),
-                  dim(`  ${n} ${plural(n, 'книга', 'книги', 'книг')}`),
+                  dim(`  ${n} ${audio ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'книга', 'книги', 'книг')}`),
                 ]
               }),
             ),
@@ -1891,11 +1908,11 @@ export function register(on) {
             }),
             dim(`  ${consoleNote(c)}`),
           ])
-        const reading = menuTabs().filter((c) => c.id === 'reading' || c.id === 'books')
+        const reading = menuTabs().filter((c) => ['reading', 'books', 'listening', 'audiobooks'].includes(c.id))
         items = [
           section('Играть'),
           tiles(tabItems(menuTabs().filter((c) => !reading.includes(c)))),
-          ...(reading.length ? [section('Читать'), tiles(tabItems(reading))] : []),
+          ...(reading.length ? [section(reading.some((c) => ['listening', 'audiobooks'].includes(c.id)) ? 'Читать и слушать' : 'Читать'), tiles(tabItems(reading))] : []),
           section('Ещё'),
           tiles([
           ...(windowMode() || e.surface === 'desktop'

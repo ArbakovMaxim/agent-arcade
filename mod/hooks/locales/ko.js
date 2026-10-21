@@ -65,6 +65,7 @@ export default {
   "Press any button to take off": "아무 버튼이나 눌러 이륙",
   "Racing": "레이싱",
   "Read": "읽기",
+  "Read & listen": "읽기·듣기",
   "Reassign keys": "키 다시 지정",
   "Reassigning the controls.": "조작 키를 다시 지정합니다.",
   "Settings": "설정",
@@ -114,6 +115,7 @@ export default {
   "memoir": "회고록",
   "memory": "짝 맞추기",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "대화 옆에 열립니다. 자동 모드에서는 Claude가 게임을 엽니다. 잠시 멈췄다가 다시 작업으로 돌아갑니다",
+  "no timer": "시간 제한 없음",
   "nothing yet": "아직 없음",
   "novel": "장편소설",
   "novella": "중편소설",
@@ -237,7 +239,12 @@ export default {
   "Ask Claude to open this in the built-in browser: {0}": "Claude에게 내장 브라우저에서 열어 달라고 요청하세요: {0}",
   "Score: {0} · best: {1}": "점수: {0} · 최고: {1}",
   "Crash! Score: {0} · best: {1} — any button to try again": "충돌! 점수: {0} · 최고: {1} — 아무 버튼이나 눌러 다시",
-  "flap — any button: {0} or {1}": "날갯짓 — 아무 버튼: {0} 또는 {1}"
+  "flap — any button: {0} or {1}": "날갯짓 — 아무 버튼: {0} 또는 {1}",
+  "{0} audiobook": "{0#other=오디오북 #권}",
+  "{0} audiobooks": "{0#other=오디오북 #권}",
+  "{0} — {1}": "{0} — {1}",
+  "{0}, {1}": "{0}, {1}",
+  "{0}: {1}": "{0}: {1}"
  },
  "words": [
   [

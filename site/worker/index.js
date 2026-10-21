@@ -476,7 +476,31 @@ export class BoardRoom {
 
   snapshot(ws) {
     const s = this.s
-    return { type: 'state', game: s.game, seat: ws.deserializeAttachment()?.seat ?? -1, seats: s.seats.length, moves: s.moves }
+    // Контроль времени, часы, итог и вариант (доска го) — только если они есть: старые партии выглядят как раньше
+    return {
+      type: 'state', game: s.game, seat: ws.deserializeAttachment()?.seat ?? -1, seats: s.seats.length, moves: s.moves,
+      ...(s.control ? { control: s.control } : {}), ...(s.variant ? { variant: s.variant } : {}),
+      ...(s.clock ? { clock: { ...s.clock, now: Date.now() } } : {}), ...(s.result ? { result: s.result } : {}),
+    }
+  }
+
+  // Часы: идут, когда сели двое; на ход — минус время ходившего; кончилось — проигрыш по времени
+  startClock() {
+    const s = this.s
+    if (s.control > 0 && s.seats.length >= 2 && !s.clock && !s.result) s.clock = { left: [s.control * 1000, s.control * 1000], since: Date.now() }
+  }
+
+  // Время у того, чей ход, вышло? Тогда — итог и всем свежая позиция
+  async timeUp() {
+    const s = this.s
+    if (!s.clock || s.result) return false
+    const mover = s.moves.length % 2
+    if (Date.now() - s.clock.since < s.clock.left[mover]) return false
+    s.clock.left[mover] = 0
+    s.result = { loser: mover, reason: 'time' }
+    await this.save()
+    for (const other of this.ctx.getWebSockets()) this.send(other, this.snapshot(other))
+    return true
   }
 
   async webSocketMessage(ws, message) {
@@ -494,6 +518,11 @@ export class BoardRoom {
     if (m.type === 'hello') {
       if (!/^[a-z0-9]{8,32}$/.test(m.token || '')) return
       if (!s.game && /^[a-z0-9-]{1,40}$/.test(m.game || '')) s.game = m.game
+      // Контроль времени (секунды на партию) и вариант (доска го) задаёт первый, кто вошёл в пустую партию
+      if (!s.seats.length && !s.moves.length) {
+        if (Number.isInteger(m.control) && m.control > 0 && m.control <= 10800) s.control = m.control
+        if (/^[a-z0-9-]{1,16}$/.test(m.variant || '')) s.variant = m.variant
+      }
       let seat = s.seats.indexOf(m.token)
       if (seat < 0 && s.seats.length < 2) {
         s.seats.push(m.token)
@@ -501,19 +530,41 @@ export class BoardRoom {
         await this.save()
       }
       ws.serializeAttachment({ ...me, seat })
+      if (s.seats.length >= 2 && s.control && !s.clock) {
+        this.startClock()
+        await this.save()
+        for (const other of this.ctx.getWebSockets()) if (other !== ws) this.send(other, this.snapshot(other))
+      }
       this.send(ws, this.snapshot(ws))
       for (const other of this.ctx.getWebSockets()) if (other !== ws) this.send(other, { type: 'seats', seats: s.seats.length })
     } else if (m.type === 'move') {
       // Ходит только тот, чья очередь, и только следующим ходом; иначе — пусть возьмёт свежую позицию
-      if (me.seat < 0 || m.ply !== s.moves.length || s.moves.length % 2 !== me.seat || s.seats.length < 2) return this.send(ws, this.snapshot(ws))
+      if (me.seat < 0 || m.ply !== s.moves.length || s.moves.length % 2 !== me.seat || s.seats.length < 2 || s.result) return this.send(ws, this.snapshot(ws))
+      if (await this.timeUp()) return // время вышло раньше, чем пришёл ход
+      if (s.clock) {
+        const now = Date.now()
+        s.clock.left[me.seat] -= now - s.clock.since
+        s.clock.since = now
+      }
       s.moves.push(m.move)
       await this.save()
-      for (const other of this.ctx.getWebSockets()) this.send(other, { type: 'move', ply: m.ply, move: m.move })
+      for (const other of this.ctx.getWebSockets()) this.send(other, { type: 'move', ply: m.ply, move: m.move, ...(s.clock ? { clock: { ...s.clock, now: Date.now() } } : {}) })
+    } else if (m.type === 'flag') {
+      // «У соперника вышло время» — сервер проверяет по своим часам
+      await this.timeUp()
+    } else if (m.type === 'resign') {
+      if (me.seat < 0 || s.result || s.seats.length < 2) return
+      s.result = { loser: me.seat, reason: 'resign' }
+      await this.save()
+      for (const other of this.ctx.getWebSockets()) this.send(other, this.snapshot(other))
     } else if (m.type === 'reset') {
       // Новая партия: стороны меняются местами
       if (me.seat < 0) return
       s.moves = []
       s.seats.reverse()
+      s.result = null
+      s.clock = null
+      this.startClock()
       await this.save()
       for (const other of this.ctx.getWebSockets()) {
         const a = other.deserializeAttachment() || {}

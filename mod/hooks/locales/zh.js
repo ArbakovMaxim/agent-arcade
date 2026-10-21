@@ -65,6 +65,7 @@ export default {
   "Press any button to take off": "按任意按钮起飞",
   "Racing": "竞速",
   "Read": "阅读",
+  "Read & listen": "阅读与收听",
   "Reassign keys": "重新设置按键",
   "Reassigning the controls.": "正在重新设置按键。",
   "Settings": "设置",
@@ -114,6 +115,7 @@ export default {
   "memoir": "回忆录",
   "memory": "翻牌配对",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "在对话旁边；自动模式下由 Claude 打开游戏——它会短暂停下，然后继续工作",
+  "no timer": "不计时",
   "nothing yet": "暂无",
   "novel": "长篇小说",
   "novella": "中篇小说",
@@ -237,7 +239,12 @@ export default {
   "Ask Claude to open this in the built-in browser: {0}": "请让 Claude 在内置浏览器中打开：{0}",
   "Score: {0} · best: {1}": "得分：{0} · 最高：{1}",
   "Crash! Score: {0} · best: {1} — any button to try again": "撞上了！得分：{0} · 最高：{1} — 按任意按钮重来",
-  "flap — any button: {0} or {1}": "扇动翅膀 — 任意按钮：{0} 或 {1}"
+  "flap — any button: {0} or {1}": "扇动翅膀 — 任意按钮：{0} 或 {1}",
+  "{0} audiobook": "{0#other=# 本有声书}",
+  "{0} audiobooks": "{0#other=# 本有声书}",
+  "{0} — {1}": "{0} — {1}",
+  "{0}, {1}": "{0}, {1}",
+  "{0}: {1}": "{0}: {1}"
  },
  "words": [
   [

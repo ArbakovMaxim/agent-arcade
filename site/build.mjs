@@ -55,7 +55,8 @@ function copyEmulatorJS(from, out) {
   fs.writeFileSync(emulator, code.replace(marker, `${marker}        return // Arcade: без запроса к cdn.emulatorjs.org\n`))
 }
 
-export function build({ root, out, now = new Date() }) {
+// audiobooks — список аудиокниг вместо content/audiobooks/index.json (для тестов)
+export function build({ root, out, now = new Date(), audiobooks = null }) {
   const content = path.join(root, 'content')
   const source = JSON.parse(fs.readFileSync(path.join(content, 'catalog.json'), 'utf8'))
   fs.rmSync(out, { recursive: true, force: true })
@@ -77,6 +78,41 @@ export function build({ root, out, now = new Date() }) {
       })
     }
   }
+  // Аудиокниги — из content/audiobooks/index.json (пишет tools/audiobooks/build.mjs из LibriVox); звук — на archive.org.
+  // Карточка «Мои аудиокниги» — всегда, если в каталоге есть полка аудиокниг: свои файлы хранятся в браузере
+  const audioIndex = path.join(content, 'audiobooks', 'index.json')
+  if (consoles.some((c) => c.id === 'audiobooks')) {
+    const listed = new Set((source.games ?? []).map((g) => g.id))
+    if (audiobooks || fs.existsSync(audioIndex)) {
+      for (const b of audiobooks || JSON.parse(fs.readFileSync(audioIndex, 'utf8'))) {
+        if (listed.has(b.id)) continue
+        ;(source.games ??= []).push({
+          id: b.id, console: 'audiobooks', kind: 'audio', shelf: `audio-${b.lang}`, title: b.title, author: b.author, reader: b.reader ?? '', lang: b.lang, year: b.year, genre: b.genre ?? 'аудиокнига',
+          about: b.about ?? '', about_en: b.about_en ?? '', keys: 'пробел — пауза · ← → — на 10 секунд', chapters: b.chapters,
+          license: { name: 'общественное достояние (LibriVox)', author: b.author, source: b.source },
+        })
+      }
+    }
+    if (!listed.has('my-audio')) {
+      ;(source.games ??= []).push({
+        id: 'my-audio', console: 'audiobooks', kind: 'audio-mine', shelf: 'audio-mine', title: 'Мои аудиокниги', genre: 'свои файлы',
+        about: 'Свои MP3, M4A, M4B, OGG или Opus — файлы хранятся только в этом браузере.', about_en: 'Your own MP3, M4A, M4B, OGG or Opus — the files stay in this browser only.',
+        keys: 'пробел — пауза · ← → — на 10 секунд', license: { name: 'свои файлы', author: '—', source: 'https://github.com/ArbakovMaxim/agent-arcade' },
+      })
+    }
+  }
+  // Полки языков: книга или аудиокнига на новом языке — новая полка (books-<язык>, audio-<язык>), название — на этом языке
+  const LANG_NAMES = { en: 'English', uk: 'Українська', ru: 'Русский', de: 'Deutsch', fr: 'Français', es: 'Español', it: 'Italiano', pl: 'Polski', pt: 'Português', tr: 'Türkçe', ja: '日本語', zh: '中文', ko: '한국어', la: 'Latina', nl: 'Nederlands', cs: 'Čeština' }
+  source.shelves ??= []
+  for (const g of source.games ?? []) {
+    const m = /^(books|audio)-([a-z]{2,3})$/.exec(g.shelf || '')
+    if (m && !source.shelves.some((s) => s.id === g.shelf)) {
+      const mine = source.shelves.findIndex((s) => s.id === 'audio-mine')
+      const shelf = { id: g.shelf, title: LANG_NAMES[m[2]] || m[2] }
+      if (m[1] === 'audio' && mine >= 0) source.shelves.splice(mine, 0, shelf) // языки — перед «Моими аудиокнигами»
+      else source.shelves.push(shelf)
+    }
+  }
   const consoleIds = new Set()
   for (const c of consoles) {
     if (!ID.test(c.id ?? '')) fail(`у приставки неправильный id ${JSON.stringify(c.id)}`)
@@ -92,7 +128,7 @@ export function build({ root, out, now = new Date() }) {
     if (!ID.test(g.id ?? '')) fail(`у игры неправильный id ${JSON.stringify(g.id)}`)
     if (games[g.id]) fail(`${where} описана дважды`)
     if (!consoleIds.has(g.console)) fail(`${where}: нет приставки ${g.console}`)
-    for (const field of [...(g.kind === 'book' ? ['title', 'genre', 'keys', 'text', 'author', 'lang'] : ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : g.kind === 'pane' ? ['engine'] : ['rom'])])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
+    for (const field of [...(g.kind === 'book' ? ['title', 'genre', 'keys', 'text', 'author', 'lang'] : g.kind === 'audio' ? ['title', 'genre', 'keys', 'author', 'chapters'] : g.kind === 'audio-mine' ? ['title', 'genre', 'about', 'keys'] : ['title', 'genre', 'about', 'about_en', 'keys', ...(g.kind === 'board' ? ['board'] : g.kind === 'web' ? ['page'] : g.kind === 'pane' ? ['engine'] : ['rom'])])]) if (!g[field]) fail(`${where}: нет поля ${field}`)
     if (/[А-Яа-яЁё]/.test(g.about_en)) fail(`${where}: в about_en русские буквы — нужно английское описание`)
     const license = g.license ?? {}
     for (const field of ['name', 'author', 'source']) if (!license[field]) fail(`${where}: в лицензии нет поля ${field}`)
@@ -171,6 +207,28 @@ export function build({ root, out, now = new Date() }) {
       continue
     }
     // Настольная игра — без ROM: доска, правила и сеть — страница board.js
+    // Аудиокнига: главы — https-адреса на archive.org (LibriVox хранит звук там), длительность — секунды
+    if (g.kind === 'audio') {
+      if (!Array.isArray(g.chapters) || !g.chapters.length || g.chapters.length > 400) fail(`${where}: нужно от 1 до 400 глав`)
+      for (const c of g.chapters) {
+        if (!c || typeof c.title !== 'string' || !c.title) fail(`${where}: у главы нет названия`)
+        if (!/^https:\/\/([a-z0-9-]+\.)*archive\.org\//.test(c.url || '')) fail(`${where}: адрес главы «${c.title}» — не https на archive.org`)
+        if (c.seconds !== undefined && !(Number.isInteger(c.seconds) && c.seconds >= 0)) fail(`${where}: длительность главы «${c.title}» — не целое число секунд`)
+      }
+      games[g.id] = {
+        ...(g.shelf ? { shelf: g.shelf } : {}),
+        console: g.console, kind: 'audio', title: g.title, author: g.author, reader: g.reader || '', lang: g.lang, year: g.year, genre: g.genre, about: g.about || '', about_en: g.about_en || '', keys: g.keys,
+        chapters: g.chapters.map((c) => ({ title: c.title, url: c.url, ...(c.seconds !== undefined ? { seconds: c.seconds } : {}) })),
+        credit: `${g.title} — ${g.author}${g.reader ? `, читает ${g.reader}` : ''} · LibriVox, ${license.name}`,
+        license: { name: license.name, author: license.author, source: license.source, files: [] },
+      }
+      continue
+    }
+    if (g.kind === 'audio-mine') {
+      games[g.id] = { ...(g.shelf ? { shelf: g.shelf } : {}), console: g.console, kind: 'audio-mine', title: g.title, genre: g.genre, about: g.about, about_en: g.about_en || '', keys: g.keys }
+      continue
+    }
+
     // Своя игра (Flappy Arcade): движок — файл мода hooks/<engine>.js, в окне — тот же файл (dist/<engine>.js)
     if (g.kind === 'pane') {
       if (!['flappy'].includes(g.engine)) fail(`${where}: неизвестный движок ${g.engine}`)
@@ -184,7 +242,7 @@ export function build({ root, out, now = new Date() }) {
     }
 
     if (g.kind === 'board') {
-      if (!['chess', 'checkers', 'reversi'].includes(g.board)) fail(`${where}: неизвестная настольная игра ${g.board}`)
+      if (!['chess', 'checkers', 'reversi', 'go'].includes(g.board)) fail(`${where}: неизвестная настольная игра ${g.board}`)
       const files = (license.files ?? []).map((file) => {
         const from = path.join(content, file)
         if (!fs.existsSync(from)) fail(`${where}: нет файла лицензии ${file}`)

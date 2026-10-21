@@ -2329,3 +2329,51 @@ test('Flappy Arcade: движок — падение без взмахов, тр
   expect(idle.score).toBe(0)
 })
 
+test('кто ждёт по вариантам: контроль времени у шахмат и размер доски у го', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'board', title: 'Настольные' })
+  site.games.chess = { console: 'board', kind: 'board', board: 'chess', title: 'Шахматы', genre: 'стратегия', about: 'по сети', keys: '…' }
+  site.games.go = { console: 'board', kind: 'board', board: 'go', title: 'Го', genre: 'стратегия', about: 'по сети', keys: '…' }
+  const { clock } = stubs(on, { env: WINDOWS, site: JSON.stringify(site), files: { 'api/lobbies': JSON.stringify({ doom: 0, games: {}, board: { 'chess-7': 1, 'chess-0': 2, 'go-9': 1 } }) } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '  в сети ждут: Шахматы: 7 мин — 1, без таймера — 2, Го: 9×9 — 1' })).toBeDefined()
+  expect(tr('в сети ждут: Шахматы: 7 мин — 1, без таймера — 2, Го: 9×9 — 1', 'en')).toBe('waiting online: Chess: 7 min — 1, no timer — 2, Go: 9×9 — 1')
+  await ui.unmount()
+})
+
+test('аудиокниги: своя группа — полки языков и «Мои аудиокниги», жанры плитками, открываются в окне', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'books', title: 'Книги', group: 'reading' }, { id: 'audiobooks', title: 'Аудиокниги', group: 'listening' })
+  site.groups = [{ id: 'reading', title: 'Книги' }, { id: 'listening', title: 'Аудиокниги' }]
+  site.shelves = [{ id: 'books-en', title: 'English' }, { id: 'audio-en', title: 'English' }, { id: 'audio-mine', title: 'Мои аудиокниги' }]
+  site.games.emma = { console: 'books', kind: 'book', shelf: 'books-en', text: 'books/emma/book.json', title: 'Emma', author: 'Jane Austen', genre: 'роман', about: '', keys: '…' }
+  const audio = (id: string, title: string, genre: string) => ({ console: 'audiobooks', kind: 'audio', shelf: 'audio-en', title, author: 'Автор', genre, about: '', keys: '…', chapters: [{ title: '1', url: 'https://archive.org/download/x/1.mp3' }] })
+  site.games['happy-prince'] = audio('happy-prince', 'The Happy Prince', 'сказки')
+  site.games['selfish-giant'] = audio('selfish-giant', 'The Selfish Giant', 'сказки')
+  site.games['gift-of-the-magi'] = audio('gift-of-the-magi', 'The Gift of the Magi', 'рассказы')
+  site.games['my-audio'] = { console: 'audiobooks', kind: 'audio-mine', shelf: 'audio-mine', title: 'Мои аудиокниги', genre: 'свои файлы', about: 'Свои MP3 — только в этом браузере.', keys: '…' }
+  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: 'Читать и слушать' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  4 аудиокниги' })).toBeDefined() // плитка «Аудиокниги» на главной
+  await ui.press({ key: 'arcade-menu-listening' })
+  expect(await ui.find({ key: 'arcade-menu-shelf-audio-en' })).toMatchObject({ props: { label: 'English' } })
+  expect(await ui.find({ key: 'arcade-menu-shelf-audio-mine' })).toMatchObject({ props: { label: 'Мои аудиокниги' } })
+  await ui.press({ key: 'arcade-menu-shelf-audio-en' })
+  // как у книг: на полке языка — жанры плитками с числом аудиокниг
+  expect(await ui.find({ key: 'arcade-genre-0' })).toMatchObject({ props: { label: 'Сказки' } })
+  expect(await ui.find({ type: 'Text', text: '  2 аудиокниги' })).toBeDefined()
+  await ui.press({ key: 'arcade-genre-0' })
+  await ui.press({ key: 'arcade-game-happy-prince' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=happy-prince`)
+  expect(tr('2 аудиокниги', 'en')).toBe('2 audiobooks')
+  expect(tr('Читать и слушать', 'en')).toBe('Read & listen')
+  await ui.unmount()
+})
+

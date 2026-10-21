@@ -16,9 +16,9 @@ Every game in the catalog is free and openly licensed. You can also play online 
 
 - **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt; it never steals focus unless you ask it to.
 - **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings).
-- **55 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy and board games.
+- **56 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy and board games.
 - **NES and Flappy Arcade right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
-- **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, draughts and reversi against people or the computer.
+- **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, Go, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
 - **Your own games.** Add ROMs you own; they stay on your machine.
 - **13 interface languages:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — picked from your system or browser, English by default.
@@ -81,8 +81,9 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch |
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
 | **Games → Strategy** | OpenTTD — transport tycoon |
-| **Games → Board games** | Chess — against people or the computer (Stockfish, levels 1–10), Russian draughts, Reversi |
+| **Games → Board games** | Chess — against people or the computer (Stockfish, levels 1–10), online with clocks; Go on 9×9, 13×13 and 19×19 boards; Russian draughts, Reversi |
 | **Books** | 136 public-domain classics: 98 in English (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoy and Dostoyevsky in translation…) and 38 in Ukrainian (Franko, Lesya Ukrainka, Kotsiubynsky, Kotliarevsky, Kulish…). The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window |
+| **Audiobooks** | Public-domain recordings from LibriVox on language shelves, by genre: Oscar Wilde and O. Henry in English, Gogol in Ukrainian. The player in the Arcade window remembers where you stopped; your own MP3, M4A, M4B, OGG and Opus files open there too and stay in your browser |
 
 Each game's card links to its license and source code.
 
@@ -115,7 +116,7 @@ Open **Settings** in the `/arcade` menu:
 ## Privacy
 
 - No ads, no analytics, no tracking. Games that came with analytics had it removed (see each game's `NOTICE`).
-- Your own ROMs and WADs never leave your machine or browser.
+- Your own ROMs, WADs and audiobook files never leave your machine or browser.
 - Online play goes through Arcade's server on Cloudflare: messages are relayed between players in a room and not stored — except moves of board games, which are kept so you can come back; a game untouched for a month is deleted.
 - Some games can reach the internet only when you ask them to — for example OpenTTD's optional survey and its *Online Content* button.
 

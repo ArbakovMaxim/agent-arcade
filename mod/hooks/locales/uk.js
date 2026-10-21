@@ -65,6 +65,7 @@ export default {
   "Press any button to take off": "Натисни будь-яку кнопку — злетіти",
   "Racing": "Перегони",
   "Read": "Читати",
+  "Read & listen": "Читати й слухати",
   "Reassign keys": "Перепризначити клавіші",
   "Reassigning the controls.": "Перепризначаємо керування.",
   "Settings": "Налаштування",
@@ -114,6 +115,7 @@ export default {
   "memoir": "мемуари",
   "memory": "знайди пару",
   "next to the chat; in auto mode Claude opens the game — it stops for a moment and gets back to work": "поруч із розмовою; в авто-режимі гру відкриває Claude — він ненадовго зупиниться й повернеться до роботи",
+  "no timer": "без таймера",
   "nothing yet": "поки нічого",
   "novel": "роман",
   "novella": "повість",
@@ -237,7 +239,12 @@ export default {
   "Ask Claude to open this in the built-in browser: {0}": "Попроси Claude відкрити це у вбудованому браузері: {0}",
   "Score: {0} · best: {1}": "Рахунок: {0} · рекорд: {1}",
   "Crash! Score: {0} · best: {1} — any button to try again": "Удар! Рахунок: {0} · рекорд: {1} — будь-яка кнопка, ще раз",
-  "flap — any button: {0} or {1}": "змах — будь-яка кнопка: {0} або {1}"
+  "flap — any button: {0} or {1}": "змах — будь-яка кнопка: {0} або {1}",
+  "{0} audiobook": "{0#one=# аудіокнига;few=# аудіокниги;many=# аудіокниг;other=# аудіокниги}",
+  "{0} audiobooks": "{0#one=# аудіокнига;few=# аудіокниги;many=# аудіокниг;other=# аудіокниги}",
+  "{0} — {1}": "{0} — {1}",
+  "{0}, {1}": "{0}, {1}",
+  "{0}: {1}": "{0}: {1}"
  },
  "words": [
   [

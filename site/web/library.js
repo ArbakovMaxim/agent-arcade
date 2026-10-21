@@ -184,7 +184,7 @@
     const list = el('div', 'games')
     let ids = Object.keys(games).filter((id) => (groupOf(tab) ? inGroup(tab).includes(games[id].console) && games[id].shelf === shelf : games[id].console === tab))
     // Книги на полке — по жанрам (в порядке первого появления жанра), с заголовком жанра
-    const books = ids.length > 0 && ids.every((id) => games[id].kind === 'book')
+    const books = ids.length > 0 && ids.every((id) => ['book', 'audio'].includes(games[id].kind)) // книги и аудиокниги — по жанрам
     if (books) {
       const order = [...new Set(ids.map((id) => games[id].genre))]
       ids = order.flatMap((g) => ids.filter((id) => games[id].genre === g))
@@ -227,7 +227,19 @@
         }
         return at && typeof at.percent === 'number' ? T(`прочитано ${at.percent}%`) : T('ещё не читали')
       }
-      card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang !== 'ru' && game.about_en ? game.about_en : game.about), el('div', 'stats', game.kind === 'book' ? reading() : ArcadeStats.summary(id, game.score)))
+      // Аудиокнига: сколько прослушано по запомненному месту; «Мои аудиокниги» — где лежат свои файлы
+      const listened = () => {
+        let at = null
+        try {
+          at = JSON.parse(localStorage.getItem(`arcade:audio:${id}`))
+        } catch {
+          // без хранилища
+        }
+        const total = (game.chapters || []).length
+        return at && total ? T(`прослушано ${Math.min(100, Math.round(((Number(at.chapter) || 0) / total) * 100))}%`) : T('ещё не слушали')
+      }
+      const stats = game.kind === 'book' ? reading() : game.kind === 'audio' ? listened() : game.kind === 'audio-mine' ? T('свои файлы — только в этом браузере') : ArcadeStats.summary(id, game.score)
+      card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang !== 'ru' && game.about_en ? game.about_en : game.about), el('div', 'stats', stats))
       list.append(card)
     }
     if (mineList.length) list.append(el('div', 'mine-head', T('Мои игры — только в этом браузере')))

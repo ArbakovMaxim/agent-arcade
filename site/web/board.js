@@ -212,9 +212,10 @@
     const root = prepare(game)
     const params = new URLSearchParams(location.search)
     const code = params.get('room')
+    // Го и шахматы — свои модули со всеми режимами: с компьютером, по сети с часами, с другом
+    if (game.board === 'go' && window.ArcadeGo) return window.ArcadeGo.start(game, id, root)
+    if (game.board === 'chess' && window.ArcadeChess) return window.ArcadeChess.start(game, id, root)
     if (code && /^[a-z0-9]{6,16}$/.test(code)) play(game, id, code, root)
-    // шахматы с компьютером — свой экран: сила 1–10, цвет, таймер, запись ходов (chess.js)
-    else if (params.get('vs') === 'bot' && game.board === 'chess' && window.ArcadeChess) window.ArcadeChess.start(game, id, root)
     else if (params.get('vs') === 'bot') playBot(game, id, root)
     else menu(game, id, root)
   }
@@ -470,5 +471,6 @@
     window.ArcadeBoard.game = { get position() { return position }, get moves() { return moves }, get seat() { return seat }, click, rules, reset: () => ws.send(JSON.stringify({ type: 'reset' })) }
   }
 
-  window.ArcadeBoard = { start, adapter }
+  // Помощники — модулям шахмат (chess.js) и го (go.js): поиск соперника, жетон места, «Мои партии», адрес сокета
+  window.ArcadeBoard = { start, adapter, seek, randomCode, tokenFor, remember, myGames, wsUrl }
 })()
