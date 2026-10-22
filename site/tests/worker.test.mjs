@@ -1,7 +1,7 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
+import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch, Account, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -665,6 +665,234 @@ try {
     await object.alarm()
     assert.ok(!store.has('u:old_channel'))
     assert.ok(store.has('u:myfriend') && store.has('u:ghost_user') && store.has('token'))
+  } finally {
+    globalThis.fetch = realFetch
+    Date.now = realNow
+  }
+}
+
+// --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
+{
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS } = await import('../worker/account.js')
+  const KEY = 'a'.repeat(43)
+  assert.equal(sessionId(`Bearer 42.${KEY}`), '42')
+  assert.equal(sessionId(`Bearer 42.${KEY}x`), null)
+  assert.equal(sessionId(`42.${KEY}`), null)
+  assert.equal(sessionId(`Bearer x.${KEY}`), null)
+  assert.equal(sessionId(null), null)
+
+  // Настройки: по каждому ключу побеждает более позднее
+  const now0 = Date.UTC(2026, 9, 22)
+  const stored = { lang: { v: 'ru', at: 100 }, wide: { v: true, at: 300 } }
+  assert.deepEqual(mergeSettings(stored, { lang: { v: 'en', at: 200 }, wide: { v: false, at: 200 }, keys: { v: null, at: 5 } }, now0), {
+    lang: { v: 'en', at: 200 }, wide: { v: true, at: 300 }, keys: { v: null, at: 5 },
+  })
+  assert.deepEqual(stored, { lang: { v: 'ru', at: 100 }, wide: { v: true, at: 300 } }, 'хранимое не меняется')
+  assert.equal(mergeSettings({}, { 'bad key': { v: 1, at: 1 } }, now0), null)
+  assert.equal(mergeSettings({}, { __proto__x: { v: 1, at: 1 } }, now0), null)
+  assert.equal(mergeSettings({}, { lang: { at: 1 } }, now0), null, 'без значения')
+  assert.equal(mergeSettings({}, { lang: { v: 'en', at: -1 } }, now0), null)
+  assert.equal(mergeSettings({}, { lang: { v: 'en', at: '5' } }, now0), null)
+  assert.equal(mergeSettings({}, { lang: { v: 'en', at: now0 + 2 * 86_400_000 } }, now0), null, 'из будущего')
+  assert.ok(mergeSettings({}, { lang: { v: 'en', at: now0 + 3_600_000 } }, now0), 'час вперёд — расхождение часов')
+  assert.equal(mergeSettings({}, [], now0), null)
+  assert.equal(mergeSettings({}, null, now0), null)
+  const many = Object.fromEntries(Array.from({ length: MAX_KEYS + 1 }, (_, i) => [`k${i}`, { v: i, at: 1 }]))
+  assert.equal(mergeSettings({}, many, now0), null)
+
+  // GitHub — подставной: коды, ответы на «вошёл ли» по очереди и профиль
+  const asked = []
+  const gh = { answers: [], user: { id: 42, login: 'octo-cat', avatar_url: 'https://avatars.githubusercontent.com/u/42?v=4', email: 'octo@example.com' }, disabled: false, down: false }
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input)
+    asked.push(url)
+    if (gh.down) return new Response('<html>нет</html>', { status: 502 })
+    if (url === 'https://github.com/login/device/code') {
+      const form = new URLSearchParams(init.body)
+      assert.equal(init.method, 'POST')
+      assert.equal(init.headers.Accept, 'application/json')
+      assert.equal(form.get('client_id'), 'gh-client')
+      assert.equal(form.get('scope'), '', 'ни почты, ни репозиториев')
+      if (gh.disabled) return Response.json({ error: 'device_flow_disabled' }, { status: 400 })
+      return Response.json({ device_code: 'dev_code_12345', user_code: 'ABCD-1234', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 })
+    }
+    if (url === 'https://github.com/login/oauth/access_token') {
+      const form = new URLSearchParams(init.body)
+      assert.equal(form.get('client_id'), 'gh-client')
+      assert.equal(form.get('device_code'), 'dev_code_12345')
+      assert.equal(form.get('grant_type'), 'urn:ietf:params:oauth:grant-type:device_code')
+      return Response.json(gh.answers.length ? gh.answers.shift() : { access_token: 'gho_github_token', token_type: 'bearer', scope: '' })
+    }
+    if (url === 'https://api.github.com/user') {
+      assert.equal(init.headers.Authorization, 'Bearer gho_github_token')
+      assert.ok(init.headers['User-Agent'])
+      return Response.json(gh.user)
+    }
+    return new Response('нет', { status: 404 })
+  }
+  const realNow = Date.now
+  try {
+    // Хранилище на экземпляр: 'auth' и gh:<номер>
+    const objects = new Map()
+    const env = { GITHUB_CLIENT_ID: 'gh-client' }
+    const instance = (name) => {
+      if (!objects.has(name)) {
+        const store = new Map()
+        const storage = {
+          alarm: null,
+          get: async (k) => (Array.isArray(k) ? new Map(k.filter((x) => store.has(x)).map((x) => [x, store.get(x)])) : structuredClone(store.get(k))),
+          put: async (k, v) => {
+            for (const [a, b] of typeof k === 'object' ? Object.entries(k) : [[k, v]]) store.set(a, structuredClone(b))
+          },
+          delete: async (keys) => {
+            for (const k of [].concat(keys)) store.delete(k)
+          },
+          deleteAll: async () => store.clear(),
+          getAlarm: async () => storage.alarm,
+          setAlarm: async (t) => {
+            storage.alarm = t
+          },
+          deleteAlarm: async () => {
+            storage.alarm = null
+          },
+        }
+        objects.set(name, { store, storage, object: new Account({ storage }, env) })
+      }
+      return objects.get(name).object
+    }
+    env.ACCOUNT = { idFromName: (name) => name, get: instance }
+    const go = async (method, path, { body, token, ip = '10.0.0.1', withEnv = env } = {}) => {
+      const headers = { 'CF-Connecting-IP': ip, ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      const init = { method, headers, ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }) }
+      const response = await worker.fetch(new Request(`https://arcade.test${path}`, init), withEnv)
+      return { status: response.status, body: await response.json() }
+    }
+    const enter = async (ip) => {
+      assert.equal((await go('POST', '/api/auth/start', { ip })).status, 200)
+      return go('POST', '/api/auth/poll', { body: { device: 'dev_code_12345' }, ip })
+    }
+
+    // Маршруты: чужой путь, не тот метод, вход не настроен, нет ключа
+    assert.deepEqual(await go('GET', '/api/auth/nope'), { status: 404, body: { error: 'not found' } })
+    assert.deepEqual(await go('GET', '/api/auth/start'), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await go('POST', '/api/me'), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await go('POST', '/api/auth/start', { withEnv: { ...env, GITHUB_CLIENT_ID: '' } }), { status: 503, body: { error: 'off' } })
+    assert.deepEqual(await go('GET', '/api/me', { withEnv: { GITHUB_CLIENT_ID: 'gh-client' } }), { status: 503, body: { error: 'off' } })
+    assert.deepEqual(await go('GET', '/api/me'), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('GET', '/api/me', { token: 'not-a-key' }), { status: 401, body: { error: 'auth' } })
+    assert.equal(asked.length, 0)
+    assert.equal(objects.size, 0, 'без ключа объекты не будятся')
+
+    // Код для github.com/login/device
+    assert.deepEqual(await go('POST', '/api/auth/start'), {
+      status: 200, body: { device: 'dev_code_12345', code: 'ABCD-1234', url: 'https://github.com/login/device', interval: 5, expires: 900 },
+    })
+    // Пока человек не ввёл код — ждём; GitHub просит реже — новый интервал; отказ и истёкший код
+    gh.answers.push({ error: 'authorization_pending' }, { error: 'slow_down', interval: 10 }, { error: 'access_denied' }, { error: 'expired_token' })
+    const poll = (body = { device: 'dev_code_12345' }) => go('POST', '/api/auth/poll', { body })
+    assert.deepEqual(await poll(), { status: 200, body: { status: 'pending' } })
+    assert.deepEqual(await poll(), { status: 200, body: { status: 'pending', interval: 10 } })
+    assert.deepEqual(await poll(), { status: 200, body: { status: 'denied' } })
+    assert.deepEqual(await poll(), { status: 200, body: { status: 'expired' } })
+    assert.deepEqual(await poll({ device: 'x' }), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await go('POST', '/api/auth/poll', { body: 'не json' }), { status: 400, body: { error: 'bad request' } })
+
+    // Вошёл: свой ключ сессии; почта профиля и токен GitHub не сохраняются нигде
+    const first = await poll()
+    assert.equal(first.status, 200)
+    assert.equal(first.body.status, 'ok')
+    assert.deepEqual(first.body.user, { id: '42', login: 'octo-cat', avatar: 'https://avatars.githubusercontent.com/u/42?v=4' })
+    const token1 = first.body.token
+    assert.match(token1, /^42\.[A-Za-z0-9_-]{43}$/)
+    const account42 = objects.get('gh:42')
+    const saved = () => JSON.stringify([...objects.values()].map((o) => [...o.store]))
+    assert.ok(!saved().includes('gho_github_token') && !saved().includes('octo@example.com'))
+    assert.ok(!saved().includes(token1.split('.')[1]), 'ключ сессии — только хешем')
+    assert.equal(account42.store.get('sessions').length, 1)
+    assert.ok(account42.storage.alarm > Date.now() + IDLE_MS - 60_000, 'уборка через год')
+    assert.equal(objects.get('auth').store.size, 0, 'экземпляр входа ничего не хранит')
+
+    // Профиль и настройки
+    assert.deepEqual(await go('GET', '/api/me', { token: token1 }), { status: 200, body: { user: first.body.user, settings: {} } })
+    const at = Date.now()
+    const put = (settings, token = token1) => go('PUT', '/api/me/settings', { body: { settings }, token })
+    assert.deepEqual(await put({ lang: { v: 'en', at }, keys: { v: { up: 'w' }, at } }), {
+      status: 200, body: { settings: { lang: { v: 'en', at }, keys: { v: { up: 'w' }, at } } },
+    })
+    // Второй компьютер: свой ключ, те же настройки; его старое значение не затирает новое
+    const token2 = (await enter('10.0.0.2')).body.token
+    assert.notEqual(token2, token1)
+    const second = await put({ lang: { v: 'de', at: at - 1000 }, wide: { v: true, at: at + 5 } }, token2)
+    assert.deepEqual(second.body.settings, { lang: { v: 'en', at }, keys: { v: { up: 'w' }, at }, wide: { v: true, at: at + 5 } })
+    assert.deepEqual((await go('GET', '/api/me', { token: token1 })).body.settings, second.body.settings)
+    // Неверные и слишком большие настройки
+    assert.deepEqual(await put({ 'no such': { v: 1, at } }), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await go('PUT', '/api/me/settings', { body: '{', token: token1 }), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await put({ big: { v: 'x'.repeat(SETTINGS_MAX), at } }), { status: 413, body: { error: 'too big' } })
+    assert.deepEqual(await put({ big: { v: 'x'.repeat(40 * 1024), at } }), { status: 413, body: { error: 'too big' } })
+    assert.ok(!('big' in account42.store.get('settings')))
+
+    // Ключ с чужим номером или выдуманный — 401
+    assert.deepEqual(await go('GET', '/api/me', { token: `43.${token1.split('.')[1]}` }), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('GET', '/api/me', { token: `42.${KEY}` }), { status: 401, body: { error: 'auth' } })
+
+    // Через двое суток: отметка «заходил» и уборка сдвигаются
+    const seen = account42.store.get('seen')
+    Date.now = () => realNow() + 2 * 86_400_000
+    assert.equal((await go('GET', '/api/me', { token: token1 })).status, 200)
+    assert.ok(account42.store.get('seen') > seen + 86_400_000)
+    assert.ok(account42.storage.alarm > account42.store.get('seen') + IDLE_MS - 1)
+
+    // Выйти на одном компьютере — другой остаётся
+    assert.deepEqual(await go('POST', '/api/auth/logout', { token: token1 }), { status: 200, body: { ok: true } })
+    assert.equal((await go('GET', '/api/me', { token: token1 })).status, 401)
+    assert.equal((await go('GET', '/api/me', { token: token2 })).status, 200)
+
+    // Больше MAX_SESSIONS компьютеров — самый старый вход выталкивается
+    const tokens = [token2]
+    for (let i = 0; i < MAX_SESSIONS; i++) tokens.push((await enter(`10.1.0.${i}`)).body.token)
+    assert.equal(account42.store.get('sessions').length, MAX_SESSIONS)
+    assert.equal((await go('GET', '/api/me', { token: tokens[0] })).status, 401)
+    assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).status, 200)
+
+    // Картинка профиля не с CDN GitHub — без неё
+    gh.user = { id: 7, login: 'other', avatar_url: 'https://evil.test/a.png' }
+    const other = await enter('10.0.0.7')
+    assert.deepEqual(other.body.user, { id: '7', login: 'other' })
+    assert.deepEqual((await go('GET', '/api/me', { token: other.body.token })).body, { user: { id: '7', login: 'other' }, settings: {} })
+
+    // Удалить аккаунт — ничего не остаётся
+    assert.deepEqual(await go('DELETE', '/api/me', { token: tokens.at(-1) }), { status: 200, body: { ok: true } })
+    assert.equal(account42.store.size, 0)
+    assert.equal(account42.storage.alarm, null)
+    assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).status, 401)
+
+    // Будильник: год без входа — аккаунт удаляется, заходил — уборка переносится
+    const account7 = objects.get('gh:7')
+    await account7.object.alarm()
+    assert.ok(account7.store.size > 0)
+    assert.equal(account7.storage.alarm, account7.store.get('seen') + IDLE_MS)
+    Date.now = () => account7.store.get('seen') + IDLE_MS
+    await account7.object.alarm()
+    assert.equal(account7.store.size, 0)
+    Date.now = realNow
+
+    // GitHub не принял приложение, GitHub не ответил
+    gh.disabled = true
+    assert.deepEqual(await go('POST', '/api/auth/start', { ip: '10.3.0.1' }), { status: 503, body: { error: 'app' } })
+    gh.disabled = false
+    gh.down = true
+    assert.deepEqual(await go('POST', '/api/auth/start', { ip: '10.3.0.1' }), { status: 502, body: { error: 'upstream' } })
+    assert.deepEqual(await go('POST', '/api/auth/poll', { body: { device: 'dev_code_12345' }, ip: '10.3.0.1' }), { status: 502, body: { error: 'upstream' } })
+    gh.down = false
+
+    // С одного адреса — не больше PER_IP_DAILY.starts кодов в сутки; адрес не хранится даже в памяти
+    for (let i = 0; i < PER_IP_DAILY.starts; i++) assert.equal((await go('POST', '/api/auth/start', { ip: '10.9.9.9' })).status, 200)
+    assert.deepEqual(await go('POST', '/api/auth/start', { ip: '10.9.9.9' }), { status: 429, body: { error: 'limit' } })
+    assert.equal((await go('POST', '/api/auth/start', { ip: '10.8.8.8' })).status, 200, 'другой адрес — можно')
+    assert.ok([...objects.get('auth').object.ips.keys()].every((k) => !k.includes('10.9.9.9')))
+    assert.ok(!saved().includes('10.9.9.9'))
   } finally {
     globalThis.fetch = realFetch
     Date.now = realNow

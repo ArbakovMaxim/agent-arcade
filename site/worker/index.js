@@ -4,9 +4,11 @@
 // сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom.
 import { discover, verify } from './discover.js'
 import { twitch } from './twitch.js'
+import { account } from './account.js'
 
 export { Discover } from './discover.js'
 export { Twitch } from './twitch.js'
+export { Account } from './account.js'
 
 export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт
@@ -77,6 +79,8 @@ export default {
     if (url.pathname === '/api/verify') return verify(env, url)
     // Twitch: кто из каналов человека и каталога Arcade сейчас в эфире
     if (url.pathname === '/api/twitch') return twitch(request, env, url)
+    // Аккаунт: вход через GitHub по коду и настройки мода, общие для всех компьютеров человека
+    if (url.pathname.startsWith('/api/auth/') || url.pathname === '/api/me' || url.pathname.startsWith('/api/me/')) return account(request, env, url)
     // Кто сейчас ждёт в сети — для мода и окна: { doom: игроков в лобби, games: { номер игры: открытых комнат } }
     if (url.pathname === '/api/lobbies') return env.PRESENCE.get(env.PRESENCE.idFromName('all')).fetch('https://presence/get')
     // Сетевая игра EmulatorJS: список комнат игры и сокет — один Durable Object на игру

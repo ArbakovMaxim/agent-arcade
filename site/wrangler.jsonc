@@ -17,7 +17,8 @@
   // Поиску нужны секреты (wrangler secret put): LINK_SECRET — подпись ссылок, YOUTUBE_KEY — ключ YouTube Data API v3;
   // без них /api/discover отвечает 503, а мод берёт темы только из каталога.
   // Twitch — свой Durable Object и секреты TWITCH_CLIENT_ID и TWITCH_CLIENT_SECRET (приложение на dev.twitch.tv);
-  // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров
+  // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров.
+  // Аккаунты — свой Durable Object Account: вход через GitHub по коду (worker/account.js)
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
@@ -26,7 +27,8 @@
       { "name": "PRESENCE", "class_name": "Presence" },
       { "name": "BOARD", "class_name": "BoardRoom" },
       { "name": "DISCOVER", "class_name": "Discover" },
-      { "name": "TWITCH", "class_name": "Twitch" }
+      { "name": "TWITCH", "class_name": "Twitch" },
+      { "name": "ACCOUNT", "class_name": "Account" }
     ]
   },
   "migrations": [
@@ -37,11 +39,16 @@
     // Кеш поиска по своей теме (worker/discover.js)
     { "tag": "v5", "new_sqlite_classes": ["Discover"] },
     // Кеш эфиров Twitch (worker/twitch.js)
-    { "tag": "v6", "new_sqlite_classes": ["Twitch"] }
+    { "tag": "v6", "new_sqlite_classes": ["Twitch"] },
+    // Аккаунты: вход через GitHub и настройки мода (worker/account.js)
+    { "tag": "v7", "new_sqlite_classes": ["Account"] }
   ],
+  // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет; client secret сайту не нужен
+  "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv" },
   // Предварительные копии веток (wrangler preview): у каждой — свои Durable Objects, отдельно от рабочего сайта.
   // Код обращается к ним через env.ROOMS и т. д., поэтому привязки повторены здесь — иначе в копии ошибка 1101
   "previews": {
+    "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv" },
     "durable_objects": {
       "bindings": [
         { "name": "ROOMS", "class_name": "Room" },
@@ -50,7 +57,8 @@
         { "name": "PRESENCE", "class_name": "Presence" },
         { "name": "BOARD", "class_name": "BoardRoom" },
         { "name": "DISCOVER", "class_name": "Discover" },
-        { "name": "TWITCH", "class_name": "Twitch" }
+        { "name": "TWITCH", "class_name": "Twitch" },
+        { "name": "ACCOUNT", "class_name": "Account" }
       ]
     }
   }
