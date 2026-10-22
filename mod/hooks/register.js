@@ -163,6 +163,35 @@ function menuTabs() {
   return tabs
 }
 
+// --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf' }
+function iconSvg(kind) {
+  const c = ICON_COLORS[kind] ?? '#6e56cf'
+  const shapes = {
+    pad: `<rect x="6" y="15" width="36" height="18" rx="9" fill="${c}"/><rect x="12" y="21" width="9" height="3" fill="#fff"/><rect x="15" y="18" width="3" height="9" fill="#fff"/><circle cx="32" cy="22" r="2.4" fill="#fff"/><circle cx="37" cy="26" r="2.4" fill="#fff"/>`,
+    disc: `<circle cx="24" cy="24" r="17" fill="${c}"/><circle cx="24" cy="24" r="5" fill="#111"/><path d="M24 9a15 15 0 0 1 13 7.5" stroke="#fff" stroke-width="2.5" fill="none" opacity=".7"/>`,
+    stick: `<rect x="10" y="30" width="28" height="9" rx="3" fill="${c}"/><rect x="22" y="14" width="4" height="17" fill="#ddd"/><circle cx="24" cy="13" r="6" fill="${c}"/><circle cx="33" cy="34" r="2" fill="#fff"/>`,
+    book: `<path d="M8 12h14a4 4 0 0 1 4 4v22a3 3 0 0 0-3-3H8z" fill="${c}"/><path d="M40 12H26a4 4 0 0 0-4 4v22a3 3 0 0 1 3-3h15z" fill="${c}" opacity=".75"/>`,
+    phones: `<path d="M10 28a14 14 0 0 1 28 0" stroke="${c}" stroke-width="4" fill="none"/><rect x="7" y="26" width="8" height="13" rx="3" fill="${c}"/><rect x="33" y="26" width="8" height="13" rx="3" fill="${c}"/>`,
+    folder: `<path d="M7 14h12l4 4h18v19H7z" fill="${c}"/>`,
+    gear: `<circle cx="24" cy="24" r="11" fill="none" stroke="${c}" stroke-width="7" stroke-dasharray="5 3.6"/><circle cx="24" cy="24" r="5" fill="${c}"/>`,
+    globe: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><ellipse cx="24" cy="24" rx="6" ry="15" fill="none" stroke="${c}" stroke-width="2.5"/><path d="M9 24h30" stroke="${c}" stroke-width="2.5"/>`,
+    cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
+    window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
+  }
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window' }[kind] ?? 'stick'
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
+}
+// Обложка игры или книги: цвет от названия, крупные буквы
+function coverSvg(g) {
+  let h = 0
+  for (const ch of g.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  const hue = h % 360
+  const letters = String(g.title).replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+  const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},62%,52%)"/><stop offset="1" stop-color="hsl(${(hue + 40) % 360},70%,32%)"/></linearGradient></defs><rect width="56" height="56" rx="10" fill="url(#g)"/><text x="28" y="35" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">${esc(letters)}</text></svg>`
+}
+
 // Жанр книги для плитки и заголовка: перевод на язык интерфейса и с заглавной буквы («роман» → «Роман», «Novel»)
 function genreLabel(genre) {
   const t = tr(genre, lang)
@@ -1477,11 +1506,15 @@ export function register(on) {
       alignItems: 'center',
       children: [
         // логотип — только в главном меню библиотеки в Desktop: над экраном игры он не нужен
-        ...(!game && menu === 'main' && e.surface === 'desktop' ? [Svg({ source: LOGO_SVG, alt: 'Arcade', width: 28, height: 28 })] : []),
-        Text({ bold: true, children: [game ? `Arcade · ${game.title}` : libraryTitle()] }),
+        ...(!game && menu === 'main' && e.surface === 'desktop' ? [Svg({ source: LOGO_SVG, alt: 'Arcade', width: 40, height: 40 })] : []),
+        e.surface === 'desktop' && !game
+          ? Text({ size: 'title', weight: 'bold', children: [libraryTitle()] })
+          : Text({ bold: true, children: [game ? `Arcade · ${game.title}` : libraryTitle()] }),
+        // В Desktop — «таблетка» в рамке цвета состояния; в терминале и VS Code — как было
         Box({
           flexDirection: 'row',
           columnGap: 1,
+          ...(e.surface === 'desktop' ? { borderStyle: 'round', borderColor: statusColor, paddingX: 'sm' } : {}),
           children: [
             Text({ color: statusColor, children: ['●'] }),
             Text({ color: statusColor, children: [statusText(now)] }),
@@ -1581,8 +1614,39 @@ export function register(on) {
       const dim = (text) => Text({ dimColor: true, children: [text] })
       const gap = Text({ children: [' '] })
       // Разделы и плитки главного меню: кнопка с подписью — в рамке; плитки рядами, в узкой панели — колонкой
-      const section = (title) => Text({ bold: true, dimColor: true, children: [title] })
+      const desktop = e.surface === 'desktop'
+      const section = (title) => (desktop ? Text({ size: 'heading', weight: 'semibold', children: [title] }) : Text({ bold: true, dimColor: true, children: [title] }))
+      // Иконка карточки — по ключу кнопки: arcade-menu-nes → nes, arcade-game-… → обложка игры
+      const iconFor = (button) => {
+        const key = String(button?.key ?? button?.props?.key ?? '')
+        const game = key.startsWith('arcade-game-') ? gameById(key.slice(12)) : null
+        if (game) return Svg({ source: coverSvg(game), alt: game.title, width: 44, height: 44 })
+        const kind = key.replace(/^arcade-(menu-shelf-|menu-|genre-\d+$)/, '').replace(/^lang-main$/, 'lang').replace(/^(open-library|library)$/, 'library')
+        return Svg({ source: iconSvg(kind), alt: '', width: 36, height: 36 })
+      }
+      // Карточка: внешний блок с ключом — зона наведения, внутренний — фон, рамка и подсветка при наведении
+      const card = (children, key) =>
+        Box({
+          key: `card-${key}`,
+          children: [Box({ flexDirection: 'row', alignItems: 'center', columnGap: 'md', borderStyle: 'round', borderColor: '#2c3345', backgroundColor: '#161a23', padding: 'sm', minWidth: 230, hover: { backgroundColor: '#1f2533', borderColor: '#5b8cff' }, children })],
+        })
       const tiles = (list) => {
+        if (desktop) {
+          const out = []
+          for (let i = 0; i < list.length; i++) {
+            const x = list[i]
+            if (!x || (x.type === 'Text' && [...(x.children ?? x.props?.children ?? [])].join('') === ' ')) continue
+            const note = list[i + 1]
+            if (x.type === 'Button') {
+              const hasNote = note && note.type === 'Text' && note.props?.dimColor
+              const words = (t) => [...(t.children ?? t.props?.children ?? [])].join('')
+              const caption = hasNote ? Text({ size: 'footnote', dimColor: true, children: [words(note).trim()] }) : null
+              out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', children: [x, ...(caption ? [caption] : [])] })], String(x.key ?? x.props?.key ?? i)))
+              if (hasNote) i++
+            } else out.push(x)
+          }
+          return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 'md', rowGap: 'md', children: out })
+        }
         const out = []
         for (let i = 0; i < list.length; i++) {
           const x = list[i]
@@ -1858,7 +1922,7 @@ export function register(on) {
           items = [
             Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelfMenu) }),
             gap,
-            ...list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]),
+            ...(desktop ? [tiles(list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))] : list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])),
             ...noticeLines,
             ...hint,
           ]
@@ -1874,7 +1938,7 @@ export function register(on) {
           shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
           ...(list.length
-            ? list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
+            ? desktop ? [tiles(list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))] : list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
           // Всё, кроме Денди и своих игр (Flappy Arcade), идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
           ...(!own
