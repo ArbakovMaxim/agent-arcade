@@ -1166,7 +1166,7 @@ test('Desktop: в настройках — встроенный браузер �
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: '  открывать: встроенный браузер Claude' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'открывать: встроенный браузер Claude' })).toBeDefined() // в Desktop подпись — в карточке, без отступа
   await ui.press({ key: 'arcade-menu-settings' })
   expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: встроенный браузер Claude' } })
   expect(await ui.find({ key: 'arcade-graphics' })).toBeUndefined() // Денди в Desktop — картинкой
@@ -2428,6 +2428,20 @@ test('аудиокниги: своя группа — полки языков и
   // группа, полка и жанр «Моих аудиокниг» приходят с сайта по-русски
   expect(['Аудиокниги', 'Мои аудиокниги', 'свои файлы'].map((s) => tr(s, 'en'))).toEqual(['Audiobooks', 'My audiobooks', 'your files'])
   expect(['Аудиокниги', 'Мои аудиокниги', 'свои файлы'].map((s) => tr(s, 'de'))).toEqual(['Hörbücher', 'Meine Hörbücher', 'eigene Dateien'])
+  await ui.unmount()
+})
+
+test('Desktop: главное меню — карточки с иконками, подсветкой при наведении и крупными заголовками', async ($, on) => {
+  const { clock } = stubs(on, { env: WINDOWS })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'Играть' })).toMatchObject({ props: { size: 'heading' } })
+  const card = await ui.find({ key: 'card-arcade-menu-nes' })
+  expect(JSON.stringify(card)).toContain('"hover":{"backgroundColor":"#1f2533","borderColor":"#5b8cff"}') // подсветка при наведении — внутри зоны с ключом
+  expect(JSON.stringify(card)).toContain('Svg') // иконка
+  expect(await ui.find({ type: 'Text', text: /^\d+ игр/ })).toMatchObject({ props: { size: 'footnote' } }) // подпись карточки — мелким шрифтом, без отступа
   await ui.unmount()
 })
 
