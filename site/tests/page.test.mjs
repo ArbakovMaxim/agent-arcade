@@ -1113,4 +1113,107 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(empty.root.textContent, /нет видео/)
 }
 
+// --- Статьи и подкасты из мода: read.html ведёт только на сайты лент, listen.html — выпуск в проигрывателе аудиокниг --
+{
+  async function feedPage(scripts, { pathname, hash, search = '', net = {} }) {
+    const page = { replaced: null, reloaded: false, handlers: {}, store: new Map() }
+    const node = (tag) => ({
+      tagName: tag, className: '', children: [], style: {}, dataset: {}, listeners: {}, own: '', href: '', src: '',
+      paused: true, currentTime: 0,
+      play() { this.paused = false; return Promise.resolve() },
+      pause() { this.paused = true },
+      get textContent() { return this.own + this.children.map((c) => c.textContent).join('') },
+      set textContent(v) { this.own = String(v); this.children = [] },
+      append(...kids) { for (const k of kids) this.children.push(typeof k === 'string' ? { textContent: k, children: [] } : k) },
+      replaceChildren() { this.children = [] },
+      addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
+      fire(t) { for (const f of this.listeners[t] ?? []) f({}) },
+      click() { this.fire('click') },
+      querySelectorAll(selector) {
+        const found = []
+        const walk = (n) => { for (const c of n.children ?? []) { if ((c.className || '').split(' ').includes(selector.slice(1))) found.push(c); walk(c) } }
+        walk(this)
+        return found
+      },
+    })
+    page.root = node('div')
+    const ctx = {
+      location: { hash, search, pathname, origin: 'https://agent-arcade.test', replace: (url) => { page.replaced = url }, reload: () => { page.reloaded = true } },
+      URL, URLSearchParams, console,
+      setInterval: (fn, ms) => { const h = setInterval(fn, ms); h.unref?.(); return h },
+      navigator: { language: 'ru-RU' },
+      localStorage: { getItem: (k) => page.store.get(k) ?? null, setItem: (k, v) => page.store.set(k, String(v)), removeItem: (k) => page.store.delete(k) },
+      document: { title: '', documentElement: {}, createElement: node, getElementById: () => page.root },
+      addEventListener: (t, f) => (page.handlers[t] ??= []).push(f),
+      fetch: network(net),
+    }
+    ctx.window = ctx
+    vm.createContext(ctx)
+    for (const file of ['i18n.js', ...scripts]) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
+    await new Promise((r) => setTimeout(r, 5))
+    page.ctx = ctx
+    return page
+  }
+  const read = (hash, options = {}) => feedPage(['read.js'], { pathname: '/read', hash, ...options })
+  const listen = (hash, options = {}) => feedPage(['audio.js', 'listen.js'], { pathname: '/listen', hash, ...options })
+  const u = (text) => encodeURIComponent(text)
+
+  // Статья с сайта из лент — переход на неё; чужой сайт, http и логин в адресе — нет
+  const article = 'https://simonwillison.net/2026/Oct/20/agents/'
+  const ok = await read(`#u=${u(article)}`)
+  assert.equal(ok.replaced, article)
+  assert.match(ok.root.textContent, /Открываю статью… simonwillison\.net/)
+  assert.equal(ok.ctx.document.title, 'Arcade · Статьи')
+  for (const bad of ['https://evil.test/agents/', 'https://simonwillison.net.evil.test/']) {
+    const page = await read(`#u=${u(bad)}`)
+    assert.equal(page.replaced, null, bad)
+    assert.match(page.root.textContent, /не из лент Arcade/)
+  }
+  for (const bad of ['http://simonwillison.net/', 'https://me:pw@simonwillison.net/', 'javascript:alert(1)', '']) {
+    const page = await read(`#u=${u(bad)}`)
+    assert.equal(page.replaced, null, bad)
+    assert.match(page.root.textContent, /нет статьи/)
+  }
+  const down = await read(`#u=${u(article)}`, { net: { down: true } })
+  assert.equal(down.replaced, null)
+  assert.match(down.root.textContent, /сайт Arcade не ответил/)
+  const en = await read(`#u=${u(article)}`, { search: '?lang=en' })
+  assert.match(en.root.textContent, /^Opening the article…/)
+
+  // Выпуск: проигрыватель без глав и ⏮ ⏭, имя шоу — из лент, страница выпуска — только с сайта подкаста
+  const audio = 'https://cdn.test/se-daily/ep-1.mp3'
+  const episode = `#f=se-daily&u=${u(audio)}&t=${u('Agents at scale')}&l=${u('https://softwareengineeringdaily.com/2026/10/20/agents/')}&d=3600`
+  const ep = await listen(episode)
+  const p = ep.ctx.ArcadeAudio.player
+  assert.equal(p.audio.src, audio, 'звук — прямо с сервера подкаста')
+  assert.equal(p.book.episode, true)
+  assert.match(ep.root.textContent, /Agents at scale.*Software Engineering Daily/)
+  assert.equal(ep.ctx.document.title, 'Agents at scale · Arcade')
+  assert.equal(ep.root.querySelectorAll('.audio-play').length, 1)
+  assert.deepEqual(['.audio-prev', '.audio-next', '.audio-chapter'].map((s) => ep.root.querySelectorAll(s).length), [0, 0, 0], 'у выпуска нет глав')
+  assert.equal(ep.root.querySelectorAll('.page')[0].href, 'https://softwareengineeringdaily.com/2026/10/20/agents/')
+  ep.root.querySelectorAll('.audio-speed').find((b) => String(b.dataset.speed) === '1.5').click()
+  const saved = [...ep.store.keys()].filter((k) => k.startsWith('arcade:audio:podcast-'))
+  assert.equal(saved.length, 1, 'место выпуска запоминается')
+  assert.equal(JSON.parse(ep.store.get(saved[0])).speed, 1.5)
+  p.audio.fire('ended')
+  assert.match(ep.root.textContent, /Выпуск дослушан/)
+  // Мод включил другой выпуск в той же вкладке — страница начинает заново
+  for (const f of ep.handlers.hashchange) f({})
+  assert.equal(ep.reloaded, true)
+
+  // Страница выпуска с чужого сайта не показывается; длинное название — обрезано
+  const foreign = await listen(`#f=se-daily&u=${u(audio)}&t=${'x'.repeat(300)}&l=${u('https://evil.test/ep')}`)
+  assert.equal(foreign.root.querySelectorAll('.page').length, 0)
+  assert.equal(foreign.ctx.ArcadeAudio.player.book.title.length, 200)
+  // Подкаста нет в лентах, нет звука, звук по http, сайт не ответил
+  assert.match((await listen(`#f=nope&u=${u(audio)}`)).root.textContent, /нет в лентах Arcade/)
+  assert.match((await listen('#f=se-daily')).root.textContent, /нет выпуска/)
+  assert.match((await listen(`#f=se-daily&u=${u('http://cdn.test/ep.mp3')}`)).root.textContent, /нет выпуска/)
+  assert.match((await listen(`#f=se-daily&u=${u(audio)}`, { net: { down: true } })).root.textContent, /сайт Arcade не ответил/)
+  const enEp = await listen(episode, { search: '?lang=en' })
+  enEp.ctx.ArcadeAudio.player.audio.fire('error')
+  assert.match(enEp.root.textContent, /Could not load the episode/)
+}
+
 console.log('окно: все проверки прошли')

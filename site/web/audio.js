@@ -139,7 +139,7 @@
     player(root, { id, title: game.title, author: game.author || '', reader: game.reader || '', chapters: (game.chapters || []).map((c) => ({ title: c.title, src: c.url, seconds: c.seconds })) })
   }
 
-  // Проигрыватель
+  // Проигрыватель. book.episode — один выпуск подкаста: без глав, ⏮ ⏭ и списка
   function player(root, book) {
     let saved = {}
     try {
@@ -200,15 +200,15 @@
     }
 
     function draw() {
-      now.textContent = `${chapter + 1} / ${book.chapters.length} · ${book.chapters[chapter].title}`
-      controls.replaceChildren()
-      controls.append(
-        button('⏮', () => load(chapter - 1, 0, !audio.paused), 'audio-prev'),
+      if (!book.episode) now.textContent = `${chapter + 1} / ${book.chapters.length} · ${book.chapters[chapter].title}`
+      const main = [
         button(T('−30 с'), () => seek(-30), 'audio-back'),
         button(audio.paused ? T('▶ Слушать') : T('⏸ Пауза'), toggle, 'audio-play', true),
         button(T('+30 с'), () => seek(30), 'audio-forward'),
-        button('⏭', () => load(chapter + 1, 0, !audio.paused), 'audio-next'),
-      )
+      ]
+      controls.replaceChildren()
+      if (book.episode) controls.append(...main)
+      else controls.append(button('⏮', () => load(chapter - 1, 0, !audio.paused), 'audio-prev'), ...main, button('⏭', () => load(chapter + 1, 0, !audio.paused), 'audio-next'))
       speeds.replaceChildren()
       speeds.append(
         el('span', 'color:#9a9aa3;margin-right:6px', T('Скорость')),
@@ -224,6 +224,7 @@
         }),
       )
       list.replaceChildren()
+      if (book.episode) return
       list.append(
         ...book.chapters.map((c, i) => {
           const row = button(`${i + 1}. ${c.title}${c.seconds ? ` · ${time(c.seconds)}` : ''}`, () => load(i, 0, true), 'audio-chapter', i === chapter)
@@ -255,12 +256,16 @@
     audio.addEventListener('ended', () => {
       if (chapter < book.chapters.length - 1) load(chapter + 1, 0, true)
       else {
-        status.textContent = T('Книга дослушана')
+        status.textContent = book.episode ? T('Выпуск дослушан') : T('Книга дослушана')
         save()
       }
     })
     audio.addEventListener('error', () => {
-      status.textContent = book.mine ? T('Браузер не смог открыть этот файл — попробуй MP3') : T('Не получилось загрузить главу — проверь интернет и нажми «Слушать» ещё раз')
+      status.textContent = book.mine
+        ? T('Браузер не смог открыть этот файл — попробуй MP3')
+        : book.episode
+          ? T('Не получилось загрузить выпуск — проверь интернет и нажми «Слушать» ещё раз')
+          : T('Не получилось загрузить главу — проверь интернет и нажми «Слушать» ещё раз')
     })
     bar.addEventListener('input', () => {
       const d = audio.duration || 0
@@ -284,7 +289,8 @@
     if (navigator.mediaSession && typeof MediaMetadata !== 'undefined') {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({ title: book.chapters[chapter].title, artist: book.author || book.title, album: book.title })
-        const handlers = { play: () => playAudio(), pause: () => audio.pause(), seekbackward: () => seek(-30), seekforward: () => seek(30), previoustrack: () => load(chapter - 1, 0, true), nexttrack: () => load(chapter + 1, 0, true) }
+        const handlers = { play: () => playAudio(), pause: () => audio.pause(), seekbackward: () => seek(-30), seekforward: () => seek(30) }
+        if (!book.episode) Object.assign(handlers, { previoustrack: () => load(chapter - 1, 0, true), nexttrack: () => load(chapter + 1, 0, true) })
         for (const [action, handler] of Object.entries(handlers)) navigator.mediaSession.setActionHandler(action, handler)
       } catch {
         // браузер без Media Session
@@ -339,5 +345,5 @@
     await draw()
   }
 
-  window.ArcadeAudio = { start, addFiles, listMine, getMine, removeMine, titleOf, ACCEPT }
+  window.ArcadeAudio = { start, open: (root, book) => player(root, book), addFiles, listMine, getMine, removeMine, titleOf, ACCEPT }
 })()

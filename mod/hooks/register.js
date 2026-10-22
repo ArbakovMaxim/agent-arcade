@@ -5,7 +5,8 @@ import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screen
 import { SITE, bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { LANGS, LANG_NAMES, detectLang, isKept, keep, tr, translateTree } from './i18n.js'
-import { bundledChannels, candidates, channelsFor, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoBlurb, videoMeta, videoStats, wanted, watchUrl } from './youtube.js'
+import { bundledChannels, candidates, channelsFor, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoBlurb, videoMeta, videoStats, watchUrl, PICKS } from './youtube.js'
+import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from './rss.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
@@ -148,6 +149,10 @@ let bandFocusWanted = false // VS Code: игра только что откры�
 // заметка к подборке; request — номер последней загрузки: ответ старой загрузки, пришедший позже новой, не нужен
 let yt = { topics: null, topicsAt: 0, topicsLang: '', topic: -1, videos: [], seen: new Set(), loading: '', note: '', request: 0 }
 const feedCache = new Map() // id канала → { at, entries }: ленты перечитываем не чаще FEED_TTL_MS
+// Статьи и подкасты: темы — общие с YouTube (yt.topics), у каждого раздела своя подборка открытой темы
+const emptyReads = (request = 0) => ({ topic: -1, items: [], seen: new Set(), loading: false, note: '', request })
+let reads = { articles: emptyReads(), podcasts: emptyReads() }
+const rssCache = new Map() // «articles:id ленты» → { at, items }: ленты перечитываем не чаще FEED_TTL_MS
 
 function consoles() {
   return catalog.consoles
@@ -172,7 +177,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -189,6 +194,8 @@ function iconSvg(kind) {
     cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
     window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
     play: `<rect x="6" y="12" width="36" height="24" rx="8" fill="${c}"/><path d="M20 18v12l10-6z" fill="#fff"/>`,
+    doc: `<path d="M13 7h15l9 9v25H13z" fill="${c}"/><path d="M28 7v9h9" fill="#fff" opacity=".35"/><path d="M18 23h14M18 28h14M18 33h10" stroke="#fff" stroke-width="2.5"/>`,
+    mic: `<rect x="18" y="7" width="12" height="21" rx="6" fill="${c}"/><path d="M12 22a12 12 0 0 0 24 0" stroke="${c}" stroke-width="3" fill="none"/><path d="M24 34v7M17 41h14" stroke="${c}" stroke-width="3"/>`,
     // Жанры игр: прицел, клетчатый флаг, ладья, компас, кубик
     target: `<circle cx="24" cy="24" r="13" fill="none" stroke="${c}" stroke-width="4"/><circle cx="24" cy="24" r="4" fill="${c}"/><path d="M24 5v10M24 33v10M5 24h10M33 24h10" stroke="${c}" stroke-width="3"/>`,
     flag: `<rect x="10" y="8" width="3" height="33" rx="1.5" fill="#ddd"/><rect x="13" y="9" width="26" height="18" fill="${c}"/><path d="M13 9h6.5v6H13zM26 9h6.5v6H26zM19.5 15H26v6h-6.5zM32.5 15H39v6h-6.5zM13 21h6.5v6H13zM26 21h6.5v6H26z" fill="#fff"/>`,
@@ -196,7 +203,7 @@ function iconSvg(kind) {
     compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Обложка игры или книги: цвет от названия, крупные буквы
@@ -674,6 +681,9 @@ function windowTarget() {
 function windowUrl(id) {
   // video:<номер> — страница просмотра с подборкой YouTube; язык она берёт сама
   if (typeof id === 'string' && id.startsWith('video:')) return watchUrl(yt.videos, Number(id.slice(6)) || 0, lang)
+  // article:<номер> — переход к статье через страницу /read, episode:<номер> — выпуск подкаста на странице /listen
+  if (typeof id === 'string' && id.startsWith('article:')) return readUrl(reads.articles.items[Number(id.slice(8)) || 0], lang)
+  if (typeof id === 'string' && id.startsWith('episode:')) return listenUrl(reads.podcasts.items[Number(id.slice(8)) || 0], lang)
   let url
   // tab:<вкладка> или tab:<группа>:<полка>
   if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(...id.slice(4).split(':'))
@@ -705,6 +715,8 @@ function launchNotice(result, id) {
     const target = platform === 'windows' ? windowTarget() : { kind: 'default' }
     const where = target.kind === 'browser' ? target.browser.name : 'браузере по умолчанию'
     if (typeof id === 'string' && id.startsWith('video:')) return `Видео открыто в ${where}.`
+    if (typeof id === 'string' && id.startsWith('article:')) return `Статья открыта в ${where}.`
+    if (typeof id === 'string' && id.startsWith('episode:')) return `Выпуск открыт в ${where}.`
     return id
       ? `${title} открыт в ${where}. Игра стоит на паузе, пока окно не в фокусе.`
       : `Arcade открыт в ${where}: выбирай приставку и игру.`
@@ -895,22 +907,31 @@ async function askClaude($, url, submit, then) {
 function desktopNotice($, outcome, opened, url) {
   // Адрес для ручной просьбы не убираем через 15 секунд: его ещё надо переписать. Ожидание — пока не кончится
   // инструмент агента или сжатие, сколько бы они ни шли
-  const video = String(url).startsWith(`${SITE}/watch`)
+  // Что открывается: видео, статья или выпуск (о них — «ссылка») или игра
+  const page = (path) => String(url).startsWith(`${SITE}/${path}`)
+  const kind = page('watch') ? 'video' : page('read') || page('listen') ? 'link' : 'game'
+  const pick = (video, link, game) => ({ video, link, game })[kind]
   if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
   else if (outcome === 'waiting')
-    libraryNotice = video
-      ? 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть видео во встроенном браузере.'
-      : 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.'
+    libraryNotice = pick(
+      'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть видео во встроенном браузере.',
+      'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть ссылку во встроенном браузере.',
+      'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.',
+    )
   else if (outcome === 'compacting')
-    libraryNotice = video
-      ? 'Claude сжимает контекст — когда закончит, Arcade попросит его открыть видео во встроенном браузере.'
-      : 'Claude сжимает контекст — когда закончит, Arcade попросит его открыть игру во встроенном браузере.'
+    libraryNotice = pick(
+      'Claude сжимает контекст — когда закончит, Arcade попросит его открыть видео во встроенном браузере.',
+      'Claude сжимает контекст — когда закончит, Arcade попросит его открыть ссылку во встроенном браузере.',
+      'Claude сжимает контекст — когда закончит, Arcade попросит его открыть игру во встроенном браузере.',
+    )
   else if (outcome === 'asking')
     windowNotice(
       $,
-      video
-        ? 'Claude уже открывает это видео во встроенном браузере — подожди немного.'
-        : 'Claude уже открывает эту игру во встроенном браузере — подожди немного.',
+      pick(
+        'Claude уже открывает это видео во встроенном браузере — подожди немного.',
+        'Claude уже открывает эту ссылку во встроенном браузере — подожди немного.',
+        'Claude уже открывает эту игру во встроенном браузере — подожди немного.',
+      ),
     )
   else
     windowNotice(
@@ -918,9 +939,11 @@ function desktopNotice($, outcome, opened, url) {
       outcome === 'opened'
         ? opened
         : outcome === 'interrupted'
-          ? video
-            ? 'Arcade прервал Claude: он откроет видео во встроенном браузере и вернётся к работе.'
-            : 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.'
+          ? pick(
+              'Arcade прервал Claude: он откроет видео во встроенном браузере и вернётся к работе.',
+              'Arcade прервал Claude: он откроет ссылку во встроенном браузере и вернётся к работе.',
+              'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.',
+            )
           : outcome === 'sent'
             ? 'Arcade попросил Claude открыть ссылку во встроенном браузере.'
             : outcome === 'filled'
@@ -1029,6 +1052,8 @@ async function loadTopics($) {
   }
   if (request !== yt.request) return
   yt = { ...yt, topics: parseTopics(text, list.directions), topicsAt: now, topicsLang: lang, topic: -1, videos: [], seen: new Set(), loading: '', note: '' }
+  // Темы новые — подборки статей и подкастов по старым темам не нужны, и их загрузки тоже
+  reads = { articles: emptyReads(reads.articles.request + 1), podcasts: emptyReads(reads.podcasts.request + 1) }
   $.ui.invalidate('ui.render')
 }
 
@@ -1042,7 +1067,6 @@ async function loadVideos($, index, again = false) {
   yt = { ...yt, topic: index, videos: [], loading: 'videos', note: '' }
   $.ui.invalidate('ui.render')
   const now = await $.clock.now()
-  const want = wanted(topic.direction, lang)
   let videos = []
   let note = ''
   let used = seen
@@ -1051,7 +1075,7 @@ async function loadVideos($, index, again = false) {
     const pool = async (channels) => candidates(await Promise.all(channels.map((c) => ytFeed($, c.id, now))), topic.direction, now)
     let [mine, english] = await Promise.all([pool(local), pool(en)])
     // Всё уже показывали — начинаем круг заново
-    if (mine.length + english.length - [...mine, ...english].filter((v) => seen.has(v.id)).length < want.local + want.en) used = new Set()
+    if (mine.length + english.length - [...mine, ...english].filter((v) => seen.has(v.id)).length < PICKS) used = new Set()
     mine = mine.filter((v) => !used.has(v.id)).slice(0, YT_POOL)
     english = english.filter((v) => !used.has(v.id)).slice(0, YT_POOL)
     if (!mine.length && !english.length) note = 'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.'
@@ -1060,14 +1084,86 @@ async function loadVideos($, index, again = false) {
       const answer = await $.model.complete({ model: 'haiku', ...picksPrompt(topic, mine, english, lang), maxTokens: 300, timeoutMs: YT_MODEL_MS })
       if (answer.isAnswered) ranked = parsePicks(answer.text, [...mine, ...english])
       else log(`видео YouTube: модель не ответила (${answer.reason})`)
-      videos = choose(ranked, mine, english, want)
-      if (want.local > 0 && !videos.some((v) => mine.includes(v))) note = 'Свежих видео на языке интерфейса по этой теме нет — показываю английские.'
+      videos = choose(ranked, mine, english)
     }
   } catch (err) {
     note = `Не получилось загрузить видео: ${String(err?.message ?? err).slice(0, 200)}`
   }
   if (request !== yt.request) return
   yt = { ...yt, videos, seen: used, loading: '', note }
+  $.ui.invalidate('ui.render')
+}
+
+// --- Статьи и подкасты: те же темы, записи — из открытых RSS- и Atom-лент ---------------------------------------
+// Список лент: сохранённый, если свежий, иначе с сайта; сайт не ответил — старый сохранённый или запас мода
+async function feedsList($, now) {
+  let stored = null
+  try {
+    const saved = await $.store.get('feedsList')
+    stored = saved?.list ? parseFeeds(saved.list) : null
+    if (stored && now - saved.at < CHANNELS_TTL_MS) return stored
+    const response = await fetchWithin($, siteUrl('feeds.json'), YT_FETCH_MS)
+    const fresh = response?.ok ? parseFeeds(response.text) : null
+    if (fresh) {
+      await $.store.set('feedsList', { at: now, list: fresh })
+      return fresh
+    }
+  } catch (err) {
+    log(`ленты статей и подкастов с сайта не получены: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  return stored ?? bundledFeeds()
+}
+
+// Записи ленты; лента не ответила — что было в прошлый раз
+async function rssFeed($, feed, kind, now) {
+  const key = `${kind}:${feed.id}`
+  const hit = rssCache.get(key)
+  if (hit && now - hit.at < FEED_TTL_MS) return hit.items
+  const response = await fetchWithin($, feed.url, YT_FETCH_MS)
+  const items = response?.ok ? parseItems(response.text, feed, kind) : []
+  if (items.length) rssCache.set(key, { at: now, items })
+  return items.length ? items : hit?.items ?? []
+}
+
+// Подборка статей или выпусков по теме: ленты темы (английские — других языков в лентах нет) → свежие кандидаты →
+// haiku выбирает. again — другая подборка: уже показанное не повторяем, пока есть из чего выбрать
+async function loadReads($, kind, index, again = false) {
+  const topic = yt.topics?.[index]
+  if (!topic) return
+  const was = reads[kind]
+  const request = was.request + 1
+  const seen = again && was.topic === index ? new Set([...was.seen, ...was.items.map((x) => x.id)]) : new Set()
+  reads = { ...reads, [kind]: { ...was, topic: index, items: [], loading: true, note: '', request } }
+  $.ui.invalidate('ui.render')
+  const now = await $.clock.now()
+  const articles = kind === 'articles'
+  let items = []
+  let note = ''
+  let used = seen
+  try {
+    const list = await feedsList($, now)
+    const { en } = channelsFor({ channels: list[kind] }, topic.direction, 'en', now)
+    let pool = candidates(await Promise.all(en.map((f) => rssFeed($, f, kind, now))), topic.direction, now)
+    // Всё уже показывали — начинаем круг заново
+    if (pool.filter((x) => !seen.has(x.id)).length < PICKS) used = new Set()
+    pool = pool.filter((x) => !used.has(x.id)).slice(0, YT_POOL)
+    if (!pool.length)
+      note = articles
+        ? 'Не получилось загрузить статьи: ленты не ответили. Попробуй чуть позже.'
+        : 'Не получилось загрузить выпуски: ленты не ответили. Попробуй чуть позже.'
+    else {
+      let ranked = []
+      const answer = await $.model.complete({ model: 'haiku', ...readsPrompt(topic, pool, kind), maxTokens: 300, timeoutMs: YT_MODEL_MS })
+      if (answer.isAnswered) ranked = parsePicks(answer.text, pool)
+      else log(`${kind}: модель не ответила (${answer.reason})`)
+      items = choose(ranked, [], pool)
+    }
+  } catch (err) {
+    const reason = String(err?.message ?? err).slice(0, 200)
+    note = articles ? `Не получилось загрузить статьи: ${reason}` : `Не получилось загрузить выпуски: ${reason}`
+  }
+  if (request !== reads[kind].request) return
+  reads = { ...reads, [kind]: { ...reads[kind], items, seen: used, loading: false, note } }
   $.ui.invalidate('ui.render')
 }
 
@@ -1137,6 +1233,8 @@ function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
   if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
+  if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
+  if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
   if (menu.startsWith('genre:')) return `Arcade · ${shelfView(`shelf:${menu.split(':')[1]}`)?.title ?? ''} · ${genreLabel(menu.split(':').slice(2).join(':'))}`
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
@@ -1827,9 +1925,18 @@ export function register(on) {
         const game = key.startsWith('arcade-game-') ? gameById(key.slice(12)) : key === 'arcade-continue' && played ? gameById(lastGame) : null
         if (game) return Svg({ source: coverSvg(game), alt: game.title, width: 44, height: 44 })
         // arcade-menu-shelf-books → books, arcade-lang-main → lang, arcade-support → support; жанр — иконкой своей полки
-        // Темы YouTube (arcade-yt-topic-…) — иконкой YouTube; их названия придумала модель, в alt не ставим
-        const kind = key.replace(/^arcade-(menu-(shelf-)?)?/, '').replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '').replace(/^lang-main$/, 'lang').replace(/^open-library$/, 'library').replace(/^yt-.+$/, 'youtube')
-        return Svg({ source: iconSvg(kind), alt: kind === 'youtube' ? 'YouTube' : label || kind, width: 36, height: 36 })
+        // Темы YouTube (arcade-yt-topic-…), статей (ar-) и подкастов (pc-) — иконкой раздела; их названия придумала
+        // модель, в alt не ставим
+        const kind = key
+          .replace(/^arcade-(menu-(shelf-)?)?/, '')
+          .replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '')
+          .replace(/^lang-main$/, 'lang')
+          .replace(/^open-library$/, 'library')
+          .replace(/^yt-.+$/, 'youtube')
+          .replace(/^ar-.+$/, 'articles')
+          .replace(/^pc-.+$/, 'podcasts')
+        const alts = { youtube: 'YouTube', articles: 'Статьи', podcasts: 'Подкасты' }
+        return Svg({ source: iconSvg(kind), alt: alts[kind] ?? (label || kind), width: 36, height: 36 })
       }
       // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
       // Иконка и текст прижаты к верху, лишнее обрезается рамкой, а не ложится на соседнюю плитку.
@@ -2197,6 +2304,129 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
+      } else if (menu === 'articles' || menu === 'podcasts') {
+        // Статьи и подкасты: темы — те же, что у YouTube, подборка — своя. Названия, которые придумала модель, — уже на
+        // языке интерфейса (keep)
+        const kind = menu
+        const articles = kind === 'articles'
+        const short = articles ? 'ar' : 'pc'
+        const focus = menuFrom?.startsWith(`${kind}:`) ? Number(menuFrom.slice(kind.length + 1)) : 0
+        const topicTiles = (yt.topics ?? []).flatMap((t, i) => {
+          const button = Button({
+            key: `arcade-${short}-topic-${i}`,
+            label: t.title,
+            ...(i === focus ? { autoFocus: true } : {}),
+            onPress: () => {
+              open(`${kind}:${i}`)()
+              const state = reads[kind]
+              if (state.topic !== i || (!state.items.length && !state.loading)) loadReads($, kind, i)
+            },
+          })
+          return [t.fixed ? button : keep(button), dim(t.direction === 'news' ? '  новости и обзоры обновлений' : '  по теме работы агента')]
+        })
+        items = [
+          back,
+          gap,
+          dim(
+            articles
+              ? 'Темы — по тому, над чем сейчас работает агент; статьи — свежие, из проверенных блогов и изданий на английском.'
+              : 'Темы — по тому, над чем сейчас работает агент; выпуски — свежие, из проверенных подкастов на английском.',
+          ),
+          gap,
+          ...(yt.loading === 'topics' || !yt.topics
+            ? [Text({ children: ['Подбираю темы…'] })]
+            : [
+                desktop ? tiles(topicTiles, 44) : Box({ flexDirection: 'column', children: topicTiles }),
+                gap,
+                Button({ key: `arcade-${short}-retopic`, label: 'Другие темы', onPress: () => loadTopics($) }),
+              ]),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu.startsWith('articles:') || menu.startsWith('podcasts:')) {
+        const kind = menu.split(':')[0]
+        const articles = kind === 'articles'
+        const short = articles ? 'ar' : 'pc'
+        const index = Number(menu.slice(kind.length + 1))
+        const topic = yt.topics?.[index]
+        const state = reads[kind]
+        const builtin = builtinBrowser(e.surface)
+        const openItem = async (k) => {
+          const id = `${articles ? 'article' : 'episode'}:${k}`
+          if (builtin) return desktopWindow($, id, articles ? 'Статья открыта во встроенном браузере Claude.' : 'Выпуск открыт во встроенном браузере Claude.')
+          if (!platform) {
+            const x = reads[kind].items[k]
+            libraryNotice = articles ? `Статья: ${x.link}` : `Выпуск: ${x.link || x.audio}`
+            $.ui.invalidate('ui.render')
+            return
+          }
+          libraryNotice = 'Открываю окно…'
+          $.ui.invalidate('ui.render')
+          const command = windowCommand(id)
+          try {
+            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+            windowNotice($, launchNotice(result, id))
+            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+          } catch (err) {
+            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+          }
+          $.ui.invalidate('ui.render')
+        }
+        // Записи — названия, источники и описания как есть, без перевода (keep). В Desktop — карточка во всю строку:
+        // название, источник с датой (у выпуска — и длительностью), начало описания
+        const entry = (x, k) => {
+          const label = x.title.length > 100 ? `${x.title.slice(0, 99)}…` : x.title
+          const button = Button({ key: `arcade-${short}-item-${k}`, label, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => openItem(k) })
+          const stats = itemStats(x, lang, now)
+          if (!desktop) return keep(Box({ flexDirection: 'column', children: [button, Text({ dimColor: true, children: [`  ${[x.channel, stats].filter(Boolean).join(' · ')}`] })] }))
+          const about = videoBlurb(x)
+          return keep(
+            Box({
+              key: `card-${short}-item-${k}`,
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              columnGap: 'md',
+              borderStyle: 'round',
+              borderColor: 'subtle',
+              padding: 'md',
+              hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
+              children: [
+                Svg({ source: iconSvg(kind), alt: x.channel, width: 48, height: 48 }),
+                Box({
+                  flexDirection: 'column',
+                  rowGap: 'xs',
+                  flexShrink: 1,
+                  flexGrow: 1,
+                  children: [
+                    button,
+                    Text({ size: 'footnote', children: [Text({ weight: 'semibold', children: [x.channel] }), ...(stats ? [Text({ dimColor: true, children: [` · ${stats}`] })] : [])] }),
+                    ...(about ? [Text({ size: 'footnote', dimColor: true, wrap: 'wrap', children: [about] })] : []),
+                  ],
+                }),
+              ],
+            }),
+          )
+        }
+        items = [
+          Button({ key: 'arcade-back', label: '← Назад', ...(state.loading ? { autoFocus: true } : {}), onPress: open(kind) }),
+          gap,
+          ...(topic ? [topic.fixed ? Text({ bold: true, children: [topic.title] }) : keep(Text({ bold: true, children: [topic.title] }))] : []),
+          gap,
+          ...(state.loading
+            ? [Text({ children: [articles ? 'Подбираю статьи…' : 'Подбираю выпуски…'] })]
+            : state.items.length
+              ? [Box({ flexDirection: 'column', rowGap: desktop ? 'sm' : 0, children: state.items.map(entry) })]
+              : []),
+          ...(state.note ? [gap, dim(state.note)] : []),
+          ...(topic && !state.loading
+            ? [gap, Button({ key: `arcade-${short}-more`, label: 'Другая подборка', ...(state.items.length ? {} : { autoFocus: true }), onPress: () => loadReads($, kind, index, true) })]
+            : []),
+          ...(state.items.length && (builtin || platform)
+            ? [gap, dim(articles ? `Статьи открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.` : `Выпуски открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)]
+            : []),
+          ...noticeLines,
+          ...hint,
+        ]
       } else if (menu === 'mine') {
         // Свои игры: файлы человека. Arcade их не раздаёт — копия лежит только у него, в ~/.claude/arcade
         const remove = (m) =>
@@ -2353,6 +2583,12 @@ export function register(on) {
             dim(`  ${consoleNote(c)}`),
           ])
         const reading = menuTabs().filter((c) => ['reading', 'books', 'listening', 'audiobooks'].includes(c.id))
+        // YouTube, статьи и подкасты: общие темы подбираем заново, если их нет, сменился язык или они устарели
+        const openTopics = (id) => () => {
+          open(id)()
+          if (!yt.topics || yt.topicsLang !== lang || now - yt.topicsAt > TOPICS_TTL_MS) loadTopics($)
+        }
+        const topicTile = (id, label, note) => [Button({ key: `arcade-menu-${id}`, label, ...(menuFrom === id ? { autoFocus: true } : {}), onPress: openTopics(id) }), dim(note)]
         items = [
           section('Играть'),
           tiles([
@@ -2364,20 +2600,15 @@ export function register(on) {
               : []),
             ...tabItems(menuTabs().filter((c) => !reading.includes(c))),
           ]),
-          ...(reading.length ? [section(reading.some((c) => ['listening', 'audiobooks'].includes(c.id)) ? 'Читать и слушать' : 'Читать'), tiles(tabItems(reading))] : []),
-          section('Смотреть'),
+          // Книги и аудиокниги из каталога, за ними — свежие статьи и подкасты по теме работы агента
+          section('Читать и слушать'),
           tiles([
-            Button({
-              key: 'arcade-menu-youtube',
-              label: 'YouTube',
-              ...(menuFrom === 'youtube' ? { autoFocus: true } : {}),
-              onPress: () => {
-                open('youtube')()
-                if (!yt.topics || yt.topicsLang !== lang || now - yt.topicsAt > TOPICS_TTL_MS) loadTopics($)
-              },
-            }),
-            dim('  свежие видео по теме работы агента'),
+            ...tabItems(reading),
+            ...topicTile('articles', 'Статьи', '  свежие статьи по теме работы агента'),
+            ...topicTile('podcasts', 'Подкасты', '  свежие выпуски подкастов по теме работы агента'),
           ]),
+          section('Смотреть'),
+          tiles(topicTile('youtube', 'YouTube', '  свежие видео по теме работы агента')),
           section('Ещё'),
           tiles([
           ...(windowMode() || e.surface === 'desktop'

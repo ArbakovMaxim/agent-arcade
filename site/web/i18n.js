@@ -270,6 +270,19 @@
     'Видео удалено или скрыто.': 'The video has been removed or hidden.',
     'Автор не разрешил смотреть это видео на других сайтах — открой его на YouTube.': "The author doesn't allow watching this video on other sites — open it on YouTube.",
     'Видео здесь не играет — открой его на YouTube.': "The video doesn't play here — open it on YouTube.",
+    // статьи и подкасты из мода
+    'Статьи': 'Articles',
+    'Подкасты': 'Podcasts',
+    'Открываю статью…': 'Opening the article…',
+    'В адресе нет статьи. Подборку делает мод Arcade: /arcade → Статьи.': 'There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.',
+    'Не получилось проверить ссылку — сайт Arcade не ответил. Попробуй ещё раз.': "Could not check the link — the Arcade site didn't respond. Try again.",
+    'Эта ссылка не из лент Arcade — не открываю её.': "This link isn't from the Arcade feeds — not opening it.",
+    'В адресе нет выпуска. Подборку делает мод Arcade: /arcade → Подкасты.': 'There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.',
+    'Не получилось проверить подкаст — сайт Arcade не ответил. Попробуй ещё раз.': "Could not check the podcast — the Arcade site didn't respond. Try again.",
+    'Этого подкаста нет в лентах Arcade — не включаю выпуск.': "This podcast isn't in the Arcade feeds — not playing the episode.",
+    'Страница выпуска': 'Episode page',
+    'Выпуск дослушан': 'The episode is finished',
+    'Не получилось загрузить выпуск — проверь интернет и нажми «Слушать» ещё раз': 'Could not load the episode — check the internet and press Listen again',
   }
 
   const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')

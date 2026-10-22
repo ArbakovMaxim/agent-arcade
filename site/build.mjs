@@ -21,6 +21,9 @@ const HEADERS = `/files/*
 /channels.json
   Cache-Control: public, max-age=3600
   Access-Control-Allow-Origin: *
+/feeds.json
+  Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *
 `
 
 function fail(message) {
@@ -54,6 +57,37 @@ export function checkChannels(data) {
     if (!Array.isArray(c.topics) || !c.topics.length) bad(`${where}: нужен хотя бы один topic`)
     for (const t of c.topics) if (!directions.has(t)) bad(`${where}: нет направления ${t}`)
     ids.add(c.id)
+  }
+  return data
+}
+
+// Ленты статей и подкастов для мода (content/feeds.json), той же строгостью. hosts — сайты, на которые ведут ссылки
+// ленты (статьи, страницы выпусков): страница /read открывает только их. directions — направления из channels.json
+export function checkFeeds(data, directions) {
+  const bad = (message) => {
+    throw new Error(`ленты: ${message}`)
+  }
+  if (data?.version !== 1) bad('нужно "version": 1')
+  if (!Array.isArray(data.articles) || !Array.isArray(data.podcasts)) bad('нужны списки articles и podcasts')
+  const ids = new Set()
+  for (const f of [...data.articles, ...data.podcasts]) {
+    const where = `лента ${f?.name ?? f?.id}`
+    if (!ID.test(f?.id ?? '')) bad(`${where}: неправильный id ${JSON.stringify(f?.id)} — только a-z, 0-9 и дефис`)
+    if (ids.has(f.id)) bad(`${where}: ${f.id} уже есть в списке`)
+    if (typeof f.name !== 'string' || !f.name || f.name.length > 80) bad(`${where}: нужно имя до 80 знаков`)
+    if (!LANGS.includes(f.lang)) bad(`${where}: язык ${JSON.stringify(f.lang)} не из ${LANGS.join(', ')}`)
+    let url = null
+    try {
+      url = new URL(f.url)
+    } catch {
+      // ниже — понятная ошибка
+    }
+    if (url?.protocol !== 'https:') bad(`${where}: нужен адрес ленты https://`)
+    if (!Array.isArray(f.topics) || !f.topics.length) bad(`${where}: нужен хотя бы один topic`)
+    for (const t of f.topics) if (!directions.has(t)) bad(`${where}: нет направления ${t}`)
+    if (!Array.isArray(f.hosts) || !f.hosts.length) bad(`${where}: нужен список hosts — сайты статей или выпусков`)
+    for (const h of f.hosts) if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(h ?? '')) bad(`${where}: ${JSON.stringify(h)} — не имя сайта`)
+    ids.add(f.id)
   }
   return data
 }
@@ -369,6 +403,9 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
   // Каналы для YouTube в моде — как есть, после проверки
   const channels = checkChannels(JSON.parse(fs.readFileSync(path.join(content, 'channels.json'), 'utf8')))
   fs.writeFileSync(path.join(out, 'channels.json'), `${JSON.stringify(channels)}\n`)
+  // Ленты статей и подкастов — для мода и страниц /read и /listen
+  const feeds = checkFeeds(JSON.parse(fs.readFileSync(path.join(content, 'feeds.json'), 'utf8')), new Set(channels.directions.map((d) => d.id)))
+  fs.writeFileSync(path.join(out, 'feeds.json'), `${JSON.stringify(feeds)}\n`)
 
   // Окно Arcade и лицензии сторонних библиотек
   // Движки своих игр — из мода, как есть: export убирается, движок — в window.ArcadeFlappy
