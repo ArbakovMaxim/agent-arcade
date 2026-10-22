@@ -4,8 +4,8 @@
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { SITE, bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
-import { LANGS, LANG_NAMES, detectLang, keep, tr, translateTree } from './i18n.js'
-import { bundledChannels, candidates, channelsFor, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoMeta, wanted, watchUrl } from './youtube.js'
+import { LANGS, LANG_NAMES, detectLang, isKept, keep, tr, translateTree } from './i18n.js'
+import { bundledChannels, candidates, channelsFor, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoBlurb, videoMeta, videoStats, wanted, watchUrl } from './youtube.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
@@ -90,6 +90,7 @@ let paneOpen = false
 let netWaiting = [] // кто ждёт в сети: [{ id, title, count }] — из /api/lobbies сайта, раз в минуту
 let lang = 'ru' // язык интерфейса: ru или en — настройка, иначе по окружению
 let wide = false // панель игры во всю ширину: разговор с агентом сжимается в узкую полосу
+const unfolded = new Set() // плитки Desktop, где по «ещё» показано описание целиком: ключи карточек
 let agentAlert = null // пока открыта игра: 'done' — агент закончил, 'permission' — ждёт разрешения; плашка поверх игры
 // Что делать с игрой в панели, когда агент закончил или ждёт разрешения — отдельно для каждого сигнала
 const SIGNAL_MODES = ['notify', 'pause', 'close']
@@ -130,8 +131,10 @@ let libraryNotice = '' // что случилось при последнем з
 let opening = false // игру во встроенном браузере Desktop по просьбе Arcade открывает Claude
 let agentTurn = null // ход агента (главного цикла), который идёт сейчас: его id для $.turn.abort
 let toolsRunning = 0 // сколько инструментов агента работает сейчас
-let pendingOpen = null // адрес игры, которую откроем, когда закончится текущий инструмент агента
+let pendingOpen = null // адрес игры, которую откроем, когда закончится текущий инструмент агента или сжатие контекста
 let interrupting = false // ход оборвал Arcade: его конец — не «агент закончил»
+let asking = null // адрес, который Arcade попросил Claude открыть, а тот ещё не открыл: второй раз не прерываем
+let compacting = false // Claude сжимает контекст: прерывать ход бесполезно — ждём конца сжатия
 let catalog = bundledCatalog() // каталог: с сайта, из сохранённой копии или запас из самого мода
 let platform = null // windows | mac | linux; null — пока не знаем, окно браузера не предлагаем
 let remoteSurface = null // панель с игрой нарисована в Desktop или VS Code — кадры идут перерисовкой, а не blit
@@ -169,8 +172,10 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
 function iconSvg(kind) {
+  // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
+  kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
   const c = ICON_COLORS[kind] ?? '#6e56cf'
   const shapes = {
     pad: `<rect x="6" y="15" width="36" height="18" rx="9" fill="${c}"/><rect x="12" y="21" width="9" height="3" fill="#fff"/><rect x="15" y="18" width="3" height="9" fill="#fff"/><circle cx="32" cy="22" r="2.4" fill="#fff"/><circle cx="37" cy="26" r="2.4" fill="#fff"/>`,
@@ -184,8 +189,14 @@ function iconSvg(kind) {
     cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
     window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
     play: `<rect x="6" y="12" width="36" height="24" rx="8" fill="${c}"/><path d="M20 18v12l10-6z" fill="#fff"/>`,
+    // Жанры игр: прицел, клетчатый флаг, ладья, компас, кубик
+    target: `<circle cx="24" cy="24" r="13" fill="none" stroke="${c}" stroke-width="4"/><circle cx="24" cy="24" r="4" fill="${c}"/><path d="M24 5v10M24 33v10M5 24h10M33 24h10" stroke="${c}" stroke-width="3"/>`,
+    flag: `<rect x="10" y="8" width="3" height="33" rx="1.5" fill="#ddd"/><rect x="13" y="9" width="26" height="18" fill="${c}"/><path d="M13 9h6.5v6H13zM26 9h6.5v6H26zM19.5 15H26v6h-6.5zM32.5 15H39v6h-6.5zM13 21h6.5v6H13zM26 21h6.5v6H26z" fill="#fff"/>`,
+    rook: `<path d="M13 9h5v4h4V9h4v4h4V9h5v9l-4 4v12h4v5H13v-5h4V22l-4-4z" fill="${c}"/>`,
+    compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
+    dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Обложка игры или книги: цвет от названия, крупные буквы
@@ -326,6 +337,14 @@ function paneColumns() {
 
 function workedSeconds(now) {
   return Math.max(0, Math.round((now - turnStartedAt) / 1000))
+}
+
+// Длинный текст — не длиннее max знаков, по границе слова и с многоточием; короткий — как есть
+export function clip(text, max) {
+  if (text.length <= max) return text
+  const cut = text.slice(0, max)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:\-–—|]+$/, '')}…`
 }
 
 // Сколько работает агент — по-человечески: «48 с», «2 мин 14 с», «1 ч 5 мин»
@@ -791,8 +810,15 @@ async function openDesktopBrowser($, id) {
     denied = err?.denied === true
     log(`встроенный браузер не открылся: ${String(err?.message ?? err).slice(0, 200)}`)
   }
-  // Отказ в разрешении — просим Claude; работает он — сначала прерываем, иначе просьба ждёт конца его хода
-  if (denied && agentTurn) {
+  // Отказ в разрешении — просим Claude. Сжимает он контекст — ждём конца сжатия: прерванный в это время ход не
+  // обрывается, а просьбы копятся в очереди
+  if (denied && compacting) {
+    pendingOpen = url // откроем, когда сжатие кончится: хук session.compact в register
+    return 'compacting'
+  }
+  // Работает — сначала прерываем, иначе просьба ждёт конца его хода. Уже открывает другую игру по просьбе Arcade —
+  // второй раз не прерываем: просьба встанет следом
+  if (denied && agentTurn && !asking) {
     // Идёт инструмент или Claude Code спрашивает разрешение (прерванный ход унёс бы и вопрос) — ждём
     if (toolsRunning > 0 || status === 'permission') {
       pendingOpen = url // прервём, когда закончится текущий инструмент: хук tool.call в register
@@ -831,14 +857,15 @@ async function interruptAgent($, url, cut) {
 // Инструмент агента идёт дольше CUT_TOOL_MS, а игра всё ждёт — обрываем и его. Пока Claude Code спрашивает
 // разрешение, не обрываем: ход унёс бы и вопрос
 async function cutPending($, url) {
-  if (pendingOpen !== url || toolsRunning === 0 || status === 'permission' || !agentTurn) return
+  if (pendingOpen !== url || toolsRunning === 0 || status === 'permission' || !agentTurn || compacting) return
   pendingOpen = null
   desktopNotice($, await interruptAgent($, url, true), '', url)
 }
 
-// Текущий инструмент агента закончился, а игра ждёт — прерываем ход. Ход уже кончился сам — просьба уходит как обычно
+// Текущий инструмент агента или сжатие контекста закончились, а игра ждёт — прерываем ход. Ход уже кончился сам —
+// просьба уходит как обычно
 async function openPending($) {
-  if (!pendingOpen || toolsRunning > 0) return
+  if (!pendingOpen || toolsRunning > 0 || compacting) return
   const url = pendingOpen
   pendingOpen = null
   desktopNotice($, agentTurn ? await interruptAgent($, url) : await askClaude($, url, true), '', url)
@@ -850,8 +877,11 @@ async function askClaude($, url, submit, then) {
   const ask = [tr(`Открой во встроенном браузере: ${url}`, lang), then].filter(Boolean).join('\n')
   opening = true
   if (submit) {
+    // Отмечаем до отправки: ход с просьбой может и кончиться раньше, чем ответит submit
+    asking = url
     const sent = await $.prompt.submit({ text: ask }).catch((err) => ({ drop: String(err?.message ?? err) }))
     if (!sent.drop) return 'sent'
+    asking = null
     log(`просьба Claude не ушла: ${sent.drop.slice(0, 200)}`)
   }
   const { text: draft } = await $.prompt.read()
@@ -864,13 +894,24 @@ async function askClaude($, url, submit, then) {
 // Что сказать о попытке открыть встроенный браузер; opened — если он открылся сразу
 function desktopNotice($, outcome, opened, url) {
   // Адрес для ручной просьбы не убираем через 15 секунд: его ещё надо переписать. Ожидание — пока не кончится
-  // инструмент агента, сколько бы он ни шёл
+  // инструмент агента или сжатие, сколько бы они ни шли
   const video = String(url).startsWith(`${SITE}/watch`)
   if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
   else if (outcome === 'waiting')
     libraryNotice = video
       ? 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть видео во встроенном браузере.'
       : 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.'
+  else if (outcome === 'compacting')
+    libraryNotice = video
+      ? 'Claude сжимает контекст — когда закончит, Arcade попросит его открыть видео во встроенном браузере.'
+      : 'Claude сжимает контекст — когда закончит, Arcade попросит его открыть игру во встроенном браузере.'
+  else if (outcome === 'asking')
+    windowNotice(
+      $,
+      video
+        ? 'Claude уже открывает это видео во встроенном браузере — подожди немного.'
+        : 'Claude уже открывает эту игру во встроенном браузере — подожди немного.',
+    )
   else
     windowNotice(
       $,
@@ -891,12 +932,19 @@ function desktopNotice($, outcome, opened, url) {
 
 // Открыть во встроенном браузере и сказать, что вышло; opened — что сказать, если он открылся сразу
 async function desktopWindow($, id, opened) {
+  // Эту же игру Claude уже открывает по просьбе Arcade или она ждёт конца инструмента или сжатия — повторное
+  // нажатие только напоминает, что происходит: второй раз ход не прерываем
+  const url = windowUrl(id)
+  if (asking === url || pendingOpen === url) {
+    desktopNotice($, asking === url ? 'asking' : compacting ? 'compacting' : 'waiting', '', url)
+    return
+  }
   opening = false
   pendingOpen = null
   libraryNotice = 'Открываю встроенный браузер…'
   $.ui.invalidate('ui.render')
   const outcome = await openDesktopBrowser($, id)
-  desktopNotice($, outcome, opened, windowUrl(id))
+  desktopNotice($, outcome, opened, url)
   // Браузер встаёт под панелью Arcade, и игре тесно — панель закрываем. Назад — /arcade или «Библиотека» на сайте
   if (outcome === 'opened') await $.ui.close({ id: PANE })
 }
@@ -905,6 +953,7 @@ async function desktopWindow($, id, opened) {
 // показываем сами (в авто-режиме может и не выйти)
 async function openedForArcade($, e) {
   opening = false
+  asking = null
   await showBrowser($, desktopConsent(e.url))
   if (paneOpen) await $.ui.close({ id: PANE })
 }
@@ -1367,6 +1416,8 @@ export function register(on) {
       interrupting = false
       return next(e)
     }
+    // Ход с просьбой Arcade кончился: открыл Claude игру или нет, следующее нажатие просит заново
+    asking = null
     try {
       // Игра ждала конца инструмента, а ход кончился сам — прерывать нечего, просим как обычно
       if (pendingOpen) {
@@ -1405,6 +1456,20 @@ export function register(on) {
       log(`ошибка мода: ${err?.message ?? err}`)
     }
     return next(e)
+  })
+
+  // Сжатие контекста: пока Claude пишет сводку, прерывать ход бесполезно — он не обрывается, а просьбы Arcade копятся
+  // в очереди. Игру, нажатую в это время, открываем, когда сжатие кончится. Сжатие у субагента и сводка заранее
+  // (precompute: ничего не ставит, ход идёт дальше) — не то
+  on('session.compact', async ($, e, next) => {
+    if (e.agentId !== undefined || e.trigger === 'precompute') return next(e)
+    compacting = true
+    try {
+      return await next(e)
+    } finally {
+      compacting = false
+      if (pendingOpen) $.clock.after(0, () => openPending($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
+    }
   })
 
   on('ui.close', async ($, e, next) => {
@@ -1620,7 +1685,15 @@ export function register(on) {
     translateTree(
       await (async () => {
     if (e.requestId !== PANE) return next(e)
-    const { Box, Text, Raster, Image, Button, Client, Svg, Input } = $.ui.resolve(e)
+    const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input } = $.ui.resolve(e)
+    // Готовая кнопка заморожена и свой onPress не отдаёт, а плитка Desktop пересобирает её с переносом названия:
+    // пропсы каждой кнопки запоминаются здесь
+    const buttonProps = new WeakMap()
+    const Button = (props) => {
+      const button = makeButton(props)
+      buttonProps.set(button, props)
+      return button
+    }
     const now = await $.clock.now()
     const terminal = e.surface === 'terminal'
     const game = gameById(view)
@@ -1759,36 +1832,76 @@ export function register(on) {
         return Svg({ source: iconSvg(kind), alt: kind === 'youtube' ? 'YouTube' : label || kind, width: 36, height: 36 })
       }
       // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
+      // Иконка и текст прижаты к верху, лишнее обрезается рамкой, а не ложится на соседнюю плитку.
       // Блок с ключом — сам зона наведения
-      const card = (children, key) =>
+      const card = (children, key, width) =>
         Box({
           key: `card-${key}`,
           flexDirection: 'row',
-          alignItems: 'center',
+          alignItems: 'flex-start',
           columnGap: 'sm',
           borderStyle: 'round',
           borderColor: 'subtle',
           padding: 'sm',
-          width: 30,
+          width,
+          overflow: 'hidden',
           hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
           children,
         })
-      const tiles = (list) => {
+      // Ширина плитки — от ширины панели: в ряд встаёт столько плиток не уже min, сколько влезает, и они делят ряд поровну.
+      // Запас в 4 клетки — на поля панели и полосу прокрутки
+      const TILE_GAP = 2
+      const tileWidth = (min) => {
+        const room = Math.max(min, (e.viewport?.columns ?? PANE_COLUMNS) - 4)
+        const perRow = Math.max(1, Math.floor((room + TILE_GAP) / (min + TILE_GAP)))
+        return Math.floor((room - (perRow - 1) * TILE_GAP) / perRow)
+      }
+      const tiles = (list, min = 32) => {
         if (desktop) {
+          const width = tileWidth(min)
+          // Описание — около трёх строк мелкого шрифта; длиннее — обрезано, целиком по «ещё»
+          const room = Math.max(60, Math.round((width - 8) * 3.6))
+          const words = (t) => [...(t.children ?? t.props?.children ?? [])].join('')
           const out = []
           for (let i = 0; i < list.length; i++) {
             const x = list[i]
-            if (!x || (x.type === 'Text' && [...(x.children ?? x.props?.children ?? [])].join('') === ' ')) continue
+            if (!x || (x.type === 'Text' && words(x) === ' ')) continue
             const note = list[i + 1]
             if (x.type === 'Button') {
               const hasNote = note && note.type === 'Text' && note.props?.dimColor
-              const words = (t) => [...(t.children ?? t.props?.children ?? [])].join('')
-              const caption = hasNote ? Text({ size: 'footnote', dimColor: true, children: [words(note).trim()] }) : null
-              out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', children: [x, ...(caption ? [caption] : [])] })], String(x.key ?? x.props?.key ?? i)))
-              if (hasNote) i++
+              const cardKey = String(x.key ?? x.props?.key ?? i)
+              // Название переносится на вторую строку, а не раздвигает плитку; подпись кнопки остаётся её именем
+              const made = buttonProps.get(x)
+              const title = made?.label ? makeButton({ ...made, children: [Text({ wrap: 'wrap', children: [made.label] })] }) : x
+              if (title !== x && isKept(x)) keep(title)
+              const body = [title]
+              if (hasNote) {
+                // Описание переводится здесь, до обрезки: словарь узнаёт фразу только целиком
+                const raw = words(note).trim()
+                const text = isKept(note) ? raw : tr(raw, lang)
+                const long = text.length > room
+                const shown = long && !unfolded.has(cardKey) ? clip(text, room) : text
+                body.push(keep(Text({ size: 'footnote', dimColor: true, wrap: 'wrap', children: [shown] })))
+                if (long)
+                  body.push(
+                    Button({
+                      key: `arcade-more-${cardKey}`,
+                      label: unfolded.has(cardKey) ? 'свернуть' : 'ещё',
+                      plain: true,
+                      dimColor: true,
+                      onPress: () => {
+                        if (unfolded.has(cardKey)) unfolded.delete(cardKey)
+                        else unfolded.add(cardKey)
+                        $.ui.invalidate('ui.render')
+                      },
+                    }),
+                  )
+                i++
+              }
+              out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body })], cardKey, width))
             } else out.push(x)
           }
-          return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 'md', rowGap: 'md', children: out })
+          return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: TILE_GAP, rowGap: 'md', children: out })
         }
         const out = []
         for (let i = 0; i < list.length; i++) {
@@ -2001,7 +2114,8 @@ export function register(on) {
           ...(yt.loading === 'topics' || !yt.topics
             ? [Text({ children: ['Подбираю темы…'] })]
             : [
-                desktop ? tiles(topicTiles) : Box({ flexDirection: 'column', children: topicTiles }),
+                // Названия тем — до 40 знаков: плитки шире обычных, чтобы название чаще влезало в одну строку
+                desktop ? tiles(topicTiles, 44) : Box({ flexDirection: 'column', children: topicTiles }),
                 gap,
                 Button({ key: 'arcade-yt-retopic', label: 'Другие темы', onPress: () => loadTopics($) }),
               ]),
@@ -2032,28 +2146,39 @@ export function register(on) {
           }
           $.ui.invalidate('ui.render')
         }
-        // Видео — названия и каналы как есть, без перевода (keep). В Desktop — карточка во всю строку
+        // Видео — названия, каналы и описания как есть, без перевода (keep). В Desktop — крупная карточка во всю строку:
+        // название, канал с датой и просмотрами, начало описания
         const videoItem = (v, k) => {
           const label = v.title.length > 100 ? `${v.title.slice(0, 99)}…` : v.title
           const button = Button({ key: `arcade-yt-video-${k}`, label, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => playVideo(k) })
-          const meta = videoMeta(v, lang, now)
+          if (!desktop) return keep(Box({ flexDirection: 'column', children: [button, Text({ dimColor: true, children: [`  ${videoMeta(v, lang, now)}`] })] }))
+          const stats = videoStats(v, lang, now)
+          const about = videoBlurb(v)
           return keep(
-            desktop
-              ? Box({
-                  key: `card-yt-video-${k}`,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  columnGap: 'sm',
-                  borderStyle: 'round',
-                  borderColor: 'subtle',
-                  padding: 'sm',
-                  hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
+            Box({
+              key: `card-yt-video-${k}`,
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              columnGap: 'md',
+              borderStyle: 'round',
+              borderColor: 'subtle',
+              padding: 'md',
+              hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
+              children: [
+                Svg({ source: iconSvg('youtube'), alt: 'YouTube', width: 48, height: 48 }),
+                Box({
+                  flexDirection: 'column',
+                  rowGap: 'xs',
+                  flexShrink: 1,
+                  flexGrow: 1,
                   children: [
-                    Svg({ source: iconSvg('youtube'), alt: 'YouTube', width: 36, height: 36 }),
-                    Box({ flexDirection: 'column', rowGap: 'xs', flexShrink: 1, children: [button, Text({ size: 'footnote', dimColor: true, children: [meta] })] }),
+                    button,
+                    Text({ size: 'footnote', children: [Text({ weight: 'semibold', children: [v.channel] }), ...(stats ? [Text({ dimColor: true, children: [` · ${stats}`] })] : [])] }),
+                    ...(about ? [Text({ size: 'footnote', dimColor: true, wrap: 'wrap', children: [about] })] : []),
                   ],
-                })
-              : Box({ flexDirection: 'column', children: [button, Text({ dimColor: true, children: [`  ${meta}`] })] }),
+                }),
+              ],
+            }),
           )
         }
         items = [
@@ -2115,16 +2240,18 @@ export function register(on) {
         // Вкладка группы («Игры»): полки с играми
         const group = groupsList().find((x) => x.id === menu)
         const shelvesHere = shelvesList().filter((s) => shelfGames(s.id).some((g) => groupConsoles(group.id).includes(g.console)))
+        const shelfItems = shelvesHere.flatMap((s, i) => {
+          const n = shelfGames(s.id).length
+          return [
+            Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
+            dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : shelfGames(s.id).every((g) => ['audio', 'audio-mine'].includes(g.kind)) ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'игра', 'игры', 'игр')}`),
+          ]
+        })
+        // В Desktop полки — плитками с иконкой жанра, как разделы главного меню
         items = [
           back,
           gap,
-          ...shelvesHere.flatMap((s, i) => {
-            const n = shelfGames(s.id).length
-            return [
-              Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
-              dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : shelfGames(s.id).every((g) => ['audio', 'audio-mine'].includes(g.kind)) ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'игра', 'игры', 'игр')}`),
-            ]
-          }),
+          ...(desktop ? [tiles(shelfItems)] : shelfItems),
           ...noticeLines,
           ...hint,
         ]
