@@ -2,14 +2,14 @@ import { expect, mock, test } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
-import { ownDesktopCall, workedText } from '../hooks/register.js'
+import { clip, ownDesktopCall, workedText } from '../hooks/register.js'
 import { detectLang, tr, fromEnglish, resetLocaleCache } from '../hooks/i18n.js'
 import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
 import { installMapper28, prgBank } from '../hooks/mapper28.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 import { createFlappy } from '../hooks/flappy.js'
-import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed, parseTopics, wanted, watchUrl } from '../hooks/youtube.js'
+import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed, parseTopics, videoBlurb, wanted, watchUrl } from '../hooks/youtube.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -1457,6 +1457,66 @@ test('Desktop: ход агента не прервался — просьба ж
   await ui.unmount()
 })
 
+test('Desktop: игру нажали ещё раз, пока Claude открывает её по просьбе Arcade, — второй раз ход не прерываем', async ($, on) => {
+  const sega = (title: string, c: string) => ({ console: 'sega', title, genre: 'платформер', about: 'планеты', keys: '…', rom: { url: `files/${c.repeat(64)}.bin`, base64: `files/${c.repeat(64)}.bin.b64`, sha256: c.repeat(64), size: 1 } })
+  const { clock, aborts, submits } = stubs(on, { site: siteCatalog({ miniplanets: sega('Miniplanets', 'c'), starfield: sega('Starfield', 'd') }), abort: true, submit: true })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  await $.turn.complete({ turnId: 't1', reason: 'aborted', answer: '' })
+  await $.turn.start({ turnId: 't2', text: submits[0].text })
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits.length).toBe(1)
+  expect(await ui.find({ type: 'Text', text: 'Claude уже открывает эту игру во встроенном браузере — подожди немного.' })).toBeDefined()
+  // Другая игра — просьба встаёт следом, ход с просьбой Arcade не прерываем
+  await ui.press({ key: 'arcade-game-starfield' })
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits.length).toBe(2)
+  expect(submits[1]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=starfield` })
+  // Ход с просьбой кончился, а игра так и не открылась — следующее нажатие просит заново
+  await $.turn.complete({ turnId: 't2', answer: '' })
+  await $.turn.start({ turnId: 't3', text: 'дальше' })
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(aborts).toEqual([{ turnId: 't1' }, { turnId: 't3' }])
+  expect(submits.length).toBe(3)
+  await ui.unmount()
+})
+
+test('Desktop: Claude сжимает контекст — Arcade не прерывает ход, а ждёт конца сжатия, сколько бы оно ни шло', async ($, on) => {
+  const { clock, aborts, submits } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
+  const COMPACT_MS = 12_000 // дольше CUT_TOOL_MS: инструмент так долго ждать не стали бы
+  // Сжатие оставляет хотя бы одно сообщение: отдаём то, что пришло
+  on('session.compact', (_: any, e: any) => clock.sleep(COMPACT_MS).then(() => ({ messages: e.messages })))
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  const compacted = $.session.compact({ messages: [{ role: 'user', text: 'почини тесты', toolUses: [] }] })
+  await clock.advance(100)
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  const waiting = 'Claude сжимает контекст — когда закончит, Arcade попросит его открыть игру во встроенном браузере.'
+  expect(await ui.find({ type: 'Text', text: waiting })).toBeDefined()
+  await clock.advance(1_000)
+  await ui.press({ key: 'arcade-game-miniplanets' }) // нажали ещё раз — по-прежнему ждём
+  await clock.advance(COMPACT_MS - 2_000)
+  expect(aborts).toEqual([])
+  expect(submits).toEqual([])
+  expect(await ui.find({ type: 'Text', text: waiting })).toBeDefined()
+  await clock.advance(1_000)
+  await compacted
+  await clock.settle()
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits.length).toBe(1)
+  expect(submits[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?game=miniplanets\n${BACK_TO_WORK}` })
+  expect(await ui.find({ type: 'Text', text: 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.' })).toBeDefined()
+  await ui.unmount()
+})
+
 test('Desktop: Claude Code спрашивает разрешение — ход не прерываем, ждём конца инструмента', async ($, on) => {
   const { clock, aborts, submits } = stubs(on, { site: segaCatalog(), abort: true, submit: true })
   await start($)
@@ -2442,7 +2502,8 @@ test('Desktop: главное меню — карточки с иконками,
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'Играть' })).toMatchObject({ props: { size: 'heading' } })
   const card = await ui.find({ key: 'card-arcade-menu-nes' })
-  expect(card).toMatchObject({ props: { width: 30, borderColor: 'subtle' } }) // ровная сетка, рамка цветом темы
+  // ровная сетка, рамка цветом темы; панель в 160 клеток — четыре плитки в ряд, делят его поровну
+  expect(card).toMatchObject({ props: { width: 37, borderColor: 'subtle', alignItems: 'flex-start' } })
   expect(card.props).not.toHaveProperty('backgroundColor') // фон — от темы, а не тёмный на светлой
   // подсветка при наведении: найденный элемент своего hover не показывает — он виден в дереве над ним
   expect(JSON.stringify(await ui.findAll({ type: 'Box' }))).toContain('"hover":{"borderColor":"suggestion","backgroundColor":"#8080801a"}')
@@ -2457,6 +2518,53 @@ test('Desktop: главное меню — карточки с иконками,
   expect(JSON.stringify(await ui.findAll({}))).not.toMatch(/"(color|borderColor)":"(yellow|green|red|gray)"/)
   expect(await ui.find({ type: 'Text', text: /^\d+ игр/ })).toMatchObject({ props: { size: 'footnote' } }) // подпись карточки — мелким шрифтом, без отступа
   await ui.unmount()
+  // панель уже — плиток в ряду меньше, а в узкой одна плитка во всю ширину: ряд не шире панели
+  const pane = await $.ui.mount({ ...PANE, surface: 'desktop', viewport: { columns: 104, rows: 40 } })
+  expect(await pane.find({ key: 'card-arcade-menu-nes' })).toMatchObject({ props: { width: 32 } })
+  await pane.unmount()
+  const narrow = await $.ui.mount({ ...PANE, surface: 'desktop', viewport: { columns: 50, rows: 40 } })
+  expect(await narrow.find({ key: 'card-arcade-menu-nes' })).toMatchObject({ props: { width: 46 } })
+  await narrow.unmount()
+})
+
+test('Desktop: полки «Игр» — плитками с иконкой жанра; длинное название переносится, длинное описание — по «ещё»', async ($, on) => {
+  const site = JSON.parse(shooterCatalog())
+  const about = 'футуристические гонки на антигравитационных болидах по трассе над городом будущего: разгон, ускорители на полотне, щит, который тает от ударов о стены, и таблица лучших кругов'
+  site.games.hexgl.about = about
+  const { clock } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', viewport: { columns: 104, rows: 40 } })
+  await ui.press({ key: 'arcade-menu-games' })
+  // полки — плитки со своей иконкой (alt — название полки) и числом игр мелким шрифтом
+  const shelf = await ui.find({ key: 'card-arcade-menu-shelf-shooters' })
+  expect(shelf).toMatchObject({ props: { width: 32, borderStyle: 'round' } })
+  expect(JSON.stringify(shelf)).toContain('"alt":"Шутеры"')
+  expect(await ui.find({ type: 'Text', text: '1 игра' })).toMatchObject({ props: { size: 'footnote' } })
+  await ui.press({ key: 'arcade-menu-shelf-racing' })
+  // название — внутри кнопки текстом с переносом; кнопка по-прежнему называется названием игры
+  const title = await ui.find({ key: 'arcade-game-hexgl' })
+  expect(title).toMatchObject({ props: { label: 'HexGL' } })
+  expect(JSON.stringify(title)).toContain('"wrap":"wrap"')
+  // описание — около трёх строк, по границе слова и с многоточием; целиком — по «ещё», «свернуть» прячет снова
+  const full = `гонки — ${about}`
+  const short = await ui.find({ type: 'Text', text: /…$/ })
+  expect(short.text.length).toBeLessThan(full.length)
+  expect(full.startsWith(short.text.slice(0, -1))).toBe(true)
+  expect(await ui.find({ key: 'arcade-more-arcade-game-hexgl' })).toMatchObject({ props: { label: 'ещё' } })
+  await ui.press({ key: 'arcade-more-arcade-game-hexgl' })
+  expect(await ui.find({ type: 'Text', text: full })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-more-arcade-game-hexgl' })).toMatchObject({ props: { label: 'свернуть' } })
+  await ui.press({ key: 'arcade-more-arcade-game-hexgl' })
+  expect(await ui.find({ type: 'Text', text: full })).toBeUndefined()
+  await ui.unmount()
+  expect([tr('ещё', 'en'), tr('свернуть', 'en'), tr('ещё', 'de')]).toEqual(['more', 'less', 'mehr'])
+})
+
+test('clip: короткий текст как есть, длинный — по границе слова, без хвостовой запятой и с многоточием', () => {
+  expect(clip('короткий текст', 40)).toBe('короткий текст')
+  expect(clip('один два, три четыре пять', 12)).toBe('один два…')
+  expect(clip('сверхдлинноеслово', 8)).toBe('сверхдли…')
 })
 
 test('названия настольных игр с сайта — только по-русски, но под «Продолжить» и в списке переведены', async () => {
@@ -2626,6 +2734,10 @@ test('YouTube в Desktop на английском: четыре английс�
   expect(prompts[1].prompt).not.toContain('Russian')
   expect(await labels(ui, 'arcade-yt-video-', 5)).toEqual(['Prompt caching explained', 'Evals for coding agents', 'Agents in the terminal', 'Claude Code & hooks', undefined])
   expect(await ui.find({ key: 'card-yt-video-3' })).toBeDefined()
+  // Карточка видео: канал отдельно от даты и просмотров, под ними — начало описания
+  expect(await ui.find({ type: 'Text', text: 'AI En One' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^ · \w+ \d+ · 4K$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Про Prompt caching explained' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: "Videos open in Claude's built-in browser." })).toBeDefined()
   await ui.press({ key: 'arcade-yt-video-0' })
   expect(browserCalls[0]).toMatchObject({ server: 'Claude_Browser', tool: 'preview_start', args: { url: `${SITE}/watch?lang=en#v=aaaaaaaaa02,bbbbbbbbb01,aaaaaaaaa01,bbbbbbbbb02&i=0` } })
@@ -2669,6 +2781,10 @@ test('youtube.js: список каналов, лента, темы, подбо�
   const videos = [v('aaaaaaaaa01', 'A'), v('bad', 'A'), v('bbbbbbbbb01', 'B')]
   expect(watchUrl(videos, 7, 'ru')).toBe(`${SITE}/watch#v=aaaaaaaaa01,bbbbbbbbb01&i=1`)
   expect(watchUrl(videos, -1, 'de')).toBe(`${SITE}/watch?lang=de#v=aaaaaaaaa01,bbbbbbbbb01&i=0`)
+  // Описание для карточки: без ссылок, хештегов и таймкодов; длинное — обрезано по границе слова
+  expect(videoBlurb({ about: 'Hooks deep dive: https://x.dev/a #claude #ai 0:00 Intro 12:30 Demo' })).toBe('Hooks deep dive: Intro Demo')
+  expect(videoBlurb({ about: 'word '.repeat(60).trim() }, 30)).toBe('word word word word word word…')
+  expect(videoBlurb({})).toBe('')
   // Работа агента для модели: реплики и инструменты; длинная — с конца
   const work = [{ role: 'user', text: 'Почини тесты', toolUses: [] }, { role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'npm test' } }] }]
   expect(contextFrom(work)).toBe('Developer: Почини тесты\nAgent used Bash {"command":"npm test"}')

@@ -57,6 +57,8 @@ const EXACT = {
   'Arcade попросил Claude открыть ссылку во встроенном браузере.': 'Arcade asked Claude to open the link in the built-in browser.',
   'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.': 'The link is in the prompt box: press Enter, and Claude will open it in the built-in browser.',
   'Не получилось открыть встроенный браузер: сначала ответь на вопрос Claude Code.': "Could not open the built-in browser: answer Claude Code's question first.",
+  'Claude сжимает контекст — когда закончит, Arcade попросит его открыть игру во встроенном браузере.': "Claude is compacting its context — when it's done, Arcade will ask it to open the game in the built-in browser.",
+  'Claude уже открывает эту игру во встроенном браузере — подожди немного.': 'Claude is already opening this game in the built-in browser — give it a moment.',
   // YouTube: темы по работе агента и свежие видео
   'Смотреть': 'Watch',
   'свежие видео по теме работы агента': "fresh videos on what the agent is working on",
@@ -74,6 +76,8 @@ const EXACT = {
   'Видео открыто во встроенном браузере Claude.': "The video is open in Claude's built-in browser.",
   'Arcade прервал Claude: он откроет видео во встроенном браузере и вернётся к работе.': 'Arcade interrupted Claude: it will open the video in the built-in browser and get back to work.',
   'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть видео во встроенном браузере.': 'Claude is finishing its current step — Arcade will interrupt it when the step ends or after 10 seconds to open the video in the built-in browser.',
+  'Claude сжимает контекст — когда закончит, Arcade попросит его открыть видео во встроенном браузере.': "Claude is compacting its context — when it's done, Arcade will ask it to open the video in the built-in browser.",
+  'Claude уже открывает это видео во встроенном браузере — подожди немного.': 'Claude is already opening this video in the built-in browser — give it a moment.',
   'Свежих видео на языке интерфейса по этой теме нет — показываю английские.': 'No fresh videos in the interface language on this topic — showing English ones.',
   'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.': "Could not load videos: YouTube didn't respond. Try again a bit later.",
   'Журнал агента': 'Agent log',
@@ -131,6 +135,9 @@ const EXACT = {
   'Читать': 'Read',
   'Читать и слушать': 'Read & listen',
   'Ещё': 'More',
+  // Плитка Desktop: длинное описание — целиком по кнопке
+  'ещё': 'more',
+  'свернуть': 'less',
   // Группы и полки каталога: названия приходят с сайта по-русски
   'Игры': 'Games',
   'Книги': 'Books',
@@ -327,6 +334,10 @@ function trEn(text) {
 // Чужой текст в интерфейсе (название видео, тема от модели) переводить нельзя: словарь заменил бы в нём слова.
 // keep(узел) — узел и всё внутри него translateTree оставляет как есть
 const KEPT = new WeakSet()
+// Узел помечен keep — его текст не переводится
+export function isKept(node) {
+  return Boolean(node && typeof node === 'object' && KEPT.has(node))
+}
 export function keep(node) {
   if (node && typeof node === 'object') KEPT.add(node)
   return node

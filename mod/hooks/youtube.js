@@ -261,7 +261,12 @@ export function watchUrl(videos, index, lang) {
 
 // Подпись видео: канал · дата · просмотры — числа и даты в формате языка интерфейса
 export function videoMeta(v, lang, now) {
-  const parts = [v.channel]
+  return [v.channel, videoStats(v, lang, now)].filter(Boolean).join(' · ')
+}
+
+// Дата и просмотры видео: «12 окт. · 3,4 тыс.»; год — у видео старше 300 дней
+export function videoStats(v, lang, now) {
+  const parts = []
   try {
     parts.push(new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short', ...(now - v.published > 300 * DAY ? { year: 'numeric' } : {}) }).format(new Date(v.published)))
   } catch {
@@ -277,4 +282,19 @@ export function videoMeta(v, lang, now) {
     parts.push(n)
   }
   return parts.filter(Boolean).join(' · ')
+}
+
+// Начало описания для карточки видео: без ссылок, хештегов и таймкодов, не длиннее max — по границе слова
+export function videoBlurb(v, max = 220) {
+  const text = String(v.about ?? '')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/(^|\s)#[\p{L}\p{N}_]+/gu, ' ')
+    .replace(/(^|\s)\d{1,2}(:\d\d){1,2}(?=\s|$)/g, ' ')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—|:•·,]+|[\s\-–—|:•·,]+$/g, '')
+  if (text.length <= max) return text
+  const cut = text.slice(0, max)
+  const space = cut.lastIndexOf(' ')
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:\-–—|]+$/, '')}…`
 }
