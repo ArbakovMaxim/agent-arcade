@@ -212,11 +212,17 @@
     return dot
   }
 
-  function button(text, onClick) {
+  function button(text, onClick, cls) {
     const b = el('button', 'margin:6px;padding:8px 14px;border-radius:8px;border:1px solid #3a3a44;background:#22222a;color:#eee;font:inherit;cursor:pointer', text)
     b.type = 'button'
+    if (cls) b.className = cls
     b.addEventListener('click', onClick)
     return b
+  }
+
+  // Итог партии, где кто-то сдался: сервер присылает result { loser: место сдавшегося, reason: 'resign' }
+  function resignText(result, seat) {
+    return result.loser === seat ? T('Ты сдался — поражение') : seat >= 0 ? T('Соперник сдался — победа!') : T('Партия окончена: сдались')
   }
 
   function prepare(game) {
@@ -330,8 +336,9 @@
     const position = () => saved.moves.reduce((p, m) => rules.apply(p, m), rules.start())
     function botTurn() {
       const p = position()
-      if (rules.result(p) || rules.turn(p) === saved.seat) return
+      if (saved.result || rules.result(p) || rules.turn(p) === saved.seat) return
       setTimeout(() => {
+        if (saved.result) return // пока бот думал, игрок сдался
         const move = rules.bot(position())
         if (move === null || move === undefined) return
         saved.moves.push(move)
@@ -342,11 +349,11 @@
     }
     function handle(m) {
       if (m.type === 'hello') {
-        emit({ type: 'state', seat: saved.seat, seats: 2, moves: saved.moves })
+        emit({ type: 'state', seat: saved.seat, seats: 2, moves: saved.moves, ...(saved.result ? { result: saved.result } : {}) })
         botTurn()
       } else if (m.type === 'move') {
         const p = position()
-        if (m.ply !== saved.moves.length || rules.turn(p) !== saved.seat) return
+        if (saved.result || m.ply !== saved.moves.length || rules.turn(p) !== saved.seat) return
         try {
           rules.apply(p, m.move)
         } catch {
@@ -356,6 +363,11 @@
         store()
         emit({ type: 'move', ply: m.ply, move: m.move })
         botTurn()
+      } else if (m.type === 'resign') {
+        if (saved.result) return
+        saved.result = { loser: saved.seat, reason: 'resign' }
+        store()
+        emit({ type: 'state', seat: saved.seat, seats: 2, moves: saved.moves, result: saved.result })
       } else if (m.type === 'reset') {
         // Новая партия — стороны меняются: теперь бот ходит первым
         saved = { seat: 1 - saved.seat, moves: [] }
@@ -397,6 +409,7 @@
     let seats = 0
     let names = []
     let selected = null
+    let resigned = null // кто-то сдался: { loser, reason: 'resign' } от сервера
     const ws = options.bot ? botSocket(rules, id) : new WebSocket(wsUrl(`/net/board/${code}`))
     ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: tokenFor(code), game: id, ...(code ? named() : {}) })))
     ws.addEventListener('close', () => {
@@ -413,6 +426,7 @@
         seat = m.seat
         seats = m.seats
         names = m.names || []
+        resigned = m.result || null
         moves = []
         position = rules.start()
         for (const mv of m.moves || []) {
@@ -443,8 +457,9 @@
     function render() {
       grid.replaceChildren()
       const flip = seat === 1
-      const targets = selected ? rules.targets(position, selected) : seat === rules.turn(position) && game.board === 'reversi' ? rules.targets(position) : []
       const result = rules.result(position)
+      const over = Boolean(resigned || result)
+      const targets = over ? [] : selected ? rules.targets(position, selected) : seat === rules.turn(position) && game.board === 'reversi' ? rules.targets(position) : []
       for (let i = 0; i < 64; i++) {
         const r = flip ? 7 - Math.floor(i / 8) : Math.floor(i / 8)
         const c = flip ? 7 - (i % 8) : i % 8
@@ -464,16 +479,18 @@
       tools.replaceChildren()
       const mySide = seat >= 0 ? rules.sides[seat] : null
       const extra = rules.extra(position)
-      if (result) {
-        status.textContent = result.winner === -1 ? T('Ничья') : result.winner === seat ? T('Победа!') : seat >= 0 ? T('Поражение') : T(`Победили ${rules.sides[result.winner]}`)
+      if (over) {
+        if (resigned) status.textContent = resignText(resigned, seat)
+        else status.textContent = result.winner === -1 ? T('Ничья') : result.winner === seat ? T('Победа!') : seat >= 0 ? T('Поражение') : T(`Победили ${rules.sides[result.winner]}`)
         if (seat >= 0) tools.append(button(T('Новая партия'), () => ws.send(JSON.stringify({ type: 'reset' }))))
       } else if (seats < 2) status.textContent = T('Ждём соперника — отправь ему ссылку на эту партию')
       else if (seat < 0) status.textContent = T('Ты смотришь партию: в ней уже двое')
       else if (seat === rules.turn(position)) status.textContent = `${T('Твой ход')} (${mySide})${extra ? ` · ${extra}` : ''}`
       else if (options.bot) status.textContent = `${T('Компьютер думает…')}${extra ? ` · ${extra}` : ''}`
       else status.textContent = `${T('Ход соперника — можно вернуться к агенту, партия сохранится')}${extra ? ` · ${extra}` : ''}`
-      if (!result && seat >= 0 && seat === rules.turn(position) && rules.mustPass(position)) tools.append(button(T('Пропустить ход'), () => send('pass')))
-      if (options.bot && !result) tools.append(button(T('Начать заново'), () => ws.send(JSON.stringify({ type: 'reset' }))))
+      if (!over && seat >= 0 && seat === rules.turn(position) && rules.mustPass(position)) tools.append(button(T('Пропустить ход'), () => send('pass')))
+      if (!over && seat >= 0 && seats >= 2) tools.append(button(T('Сдаться'), () => ws.send(JSON.stringify({ type: 'resign' })), 'board-resign'))
+      if (options.bot && !over) tools.append(button(T('Начать заново'), () => ws.send(JSON.stringify({ type: 'reset' }))))
       if (link) {
         tools.append(
           button(T('Скопировать ссылку на партию'), async () => {
@@ -488,7 +505,7 @@
     }
 
     function click(r, c) {
-      if (seat < 0 || seats < 2 || rules.result(position) || seat !== rules.turn(position)) return
+      if (seat < 0 || seats < 2 || resigned || rules.result(position) || seat !== rules.turn(position)) return
       if (game.board === 'reversi') {
         if (rules.targets(position).some(([y, x]) => y === r && x === c)) send([r, c])
         return
@@ -505,10 +522,10 @@
       }
     }
 
-    window.ArcadeBoard.game = { get position() { return position }, get moves() { return moves }, get seat() { return seat }, click, rules, reset: () => ws.send(JSON.stringify({ type: 'reset' })) }
+    window.ArcadeBoard.game = { get position() { return position }, get moves() { return moves }, get seat() { return seat }, get resigned() { return resigned }, click, rules, reset: () => ws.send(JSON.stringify({ type: 'reset' })) }
   }
 
   // Помощники — модулям шахмат (chess.js) и го (go.js): поиск соперника, жетон места, «Мои партии», адрес сокета,
-  // подпись ника и ники игроков
-  window.ArcadeBoard = { start, adapter, seek, randomCode, tokenFor, remember, myGames, wsUrl, named, players }
+  // подпись ника, ники игроков и итог сдачи
+  window.ArcadeBoard = { start, adapter, seek, randomCode, tokenFor, remember, myGames, wsUrl, named, players, resignText }
 })()

@@ -531,6 +531,7 @@
     let seats = 0
     let names = []
     let moves = []
+    let result = null // кто-то сдался: { loser, reason: 'resign' } от сервера
     let variant = size ? String(size) : ''
     root.replaceChildren()
     const title = el('h2', 'margin:8px 0', game.title)
@@ -563,6 +564,7 @@
         seats = m.seats
         names = m.names || []
         if (m.variant) variant = String(m.variant)
+        result = m.result || null
         moves = Array.isArray(m.moves) ? m.moves : []
         replay()
       } else if (m.type === 'move' && m.ply === moves.length) {
@@ -577,7 +579,7 @@
     const mine = () => (seat === 0 ? BLACK : seat === 1 ? WHITE : 0)
     const send = (move) => ws.send(JSON.stringify({ type: 'move', ply: moves.length, move }))
     const click = (i) => {
-      if (seats < 2 || seat < 0 || go.over || go.turn !== mine()) return
+      if (seats < 2 || seat < 0 || go.over || result || go.turn !== mine()) return
       // проверяем ход у себя: законный — отправляем
       const probe = createGo(go.size)
       for (const mv of moves) probe.apply(mv)
@@ -587,7 +589,8 @@
       title.textContent = `${game.title} · ${go.size}×${go.size}`
       drawBoard(grid, go, click, go.over)
       const me = mine()
-      if (go.over) status.textContent = resultText(go, me)
+      if (result) status.textContent = B.resignText(result, seat)
+      else if (go.over) status.textContent = resultText(go, me)
       else if (seats < 2) status.textContent = T('Ждём соперника — отправь ему ссылку на эту партию')
       else if (seat < 0) status.textContent = T('Ты смотришь партию: в ней уже двое')
       else if (go.turn === me) status.textContent = `${T('Твой ход')} (${sideName(me)})`
@@ -595,8 +598,10 @@
       who.textContent = B.players([T('чёрные'), T('белые')], names)
       info.textContent = `${T('Взято камней')}: ${T('чёрные')} ${go.captured[BLACK]} · ${T('белые')} ${go.captured[WHITE]}${go.lastMove === 'pass' ? ` · ${T('последний ход — пас')}` : ''}`
       tools.replaceChildren()
-      if (!go.over && seat >= 0 && seats >= 2 && go.turn === me) tools.append(button(T('Пас'), () => send('pass')))
-      if (go.over && seat >= 0) tools.append(button(T('Новая партия'), () => ws.send(JSON.stringify({ type: 'reset' }))))
+      const over = go.over || Boolean(result)
+      if (!over && seat >= 0 && seats >= 2 && go.turn === me) tools.append(button(T('Пас'), () => send('pass')))
+      if (!over && seat >= 0 && seats >= 2) tools.append(button(T('Сдаться'), () => ws.send(JSON.stringify({ type: 'resign' })), false, 'go-resign'))
+      if (over && seat >= 0) tools.append(button(T('Новая партия'), () => ws.send(JSON.stringify({ type: 'reset' }))))
       tools.append(
         button(T('Скопировать ссылку на партию'), async () => {
           try {

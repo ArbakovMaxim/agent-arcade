@@ -1,5 +1,11 @@
 # Changelog · Список изменений
 
+## 0.22.1 — кнопка «Сдаться» в русских шашках и реверси (по сети и с компьютером) и в го по сети, как уже было в шахматах · a “Resign” button in checkers and reversi (online and against the computer) and in online go, as chess already had
+
+- Online, the room ends the game and both players see the result: “You resigned — you lose” and “Your opponent resigned — you win!”, a spectator sees “Game over: resignation”; after that no moves are accepted, and “New game” starts again with sides swapped · по сети партию завершает комната, и оба игрока видят итог: «Ты сдался — поражение» и «Соперник сдался — победа!», зритель — «Партия окончена: сдались»; после этого ходы не принимаются, а «Новая партия» начинает заново, стороны меняются
+- Against the computer, the bot stops moving and the result is remembered after a reload until “New game” · с компьютером бот перестаёт ходить, а итог сохраняется и после перезагрузки, пока не нажата «Новая партия»
+- The game room already knew how to resign for every board game, so the site's server is unchanged; the phrases were already translated for chess · игровая комната и раньше умела принимать сдачу в любой настольной игре, так что сервер сайта не менялся; фразы уже были переведены для шахмат
+
 ## 0.22.0 — свой @ник: в меню аккаунта — взять имя с GitHub одной кнопкой или придумать свой; в сетевых партиях шахмат, шашек, реверси и го соперники видят ник рядом с цветом · your own @handle: in the account menu, take your GitHub name in one click or make up your own; in online chess, checkers, reversi and go your opponent sees it next to your colour
 
 - Rules: 4 to 32 characters — Latin letters, digits and `_`, starting with a letter; case does not matter; names like admin, support or arcade are reserved · правила: от 4 до 32 знаков — латинские буквы, цифры и `_`, первый — буква; регистр не важен; имена вроде admin, support или arcade заняты заранее
