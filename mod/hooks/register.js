@@ -5,8 +5,9 @@ import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screen
 import { SITE, bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { LANGS, LANG_NAMES, detectLang, isKept, keep, tr, translateTree } from './i18n.js'
-import { bundledChannels, candidates, channelsFor, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoBlurb, videoMeta, videoStats, watchUrl, PICKS } from './youtube.js'
+import { bundledChannels, candidates, channelsFor, clean, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoBlurb, videoMeta, videoStats, watchUrl, PICKS } from './youtube.js'
 import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from './rss.js'
+import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
@@ -153,6 +154,12 @@ const feedCache = new Map() // id канала → { at, entries }: ленты �
 const emptyReads = (request = 0) => ({ topic: -1, items: [], seen: new Set(), loading: false, note: '', request })
 let reads = { articles: emptyReads(), podcasts: emptyReads() }
 const rssCache = new Map() // «articles:id ленты» → { at, items }: ленты перечитываем не чаще FEED_TTL_MS
+// Свои темы человека: последние, из $.store. Заметка под полем «Своя тема» — у раздела, где тему ввели; номер последнего
+// разбора — ответ модели на старый ввод не нужен
+let myTopics = []
+let ownNote = { kind: '', text: '' }
+let ownRequest = 0
+const searchCache = new Map() // «youtube:запрос» → { at, found }: поиск сайта по своей теме — не чаще SEARCH_TTL_MS
 
 function consoles() {
   return catalog.consoles
@@ -205,6 +212,40 @@ function iconSvg(kind) {
   }
   const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
+}
+// Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
+// португальский — Бразилии: перевод бразильский («você», «arquivo»)
+const star = (cx, cy, r, turn = 0) =>
+  Array.from({ length: 10 }, (_, k) => {
+    const a = ((turn - 90 + k * 36) * Math.PI) / 180
+    const d = k % 2 ? r * 0.382 : r
+    return `${(cx + d * Math.cos(a)).toFixed(2)},${(cy + d * Math.sin(a)).toFixed(2)}`
+  }).join(' ')
+// Полосы поровну: сверху вниз или слева направо
+const stripes = (colors, vertical = false) =>
+  colors.map((c, i) => (vertical ? `<rect x="${(36 / colors.length) * i}" width="${36 / colors.length}" height="24" fill="${c}"/>` : `<rect y="${(24 / colors.length) * i}" width="36" height="${24 / colors.length}" fill="${c}"/>`)).join('')
+// Триграмма флага Кореи: три черты, 1 — сплошная, 0 — с разрывом
+const trigram = (x, y, angle, bars) =>
+  `<g transform="translate(${x} ${y}) rotate(${angle})" fill="#000">${bars.map((solid, k) => (solid ? `<rect x="-2.5" y="${k * 1.6 - 2.1}" width="5" height="1"/>` : `<rect x="-2.5" y="${k * 1.6 - 2.1}" width="2.1" height="1"/><rect x=".4" y="${k * 1.6 - 2.1}" width="2.1" height="1"/>`)).join('')}</g>`
+const FLAGS = {
+  en: `<rect width="36" height="24" fill="#012169"/><path d="M0 0l36 24M36 0L0 24" stroke="#fff" stroke-width="4.8"/><path d="M0 0l36 24M36 0L0 24" stroke="#c8102e" stroke-width="1.6"/><path d="M18 0v24M0 12h36" stroke="#fff" stroke-width="8"/><path d="M18 0v24M0 12h36" stroke="#c8102e" stroke-width="4.8"/>`,
+  ru: stripes(['#fff', '#0039a6', '#d52b1e']),
+  uk: stripes(['#0057b7', '#ffd700']),
+  es: `<rect width="36" height="24" fill="#aa151b"/><rect y="6" width="36" height="12" fill="#f1bf00"/>`,
+  fr: stripes(['#002395', '#fff', '#ed2939'], true),
+  de: stripes(['#000', '#dd0000', '#ffce00']),
+  pt: `<rect width="36" height="24" fill="#009c3b"/><path d="M18 3l15 9-15 9-15-9z" fill="#ffdf00"/><circle cx="18" cy="12" r="5.2" fill="#002776"/><path d="M13 11a9 9 0 0 1 9.9 2.6" stroke="#fff" stroke-width=".9" fill="none"/>`,
+  it: stripes(['#009246', '#fff', '#ce2b37'], true),
+  pl: stripes(['#fff', '#dc143c']),
+  tr: `<rect width="36" height="24" fill="#e30a17"/><circle cx="13" cy="12" r="6" fill="#fff"/><circle cx="14.5" cy="12" r="4.8" fill="#e30a17"/><polygon points="${star(21.2, 12, 3, -90)}" fill="#fff"/>`,
+  ja: `<rect width="36" height="24" fill="#fff"/><circle cx="18" cy="12" r="7.2" fill="#bc002d"/>`,
+  zh: `<rect width="36" height="24" fill="#de2910"/>${[[6, 6, 3.6], [12, 2.4, 1.2], [14.4, 4.8, 1.2], [14.4, 8.4, 1.2], [12, 10.8, 1.2]].map(([x, y, r]) => `<polygon points="${star(x, y, r)}" fill="#ffde00"/>`).join('')}`,
+  ko: `<rect width="36" height="24" fill="#fff"/><g transform="rotate(33.7 18 12)"><circle cx="18" cy="12" r="6" fill="#0047a0"/><path d="M12 12a6 6 0 0 1 12 0z" fill="#cd2e3a"/><circle cx="15" cy="12" r="3" fill="#cd2e3a"/><circle cx="21" cy="12" r="3" fill="#0047a0"/></g>${trigram(9.7, 6.4, 123.7, [1, 1, 1])}${trigram(26.3, 6.4, 56.3, [0, 1, 0])}${trigram(9.7, 17.6, 56.3, [1, 0, 1])}${trigram(26.3, 17.6, 123.7, [0, 0, 0])}`,
+}
+// Флаг — во вложенном svg: он обрезает всё, что вылезло за края (диагонали британского флага); тонкая рамка видна
+// у белых флагов и на светлой теме, и на тёмной
+function flagSvg(code) {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/><svg x="6" y="12" width="36" height="24" viewBox="0 0 36 24">${FLAGS[code]}</svg><rect x="6.5" y="12.5" width="35" height="23" fill="none" stroke="#8080804d"/></svg>`
 }
 // Обложка игры или книги: цвет от названия, крупные буквы
 function coverSvg(g) {
@@ -988,6 +1029,10 @@ const TOPICS_TTL_MS = 20 * 60_000 // темы подбираем заново, �
 const YT_FETCH_MS = 8_000 // сколько ждать сайт и каждую ленту
 const YT_MODEL_MS = 20_000 // сколько ждать haiku
 const YT_POOL = 30 // сколько кандидатов каждого языка показывать модели
+const SEARCH_TTL_MS = 3 * 3_600_000 // найденное по своей теме помним 3 часа: «Другая подборка» не тратит поиск
+const SEARCH_FETCH_MS = 15_000 // поиск сайта опрашивает несколько источников — ждём дольше, чем ленту
+const SEARCH_DAYS = 730 // найденное поиском — не старше двух лет, как и на сайте
+const SHOW_DAYS = 365 // выпуски шоу из поиска — за год: нишевые подкасты выходят нечасто
 
 // Ответ сети или null, если не пришёл за ms: у $.http.fetch своего срока нет
 function fetchWithin($, url, ms) {
@@ -1032,6 +1077,86 @@ async function ytFeed($, id, now) {
   return entries.length ? entries : hit?.entries ?? []
 }
 
+// Тема по ключу меню: номер — из подобранных по работе агента, u<id> — своя тема человека
+const topicKey = (text) => (/^u[0-9a-z]+$/.test(text) ? text : Number(text))
+function topicOf(key) {
+  return typeof key === 'string' ? myTopics.find((t) => `u${t.id}` === key) : yt.topics?.[key]
+}
+
+// Поиск сайта по своей теме → { list, error }; удачный ответ помним SEARCH_TTL_MS
+async function searchFor($, kind, query, now) {
+  const key = `${kind}:${query.toLowerCase()}`
+  const hit = searchCache.get(key)
+  if (hit && now - hit.at < SEARCH_TTL_MS) return hit.found
+  const found = parseSearch(kind, await fetchWithin($, searchUrl(kind, query), SEARCH_FETCH_MS))
+  if (found.error) log(`поиск по своей теме (${kind}): ${found.error}`)
+  else searchCache.set(key, { at: now, found })
+  return found
+}
+
+// Почему по своей теме пусто: поиск на сегодня исчерпан, не ответил или ничего не нашёл
+function searchNote(found) {
+  if (found?.error === 'limit') return 'Поиск по своей теме на сегодня исчерпан — попробуй завтра.'
+  if (found?.error === 'feeds') return 'Подкасты по теме нашлись, но их ленты не ответили. Попробуй чуть позже.'
+  if (found?.error) return 'Поиск по своей теме не ответил. Попробуй чуть позже.'
+  return 'По этой теме ничего не нашлось — попробуй сказать иначе.'
+}
+
+// Своя тема: haiku делает из текста тему с английским запросом; не ответила — текст латиницей сам себе запрос.
+// Тема встаёт первой в «Моих темах»; если человек всё ещё в темах раздела kind — открываем её подборку
+async function addTopic($, kind, value) {
+  const text = clean(value, 200)
+  const say = (note) => {
+    ownNote = { kind, text: note }
+    $.ui.invalidate('ui.render')
+  }
+  if (text.length < 2) return say('Напиши тему словами — например, «история Рима» или «хлеб на закваске».')
+  const request = ++ownRequest
+  say('Разбираю тему…')
+  const now = await $.clock.now()
+  let parsed = null
+  try {
+    const list = await ytChannels($, now)
+    const answer = await $.model.complete({ model: 'haiku', ...ownTopicPrompt(text, lang, list.directions), maxTokens: 200, timeoutMs: YT_MODEL_MS })
+    if (answer.isAnswered) parsed = parseOwnTopic(answer.text, list.directions)
+    else log(`своя тема: модель не ответила (${answer.reason})`)
+  } catch (err) {
+    log(`своя тема не разобрана: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  if (request !== ownRequest) return
+  parsed ??= plainTopic(text)
+  if (!parsed) return say('Не получилось разобрать тему. Попробуй написать её по-английски.')
+  if (parsed.refused) return say('Такую тему Arcade не ищет: политика и темы для взрослых — мимо. Попробуй другую.')
+  const topic = ownTopic(parsed)
+  myTopics = rememberTopic(myTopics, topic)
+  ownNote = { kind: '', text: '' }
+  try {
+    await $.store.set('myTopics', myTopics)
+  } catch (err) {
+    log(`свои темы не сохранены: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  // Человек ушёл из тем этого раздела — тема только запомнилась: подборку открытой страницы не трогаем
+  const key = `u${topic.id}`
+  if (menu !== kind) return $.ui.invalidate('ui.render')
+  menuFrom = menu
+  menu = `${kind}:${key}`
+  libraryNotice = ''
+  if (kind === 'youtube') loadVideos($, key)
+  else loadReads($, kind, key)
+}
+
+// «Забыть мои темы»: список пустеет и в $.store
+async function forgetTopics($) {
+  myTopics = []
+  ownNote = { kind: '', text: '' }
+  $.ui.invalidate('ui.render')
+  try {
+    await $.store.set('myTopics', [])
+  } catch (err) {
+    log(`свои темы не стёрты: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+}
+
 // Темы: haiku читает последнюю работу агента; работы ещё нет или модель не ответила — темы по умолчанию
 async function loadTopics($) {
   const request = ++yt.request
@@ -1057,28 +1182,41 @@ async function loadTopics($) {
   $.ui.invalidate('ui.render')
 }
 
-// Подборка по теме: ленты каналов темы → свежие кандидаты → haiku выбирает. again — другая подборка: уже показанные
-// видео не повторяем, пока есть из чего выбрать
-async function loadVideos($, index, again = false) {
-  const topic = yt.topics?.[index]
+// Подборка по теме: ленты каналов темы → свежие кандидаты → haiku выбирает. Своя тема — ещё и поиск сайта по её
+// запросу: найденное идёт к английским видео вперемешку с лентами каналов по направлениям темы. again — другая
+// подборка: уже показанные видео не повторяем, пока есть из чего выбрать
+async function loadVideos($, key, again = false) {
+  const topic = topicOf(key)
   if (!topic) return
   const request = ++yt.request
-  const seen = again && yt.topic === index ? new Set([...yt.seen, ...yt.videos.map((v) => v.id)]) : new Set()
-  yt = { ...yt, topic: index, videos: [], loading: 'videos', note: '' }
+  const seen = again && yt.topic === key ? new Set([...yt.seen, ...yt.videos.map((v) => v.id)]) : new Set()
+  yt = { ...yt, topic: key, videos: [], loading: 'videos', note: '' }
   $.ui.invalidate('ui.render')
   const now = await $.clock.now()
   let videos = []
   let note = ''
   let used = seen
   try {
-    const { local, en } = channelsFor(await ytChannels($, now), topic.direction, lang, now)
-    const pool = async (channels) => candidates(await Promise.all(channels.map((c) => ytFeed($, c.id, now))), topic.direction, now)
-    let [mine, english] = await Promise.all([pool(local), pool(en)])
+    const list = await ytChannels($, now)
+    const pool = async (channels, direction) => candidates(await Promise.all(channels.map((c) => ytFeed($, c.id, now))), direction, now)
+    const byDirection = (direction) => {
+      const { local, en } = channelsFor(list, direction, lang, now)
+      return Promise.all([pool(local, direction), pool(en, direction)])
+    }
+    let found = null
+    let mine = []
+    let english = []
+    if (topic.own) {
+      const [search, ...lists] = await Promise.all([searchFor($, 'youtube', topic.query, now), ...topic.directions.map(byDirection)])
+      found = search
+      mine = lists.reduce((all, [l]) => mix(all, l, Infinity), [])
+      english = mix(freshFound(search.list, now, SEARCH_DAYS), lists.reduce((all, [, en]) => mix(all, en, Infinity), []), Infinity)
+    } else [mine, english] = await byDirection(topic.direction)
     // Всё уже показывали — начинаем круг заново
     if (mine.length + english.length - [...mine, ...english].filter((v) => seen.has(v.id)).length < PICKS) used = new Set()
     mine = mine.filter((v) => !used.has(v.id)).slice(0, YT_POOL)
     english = english.filter((v) => !used.has(v.id)).slice(0, YT_POOL)
-    if (!mine.length && !english.length) note = 'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.'
+    if (!mine.length && !english.length) note = topic.own ? searchNote(found) : 'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.'
     else {
       let ranked = []
       const answer = await $.model.complete({ model: 'haiku', ...picksPrompt(topic, mine, english, lang), maxTokens: 300, timeoutMs: YT_MODEL_MS })
@@ -1114,26 +1252,49 @@ async function feedsList($, now) {
   return stored ?? bundledFeeds()
 }
 
-// Записи ленты; лента не ответила — что было в прошлый раз
-async function rssFeed($, feed, kind, now) {
+// Записи ленты; лента не ответила — что было в прошлый раз. accept — годится ли лента по её тексту (язык шоу из поиска)
+async function rssFeed($, feed, kind, now, accept = () => true) {
   const key = `${kind}:${feed.id}`
   const hit = rssCache.get(key)
   if (hit && now - hit.at < FEED_TTL_MS) return hit.items
   const response = await fetchWithin($, feed.url, YT_FETCH_MS)
-  const items = response?.ok ? parseItems(response.text, feed, kind) : []
+  const items = response?.ok && accept(response.text) ? parseItems(response.text, feed, kind) : []
   if (items.length) rssCache.set(key, { at: now, items })
   return items.length ? items : hit?.items ?? []
 }
 
+// Найденное по своей теме для статей и подкастов → { list, error }. Статьи — с Hacker News и Medium, подписанные сайтом.
+// Подкасты: поиск находит шоу, выпуски — из их лент; лента не на английском (по её <language>) не годится. Шоу нашлись,
+// а ни одна лента не ответила — error 'feeds'
+async function foundReads($, kind, query, now) {
+  const found = await searchFor($, kind, query, now)
+  if (kind === 'articles') return { ...found, list: freshFound(found.list, now, SEARCH_DAYS) }
+  const shows = found.list.slice(0, SEARCH_SHOWS)
+  let answered = 0
+  const english = (xml) => {
+    answered++
+    return ['', 'en'].includes(feedLanguage(xml))
+  }
+  const feeds = await Promise.all(
+    shows.map(async (show) => {
+      const items = await rssFeed($, showFeed(show), kind, now, english)
+      if (items.length) answered++
+      return items.map((x) => ({ ...x, s: show.s }))
+    }),
+  )
+  return { error: shows.length && !answered ? 'feeds' : found.error, list: candidates(feeds, '', now, 3, SHOW_DAYS) }
+}
+
 // Подборка статей или выпусков по теме: ленты темы (английские — других языков в лентах нет) → свежие кандидаты →
-// haiku выбирает. again — другая подборка: уже показанное не повторяем, пока есть из чего выбрать
-async function loadReads($, kind, index, again = false) {
-  const topic = yt.topics?.[index]
+// haiku выбирает. Своя тема — ещё и поиск сайта по её запросу, вперемешку с лентами по направлениям темы. again —
+// другая подборка: уже показанное не повторяем, пока есть из чего выбрать
+async function loadReads($, kind, key, again = false) {
+  const topic = topicOf(key)
   if (!topic) return
   const was = reads[kind]
   const request = was.request + 1
-  const seen = again && was.topic === index ? new Set([...was.seen, ...was.items.map((x) => x.id)]) : new Set()
-  reads = { ...reads, [kind]: { ...was, topic: index, items: [], loading: true, note: '', request } }
+  const seen = again && was.topic === key ? new Set([...was.seen, ...was.items.map((x) => x.id)]) : new Set()
+  reads = { ...reads, [kind]: { ...was, topic: key, items: [], loading: true, note: '', request } }
   $.ui.invalidate('ui.render')
   const now = await $.clock.now()
   const articles = kind === 'articles'
@@ -1142,13 +1303,24 @@ async function loadReads($, kind, index, again = false) {
   let used = seen
   try {
     const list = await feedsList($, now)
-    const { en } = channelsFor({ channels: list[kind] }, topic.direction, 'en', now)
-    let pool = candidates(await Promise.all(en.map((f) => rssFeed($, f, kind, now))), topic.direction, now)
+    const byDirection = async (direction) => {
+      const { en } = channelsFor({ channels: list[kind] }, direction, 'en', now)
+      return candidates(await Promise.all(en.map((f) => rssFeed($, f, kind, now))), direction, now)
+    }
+    let found = null
+    let pool
+    if (topic.own) {
+      const [search, ...lists] = await Promise.all([foundReads($, kind, topic.query, now), ...topic.directions.map(byDirection)])
+      found = search
+      pool = mix(search.list, lists.reduce((all, x) => mix(all, x, Infinity), []), Infinity)
+    } else pool = await byDirection(topic.direction)
     // Всё уже показывали — начинаем круг заново
     if (pool.filter((x) => !seen.has(x.id)).length < PICKS) used = new Set()
     pool = pool.filter((x) => !used.has(x.id)).slice(0, YT_POOL)
     if (!pool.length)
-      note = articles
+      note = topic.own
+        ? searchNote(found)
+        : articles
         ? 'Не получилось загрузить статьи: ленты не ответили. Попробуй чуть позже.'
         : 'Не получилось загрузить выпуски: ленты не ответили. Попробуй чуть позже.'
     else {
@@ -1311,6 +1483,7 @@ export function register(on) {
       if (SIGNAL_MODES.includes(storedDone)) onDone = storedDone
       if (SIGNAL_MODES.includes(storedPermission)) onPermission = storedPermission
       mine = restoreMine(await $.store.get('mine'))
+      myTopics = restoreMyTopics(await $.store.get('myTopics'))
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
         sep = home.includes('\\') ? '\\' : '/'
@@ -1917,6 +2090,38 @@ export function register(on) {
       const desktop = e.surface === 'desktop'
       // В Desktop заголовок раздела — крупно, с отступом сверху от раздела выше и снизу от своих плиток
       const section = (title) => (desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [Text({ size: 'heading', weight: 'semibold', children: [title] })] }) : Text({ bold: true, dimColor: true, children: [title] }))
+      // Своя тема в темах YouTube, статей и подкастов: поле ввода с подсказкой или заметкой, «Мои темы» плитками и
+      // «Забыть мои темы». Названия своих тем — на языке интерфейса или как их написал человек (keep)
+      const ownTopics = (kind, short, focus, hintText) => {
+        const myTiles = myTopics.flatMap((t) => {
+          const key = `u${t.id}`
+          const button = Button({
+            key: `arcade-${short}-own-${t.id}`,
+            label: t.title,
+            ...(key === focus ? { autoFocus: true } : {}),
+            onPress: () => {
+              open(`${kind}:${key}`)()
+              if (kind === 'youtube') {
+                if (yt.topic !== key || (!yt.videos.length && !yt.loading)) loadVideos($, key)
+              } else if (reads[kind].topic !== key || (!reads[kind].items.length && !reads[kind].loading)) loadReads($, kind, key)
+            },
+          })
+          return [keep(button), dim('  своя тема')]
+        })
+        return [
+          gap,
+          Input({ key: `arcade-${short}-own`, label: 'Своя тема', placeholder: 'о чём угодно: история Рима, хлеб на закваске…', onSubmit: (value) => addTopic($, kind, value) }),
+          dim(ownNote.kind === kind && ownNote.text ? ownNote.text : hintText),
+          ...(myTiles.length
+            ? [
+                section('Мои темы'),
+                desktop ? tiles(myTiles, 44) : Box({ flexDirection: 'column', children: myTiles }),
+                gap,
+                Button({ key: `arcade-${short}-forget`, label: 'Забыть мои темы', onPress: () => forgetTopics($) }),
+              ]
+            : []),
+        ]
+      }
       // Иконка карточки — по ключу кнопки: arcade-menu-nes → nes, arcade-game-… и «Продолжить» → обложка игры.
       // alt — подпись кнопки: картинку с пустым alt Desktop не рисует
       const iconFor = (button) => {
@@ -1924,6 +2129,9 @@ export function register(on) {
         const label = String(button?.props?.label ?? button?.label ?? '')
         const game = key.startsWith('arcade-game-') ? gameById(key.slice(12)) : key === 'arcade-continue' && played ? gameById(lastGame) : null
         if (game) return Svg({ source: coverSvg(game), alt: game.title, width: 44, height: 44 })
+        // Плитка языка (arcade-lang-de) — флажком, подпись — название языка на нём самом
+        const flag = /^arcade-lang-([a-z]{2})$/.exec(key)?.[1]
+        if (FLAGS[flag]) return Svg({ source: flagSvg(flag), alt: LANG_NAMES[flag], width: 36, height: 36 })
         // arcade-menu-shelf-books → books, arcade-lang-main → lang, arcade-support → support; жанр — иконкой своей полки
         // Темы YouTube (arcade-yt-topic-…), статей (ar-) и подкастов (pc-) — иконкой раздела; их названия придумала
         // модель, в alt не ставим
@@ -2027,22 +2235,26 @@ export function register(on) {
 
       let items
       if (menu === 'lang') {
-        // Выбор языка: каждый подписан на самом себе, текущий отмечен
+        // Выбор языка: плитки, как остальное меню, в Desktop — с флажком; каждый язык подписан на самом себе, текущий
+        // отмечен
         items = [
           Button({ key: 'arcade-back', label: '← Назад', onPress: open(langReturn) }),
           gap,
-          ...LANGS.map((code) =>
-            Button({
-              key: `arcade-lang-${code}`,
-              label: `${LANG_NAMES[code]}${code === lang ? ' ✓' : ''}`,
-              ...(code === lang ? { autoFocus: true } : {}),
-              onPress: async () => {
-                lang = code
-                menu = langReturn
-                $.ui.invalidate('ui.render')
-                await $.store.set('lang', lang)
-              },
-            }),
+          tiles(
+            LANGS.map((code) =>
+              Button({
+                key: `arcade-lang-${code}`,
+                label: `${LANG_NAMES[code]}${code === lang ? ' ✓' : ''}`,
+                ...(code === lang ? { autoFocus: true } : {}),
+                onPress: async () => {
+                  lang = code
+                  menu = langReturn
+                  $.ui.invalidate('ui.render')
+                  await $.store.set('lang', lang)
+                },
+              }),
+            ),
+            22,
           ),
           ...hint,
         ]
@@ -2200,7 +2412,7 @@ export function register(on) {
         ]
       } else if (menu === 'youtube') {
         // Темы: три по работе агента и новинки. Названия, которые придумала модель, — уже на языке интерфейса (keep)
-        const focus = menuFrom?.startsWith('youtube:') ? Number(menuFrom.slice(8)) : 0
+        const focus = menuFrom?.startsWith('youtube:') ? topicKey(menuFrom.slice(8)) : 0
         const topicTiles = (yt.topics ?? []).flatMap((t, i) => {
           const button = Button({
             key: `arcade-yt-topic-${i}`,
@@ -2226,12 +2438,13 @@ export function register(on) {
                 gap,
                 Button({ key: 'arcade-yt-retopic', label: 'Другие темы', onPress: () => loadTopics($) }),
               ]),
+          ...ownTopics('youtube', 'yt', focus, 'Напиши, что хочешь посмотреть, — Arcade найдёт свежие видео по теме.'),
           ...noticeLines,
           ...hint,
         ]
       } else if (menu.startsWith('youtube:')) {
-        const index = Number(menu.slice(8))
-        const topic = yt.topics?.[index]
+        const topicId = topicKey(menu.slice(8))
+        const topic = topicOf(topicId)
         const builtin = builtinBrowser(e.surface)
         const playVideo = async (k) => {
           const id = `video:${k}`
@@ -2299,7 +2512,7 @@ export function register(on) {
               ? [Box({ flexDirection: 'column', rowGap: desktop ? 'sm' : 0, children: yt.videos.map(videoItem) })]
               : []),
           ...(yt.note ? [gap, dim(yt.note)] : []),
-          ...(topic && !yt.loading ? [gap, Button({ key: 'arcade-yt-more', label: 'Другая подборка', ...(yt.videos.length ? {} : { autoFocus: true }), onPress: () => loadVideos($, index, true) })] : []),
+          ...(topic && !yt.loading ? [gap, Button({ key: 'arcade-yt-more', label: 'Другая подборка', ...(yt.videos.length ? {} : { autoFocus: true }), onPress: () => loadVideos($, topicId, true) })] : []),
           ...(yt.videos.length && (builtin || platform) ? [gap, dim(`Видео открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)] : []),
           ...noticeLines,
           ...hint,
@@ -2310,7 +2523,7 @@ export function register(on) {
         const kind = menu
         const articles = kind === 'articles'
         const short = articles ? 'ar' : 'pc'
-        const focus = menuFrom?.startsWith(`${kind}:`) ? Number(menuFrom.slice(kind.length + 1)) : 0
+        const focus = menuFrom?.startsWith(`${kind}:`) ? topicKey(menuFrom.slice(kind.length + 1)) : 0
         const topicTiles = (yt.topics ?? []).flatMap((t, i) => {
           const button = Button({
             key: `arcade-${short}-topic-${i}`,
@@ -2340,6 +2553,12 @@ export function register(on) {
                 gap,
                 Button({ key: `arcade-${short}-retopic`, label: 'Другие темы', onPress: () => loadTopics($) }),
               ]),
+          ...ownTopics(
+            kind,
+            short,
+            focus,
+            articles ? 'Напиши, о чём хочешь почитать, — Arcade найдёт свежие статьи по теме.' : 'Напиши, о чём хочешь послушать, — Arcade найдёт свежие выпуски по теме.',
+          ),
           ...noticeLines,
           ...hint,
         ]
@@ -2347,8 +2566,8 @@ export function register(on) {
         const kind = menu.split(':')[0]
         const articles = kind === 'articles'
         const short = articles ? 'ar' : 'pc'
-        const index = Number(menu.slice(kind.length + 1))
-        const topic = yt.topics?.[index]
+        const topicId = topicKey(menu.slice(kind.length + 1))
+        const topic = topicOf(topicId)
         const state = reads[kind]
         const builtin = builtinBrowser(e.surface)
         const openItem = async (k) => {
@@ -2419,7 +2638,7 @@ export function register(on) {
               : []),
           ...(state.note ? [gap, dim(state.note)] : []),
           ...(topic && !state.loading
-            ? [gap, Button({ key: `arcade-${short}-more`, label: 'Другая подборка', ...(state.items.length ? {} : { autoFocus: true }), onPress: () => loadReads($, kind, index, true) })]
+            ? [gap, Button({ key: `arcade-${short}-more`, label: 'Другая подборка', ...(state.items.length ? {} : { autoFocus: true }), onPress: () => loadReads($, kind, topicId, true) })]
             : []),
           ...(state.items.length && (builtin || platform)
             ? [gap, dim(articles ? `Статьи открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.` : `Выпуски открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)]

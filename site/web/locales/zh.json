@@ -23,6 +23,7 @@
   "Checkmate — you lose": "将死 — 你输了",
   "Checkmate — you win!": "将死 — 你赢了！",
   "Chess": "国际象棋",
+  "Click here or press any key. It is needed only once: the browser keeps the file, it never goes to the server.": "点击这里或按任意键。只需一次：浏览器会保存文件，文件不会上传到服务器。",
   "Click or press any key to continue": "点击或按任意键继续",
   "Click or press any key to start": "点击或按任意键开始",
   "Co-op": "合作",
@@ -96,6 +97,7 @@
   "Paused": "已暂停",
   "Picking up where you left off — click or press any key": "从上次中断的地方继续——点击或按任意键",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation 需要光盘镜像：.chd、.pbp、.iso，或内含 .cue 和 .bin 的 .zip。",
+  "Podcast page": "播客页面",
   "Podcasts": "播客",
   "Press Listen again — the browser needs a click to start": "请再点一次“收听” — 浏览器需要点击才能开始播放",
   "Press Space, ↑ or click to take off": "按空格键、↑ 或点击起飞",
@@ -294,12 +296,20 @@
  },
  "words": [
   [
+   "Enter",
+   "Enter"
+  ],
+  [
    "Select",
    "Select"
   ],
   [
    "Start",
    "Start"
+  ],
+  [
+   "contents and font size",
+   "目录和字号"
   ],
   [
    "fire",
@@ -332,6 +342,10 @@
   [
    "run",
    "奔跑"
+  ],
+  [
+   "scroll or Space",
+   "滚轮或 空格键"
   ],
   [
    "strafe",

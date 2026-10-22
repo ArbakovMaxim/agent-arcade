@@ -23,6 +23,7 @@
   "Checkmate — you lose": "Şah mat — kaybettin",
   "Checkmate — you win!": "Şah mat — kazandın!",
   "Chess": "Satranç",
+  "Click here or press any key. It is needed only once: the browser keeps the file, it never goes to the server.": "Buraya tıkla veya herhangi bir tuşa bas. Bu yalnızca bir kez gerekli: tarayıcı dosyayı kendinde saklar, dosya asla sunucuya gitmez.",
   "Click or press any key to continue": "Devam etmek için tıkla veya herhangi bir tuşa bas",
   "Click or press any key to start": "Başlamak için tıkla veya herhangi bir tuşa bas",
   "Co-op": "Co-op",
@@ -96,6 +97,7 @@
   "Paused": "Duraklatıldı",
   "Picking up where you left off — click or press any key": "Kaldığın yerden devam — tıkla veya herhangi bir tuşa bas",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation için disk imajı gerekir: .chd, .pbp, .iso ya da içinde .cue ve .bin olan bir .zip.",
+  "Podcast page": "Podcast sayfası",
   "Podcasts": "Podcast’ler",
   "Press Listen again — the browser needs a click to start": "Dinle’ye yeniden bas — tarayıcı başlatmak için bir tıklama istiyor",
   "Press Space, ↑ or click to take off": "Havalanmak için Boşluk, ↑ tuşuna bas ya da tıkla",
@@ -294,12 +296,20 @@
  },
  "words": [
   [
+   "Enter",
+   "Enter"
+  ],
+  [
    "Select",
    "Select"
   ],
   [
    "Start",
    "Start"
+  ],
+  [
+   "contents and font size",
+   "içindekiler ve yazı boyutu"
   ],
   [
    "fire",
@@ -332,6 +342,10 @@
   [
    "run",
    "koş"
+  ],
+  [
+   "scroll or Space",
+   "kaydır veya Boşluk"
   ],
   [
    "strafe",

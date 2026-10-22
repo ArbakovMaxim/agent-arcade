@@ -13,21 +13,26 @@
     // Код вызывается только для сетевых адресов — всю остальную статику Cloudflare отдаёт сам, как раньше
     "run_worker_first": ["/api/*", "/net/*"]
   },
-  // Комнаты для сетевой игры — Durable Objects на SQLite: они есть на бесплатном тарифе
+  // Комнаты для сетевой игры и кеш поиска — Durable Objects на SQLite: они есть на бесплатном тарифе.
+  // Поиску нужны секреты (wrangler secret put): LINK_SECRET — подпись ссылок, YOUTUBE_KEY — ключ YouTube Data API v3;
+  // без них /api/discover отвечает 503, а мод берёт темы только из каталога
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
       { "name": "DOOM", "class_name": "DoomRoom" },
       { "name": "EJS", "class_name": "EjsGame" },
       { "name": "PRESENCE", "class_name": "Presence" },
-      { "name": "BOARD", "class_name": "BoardRoom" }
+      { "name": "BOARD", "class_name": "BoardRoom" },
+      { "name": "DISCOVER", "class_name": "Discover" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Room"] },
     { "tag": "v2", "new_sqlite_classes": ["DoomRoom"] },
     { "tag": "v3", "new_sqlite_classes": ["EjsGame", "Presence"] },
-    { "tag": "v4", "new_sqlite_classes": ["BoardRoom"] }
+    { "tag": "v4", "new_sqlite_classes": ["BoardRoom"] },
+    // Кеш поиска по своей теме (worker/discover.js)
+    { "tag": "v5", "new_sqlite_classes": ["Discover"] }
   ],
   // Предварительные копии веток (wrangler preview): у каждой — свои Durable Objects, отдельно от рабочего сайта.
   // Код обращается к ним через env.ROOMS и т. д., поэтому привязки повторены здесь — иначе в копии ошибка 1101
@@ -38,7 +43,8 @@
         { "name": "DOOM", "class_name": "DoomRoom" },
         { "name": "EJS", "class_name": "EjsGame" },
         { "name": "PRESENCE", "class_name": "Presence" },
-        { "name": "BOARD", "class_name": "BoardRoom" }
+        { "name": "BOARD", "class_name": "BoardRoom" },
+        { "name": "DISCOVER", "class_name": "Discover" }
       ]
     }
   }

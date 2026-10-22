@@ -23,6 +23,7 @@
   "Checkmate — you lose": "Мат — поразка",
   "Checkmate — you win!": "Мат — перемога!",
   "Chess": "Шахи",
+  "Click here or press any key. It is needed only once: the browser keeps the file, it never goes to the server.": "Клацни сюди або натисни будь-яку клавішу. Це потрібно лише раз: браузер запам’ятає файл у себе, на сервер він не потрапляє.",
   "Click or press any key to continue": "Клацни або натисни будь-яку клавішу, щоб продовжити",
   "Click or press any key to start": "Клацни або натисни будь-яку клавішу, щоб почати",
   "Co-op": "Кооператив",
@@ -96,6 +97,7 @@
   "Paused": "Пауза",
   "Picking up where you left off — click or press any key": "Продовжуємо з місця зупинки — клацни або натисни будь-яку клавішу",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "Для PlayStation потрібен образ диска: .chd, .pbp, .iso або .zip, у якому лежать .cue і .bin.",
+  "Podcast page": "Сторінка подкасту",
   "Podcasts": "Подкасти",
   "Press Listen again — the browser needs a click to start": "Натисни «Слухати» ще раз — браузер не дає почати без натискання",
   "Press Space, ↑ or click to take off": "Натисни пробіл, ↑ або клацни — злетіти",
@@ -294,12 +296,20 @@
  },
  "words": [
   [
+   "Enter",
+   "Enter"
+  ],
+  [
    "Select",
    "Select"
   ],
   [
    "Start",
    "Start"
+  ],
+  [
+   "contents and font size",
+   "зміст і розмір шрифту"
   ],
   [
    "fire",
@@ -332,6 +342,10 @@
   [
    "run",
    "біг"
+  ],
+  [
+   "scroll or Space",
+   "коліщатко або пробіл"
   ],
   [
    "strafe",

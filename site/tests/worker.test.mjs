@@ -1,6 +1,6 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
-import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
+import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -316,4 +316,199 @@ try {
 } finally {
   globalThis.Response = RealResponse
 }
+// --- Своя тема: поиск с кешем, лимитами и подписанными ссылками (worker/discover.js) ------------------------------
+{
+  const { normalQuery, looksEnglish, isoSeconds, PER_IP_DAILY } = await import('../worker/discover.js')
+  assert.equal(normalQuery('  Rust  Embedded!! '), 'rust embedded')
+  assert.equal(normalQuery('C++ & C#'), 'c++ c#')
+  assert.equal(normalQuery('я'), '', 'не латиница — не запрос')
+  assert.equal(normalQuery('x'.repeat(200)).length, 80)
+  assert.deepEqual(['Pokémon tips', '¿Cuántos usuarios?', 'Équipe générale', 'Привет', 'Rust 🚀'].map(looksEnglish), [true, false, false, false, true])
+  assert.deepEqual(['PT1H2M3S', 'PT45S', 'P0D', 'нет'].map(isoSeconds), [3723, 45, 0, 0])
+
+  const now = Date.now()
+  const sec = (days) => Math.floor((now - days * 86_400_000) / 1000)
+  const iso = (days) => new Date(now - days * 86_400_000).toISOString()
+  const asked = []
+  let down = false
+  let quota = false
+  const medium = `<rss><channel><title>Medium</title>
+    <item><title><![CDATA[Rust on tiny chips]]></title><link>https://medium.com/@ann/rust-chips-1a2b?source=rss------embedded_rust-5</link><pubDate>${new Date(now - 3_600_000).toUTCString()}</pubDate></item>
+    <item><title><![CDATA[¿Rust en producción?]]></title><link>https://medium.com/@luis/rust-es-9f?source=rss</link><pubDate>${new Date(now).toUTCString()}</pubDate></item>
+  </channel></rss>`
+  const replies = {
+    'hn.algolia.com': () => ({
+      hits: [
+        { title: 'Embedded Rust in production', url: 'https://blog.example.com/rust', created_at_i: sec(2), points: 120 },
+        { title: 'A talk', url: 'https://www.youtube.com/watch?v=abcdefghijk', created_at_i: sec(3), points: 50 },
+        { title: 'Plain http', url: 'http://plain.example.com/', created_at_i: sec(3), points: 50 },
+        { title: 'Paper', url: 'https://arxiv.org/pdf/2401.1.pdf', created_at_i: sec(3), points: 50 },
+        { title: 'Embedded Rust in production', url: 'https://blog.example.com/rust', created_at_i: sec(2), points: 120 },
+        { title: 'Ask HN: no link', created_at_i: sec(1), points: 90 },
+      ],
+    }),
+    'medium.com': () => medium,
+    'itunes.apple.com': () => ({
+      results: [
+        { collectionId: 111, collectionName: 'Rustacean Station', feedUrl: 'https://rustacean-station.org/podcast.rss', releaseDate: iso(10), trackCount: 150, primaryGenreName: 'Technology' },
+        { collectionId: 222, collectionName: 'Old Show', feedUrl: 'https://old.example.com/rss', releaseDate: iso(900), trackCount: 40, primaryGenreName: 'Technology' },
+        { collectionId: 333, collectionName: 'Loud Show', feedUrl: 'https://loud.example.com/rss', releaseDate: iso(5), trackCount: 40, collectionExplicitness: 'explicit' },
+        { collectionId: 444, collectionName: 'Daily Debate', feedUrl: 'https://debate.example.com/rss', releaseDate: iso(1), trackCount: 400, primaryGenreName: 'News', genres: ['News', 'Politics'] },
+        { collectionId: 555, collectionName: 'Two Episodes', feedUrl: 'https://two.example.com/rss', releaseDate: iso(1), trackCount: 2 },
+        { collectionId: 666, collectionName: 'Embedded FM', feedUrl: 'http://embedded.fm/episodes?format=rss', releaseDate: iso(7), trackCount: 500, primaryGenreName: 'Technology' },
+        { collectionId: 777, collectionName: 'Message à caractère informatique', feedUrl: 'https://fr.example.com/rss', releaseDate: iso(7), trackCount: 90 },
+      ],
+    }),
+    'www.googleapis.com': (url) => {
+      if (quota) return new Response(JSON.stringify({ error: { errors: [{ reason: 'quotaExceeded' }] } }), { status: 403 })
+      if (url.pathname.endsWith('/search')) return { items: ['aaaaaaaaaaa', 'bbbbbbbbbbb', 'ccccccccccc', 'ddddddddddd', 'eeeeeeeeeee'].map((videoId) => ({ id: { videoId } })) }
+      const video = (id, duration, extra = {}) => ({
+        id,
+        snippet: { title: `Video ${id}`, channelTitle: 'Chan', publishedAt: iso(20), description: 'About it', liveBroadcastContent: 'none', ...extra },
+        contentDetails: { duration },
+        statistics: { viewCount: '1234' },
+      })
+      return {
+        items: [
+          video('bbbbbbbbbbb', 'PT45S'),
+          video('aaaaaaaaaaa', 'PT12M5S', { defaultAudioLanguage: 'en-US' }),
+          video('ccccccccccc', 'PT0S', { liveBroadcastContent: 'live' }),
+          video('ddddddddddd', 'PT20M', { defaultAudioLanguage: 'ru' }),
+          video('eeeeeeeeeee', 'PT2M30S', { title: 'Quick tip #shorts' }),
+        ],
+      }
+    },
+  }
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    asked.push(url)
+    if (down) throw new Error('сеть недоступна')
+    const body = replies[url.hostname]?.(url)
+    if (body === undefined) return new Response('нет', { status: 404 })
+    if (body instanceof Response) return body
+    return typeof body === 'string' ? new Response(body) : Response.json(body)
+  }
+  try {
+    // Хранилище Durable Object в памяти; по одному объекту на вид поиска, как idFromName(kind)
+    const objects = new Map()
+    const env = { LINK_SECRET: 'тестовый-секрет', YOUTUBE_KEY: 'yt-key', YT_DAILY_SEARCHES: '2' }
+    env.DISCOVER = {
+      idFromName: (name) => name,
+      get: (kind) => {
+        if (!objects.has(kind)) {
+          const store = new Map()
+          const storage = {
+            alarm: null,
+            get: async (k) => store.get(k),
+            put: async (k, v) => void store.set(k, structuredClone(v)),
+            delete: async (keys) => {
+              for (const k of [].concat(keys)) store.delete(k)
+            },
+            list: async () => new Map(store),
+            getAlarm: async () => storage.alarm,
+            setAlarm: async (t) => {
+              storage.alarm = t
+            },
+          }
+          objects.set(kind, { store, storage, object: new Discover({ storage }, env) })
+        }
+        return objects.get(kind).object
+      },
+    }
+    const go = (path, ip = '10.0.0.1', withEnv = env) => worker.fetch(new Request(`https://arcade.test${path}`, { headers: { 'CF-Connecting-IP': ip } }), withEnv)
+    const find = async (kind, q, ip) => {
+      const response = await go(`/api/discover?kind=${kind}&q=${encodeURIComponent(q)}`, ip)
+      return { status: response.status, body: await response.json() }
+    }
+
+    // Неверный запрос и выключенный поиск
+    assert.equal((await find('films', 'rust')).status, 400)
+    assert.equal((await find('articles', 'я')).status, 400)
+    assert.equal((await go('/api/discover?kind=articles&q=rust', '1.1.1.1', { ...env, LINK_SECRET: '' })).status, 503, 'без секрета поиска нет')
+    assert.equal((await go('/api/discover?kind=youtube&q=rust', '1.1.1.1', { ...env, YOUTUBE_KEY: '' })).status, 503, 'без ключа нет поиска YouTube')
+    assert.equal(asked.length, 0)
+
+    // Статьи: HN и Medium вперемешку; видео, http, PDF, не английское, повтор и запись без ссылки — мимо
+    const ar = await find('articles', 'Embedded Rust')
+    assert.equal(ar.status, 200)
+    assert.deepEqual(ar.body.items.map((i) => i.link), ['https://blog.example.com/rust', 'https://medium.com/@ann/rust-chips-1a2b'])
+    assert.deepEqual(ar.body.items.map((i) => i.source), ['blog.example.com', 'medium.com'])
+    assert.equal(ar.body.items[0].points, 120)
+    assert.ok(ar.body.items.every((i) => /^[\w-]{22}$/.test(i.s)), 'каждая ссылка подписана')
+    assert.deepEqual(asked.filter((u) => u.hostname === 'medium.com').map((u) => u.pathname), ['/feed/tag/embedded-rust', '/feed/tag/embedded'], 'мало по всему запросу — ещё по первому слову')
+    // Подпись проверяет /api/verify: чужая ссылка или подпись от другой ссылки — нет
+    const check = async (query) => (await (await go(`/api/verify?${query}`)).json()).ok
+    const [first] = ar.body.items
+    assert.equal(await check(`kind=read&u=${encodeURIComponent(first.link)}&s=${first.s}`), true)
+    assert.equal(await check(`kind=read&u=${encodeURIComponent('https://evil.test/')}&s=${first.s}`), false)
+    assert.equal(await check(`kind=read&u=${encodeURIComponent(first.link)}&s=${'A'.repeat(22)}`), false)
+    assert.equal(await check(`kind=read&u=${encodeURIComponent(first.link)}`), false)
+    // Повтор того же запроса (в другом виде) — из кеша, без источников
+    const before = asked.length
+    assert.deepEqual((await find('articles', 'embedded   RUST', '10.0.0.2')).body, ar.body)
+    assert.equal(asked.length, before, 'из кеша')
+    // Одинаковые запросы одновременно — один поиск
+    const [x, y] = await Promise.all([find('articles', 'zig', '10.0.0.3'), find('articles', 'zig', '10.0.0.4')])
+    assert.deepEqual(x, y)
+    assert.equal(asked.filter((u) => u.hostname === 'hn.algolia.com' && u.searchParams.get('query') === 'zig').length, 1)
+
+    // Источники не ответили — 502, и это не кешируется
+    down = true
+    assert.deepEqual(await find('articles', 'go generics'), { status: 502, body: { error: 'upstream' } })
+    down = false
+    assert.equal((await find('articles', 'go generics')).status, 200)
+
+    // Подкасты: только живые шоу без explicit, политики, проб на пару выпусков и не английских; http-ленту — по https
+    const pc = await find('podcasts', 'embedded rust')
+    assert.deepEqual(pc.body.shows.map((s) => [s.id, s.name, s.url]), [
+      ['it111', 'Rustacean Station', 'https://rustacean-station.org/podcast.rss'],
+      ['it666', 'Embedded FM', 'https://embedded.fm/episodes?format=rss'],
+    ])
+    const show = pc.body.shows[0]
+    assert.equal(await check(`kind=listen&f=${show.id}&n=${encodeURIComponent(show.name)}&s=${show.s}`), true)
+    assert.equal(await check(`kind=listen&f=${show.id}&n=${encodeURIComponent('Other Show')}&s=${show.s}`), false, 'подпись — на номер и название вместе')
+    assert.equal(await check(`kind=listen&f=se-daily&n=x&s=${show.s}`), false)
+
+    // YouTube: без Shorts, трансляций и озвучки не на английском
+    const yt = await find('youtube', 'rust embedded')
+    assert.equal(yt.status, 200)
+    assert.deepEqual(yt.body.videos.map((v) => [v.id, v.seconds, v.views]), [['aaaaaaaaaaa', 725, 1234]])
+    const search = asked.find((u) => u.pathname.endsWith('/youtube/v3/search'))
+    assert.equal(search.searchParams.get('safeSearch'), 'strict')
+    assert.equal(search.searchParams.get('relevanceLanguage'), 'en')
+    // Потолок поисков в сутки (здесь 2): третий новый запрос — 429 без обращения к YouTube
+    assert.equal((await find('youtube', 'zig comptime', '10.0.0.5')).status, 200)
+    const calls = asked.length
+    assert.deepEqual(await find('youtube', 'wasm', '10.0.0.6'), { status: 429, body: { error: 'quota' } })
+    assert.equal(asked.length, calls)
+    assert.equal((await find('youtube', 'rust embedded', '10.0.0.6')).status, 200, 'кеш работает и без квоты')
+    // YouTube сказал «квота кончилась» — до конца суток не спрашиваем
+    const day = new Date().toISOString().slice(0, 10)
+    objects.get('youtube').store.set(`day:${day}`, 0)
+    quota = true
+    assert.equal((await find('youtube', 'ocaml', '10.0.0.7')).status, 429)
+    assert.equal(objects.get('youtube').store.get(`day:${day}`), 2)
+    quota = false
+
+    // Один адрес — не больше PER_IP_DAILY новых поисков в сутки; адрес хранится только меткой
+    for (let i = 1; i < PER_IP_DAILY.podcasts; i++) assert.equal((await find('podcasts', `topic ${i}`, '10.9.9.9')).status, 200)
+    assert.equal((await find('podcasts', 'last one', '10.9.9.9')).status, 200)
+    assert.deepEqual(await find('podcasts', 'one more', '10.9.9.9'), { status: 429, body: { error: 'limit' } })
+    assert.equal((await find('podcasts', 'one more', '10.8.8.8')).status, 200, 'другой адрес — можно')
+    assert.ok([...objects.get('podcasts').store.keys()].every((k) => !k.includes('10.9.9.9')))
+
+    // Будильник убирает старые ответы и счётчики прошлых суток
+    const { store, storage, object } = objects.get('articles')
+    assert.ok(storage.alarm > now, 'уборка назначена')
+    store.set('q:stale', { at: now - 3 * 86_400_000, data: {} })
+    store.set('ip:2000-01-01:abc', 3)
+    await object.alarm()
+    assert.ok(!store.has('q:stale') && !store.has('ip:2000-01-01:abc'))
+    assert.ok(store.has('q:embedded rust'), 'свежие ответы остаются')
+  } finally {
+    globalThis.fetch = realFetch
+  }
+}
+
 console.log('комнаты: все проверки прошли')

@@ -11,13 +11,72 @@ const LANGS = ['uk', 'es', 'fr', 'de', 'pt', 'it', 'pl', 'tr', 'ja', 'zh', 'ko']
 const templates = JSON.parse(fs.readFileSync(path.join(ROOT, 'tools', 'i18n', 'templates.json'), 'utf8'))
 const CYR = /[А-Яа-яЁё]/
 
-// Строки с кириллицей из кода: '…', "…" и `…` без подстановок
+// После этих слов «/» начинает регулярное выражение, а не деление
+const BEFORE_REGEX = new Set(['return', 'typeof', 'instanceof', 'case', 'do', 'else', 'in', 'of', 'new', 'delete', 'void', 'throw', 'yield', 'await'])
+const WORD = /[\w$\u0080-￿]+/y
+
+// Строки с кириллицей из кода: '…', "…" и `…` без подстановок; у `…${…}…` — строки внутри подстановок. Код читается
+// по порядку, как его читает JavaScript: кавычка в комментарии, в регулярном выражении или закрывающая кавычка
+// шаблона не начинает строку и не съедает код до следующей кавычки
 function literals(file) {
   const src = fs.readFileSync(file, 'utf8')
   const out = []
-  for (const m of src.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`([^`$\\]*)`/g)) {
-    const s = (m[1] ?? m[2] ?? m[3] ?? '').replace(/\\'/g, "'").replace(/\\"/g, '"')
-    if (CYR.test(s)) out.push(s)
+  const keep = (s) => CYR.test(s) && out.push(s)
+  const subst = [] // открытые подстановки ${…}: сколько в каждой открыто скобок {
+  let prev = '' // последний значимый знак или слово
+  let i = 0
+  // Строка '…' или "…": i — на кавычке. Экранированные кавычки — как есть, остальное экранирование не трогаем
+  const quoted = (q) => {
+    let s = ''
+    for (i++; i < src.length && src[i] !== q && src[i] !== '\n'; i++) s += src[i] === '\\' ? (/['"]/.test(src[i + 1]) ? '' : '\\') + src[++i] : src[i]
+    i++
+    return s
+  }
+  // Кусок шаблона: i — после ` или } подстановки. open — кусок кончился на ${, а не на `
+  const template = () => {
+    let s = ''
+    for (; i < src.length; i++) {
+      if (src[i] === '\\') s += src[i] + src[++i]
+      else if (src[i] === '`') return i++, { s, open: false }
+      else if (src[i] === '$' && src[i + 1] === '{') return (i += 2), { s, open: true }
+      else s += src[i]
+    }
+    return { s, open: false }
+  }
+  // Регулярное выражение: i — на «/»
+  const regex = () => {
+    let cls = false
+    for (i++; i < src.length && src[i] !== '\n'; i++) {
+      if (src[i] === '\\') i++
+      else if (src[i] === '[') cls = true
+      else if (src[i] === ']') cls = false
+      else if (src[i] === '/' && !cls) break
+    }
+    i++
+  }
+  while (i < src.length) {
+    const c = src[i]
+    if (/\s/.test(c)) i++
+    else if (c === '/' && src[i + 1] === '/') i = src.includes('\n', i) ? src.indexOf('\n', i) : src.length
+    else if (c === '/' && src[i + 1] === '*') i = src.includes('*/', i + 2) ? src.indexOf('*/', i + 2) + 2 : src.length
+    else if (c === '/' && (!prev || BEFORE_REGEX.has(prev) || /^[(,=:[!&|?{};+\-*%<>~^]$/.test(prev))) regex(), (prev = 'x')
+    else if (c === "'" || c === '"') keep(quoted(c)), (prev = 'x')
+    else if (c === '`' || (c === '}' && subst.at(-1) === 0)) {
+      if (c === '}') subst.pop()
+      i++
+      const t = template()
+      if (t.open) subst.push(0)
+      else if (c === '`') keep(t.s)
+      prev = t.open ? '{' : 'x'
+    } else if ((WORD.lastIndex = i), WORD.exec(src)) {
+      prev = BEFORE_REGEX.has(src.slice(i, WORD.lastIndex)) ? src.slice(i, WORD.lastIndex) : 'x'
+      i = WORD.lastIndex
+    } else {
+      if (subst.length && c === '{') subst[subst.length - 1]++
+      if (subst.length && c === '}') subst[subst.length - 1]--
+      prev = c
+      i++
+    }
   }
   return out
 }

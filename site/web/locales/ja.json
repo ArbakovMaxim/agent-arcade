@@ -23,6 +23,7 @@
   "Checkmate — you lose": "チェックメイト — 負け",
   "Checkmate — you win!": "チェックメイト — 勝ち！",
   "Chess": "チェス",
+  "Click here or press any key. It is needed only once: the browser keeps the file, it never goes to the server.": "ここをクリックするか、いずれかのキーを押してください。必要なのは一度だけです。ファイルはブラウザーに保存され、サーバーに送られることはありません。",
   "Click or press any key to continue": "クリックするか、いずれかのキーを押して続行",
   "Click or press any key to start": "クリックするか、いずれかのキーを押してスタート",
   "Co-op": "協力プレイ",
@@ -96,6 +97,7 @@
   "Paused": "一時停止中",
   "Picking up where you left off — click or press any key": "前回の続きから再開します — クリックするか、いずれかのキーを押してください",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation にはディスクイメージが必要です：.chd、.pbp、.iso、または .cue と .bin を含む .zip。",
+  "Podcast page": "ポッドキャストのページ",
   "Podcasts": "ポッドキャスト",
   "Press Listen again — the browser needs a click to start": "もう一度「聴く」を押してください — ブラウザは再生の開始にクリックが必要です",
   "Press Space, ↑ or click to take off": "スペース、↑ またはクリックで離陸",
@@ -294,12 +296,20 @@
  },
  "words": [
   [
+   "Enter",
+   "Enter"
+  ],
+  [
    "Select",
    "Select"
   ],
   [
    "Start",
    "Start"
+  ],
+  [
+   "contents and font size",
+   "目次と文字サイズ"
   ],
   [
    "fire",
@@ -332,6 +342,10 @@
   [
    "run",
    "ダッシュ"
+  ],
+  [
+   "scroll or Space",
+   "スクロールまたは スペース"
   ],
   [
    "strafe",
