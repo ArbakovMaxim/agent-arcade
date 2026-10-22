@@ -85,7 +85,15 @@
   "Videos open in {0}.",
   "The video is open in {0}.",
   "Video: {0}",
-  "Could not load videos: {0}"
+  "Could not load videos: {0}",
+  "Articles open in {0}.",
+  "Episodes open in {0}.",
+  "The article is open in {0}.",
+  "The episode is open in {0}.",
+  "Article: {0}",
+  "Episode: {0}",
+  "Could not load articles: {0}",
+  "Could not load episodes: {0}"
  ],
  "site": [
   "Played in total: {0}",
@@ -126,6 +134,8 @@
   "Games open here, in the pane.",
   "Games open in Claude's built-in browser.",
   "Videos open in Claude's built-in browser.",
+  "Articles open in Claude's built-in browser.",
+  "Episodes open in Claude's built-in browser.",
   "open in: Claude's built-in browser",
   "play here, in the pane",
   "auto",

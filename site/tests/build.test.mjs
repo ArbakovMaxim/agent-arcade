@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build, checkChannels } from '../build.mjs'
+import { build, checkChannels, checkFeeds } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 // Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск
@@ -95,6 +95,7 @@ const headers = fs.readFileSync(path.join(out, '_headers'), 'utf8')
 assert.match(headers, /\/files\/\*\n  Cache-Control: public, max-age=31536000, immutable/)
 assert.match(headers, /\/catalog\.json\n  Cache-Control: public, max-age=60/)
 assert.match(headers, /\/channels\.json\n  Cache-Control: public, max-age=3600\n  Access-Control-Allow-Origin: \*/)
+assert.match(headers, /\/feeds\.json\n  Cache-Control: public, max-age=3600\n  Access-Control-Allow-Origin: \*/)
 assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers\n_redirects\n')
 
 // Каналы YouTube для мода: на сайте — как в content/channels.json; копия в моде (запас без сайта) — та же
@@ -119,6 +120,39 @@ assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers
   assert.throws(bad((d) => { d.channels[0].topics = [] }), /хотя бы один topic/)
   assert.throws(bad((d) => { d.directions = d.directions.filter((x) => x.id !== 'news') }), /нет направления news/)
   assert.throws(bad((d) => { d.directions.push({ ...d.directions[1] }) }), /описано дважды/)
+}
+
+// Ленты статей и подкастов: на сайте — как в content/feeds.json, копия в моде — та же; источники английские,
+// и у каждого направления есть и статьи, и подкасты
+{
+  const channels = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'channels.json'), 'utf8'))
+  const feeds = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'feeds.json'), 'utf8'))
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'feeds.json'), 'utf8')), feeds)
+  const bundled = (await import(new URL('../../mod/hooks/feeds.js', import.meta.url))).default
+  assert.deepEqual(bundled, feeds, 'mod/hooks/feeds.js отстал от site/content/feeds.json — скопируй список')
+  for (const f of [...feeds.articles, ...feeds.podcasts]) assert.equal(f.lang, 'en', `${f.id}: источники — английские`)
+  for (const d of channels.directions) {
+    assert.ok(feeds.articles.some((f) => f.topics.includes(d.id)), `нет статей для ${d.id}`)
+    assert.ok(feeds.podcasts.some((f) => f.topics.includes(d.id)), `нет подкастов для ${d.id}`)
+  }
+  for (const page of ['read.html', 'read.js', 'listen.html', 'listen.js']) assert.ok(fs.existsSync(path.join(out, page)), `страница ${page}`)
+  const directions = new Set(channels.directions.map((d) => d.id))
+  const bad = (change) => {
+    const data = structuredClone(feeds)
+    change(data)
+    return () => checkFeeds(data, directions)
+  }
+  assert.doesNotThrow(bad(() => {}))
+  assert.throws(bad((d) => { d.version = 2 }), /ленты: нужно "version": 1/)
+  assert.throws(bad((d) => { delete d.podcasts }), /нужны списки articles и podcasts/)
+  assert.throws(bad((d) => { d.articles[0].id = 'Bad id' }), /неправильный id "Bad id"/)
+  assert.throws(bad((d) => { d.podcasts.push({ ...d.articles[0] }) }), /уже есть в списке/)
+  assert.throws(bad((d) => { d.articles[0].lang = 'xx' }), /язык "xx"/)
+  assert.throws(bad((d) => { d.articles[0].url = 'http://example.com/feed' }), /нужен адрес ленты https/)
+  assert.throws(bad((d) => { d.podcasts[0].topics = ['cooking'] }), /нет направления cooking/)
+  assert.throws(bad((d) => { d.podcasts[0].topics = [] }), /хотя бы один topic/)
+  assert.throws(bad((d) => { d.articles[0].hosts = [] }), /нужен список hosts/)
+  assert.throws(bad((d) => { d.articles[0].hosts = ['https://example.com'] }), /не имя сайта/)
 }
 
 // Повторная сборка даёт те же файлы (кроме времени сборки)
