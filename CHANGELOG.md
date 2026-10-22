@@ -1,5 +1,7 @@
 # Changelog · Список изменений
 
+## 0.17.0 — YouTube в главном меню, раздел «Смотреть»: Haiku предлагает три темы по работе агента и «Новинки и презентации», под темой — свежие видео с каналов из пула (обычно 2 на языке интерфейса и 2 английских, у новинок — 1 и 3); видео открываются на странице просмотра сайта — во встроенном браузере Desktop или в окне браузера; пока каналы на английском и русском, остальные языки — на этапе 2 · YouTube in the main menu, under “Watch”: Haiku suggests three topics about what the agent is working on plus “Launches and keynotes”; each topic gets fresh videos from curated channels (usually 2 in the interface language and 2 in English, 1 and 3 for launches); videos open on the site’s watch page, in the Desktop built-in browser or a browser window; channels cover English and Russian for now, other languages come in stage 2
+
 ## 0.16.1 — Desktop: плитки главного меню снова сеткой, а не по одной во всю ширину; рамки, подсветка и цвета статуса — от темы, светлой и тёмной; у всех плиток свои иконки; заголовки разделов не липнут к плиткам; «Шахматы», «Русские шашки», «Реверси» и «Го» переведены на все языки · Desktop: main menu tiles in a grid again; borders, hover and status colours follow the light or dark theme; every tile has its own icon; board game titles are translated into every language
 
 ## 0.16.0 — новый вид мода в Claude Desktop: карточки с иконками, обложки игр, подсветка при наведении, крупные заголовки; терминал и VS Code — как были · a new look in Claude Desktop: cards with icons, game covers, hover highlight
