@@ -293,6 +293,15 @@ try {
   await room.webSocketMessage(back, JSON.stringify({ type: 'reset' }))
   assert.equal(last(back).seat, 0)
   assert.deepEqual(last(back).moves, [])
+  // Сдаться: зритель не может; игрок — итог всем, ход после сдачи не принимается, новая партия — без итога
+  await say(watcher, { type: 'resign' })
+  assert.equal(last(back).result, undefined, 'зритель не сдаётся за игроков')
+  await say(a, { type: 'resign' })
+  for (const ws of [a, back, watcher]) assert.deepEqual(last(ws).result, { loser: 1, reason: 'resign' })
+  await say(back, { type: 'move', ply: 0, move: [2, 3] })
+  assert.deepEqual(last(back).moves, [], 'после сдачи ход не принимается')
+  await say(back, { type: 'reset' })
+  assert.equal(last(back).result, undefined, 'новая партия — без итога')
   await room.alarm()
   assert.equal(store.size, 0)
   // Часы: контроль задаёт первый; идут, когда сели двое; ход вычитает время; «флажок» — только по часам сервера

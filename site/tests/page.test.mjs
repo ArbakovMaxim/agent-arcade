@@ -617,6 +617,24 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   vm.runInContext('ArcadeBoard.game.reset()', bot.ctx)
   await until(() => vm.runInContext('ArcadeBoard.game.seat === 1 && ArcadeBoard.game.moves.length === 1', bot.ctx))
   assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', bot.ctx), 1, 'после «Начать заново» бот ходит первым')
+  // «Сдаться» с компьютером: поражение, кнопки больше нет, итог запомнился; «Новая партия» — заново, без итога
+  const buttonOf = (node, re) => (node.children || []).reduce((hit, c) => hit || (c.tagName === 'button' && re.test(c.textContent) ? c : buttonOf(c, re)), null)
+  bot.byId.stage.querySelectorAll('.board-resign')[0].click()
+  await until(() => /Ты сдался — поражение/.test(textOf(bot.byId.stage)))
+  assert.match(textOf(bot.byId.stage), /Ты сдался — поражение/)
+  assert.equal(bot.byId.stage.querySelectorAll('.board-resign').length, 0, 'после сдачи кнопки нет')
+  assert.deepEqual(JSON.parse(botStore.get('arcade:board:bot:reversi')).result, { loser: 1, reason: 'resign' })
+  const reopened = await makePage(botStore, { search: '?game=reversi&vs=bot' })
+  await until(() => /Ты сдался — поражение/.test(textOf(reopened.byId.stage)))
+  assert.match(textOf(reopened.byId.stage), /Ты сдался — поражение/, 'итог на месте и после перезагрузки')
+  buttonOf(reopened.byId.stage, /Новая партия/).click()
+  await until(() => /Твой ход \(чёрные\)/.test(textOf(reopened.byId.stage)))
+  assert.equal(JSON.parse(botStore.get('arcade:board:bot:reversi')).result, undefined, 'новая партия — без итога')
+  assert.equal(reopened.byId.stage.querySelectorAll('.board-resign').length, 1)
+  // Шашки — та же кнопка
+  const draughts = await makePage(new Map(), { search: '?game=checkers&vs=bot' })
+  await until(() => /Твой ход/.test(textOf(draughts.byId.stage)))
+  assert.equal(draughts.byId.stage.querySelectorAll('.board-resign').length, 1, 'в шашках можно сдаться')
   // Партия реверси: подключение, «Твой ход», клик — ход на сервер, ответ — «Ход соперника»
   const game = await makePage(new Map(), { search: '?game=reversi&room=abcdef1234' })
   await until(() => game.sockets.length > 0)
@@ -632,6 +650,21 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(textOf(game.byId.stage), /Ход соперника — можно вернуться к агенту/)
   assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', game.ctx), 1)
   assert.doesNotMatch(textOf(game.byId.stage), /@/, 'без ников — без имён')
+  // «Сдаться» по сети: просьба серверу; итог присылает сервер — поражение, ходить нельзя, «Новая партия»
+  game.byId.stage.querySelectorAll('.board-resign')[0].click()
+  assert.deepEqual(JSON.parse(ws.sent.at(-1)), { type: 'resign' })
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'reversi', seat: 0, seats: 2, moves: [[2, 3]], result: { loser: 0, reason: 'resign' } }))
+  assert.match(textOf(game.byId.stage), /Ты сдался — поражение/)
+  assert.equal(game.byId.stage.querySelectorAll('.board-resign').length, 0, 'после сдачи кнопки нет')
+  assert.ok(buttonOf(game.byId.stage, /Новая партия/))
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'reversi', seat: 1, seats: 2, moves: [[2, 3]], result: { loser: 0, reason: 'resign' } }))
+  assert.match(textOf(game.byId.stage), /Соперник сдался — победа!/)
+  const sent = ws.sent.length
+  vm.runInContext('(() => { const g = ArcadeBoard.game; const [r, c] = g.rules.targets(g.position)[0]; g.click(r, c) })()', game.ctx)
+  assert.equal(ws.sent.length, sent, 'после сдачи ходов нет')
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'reversi', seat: -1, seats: 2, moves: [[2, 3]], result: { loser: 0, reason: 'resign' } }))
+  assert.match(textOf(game.byId.stage), /Партия окончена: сдались/)
+  assert.equal(buttonOf(game.byId.stage, /Новая партия/), null, 'зрителю новую партию не начать')
   // @ник: мод кладёт подпись после # — страница прячет её в браузер, убирает из адреса и шлёт в hello
   const TICKET = `fefa.1790000000.${'A'.repeat(22)}`
   const namedStore = new Map()
@@ -871,6 +904,17 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(JSON.parse(gws.sent[0]).me, `octo_cat.1790000000.${'A'.repeat(22)}`)
   gws.emit('message', JSON.stringify({ type: 'state', game: 'go', seat: 1, seats: 2, moves: [], variant: '9', names: ['fefa', 'octo_cat'] }))
   assert.match(textOf(room.byId.stage), /black — @fefa · white — @octo_cat/)
+  // «Сдаться» по сети — и в чужой ход; итог присылает сервер
+  room.byId.stage.querySelectorAll('.go-resign')[0].click()
+  assert.deepEqual(JSON.parse(gws.sent.at(-1)), { type: 'resign' })
+  gws.emit('message', JSON.stringify({ type: 'state', game: 'go', seat: 1, seats: 2, moves: [], variant: '9', result: { loser: 1, reason: 'resign' } }))
+  assert.match(textOf(room.byId.stage), /You resigned — you lose/)
+  assert.equal(room.byId.stage.querySelectorAll('.go-resign').length, 0, 'после сдачи кнопки нет')
+  gws.emit('message', JSON.stringify({ type: 'state', game: 'go', seat: 0, seats: 2, moves: [], variant: '9', result: { loser: 1, reason: 'resign' } }))
+  assert.match(textOf(room.byId.stage), /Your opponent resigned — you win!/)
+  const before = gws.sent.length
+  room.ctx.ArcadeGo.game.click(40)
+  assert.equal(gws.sent.length, before, 'после сдачи ходов нет')
 }
 
 // --- Аудиокниги: проигрыватель (главы, скорость, место прослушивания), свои файлы, полка «Аудиокниги» -------------
