@@ -2439,9 +2439,25 @@ test('Desktop: главное меню — карточки с иконками,
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: 'Играть' })).toMatchObject({ props: { size: 'heading' } })
   const card = await ui.find({ key: 'card-arcade-menu-nes' })
-  expect(JSON.stringify(card)).toContain('"hover":{"backgroundColor":"#1f2533","borderColor":"#5b8cff"}') // подсветка при наведении — внутри зоны с ключом
-  expect(JSON.stringify(card)).toContain('Svg') // иконка
+  expect(card).toMatchObject({ props: { width: 30, borderColor: 'subtle' } }) // ровная сетка, рамка цветом темы
+  expect(card.props).not.toHaveProperty('backgroundColor') // фон — от темы, а не тёмный на светлой
+  // подсветка при наведении: найденный элемент своего hover не показывает — он виден в дереве над ним
+  expect(JSON.stringify(await ui.findAll({ type: 'Box' }))).toContain('"hover":{"borderColor":"suggestion","backgroundColor":"#8080801a"}')
+  expect(JSON.stringify(card)).toContain('"alt":"Денди"') // иконка с подписью: с пустым alt Desktop её не рисует
+  // у «Поддержать», языка и окна Arcade — свои иконки (чашка, глобус, окно), а не джойстик по умолчанию
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-support' }))).toContain('M32 21h4')
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-lang-main' }))).toContain('<ellipse')
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-open-library' }))).toContain('M20 25l8 4-8 4z')
+  // заголовок раздела отделён и от раздела выше, и от своих плиток
+  expect(JSON.stringify(await ui.findAll({ type: 'Box' }))).toContain('"marginTop":"lg","marginBottom":"sm"')
+  // цвета меню — ключи темы, а не «жёлтый» или «серый»: они читаются и на светлой, и на тёмной теме
+  expect(JSON.stringify(await ui.findAll({}))).not.toMatch(/"(color|borderColor)":"(yellow|green|red|gray)"/)
   expect(await ui.find({ type: 'Text', text: /^\d+ игр/ })).toMatchObject({ props: { size: 'footnote' } }) // подпись карточки — мелким шрифтом, без отступа
   await ui.unmount()
+})
+
+test('названия настольных игр с сайта — только по-русски, но под «Продолжить» и в списке переведены', async () => {
+  expect(['Шахматы', 'Русские шашки', 'Реверси', 'Го'].map((s) => tr(s, 'en'))).toEqual(['Chess', 'Russian checkers', 'Reversi', 'Go'])
+  expect(tr('Шахматы', 'de')).toBe('Schach')
 })
 

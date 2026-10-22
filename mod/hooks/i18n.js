@@ -125,6 +125,14 @@ const EXACT = {
   'Аудиокниги': 'Audiobooks',
   'Мои аудиокниги': 'My audiobooks',
   'свои файлы': 'your files',
+  // Названия игр каталога, которые приходят с сайта только по-русски
+  'Шахматы': 'Chess',
+  'Русские шашки': 'Russian checkers',
+  'Реверси': 'Reversi',
+  'Го': 'Go',
+  'Классические квесты': 'Classic adventures',
+  'FreeDM — сетевой deathmatch': 'FreeDM — network deathmatch',
+  'BlasphDM — сетевой deathmatch': 'BlasphDM — network deathmatch',
   'аудиокнига': 'audiobook',
   'язык интерфейса — 13 на выбор': 'interface language — 13 to choose from',
   // жанры книг

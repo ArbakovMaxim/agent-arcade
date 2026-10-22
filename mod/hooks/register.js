@@ -187,7 +187,7 @@ function coverSvg(g) {
   let h = 0
   for (const ch of g.id) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   const hue = h % 360
-  const letters = String(g.title).replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
+  const letters = String(tr(g.title, lang)).replace(/[^\p{L}\p{N} ]/gu, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?'
   const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},62%,52%)"/><stop offset="1" stop-color="hsl(${(hue + 40) % 360},70%,32%)"/></linearGradient></defs><rect width="56" height="56" rx="10" fill="url(#g)"/><text x="28" y="35" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">${esc(letters)}</text></svg>`
 }
@@ -1498,8 +1498,8 @@ export function register(on) {
     remoteSurface = terminal ? null : e.surface
 
     // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает — жёлтый, ждёт разрешения —
-    // красный, закончил — зелёный, свободен — серый
-    const statusColor = status === 'permission' ? 'red' : status === 'working' ? 'yellow' : status === 'done' ? 'green' : 'gray'
+    // красный, закончил — зелёный, свободен — серый. Цвета — ключи темы: читаются и на светлой, и на тёмной
+    const statusColor = status === 'permission' ? 'error' : status === 'working' ? 'warning' : status === 'done' ? 'success' : 'inactive'
     const header = Box({
       flexDirection: 'row',
       columnGap: 2,
@@ -1615,20 +1615,33 @@ export function register(on) {
       const gap = Text({ children: [' '] })
       // Разделы и плитки главного меню: кнопка с подписью — в рамке; плитки рядами, в узкой панели — колонкой
       const desktop = e.surface === 'desktop'
-      const section = (title) => (desktop ? Text({ size: 'heading', weight: 'semibold', children: [title] }) : Text({ bold: true, dimColor: true, children: [title] }))
-      // Иконка карточки — по ключу кнопки: arcade-menu-nes → nes, arcade-game-… → обложка игры
+      // В Desktop заголовок раздела — крупно, с отступом сверху от раздела выше и снизу от своих плиток
+      const section = (title) => (desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [Text({ size: 'heading', weight: 'semibold', children: [title] })] }) : Text({ bold: true, dimColor: true, children: [title] }))
+      // Иконка карточки — по ключу кнопки: arcade-menu-nes → nes, arcade-game-… и «Продолжить» → обложка игры.
+      // alt — подпись кнопки: картинку с пустым alt Desktop не рисует
       const iconFor = (button) => {
         const key = String(button?.key ?? button?.props?.key ?? '')
-        const game = key.startsWith('arcade-game-') ? gameById(key.slice(12)) : null
+        const label = String(button?.props?.label ?? button?.label ?? '')
+        const game = key.startsWith('arcade-game-') ? gameById(key.slice(12)) : key === 'arcade-continue' && played ? gameById(lastGame) : null
         if (game) return Svg({ source: coverSvg(game), alt: game.title, width: 44, height: 44 })
-        const kind = key.replace(/^arcade-(menu-shelf-|menu-|genre-\d+$)/, '').replace(/^lang-main$/, 'lang').replace(/^(open-library|library)$/, 'library')
-        return Svg({ source: iconSvg(kind), alt: '', width: 36, height: 36 })
+        // arcade-menu-shelf-books → books, arcade-lang-main → lang, arcade-support → support; жанр — иконкой своей полки
+        const kind = key.replace(/^arcade-(menu-(shelf-)?)?/, '').replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '').replace(/^lang-main$/, 'lang').replace(/^open-library$/, 'library')
+        return Svg({ source: iconSvg(kind), alt: label || kind, width: 36, height: 36 })
       }
-      // Карточка: внешний блок с ключом — зона наведения, внутренний — фон, рамка и подсветка при наведении
+      // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
+      // Блок с ключом — сам зона наведения
       const card = (children, key) =>
         Box({
           key: `card-${key}`,
-          children: [Box({ flexDirection: 'row', alignItems: 'center', columnGap: 'md', borderStyle: 'round', borderColor: '#2c3345', backgroundColor: '#161a23', padding: 'sm', minWidth: 230, hover: { backgroundColor: '#1f2533', borderColor: '#5b8cff' }, children })],
+          flexDirection: 'row',
+          alignItems: 'center',
+          columnGap: 'sm',
+          borderStyle: 'round',
+          borderColor: 'subtle',
+          padding: 'sm',
+          width: 30,
+          hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
+          children,
         })
       const tiles = (list) => {
         if (desktop) {
@@ -1659,7 +1672,7 @@ export function register(on) {
         }
         return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 1, children: out })
       }
-      const noticeLines = libraryNotice ? [gap, Text({ color: 'yellow', children: [libraryNotice] })] : []
+      const noticeLines = libraryNotice ? [gap, Text({ color: 'warning', children: [libraryNotice] })] : []
       const hint = [gap, dim('↑ ↓ или Tab — выбрать, Enter — открыть. Можно кликнуть мышью.')]
 
       let items
@@ -2126,15 +2139,15 @@ export function register(on) {
     // Назначение клавиш или сообщение мода; иначе — подсказка для этой поверхности
     const message = paused
       ? Text({
-          color: 'yellow',
+          color: 'warning',
           children: [`Пауза: ${agentAlert === 'permission' ? 'агент ждёт разрешения' : 'агент закончил'}. Любая клавиша игры — играть дальше, Esc — к агенту`],
         })
       : mode === 'assign'
-        ? Text({ color: 'yellow', children: [`${notice} Нажми клавишу для «${ACTIONS[assignStep].label}» (${assignStep + 1} из ${ACTIONS.length})`] })
+        ? Text({ color: 'warning', children: [`${notice} Нажми клавишу для «${ACTIONS[assignStep].label}» (${assignStep + 1} из ${ACTIONS.length})`] })
         : notice
-          ? Text({ color: 'yellow', children: [notice] })
+          ? Text({ color: 'warning', children: [notice] })
           : game.engine === 'flappy'
-            ? Text({ color: nes?.state === 'over' ? 'yellow' : 'green', children: [flappyLine()] })
+            ? Text({ color: nes?.state === 'over' ? 'warning' : 'success', children: [flappyLine()] })
             : null
 
     // Desktop и VS Code: кадр Денди — PNG внутри Svg, панель перерисовывается каждый шаг игры

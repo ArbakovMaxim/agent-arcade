@@ -1,5 +1,7 @@
 # Changelog · Список изменений
 
+## 0.16.1 — Desktop: плитки главного меню снова сеткой, а не по одной во всю ширину; рамки, подсветка и цвета статуса — от темы, светлой и тёмной; у всех плиток свои иконки; заголовки разделов не липнут к плиткам; «Шахматы», «Русские шашки», «Реверси» и «Го» переведены на все языки · Desktop: main menu tiles in a grid again; borders, hover and status colours follow the light or dark theme; every tile has its own icon; board game titles are translated into every language
+
 ## 0.16.0 — новый вид мода в Claude Desktop: карточки с иконками, обложки игр, подсветка при наведении, крупные заголовки; терминал и VS Code — как были · a new look in Claude Desktop: cards with icons, game covers, hover highlight
 
 ## 0.15.1 — Desktop: после перезагрузки мода (`/reload-plugins`, обновление) панель Arcade снова закрывается, когда Claude открыл игру во встроенном браузере, и браузер разворачивается на всё окно; правило из настроек (разрешить или запретить) Arcade больше не переписывает, и встроенная защита Claude Code не пишет об этом в чат · Desktop: after a mod reload the Arcade pane closes again once Claude opens the game in the built-in browser, which then takes the whole window; Arcade no longer rewrites allow or deny rules from settings
