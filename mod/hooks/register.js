@@ -10,6 +10,7 @@ import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, re
 import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
 import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
+import { SYNC_KEYS, accountUrl, parseDone, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, syncPlan } from './account.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
 
@@ -165,6 +166,15 @@ const searchCache = new Map() // «youtube:запрос» → { at, found }: п�
 // Twitch, каталог Arcade; at — когда спрашивали сайт, error — что ответил сайт, note — заметка под полем «Добавить
 // канал»; request — номер последнего вопроса: ответ старого вопроса, пришедший позже нового, не нужен
 let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loading: false, error: '', note: '', request: 0 }
+// Аккаунт: вход через GitHub (session — { token, user } из $.store или null), вход по коду, который идёт сейчас (flow —
+// { device, code, url, interval, until } или null), starting — просим код у сайта, заметка в меню аккаунта, идёт ли
+// синхронизация (again — за время неё настройку поменяли ещё раз) и когда она последний раз удалась; confirmDelete —
+// «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен
+let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0 }
+let stamps = {} // когда человек менял синхронизируемые настройки: ключ → время; в $.store — syncAt
+// Какие из SYNC_KEYS сохранены на этом компьютере: чего человек здесь не менял, то берём с сайта, а не отправляем туда
+const savedKeys = new Set()
+let syncTimer = null
 
 function consoles() {
   return catalog.consoles
@@ -189,7 +199,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -202,6 +212,7 @@ function iconSvg(kind) {
     phones: `<path d="M10 28a14 14 0 0 1 28 0" stroke="${c}" stroke-width="4" fill="none"/><rect x="7" y="26" width="8" height="13" rx="3" fill="${c}"/><rect x="33" y="26" width="8" height="13" rx="3" fill="${c}"/>`,
     folder: `<path d="M7 14h12l4 4h18v19H7z" fill="${c}"/>`,
     gear: `<circle cx="24" cy="24" r="11" fill="none" stroke="${c}" stroke-width="7" stroke-dasharray="5 3.6"/><circle cx="24" cy="24" r="5" fill="${c}"/>`,
+    person: `<circle cx="24" cy="17" r="8" fill="${c}"/><path d="M9 40a15 13 0 0 1 30 0z" fill="${c}"/>`,
     globe: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><ellipse cx="24" cy="24" rx="6" ry="15" fill="none" stroke="${c}" stroke-width="2.5"/><path d="M9 24h30" stroke="${c}" stroke-width="2.5"/>`,
     cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
     window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
@@ -217,7 +228,7 @@ function iconSvg(kind) {
     compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -627,7 +638,7 @@ function launch(id, romBase64) {
       {
         best: flappyBest,
         onGameOver: (score, best) => {
-          if (best === flappyBest) return
+          if (best <= flappyBest) return
           flappyBest = best
           flappyDirty = true
         },
@@ -1044,8 +1055,8 @@ const SEARCH_FETCH_MS = 15_000 // поиск сайта опрашивает н�
 const SEARCH_DAYS = 730 // найденное поиском — не старше двух лет, как и на сайте
 const SHOW_DAYS = 365 // выпуски шоу из поиска — за год: нишевые подкасты выходят нечасто
 
-// Ответ сети или null, если не пришёл за ms: у $.http.fetch своего срока нет
-function fetchWithin($, url, ms) {
+// Ответ сети или null, если не пришёл за ms: у $.http.fetch своего срока нет. init — метод, заголовки и тело запроса
+function fetchWithin($, url, ms, init = undefined) {
   return new Promise((resolve) => {
     let done = false
     const finish = (value) => {
@@ -1054,7 +1065,8 @@ function fetchWithin($, url, ms) {
       resolve(value)
     }
     $.clock.after(ms, () => finish(null))
-    $.http.fetch(url).then(finish, () => finish(null))
+    const answer = init ? $.http.fetch(url, init) : $.http.fetch(url)
+    answer.then(finish, () => finish(null))
   })
 }
 
@@ -1141,7 +1153,7 @@ async function addTopic($, kind, value) {
   myTopics = rememberTopic(myTopics, topic)
   ownNote = { kind: '', text: '' }
   try {
-    await $.store.set('myTopics', myTopics)
+    await saveSetting($, 'myTopics', myTopics)
   } catch (err) {
     log(`свои темы не сохранены: ${String(err?.message ?? err).slice(0, 200)}`)
   }
@@ -1161,7 +1173,7 @@ async function forgetTopics($) {
   ownNote = { kind: '', text: '' }
   $.ui.invalidate('ui.render')
   try {
-    await $.store.set('myTopics', [])
+    await saveSetting($, 'myTopics', [])
   } catch (err) {
     log(`свои темы не стёрты: ${String(err?.message ?? err).slice(0, 200)}`)
   }
@@ -1213,7 +1225,7 @@ async function loadTwitch($, force = false) {
 
 async function saveChannels($) {
   try {
-    await $.store.set('twitchChannels', tw.channels)
+    await saveSetting($, 'twitchChannels', tw.channels)
   } catch (err) {
     log(`каналы Twitch не сохранены: ${String(err?.message ?? err).slice(0, 200)}`)
   }
@@ -1260,6 +1272,273 @@ async function removeChannel($, login) {
 function twitchList(login) {
   const own = liveFirst(tw.channels, tw.info).map((c) => c.login)
   return own.includes(login) ? own : tw.catalog.map((c) => c.login)
+}
+
+// --- Аккаунт: вход через GitHub и настройки на всех компьютерах ------------------------------------------------------
+const ACCOUNT_FETCH_MS = 15_000 // сайту самому надо спросить GitHub
+const SYNC_DELAY_MS = 2_000 // настройку поменяли — на сайт через пару секунд: вдруг человек меняет ещё
+const SYNC_EVERY_MS = 30 * 60_000 // и раз в полчаса — забрать то, что поменяли на другом компьютере
+
+// Почему вход или синхронизация не удались
+function accountNote(error) {
+  if (error === 'off') return 'Вход на сайте Arcade ещё не настроен.'
+  if (error === 'app') return 'GitHub не принял приложение Arcade — вход пока не работает.'
+  if (error === 'limit') return 'Попыток входа с этого адреса на сегодня слишком много — попробуй завтра.'
+  if (error === 'big') return 'Настройки не поместились на сайте Arcade.'
+  return 'Сайт Arcade не ответил. Попробуй чуть позже.'
+}
+
+// Вопрос к сайту про вход или настройки. Ключ сессии — только в заголовке и только своему сайту
+function accountFetch($, name, { method = 'GET', body, token } = {}) {
+  const headers = { Accept: 'application/json' }
+  if (token) headers.Authorization = `Bearer ${token}`
+  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  return fetchWithin($, accountUrl(name), ACCOUNT_FETCH_MS, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
+}
+
+// Настройка из $.store или с сайта → в мод. Не подходит — false, остаётся прежняя
+function applySetting(key, value) {
+  if (key === 'lang') {
+    if (!LANGS.includes(value)) return false
+    lang = value
+  } else if (key === 'keys') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const fine = (list) => Array.isArray(list) && list.length <= 64 && list.every((k) => typeof k === 'string' && k.length <= 30)
+    keymap = restoreKeymap(Object.fromEntries(Object.entries(value).filter(([, list]) => fine(list))))
+  } else if (key === 'notify' || key === 'wide') {
+    if (typeof value !== 'boolean') return false
+    if (key === 'notify') osNotify = value
+    else wide = value
+  } else if (key === 'onDone' || key === 'onPermission') {
+    if (!SIGNAL_MODES.includes(value)) return false
+    if (key === 'onDone') onDone = value
+    else onPermission = value
+  } else if (key === 'myTopics') {
+    if (!Array.isArray(value)) return false
+    myTopics = restoreMyTopics(value)
+  } else if (key === 'twitchChannels') {
+    if (!Array.isArray(value)) return false
+    tw.channels = restoreTwitch(value)
+  } else if (key === 'flappyBest') {
+    const best = Math.floor(Number(value))
+    if (!Number.isFinite(best) || best < 0) return false
+    flappyBest = Math.max(flappyBest, best)
+  } else return false
+  return true
+}
+
+// Настройка из SYNC_KEYS, как она сейчас в моде
+function settingValue(key) {
+  return { lang, keys: keymap, notify: osNotify, wide, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest }[key]
+}
+
+// Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
+async function saveSetting($, key, value) {
+  const at = await $.clock.now()
+  savedKeys.add(key)
+  stamps = { ...stamps, [key]: at }
+  await $.store.set(key, value)
+  await $.store.set('syncAt', stamps)
+  if (acct.session) scheduleSync($, SYNC_DELAY_MS)
+}
+
+function scheduleSync($, ms) {
+  syncTimer?.cancel()
+  syncTimer = $.clock.after(ms, () => {
+    syncTimer = null
+    syncAccount($)
+  })
+}
+
+// Встреча настроек этого компьютера и сайта: новое оттуда — сюда, новое отсюда — туда
+async function syncAccount($) {
+  const session = acct.session
+  if (!session) return
+  if (acct.syncing) {
+    acct.again = true
+    return
+  }
+  acct.syncing = true
+  acct.again = false
+  $.ui.invalidate('ui.render')
+  try {
+    const me = parseMe(await accountFetch($, 'me', { token: session.token }))
+    if (acct.session !== session) return
+    if (me.error) return await syncFailed($, me.error)
+    const now = await $.clock.now()
+    if (acct.session !== session) return
+    const renamed = me.user.id === session.user.id && JSON.stringify(me.user) !== JSON.stringify(session.user)
+    if (renamed) session.user = me.user
+    const local = Object.fromEntries([...savedKeys].map((key) => [key, settingValue(key)]))
+    const plan = syncPlan(local, stamps, me.settings, now)
+    const changed = []
+    for (const [key, value] of Object.entries(plan.apply)) {
+      if (applySetting(key, value)) {
+        savedKeys.add(key)
+        changed.push(key)
+      } else if (savedKeys.has(key)) {
+        // С сайта пришло то, чего мод не понимает: остаётся своё — и уходит на сайт поверх
+        plan.stamps[key] = Math.max(now, me.settings[key].at + 1)
+        plan.push[key] = { v: settingValue(key), at: plan.stamps[key] }
+      }
+    }
+    stamps = plan.stamps
+    if (changed.length) $.ui.invalidate('ui.render')
+    if (renamed) await $.store.set('account', session)
+    for (const key of changed) await $.store.set(key, settingValue(key))
+    await $.store.set('syncAt', stamps)
+    if (Object.keys(plan.push).length) {
+      const sent = parseSettings(await accountFetch($, 'settings', { method: 'PUT', body: { settings: plan.push }, token: session.token }))
+      if (acct.session !== session) return
+      if (sent.error) return await syncFailed($, sent.error)
+    }
+    acct.syncedAt = now
+    acct.note = ''
+  } catch (err) {
+    log(`настройки не синхронизированы: ${String(err?.message ?? err).slice(0, 200)}`)
+  } finally {
+    acct.syncing = false
+    $.ui.invalidate('ui.render')
+    if (acct.again) syncAccount($)
+  }
+}
+
+async function syncFailed($, error) {
+  log(`аккаунт: ${error}`)
+  if (error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  acct.note = accountNote(error)
+}
+
+// Забыть вход на этом компьютере. Настройки остаются как есть
+async function forgetSession($, note) {
+  acct.session = null
+  acct.flow = null
+  acct.starting = false
+  acct.note = note
+  acct.syncedAt = 0
+  acct.confirmDelete = false
+  acct.request++
+  syncTimer?.cancel()
+  syncTimer = null
+  $.ui.invalidate('ui.render')
+  try {
+    await $.store.delete('account')
+  } catch (err) {
+    log(`вход не забыт: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+}
+
+// «Войти через GitHub»: сайт просит у GitHub код, человек вводит его на странице GitHub
+async function startLogin($) {
+  if (acct.starting || acct.flow || acct.session) return
+  const request = ++acct.request
+  acct.starting = true
+  acct.note = ''
+  $.ui.invalidate('ui.render')
+  const start = parseStart(await accountFetch($, 'start', { method: 'POST' }))
+  const now = await $.clock.now()
+  if (request !== acct.request) return
+  acct.starting = false
+  if (start.error) acct.note = accountNote(start.error)
+  else {
+    acct.flow = { device: start.device, code: start.code, url: start.url, interval: start.interval, until: now + start.expires * 1000 }
+    waitLogin($, request, now)
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Спрашивать сайт, вошёл ли человек, — раз в interval секунд, пока код жив; истечёт раньше — сказать сразу
+function waitLogin($, request, now) {
+  const flow = acct.flow
+  const current = () => request === acct.request && acct.flow === flow
+  const end = (note) => {
+    acct.flow = null
+    acct.note = note
+    $.ui.invalidate('ui.render')
+  }
+  $.clock.after(Math.min(flow.interval * 1000, Math.max(flow.until - now, 0) + 1), async () => {
+    if (!current()) return
+    if ((await $.clock.now()) > flow.until) return end('Код истёк — попробуй ещё раз.')
+    const poll = parsePoll(await accountFetch($, 'poll', { method: 'POST', body: { device: flow.device } }))
+    if (!current()) return
+    if (poll.status === 'ok') return finishLogin($, poll.account)
+    if (poll.status === 'expired') return end('Код истёк — попробуй ещё раз.')
+    if (poll.status === 'denied') return end('Вход отменён на GitHub.')
+    if (['off', 'app', 'limit'].includes(poll.error)) return end(accountNote(poll.error))
+    // Ждём дальше; сайт не ответил — тоже ждём, но говорим об этом
+    if (poll.interval) flow.interval = poll.interval
+    const note = poll.error ? accountNote(poll.error) : ''
+    if (note !== acct.note) {
+      acct.note = note
+      $.ui.invalidate('ui.render')
+    }
+    waitLogin($, request, await $.clock.now())
+  })
+}
+
+async function finishLogin($, account) {
+  acct.flow = null
+  acct.note = ''
+  acct.session = account
+  $.ui.invalidate('ui.render')
+  try {
+    await $.store.set('account', account)
+  } catch (err) {
+    log(`вход не сохранён: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  syncAccount($)
+}
+
+function cancelLogin($) {
+  acct.request++
+  acct.flow = null
+  acct.starting = false
+  acct.note = ''
+  $.ui.invalidate('ui.render')
+}
+
+// «Выйти»: забыть вход здесь и сказать сайту, что ключ сессии больше не нужен; что ответит сайт, неважно
+async function logout($) {
+  const token = acct.session?.token
+  if (!token) return
+  await forgetSession($, 'Выход выполнен: на этом компьютере настройки больше не синхронизируются.')
+  await accountFetch($, 'logout', { method: 'POST', token })
+}
+
+// «Удалить аккаунт»: первое нажатие спрашивает «точно?», второе — просит сайт забыть человека и его настройки
+async function deleteAccount($) {
+  const session = acct.session
+  if (!session) return
+  if (!acct.confirmDelete) {
+    acct.confirmDelete = true
+    acct.note = ''
+    return $.ui.invalidate('ui.render')
+  }
+  acct.confirmDelete = false
+  acct.note = 'Удаляю аккаунт…'
+  $.ui.invalidate('ui.render')
+  const error = parseDone(await accountFetch($, 'me', { method: 'DELETE', token: session.token }))
+  if (acct.session !== session) return
+  if (error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  if (!error) return forgetSession($, 'Аккаунт удалён: сайт Arcade забыл тебя и твои настройки. Здесь настройки остались.')
+  acct.note = accountNote(error)
+  $.ui.invalidate('ui.render')
+}
+
+// Страница GitHub для кода — в обычном браузере: встроенный браузер Desktop открывает только страницы сайта Arcade
+async function openGithub($, url) {
+  const command = openUrlCommand(platform, url)
+  let opened = false
+  if (command) {
+    try {
+      opened = (await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS }))?.exitCode === 0
+    } catch {
+      // не открылся — адрес и так написан в меню
+    }
+  }
+  if (opened) windowNotice($, 'Открываю GitHub в браузере — введи там код.')
+  else libraryNotice = 'Браузер не открылся — открой адрес выше сам.'
+  $.ui.invalidate('ui.render')
 }
 
 // Темы: haiku читает последнюю работу агента; работы ещё нет или модель не ответила — темы по умолчанию
@@ -1509,6 +1788,7 @@ function settingsNote(surface) {
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
+  if (menu === 'account') return 'Arcade · аккаунт'
   if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
   if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
   if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
@@ -1579,25 +1859,18 @@ export function register(on) {
       // Модуль перезагрузили (/reload-plugins, обновление), а панель осталась открытой: движок её помнит, а наш флаг — нет.
       // Без этого после перезагрузки панель не закрывалась, когда Claude открывал игру во встроенном браузере
       paneOpen = (await $.ui.panes().catch(() => [])).some((p) => p.id === PANE)
-      keymap = restoreKeymap(await $.store.get('keys'))
-      osNotify = (await $.store.get('notify')) !== false
-      wide = (await $.store.get('wide')) === true
-      const storedLang = await $.store.get('lang')
-      lang = LANGS.includes(storedLang) ? storedLang : detectLang(await $.env.get('LC_ALL'), await $.env.get('LC_MESSAGES'), await $.env.get('LANG'))
-      const storedDone = await $.store.get('onDone')
-      const storedPermission = await $.store.get('onPermission')
-      if (SIGNAL_MODES.includes(storedDone)) onDone = storedDone
-      if (SIGNAL_MODES.includes(storedPermission)) onPermission = storedPermission
+      // Общие настройки (SYNC_KEYS): чего в $.store нет или что не подходит — остаётся по умолчанию
+      for (const key of SYNC_KEYS) if (applySetting(key, await $.store.get(key))) savedKeys.add(key)
+      if (!savedKeys.has('lang')) lang = detectLang(await $.env.get('LC_ALL'), await $.env.get('LC_MESSAGES'), await $.env.get('LANG'))
+      stamps = restoreStamps(await $.store.get('syncAt'))
+      acct.session = restoreAccount(await $.store.get('account'))
       mine = restoreMine(await $.store.get('mine'))
-      myTopics = restoreMyTopics(await $.store.get('myTopics'))
-      tw.channels = restoreTwitch(await $.store.get('twitchChannels'))
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
         sep = home.includes('\\') ? '\\' : '/'
         dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(sep)
       }
       catalog = restoreCatalog(await $.store.get('catalog')) ?? catalog
-      flappyBest = Number(await $.store.get('flappyBest')) || 0
       const savedGame = await $.store.get('lastGame')
       played = games().some((g) => g.id === savedGame)
       if (played) lastGame = savedGame
@@ -1627,6 +1900,9 @@ export function register(on) {
       }
       $.clock.after(2_000, pollLobbies)
       $.clock.every(LOBBIES_EVERY_MS, pollLobbies)
+      // Настройки с других компьютеров — вскоре после старта и раз в полчаса; без входа syncAccount ничего не делает
+      $.clock.after(3_000, () => syncAccount($))
+      $.clock.every(SYNC_EVERY_MS, () => syncAccount($))
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -1905,10 +2181,10 @@ export function register(on) {
     if (e.element !== INPUT) return {}
     const { save, redraw } = readInput(e.data)
     if (redraw) $.ui.invalidate('ui.render')
-    if (save) await $.store.set('keys', keymap)
+    if (save) await saveSetting($, 'keys', keymap)
     if (flappyDirty) {
       flappyDirty = false
-      await $.store.set('flappyBest', flappyBest)
+      await saveSetting($, 'flappyBest', flappyBest)
     }
     return {}
   })
@@ -1972,10 +2248,10 @@ export function register(on) {
             onInput: async (value) => {
               const save = typedFrom(value)
               $.ui.invalidate('ui.render')
-              if (save) await $.store.set('keys', keymap)
+              if (save) await saveSetting($, 'keys', keymap)
               if (flappyDirty) {
                 flappyDirty = false
-                await $.store.set('flappyBest', flappyBest)
+                await saveSetting($, 'flappyBest', flappyBest)
               }
             },
             onSubmit: () => {
@@ -2358,7 +2634,7 @@ export function register(on) {
                   lang = code
                   menu = langReturn
                   $.ui.invalidate('ui.render')
-                  await $.store.set('lang', lang)
+                  await saveSetting($, 'lang', lang)
                 },
               }),
             ),
@@ -2366,6 +2642,56 @@ export function register(on) {
           ),
           ...hint,
         ]
+      } else if (menu === 'account') {
+        // Аккаунт: вошли — кто и что общее; идёт вход — код для GitHub; иначе — зачем вход и что Arcade узнает
+        const flow = acct.flow
+        const note = acct.note ? [Text({ color: 'warning', children: [acct.note] })] : []
+        if (acct.session) {
+          items = [
+            back,
+            gap,
+            keep(Text({ bold: true, children: [`GitHub: @${acct.session.user.login}`] })),
+            dim('Общие для всех компьютеров: язык, клавиши, уведомления, размер панели, что делать с игрой по сигналу агента, свои темы, каналы Twitch и рекорд Flappy Arcade.'),
+            dim(acct.syncing ? 'Синхронизирую…' : acct.syncedAt ? 'Настройки синхронизированы.' : 'Настройки ещё не синхронизированы.'),
+            ...note,
+            gap,
+            Button({ key: 'arcade-account-sync', label: 'Синхронизировать сейчас', autoFocus: true, onPress: () => syncAccount($) }),
+            Button({ key: 'arcade-account-logout', label: 'Выйти', onPress: () => logout($) }),
+            dim('  на этом компьютере; настройки останутся здесь как есть'),
+            Button({ key: 'arcade-account-delete', label: acct.confirmDelete ? 'Точно удалить? Нажми ещё раз' : 'Удалить аккаунт', onPress: () => deleteAccount($) }),
+            dim('  сайт Arcade забудет тебя и твои настройки; здесь всё останется'),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (flow) {
+          items = [
+            back,
+            gap,
+            Text({ children: ['Введи этот код на странице GitHub:'] }),
+            keep(desktop ? Text({ size: 'heading', weight: 'semibold', children: [flow.code] }) : Text({ bold: true, children: [`  ${flow.code}`] })),
+            gap,
+            Button({ key: 'arcade-account-github', label: 'Открыть страницу GitHub', autoFocus: true, onPress: () => openGithub($, flow.url) }),
+            keep(dim(`  ${flow.url}`)),
+            dim('  страница откроется в обычном браузере; после кода GitHub спросит, пустить ли Agent Arcade'),
+            gap,
+            ...(note.length ? note : [dim('Жду, когда ты подтвердишь вход на GitHub…')]),
+            Button({ key: 'arcade-account-cancel', label: 'Отмена', onPress: () => cancelLogin($) }),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else {
+          items = [
+            back,
+            gap,
+            dim('Вход нужен только для того, чтобы настройки были одни на всех твоих компьютерах. Без входа всё работает.'),
+            dim('Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.'),
+            ...note,
+            gap,
+            Button({ key: 'arcade-account-login', label: acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub', autoFocus: true, onPress: () => startLogin($) }),
+            ...noticeLines,
+            ...hint,
+          ]
+        }
       } else if (menu === 'settings') {
         const field = FIELD
         items = [
@@ -2459,7 +2785,7 @@ export function register(on) {
             onPress: async () => {
               wide = !wide
               $.ui.invalidate('ui.render')
-              await $.store.set('wide', wide)
+              await saveSetting($, 'wide', wide)
               // Панель уже открыта — просим новую ширину сразу
               await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
             },
@@ -2471,7 +2797,7 @@ export function register(on) {
             onPress: async () => {
               onDone = SIGNAL_MODES[(SIGNAL_MODES.indexOf(onDone) + 1) % SIGNAL_MODES.length]
               $.ui.invalidate('ui.render')
-              await $.store.set('onDone', onDone)
+              await saveSetting($, 'onDone', onDone)
             },
           }),
           Button({
@@ -2480,7 +2806,7 @@ export function register(on) {
             onPress: async () => {
               onPermission = SIGNAL_MODES[(SIGNAL_MODES.indexOf(onPermission) + 1) % SIGNAL_MODES.length]
               $.ui.invalidate('ui.render')
-              await $.store.set('onPermission', onPermission)
+              await saveSetting($, 'onPermission', onPermission)
             },
           }),
           dim('  для игры в панели Claude; в окне браузера — системное уведомление'),
@@ -2492,7 +2818,7 @@ export function register(on) {
                   onPress: async () => {
                     osNotify = !osNotify
                     $.ui.invalidate('ui.render')
-                    await $.store.set('notify', osNotify)
+                    await saveSetting($, 'notify', osNotify)
                   },
                 }),
                 dim('  системное уведомление со звуком, когда агент закончил или ждёт разрешения'),
@@ -3102,6 +3428,18 @@ export function register(on) {
             onPress: open('settings'),
           }),
           dim(`  ${settingsNote(e.surface)}`),
+          // Вход — по желанию: настройки одни на всех компьютерах человека
+          Button({
+            key: 'arcade-menu-account',
+            label: acct.session ? 'Аккаунт' : 'Войти через GitHub',
+            ...(menuFrom === 'account' ? { autoFocus: true } : {}),
+            onPress: () => {
+              acct.confirmDelete = false
+              open('account')()
+              syncAccount($)
+            },
+          }),
+          acct.session ? keep(dim(`  GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах'),
           // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
           Button({
             key: 'arcade-lang-main',
