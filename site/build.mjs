@@ -92,6 +92,27 @@ export function checkFeeds(data, directions) {
   return data
 }
 
+// Каталог Twitch (content/twitch.json) — его читает Worker (/api/twitch). Логины — как в адресе twitch.tv, все
+// вместе — один вопрос к Twitch (до 100). directions — направления из channels.json
+export function checkTwitch(data, directions) {
+  const bad = (message) => {
+    throw new Error(`Twitch: ${message}`)
+  }
+  if (data?.version !== 1) bad('нужно "version": 1')
+  if (!Array.isArray(data.channels) || !data.channels.length) bad('нужен список channels')
+  if (data.channels.length > 100) bad('больше 100 каналов — Twitch за один вопрос столько не отдаст')
+  const logins = new Set()
+  for (const c of data.channels) {
+    const where = `канал ${c?.login}`
+    if (!/^[a-z0-9][a-z0-9_]{1,24}$/.test(c?.login ?? '')) bad(`${where}: логин — как в адресе twitch.tv, строчными буквами`)
+    if (logins.has(c.login)) bad(`${where}: уже есть в списке`)
+    if (!Array.isArray(c.topics) || !c.topics.length || c.topics.length > 2) bad(`${where}: нужно одно-два направления topics`)
+    for (const t of c.topics) if (!directions.has(t)) bad(`${where}: нет направления ${t}`)
+    logins.add(c.login)
+  }
+  return data
+}
+
 // "0x3d9" или 985 → 985; адрес в памяти приставки
 function address(value, where) {
   const n = typeof value === 'string' ? Number.parseInt(value, value.startsWith('0x') ? 16 : 10) : value
@@ -406,6 +427,8 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
   // Ленты статей и подкастов — для мода и страниц /read и /listen
   const feeds = checkFeeds(JSON.parse(fs.readFileSync(path.join(content, 'feeds.json'), 'utf8')), new Set(channels.directions.map((d) => d.id)))
   fs.writeFileSync(path.join(out, 'feeds.json'), `${JSON.stringify(feeds)}\n`)
+  // Каталог Twitch Worker берёт из content/ сам — здесь только проверка
+  checkTwitch(JSON.parse(fs.readFileSync(path.join(content, 'twitch.json'), 'utf8')), new Set(channels.directions.map((d) => d.id)))
 
   // Окно Arcade и лицензии сторонних библиотек
   // Движки своих игр — из мода, как есть: export убирается, движок — в window.ArcadeFlappy

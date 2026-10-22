@@ -15,7 +15,9 @@
   },
   // Комнаты для сетевой игры и кеш поиска — Durable Objects на SQLite: они есть на бесплатном тарифе.
   // Поиску нужны секреты (wrangler secret put): LINK_SECRET — подпись ссылок, YOUTUBE_KEY — ключ YouTube Data API v3;
-  // без них /api/discover отвечает 503, а мод берёт темы только из каталога
+  // без них /api/discover отвечает 503, а мод берёт темы только из каталога.
+  // Twitch — свой Durable Object и секреты TWITCH_CLIENT_ID и TWITCH_CLIENT_SECRET (приложение на dev.twitch.tv);
+  // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
@@ -23,7 +25,8 @@
       { "name": "EJS", "class_name": "EjsGame" },
       { "name": "PRESENCE", "class_name": "Presence" },
       { "name": "BOARD", "class_name": "BoardRoom" },
-      { "name": "DISCOVER", "class_name": "Discover" }
+      { "name": "DISCOVER", "class_name": "Discover" },
+      { "name": "TWITCH", "class_name": "Twitch" }
     ]
   },
   "migrations": [
@@ -32,7 +35,9 @@
     { "tag": "v3", "new_sqlite_classes": ["EjsGame", "Presence"] },
     { "tag": "v4", "new_sqlite_classes": ["BoardRoom"] },
     // Кеш поиска по своей теме (worker/discover.js)
-    { "tag": "v5", "new_sqlite_classes": ["Discover"] }
+    { "tag": "v5", "new_sqlite_classes": ["Discover"] },
+    // Кеш эфиров Twitch (worker/twitch.js)
+    { "tag": "v6", "new_sqlite_classes": ["Twitch"] }
   ],
   // Предварительные копии веток (wrangler preview): у каждой — свои Durable Objects, отдельно от рабочего сайта.
   // Код обращается к ним через env.ROOMS и т. д., поэтому привязки повторены здесь — иначе в копии ошибка 1101
@@ -44,7 +49,8 @@
         { "name": "EJS", "class_name": "EjsGame" },
         { "name": "PRESENCE", "class_name": "Presence" },
         { "name": "BOARD", "class_name": "BoardRoom" },
-        { "name": "DISCOVER", "class_name": "Discover" }
+        { "name": "DISCOVER", "class_name": "Discover" },
+        { "name": "TWITCH", "class_name": "Twitch" }
       ]
     }
   }

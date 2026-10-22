@@ -93,7 +93,14 @@
   "Article: {0}",
   "Episode: {0}",
   "Could not load articles: {0}",
-  "Could not load episodes: {0}"
+  "Could not load episodes: {0}",
+  "The stream is open in {0}.",
+  "Streams open in {0}.",
+  "Stream: {0}",
+  "Channel added: {0}.",
+  "Channel removed: {0}.",
+  "live · viewers: {0}",
+  "live · {0} · viewers: {1}"
  ],
  "site": [
   "Played in total: {0}",
@@ -123,7 +130,8 @@
   "level {0}",
   "Computer · level {0}",
   "waiting: {0}",
-  "listened {0}%"
+  "listened {0}%",
+  "viewers: {0}"
  ],
  "modExact": [
   "default browser window",
@@ -136,6 +144,7 @@
   "Videos open in Claude's built-in browser.",
   "Articles open in Claude's built-in browser.",
   "Episodes open in Claude's built-in browser.",
+  "Streams open in Claude's built-in browser.",
   "open in: Claude's built-in browser",
   "play here, in the pane",
   "auto",

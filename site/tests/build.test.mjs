@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build, checkChannels, checkFeeds } from '../build.mjs'
+import { build, checkChannels, checkFeeds, checkTwitch } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 // Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск
@@ -153,6 +153,29 @@ assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers
   assert.throws(bad((d) => { d.podcasts[0].topics = [] }), /хотя бы один topic/)
   assert.throws(bad((d) => { d.articles[0].hosts = [] }), /нужен список hosts/)
   assert.throws(bad((d) => { d.articles[0].hosts = ['https://example.com'] }), /не имя сайта/)
+}
+
+// Каталог Twitch (content/twitch.json): логины как в адресе twitch.tv, направления — из channels.json; страница /live
+{
+  const twitch = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'twitch.json'), 'utf8'))
+  const channels = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'channels.json'), 'utf8'))
+  const directions = new Set(channels.directions.map((d) => d.id))
+  for (const page of ['live.html', 'live.js']) assert.ok(fs.existsSync(path.join(out, page)), `страница ${page}`)
+  const bad = (change) => {
+    const data = structuredClone(twitch)
+    change(data)
+    return () => checkTwitch(data, directions)
+  }
+  assert.doesNotThrow(bad(() => {}))
+  assert.throws(bad((d) => { d.version = 2 }), /Twitch: нужно "version": 1/)
+  assert.throws(bad((d) => { d.channels = [] }), /нужен список channels/)
+  assert.throws(bad((d) => { d.channels = Array.from({ length: 101 }, (_, i) => ({ login: `user${i}`, topics: ['tools'] })) }), /больше 100 каналов/)
+  assert.throws(bad((d) => { d.channels[0].login = 'TheName' }), /строчными буквами/)
+  assert.throws(bad((d) => { d.channels[0].login = 'https://twitch.tv/x' }), /строчными буквами/)
+  assert.throws(bad((d) => { d.channels.push({ ...d.channels[0] }) }), /уже есть в списке/)
+  assert.throws(bad((d) => { d.channels[0].topics = [] }), /одно-два направления/)
+  assert.throws(bad((d) => { d.channels[0].topics = ['tools', 'web', 'ai'] }), /одно-два направления/)
+  assert.throws(bad((d) => { d.channels[0].topics = ['cooking'] }), /нет направления cooking/)
 }
 
 // Повторная сборка даёт те же файлы (кроме времени сборки)

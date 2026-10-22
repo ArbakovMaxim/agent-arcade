@@ -1,6 +1,7 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
-import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
+import fs from 'node:fs'
+import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -508,6 +509,165 @@ try {
     assert.ok(store.has('q:embedded rust'), 'свежие ответы остаются')
   } finally {
     globalThis.fetch = realFetch
+  }
+}
+
+// --- Twitch: кто в эфире, с кешем, токеном приложения и лимитом адреса (worker/twitch.js) -------------------------
+{
+  const { parseLogins, PER_IP_DAILY, USER_TTL_MS } = await import('../worker/twitch.js')
+  const CATALOG = JSON.parse(fs.readFileSync(new URL('../content/twitch.json', import.meta.url), 'utf8'))
+  assert.deepEqual(parseLogins('Tsoding,teej_dv,tsoding'), ['tsoding', 'teej_dv'])
+  assert.deepEqual(parseLogins(''), [])
+  assert.equal(parseLogins('bad name'), null)
+  assert.equal(parseLogins('x'), null, 'логин Twitch — от двух знаков')
+  assert.equal(parseLogins(Array.from({ length: 51 }, (_, i) => `user${i}`).join(',')), null)
+
+  const missing = new Set(['ghost_user', CATALOG.channels.at(-1).login])
+  const live = { theprimeagen: 9000, tsoding: 500, vedal987: 20000, myfriend: 10 }
+  const asked = []
+  const tokens = []
+  const flags = { keys: false, expire: 0, down: false }
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(String(input))
+    asked.push(url)
+    if (flags.down) return new Response('нет', { status: 500 })
+    if (url.hostname === 'id.twitch.tv') {
+      if (flags.keys) return Response.json({ status: 400, message: 'invalid client secret' }, { status: 400 })
+      assert.equal(new URLSearchParams(init.body).get('grant_type'), 'client_credentials')
+      tokens.push(`tok${tokens.length + 1}`)
+      return Response.json({ access_token: tokens.at(-1), expires_in: 5_000_000, token_type: 'bearer' })
+    }
+    assert.equal(url.hostname, 'api.twitch.tv')
+    assert.equal(init.headers['Client-Id'], 'twitch-id')
+    assert.equal(init.headers.Authorization, `Bearer ${tokens.at(-1)}`)
+    if (flags.expire > 0) {
+      flags.expire--
+      return new Response('{}', { status: 401 })
+    }
+    if (url.pathname === '/helix/users') {
+      const data = url.searchParams.getAll('login').filter((l) => !missing.has(l)).map((login, k) => ({
+        id: String(1000 + k),
+        login,
+        display_name: login === 'myfriend' ? 'MyFriend' : login,
+        profile_image_url: login === 'myfriend' ? 'https://evil.test/me.png' : `https://static-cdn.jtvnw.net/jtv_user_pictures/${login}-300x300.png`,
+      }))
+      return Response.json({ data })
+    }
+    if (url.pathname === '/helix/streams') {
+      assert.equal(url.searchParams.get('first'), '100')
+      const data = url.searchParams.getAll('user_login').filter((l) => l in live).map((l) => ({
+        user_login: l, type: 'live', title: `  ${l}   is live  `, game_name: 'Software and Game Development', viewer_count: live[l], started_at: '2026-10-22T10:00:00Z', is_mature: l === 'vedal987',
+      }))
+      return Response.json({ data })
+    }
+    return new Response('нет', { status: 404 })
+  }
+  const realNow = Date.now
+  try {
+    const store = new Map()
+    const storage = {
+      alarm: null,
+      get: async (k) => (Array.isArray(k) ? new Map(k.filter((x) => store.has(x)).map((x) => [x, store.get(x)])) : store.get(k)),
+      put: async (k, v) => void store.set(k, structuredClone(v)),
+      delete: async (keys) => {
+        for (const k of [].concat(keys)) store.delete(k)
+      },
+      list: async ({ prefix = '' } = {}) => new Map([...store].filter(([k]) => k.startsWith(prefix))),
+      getAlarm: async () => storage.alarm,
+      setAlarm: async (t) => {
+        storage.alarm = t
+      },
+    }
+    const env = { TWITCH_CLIENT_ID: 'twitch-id', TWITCH_CLIENT_SECRET: 'twitch-secret' }
+    let object = new Twitch({ storage }, env)
+    env.TWITCH = { idFromName: (name) => name, get: () => object }
+    const go = async (logins, ip = '10.0.0.1', withEnv = env) => {
+      const response = await worker.fetch(new Request(`https://arcade.test/api/twitch?logins=${logins}`, { headers: { 'CF-Connecting-IP': ip } }), withEnv)
+      return { status: response.status, body: await response.json() }
+    }
+
+    // Неверный вопрос и Twitch не настроен
+    assert.equal((await go('bad%20name')).status, 400)
+    assert.deepEqual(await go('tsoding', '1.1.1.1', { ...env, TWITCH_CLIENT_SECRET: '' }), { status: 503, body: { error: 'off' } })
+    assert.equal(asked.length, 0)
+
+    // Первый вопрос: токен, каналы одним вопросом users, эфиры одним вопросом streams
+    const first = await go('myfriend,ghost_user')
+    assert.equal(first.status, 200)
+    assert.deepEqual(tokens, ['tok1'])
+    assert.deepEqual(asked.map((u) => u.pathname), ['/oauth2/token', '/helix/users', '/helix/streams'])
+    assert.deepEqual(first.body.channels, [
+      { login: 'myfriend', name: 'MyFriend', live: { title: 'myfriend is live', game: 'Software and Game Development', viewers: 10, since: Date.parse('2026-10-22T10:00:00Z'), mature: false } },
+    ], 'картинка не с CDN Twitch — без неё')
+    assert.deepEqual(first.body.missing, ['ghost_user'])
+    // Каталог: сначала эфиры (больше зрителей — выше), эфир 18+ и канал, которого нет, — мимо
+    const catalog = first.body.catalog
+    assert.deepEqual(catalog.slice(0, 2).map((c) => [c.login, c.live.viewers]), [['theprimeagen', 9000], ['tsoding', 500]])
+    assert.ok(!catalog.some((c) => c.login === 'vedal987' || missing.has(c.login)))
+    assert.equal(catalog.length, CATALOG.channels.length - 2)
+    assert.deepEqual(catalog.slice(2).map((c) => c.login), CATALOG.channels.map((c) => c.login).filter((l) => !['theprimeagen', 'tsoding', 'vedal987'].includes(l) && !missing.has(l)))
+    assert.ok(catalog.every((c) => c.topics.length && (c.live === null || c.live.viewers > 0)))
+    assert.match(catalog[0].avatar, /^https:\/\/static-cdn\.jtvnw\.net\//)
+
+    // Те же каналы с другого адреса в ту же минуту — из кеша, Twitch не спрашиваем
+    assert.deepEqual(await go('ghost_user,myfriend', '10.0.0.2'), { status: 200, body: first.body })
+    assert.equal(asked.length, 3)
+    // Через минуту — только эфиры; каналы и токен — из кеша
+    Date.now = () => realNow() + 61_000
+    live.myfriend = 0
+    delete live.tsoding
+    const later = await go('myfriend')
+    assert.deepEqual(asked.slice(3).map((u) => u.pathname), ['/helix/streams'])
+    assert.equal(later.body.channels[0].live.viewers, 0)
+    assert.equal(later.body.catalog.find((c) => c.login === 'tsoding').live, null)
+
+    // Новый объект (Cloudflare усыпил прежний) — каналы и токен из хранилища
+    object = new Twitch({ storage }, env)
+    Date.now = () => realNow() + 122_000
+    await go('myfriend')
+    assert.deepEqual(asked.slice(4).map((u) => u.pathname), ['/helix/streams'])
+    assert.deepEqual(tokens, ['tok1'])
+
+    // Токен перестал подходить — один раз берём новый, и дальше как обычно
+    Date.now = () => realNow() + 183_000
+    flags.expire = 1
+    assert.equal((await go('myfriend')).status, 200)
+    assert.deepEqual(tokens, ['tok1', 'tok2'])
+    // И новый не подходит — ключи приложения неверные
+    Date.now = () => realNow() + 244_000
+    flags.expire = 2
+    assert.deepEqual(await go('myfriend'), { status: 503, body: { error: 'keys' } })
+    flags.keys = true
+    object.access = null
+    store.delete('token')
+    Date.now = () => realNow() + 305_000
+    assert.deepEqual(await go('myfriend'), { status: 503, body: { error: 'keys' } })
+    flags.keys = false
+    flags.expire = 0
+    // Twitch не ответил — 502, а следующий вопрос снова идёт в Twitch
+    flags.down = true
+    assert.deepEqual(await go('myfriend'), { status: 502, body: { error: 'upstream' } })
+    flags.down = false
+    assert.equal((await go('myfriend')).status, 200)
+
+    // С одного адреса — не больше PER_IP_DAILY.logins новых каналов в сутки; адрес не хранится
+    const batch = (n) => Array.from({ length: 50 }, (_, i) => `spam${n}_${i}`).join(',')
+    for (let n = 0; n < PER_IP_DAILY.logins / 50; n++) assert.equal((await go(batch(n), '10.9.9.9')).status, 200)
+    assert.deepEqual(await go(batch(99), '10.9.9.9'), { status: 429, body: { error: 'limit' } })
+    assert.equal((await go(batch(99), '10.8.8.8')).status, 200, 'другой адрес — можно')
+    assert.equal((await go(batch(0), '10.9.9.9')).status, 200, 'уже известные каналы — не новые')
+    assert.ok([...store.keys()].every((k) => !k.includes('10.9.9.9')))
+
+    // Будильник раз в сутки убирает каналы, о которых давно не спрашивали
+    assert.ok(storage.alarm > realNow(), 'уборка назначена')
+    store.set('u:old_channel', { at: realNow() - USER_TTL_MS - 1, id: '1', name: 'old' })
+    await object.alarm()
+    assert.ok(!store.has('u:old_channel'))
+    assert.ok(store.has('u:myfriend') && store.has('u:ghost_user') && store.has('token'))
+  } finally {
+    globalThis.fetch = realFetch
+    Date.now = realNow
   }
 }
 

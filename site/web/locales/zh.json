@@ -67,6 +67,7 @@
   "Joining the round": "正在加入回合",
   "Link to this game": "本局链接",
   "Listen": "收听",
+  "Live": "直播中",
   "Loading the engine and maps…": "正在加载引擎和地图…",
   "Loading the game…": "正在加载游戏…",
   "Looking for an opponent…": "正在寻找对手…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "无法连接大厅",
   "No file selected.": "未选择文件。",
   "No games here yet.": "这里还没有游戏。",
+  "Offline": "未直播",
   "Online": "联网",
+  "Open on Twitch": "在 Twitch 上打开",
   "Open on YouTube": "在 YouTube 上打开",
   "Open the window again in a minute.": "请过一分钟再打开窗口。",
   "Open your files": "打开自己的文件",
@@ -130,9 +133,11 @@
   "The round is starting": "回合即将开始",
   "The video doesn't play here — open it on YouTube.": "视频无法在这里播放——请在 YouTube 上打开。",
   "The video has been removed or hidden.": "视频已被删除或隐藏。",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "地址中没有频道。频道由 Arcade 模组选择：/arcade → Twitch。",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "地址中没有视频。视频由 Arcade 模组挑选：/arcade → YouTube。",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "地址中没有文章。文章由 Arcade 模组挑选：/arcade → 文章。",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "地址中没有单集。单集由 Arcade 模组挑选：/arcade → 播客。",
+  "There is no such channel on Twitch": "Twitch 上没有这个频道",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "这些不是音频文件：可以用 MP3、M4A、M4B、OGG 或 Opus",
   "This audiobook is no longer in the browser — open your files again": "浏览器里已经没有这本有声书了 — 请重新打开你的文件",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "此浏览器不允许游戏捕获鼠标 —— 请用方向键转向。要用鼠标，请在普通浏览器窗口中运行游戏。",
@@ -292,7 +297,8 @@
   "level {0}": "{0} 级",
   "Computer · level {0}": "电脑 · {0} 级",
   "waiting: {0}": "等待中：{0}",
-  "listened {0}%": "已听 {0}%"
+  "listened {0}%": "已听 {0}%",
+  "viewers: {0}": "观众：{0}"
  },
  "words": [
   [

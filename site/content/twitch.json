@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "about": "Twitch channels for the Arcade catalog: English live streams about programming, tech, science and retro games. topics are direction ids from channels.json, the first one is the main. Channels that Twitch does not know are skipped by /api/twitch; live streams marked 18+ are not shown.",
+  "channels": [
+    { "login": "theprimeagen", "topics": ["tools", "langs"] },
+    { "login": "teej_dv", "topics": ["tools"] },
+    { "login": "bashbunni", "topics": ["tools", "langs"] },
+    { "login": "lcolonq", "topics": ["tools"] },
+    { "login": "tsoding", "topics": ["langs", "cs"] },
+    { "login": "anthonywritescode", "topics": ["langs", "tools"] },
+    { "login": "strager", "topics": ["langs", "cs"] },
+    { "login": "sphaerophoria", "topics": ["langs", "cs"] },
+    { "login": "melkey", "topics": ["backend", "langs"] },
+    { "login": "theo", "topics": ["web", "ai"] },
+    { "login": "codinggarden", "topics": ["web"] },
+    { "login": "trash_dev", "topics": ["web", "langs"] },
+    { "login": "kevinpowellcss", "topics": ["web", "design"] },
+    { "login": "vedal987", "topics": ["ai"] },
+    { "login": "j_blow", "topics": ["gamedev", "langs"] },
+    { "login": "togglebit", "topics": ["gamedev", "langs"] },
+    { "login": "unrealengine", "topics": ["gamedev"] },
+    { "login": "awsonair", "topics": ["devops"] },
+    { "login": "microsoftdeveloper", "topics": ["news", "tools"] },
+    { "login": "github", "topics": ["opensource", "tools"] },
+    { "login": "linustech", "topics": ["hardware", "news"] },
+    { "login": "nahamsec", "topics": ["security"] },
+    { "login": "nasa", "topics": ["space", "science"] },
+    { "login": "gamesdonequick", "topics": ["retro"] },
+    { "login": "esamarathon", "topics": ["retro"] },
+    { "login": "dwangoac", "topics": ["retro", "hardware"] }
+  ]
+}

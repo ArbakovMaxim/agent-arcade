@@ -67,6 +67,7 @@
   "Joining the round": "Dołączam do rundy",
   "Link to this game": "Link do tej partii",
   "Listen": "Słuchaj",
+  "Live": "Na żywo",
   "Loading the engine and maps…": "Wczytuję silnik i mapy…",
   "Loading the game…": "Wczytuję grę…",
   "Looking for an opponent…": "Szukam przeciwnika…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "Brak połączenia z lobby",
   "No file selected.": "Nie wybrano pliku.",
   "No games here yet.": "Nie ma tu jeszcze gier.",
+  "Offline": "Offline",
   "Online": "Online",
+  "Open on Twitch": "Otwórz na Twitchu",
   "Open on YouTube": "Otwórz w YouTube",
   "Open the window again in a minute.": "Otwórz okno ponownie za minutę.",
   "Open your files": "Otwórz własne pliki",
@@ -130,9 +133,11 @@
   "The round is starting": "Runda się zaczyna",
   "The video doesn't play here — open it on YouTube.": "Ten film nie odtwarza się tutaj — otwórz go w YouTube.",
   "The video has been removed or hidden.": "Film został usunięty lub ukryty.",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "W adresie nie ma kanałów. Kanały wybiera mod Arcade: /arcade → Twitch.",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "W adresie nie ma filmów. Wybór robi mod Arcade: /arcade → YouTube.",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "W adresie nie ma artykułu. Wybór robi mod Arcade: /arcade → Artykuły.",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "W adresie nie ma odcinka. Wybór robi mod Arcade: /arcade → Podcasty.",
+  "There is no such channel on Twitch": "Takiego kanału nie ma na Twitchu",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "To nie są pliki audio: pasują MP3, M4A, M4B, OGG lub Opus",
   "This audiobook is no longer in the browser — open your files again": "Tego audiobooka nie ma już w przeglądarce — otwórz swoje pliki jeszcze raz",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Ta przeglądarka nie pozwala grze przechwycić myszy — obracaj się strzałkami. Z myszą gra działa w zwykłym oknie przeglądarki.",
@@ -292,7 +297,8 @@
   "level {0}": "poziom {0}",
   "Computer · level {0}": "Komputer · poziom {0}",
   "waiting: {0}": "czeka: {0}",
-  "listened {0}%": "wysłuchano {0}%"
+  "listened {0}%": "wysłuchano {0}%",
+  "viewers: {0}": "widzowie: {0}"
  },
  "words": [
   [
