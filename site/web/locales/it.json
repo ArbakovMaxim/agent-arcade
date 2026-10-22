@@ -67,6 +67,7 @@
   "Joining the round": "Ingresso nel round",
   "Link to this game": "Link della partita",
   "Listen": "Ascolta",
+  "Live": "In diretta",
   "Loading the engine and maps…": "Caricamento del motore e delle mappe…",
   "Loading the game…": "Caricamento del gioco…",
   "Looking for an opponent…": "Ricerca di un avversario…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "Nessuna connessione con la lobby",
   "No file selected.": "Nessun file selezionato.",
   "No games here yet.": "Qui non ci sono ancora giochi.",
+  "Offline": "Offline",
   "Online": "Online",
+  "Open on Twitch": "Apri su Twitch",
   "Open on YouTube": "Apri su YouTube",
   "Open the window again in a minute.": "Riapri la finestra tra un minuto.",
   "Open your files": "Apri i tuoi file",
@@ -130,9 +133,11 @@
   "The round is starting": "Il round sta iniziando",
   "The video doesn't play here — open it on YouTube.": "Il video qui non parte — aprilo su YouTube.",
   "The video has been removed or hidden.": "Il video è stato rimosso o nascosto.",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "Nell’indirizzo non ci sono canali. I canali si scelgono nel mod Arcade: /arcade → Twitch.",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "Nell’indirizzo non ci sono video. La selezione la fa il mod Arcade: /arcade → YouTube.",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "Nell’indirizzo non c’è nessun articolo. La selezione la fa il mod Arcade: /arcade → Articoli.",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "Nell’indirizzo non c’è nessun episodio. La selezione la fa il mod Arcade: /arcade → Podcast.",
+  "There is no such channel on Twitch": "Questo canale non esiste su Twitch",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "Questi non sono file audio: vanno bene MP3, M4A, M4B, OGG o Opus",
   "This audiobook is no longer in the browser — open your files again": "Questo audiolibro non è più nel browser — riapri i tuoi file",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Questo browser non lascia che il gioco catturi il mouse: gira con le frecce. Con il mouse il gioco funziona in una normale finestra del browser.",
@@ -292,7 +297,8 @@
   "level {0}": "livello {0}",
   "Computer · level {0}": "Computer · livello {0}",
   "waiting: {0}": "in attesa: {0}",
-  "listened {0}%": "ascoltato al {0}%"
+  "listened {0}%": "ascoltato al {0}%",
+  "viewers: {0}": "spettatori: {0}"
  },
  "words": [
   [

@@ -67,6 +67,7 @@
   "Joining the round": "Raunda katılınıyor",
   "Link to this game": "Bu oyunun bağlantısı",
   "Listen": "Dinle",
+  "Live": "Yayında",
   "Loading the engine and maps…": "Motor ve haritalar yükleniyor…",
   "Loading the game…": "Oyun yükleniyor…",
   "Looking for an opponent…": "Rakip aranıyor…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "Lobiyle bağlantı yok",
   "No file selected.": "Dosya seçilmedi.",
   "No games here yet.": "Burada henüz oyun yok.",
+  "Offline": "Çevrimdışı",
   "Online": "Çevrim içi",
+  "Open on Twitch": "Twitch’te aç",
   "Open on YouTube": "YouTube’da aç",
   "Open the window again in a minute.": "Bir dakika sonra pencereyi yeniden aç.",
   "Open your files": "Kendi dosyalarını aç",
@@ -130,9 +133,11 @@
   "The round is starting": "Raunt başlıyor",
   "The video doesn't play here — open it on YouTube.": "Video burada oynatılamıyor — YouTube’da aç.",
   "The video has been removed or hidden.": "Video silinmiş ya da gizlenmiş.",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "Adreste kanal yok. Kanalları Arcade modu seçer: /arcade → Twitch.",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "Adreste video yok. Seçkiyi Arcade modu hazırlar: /arcade → YouTube.",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "Adreste makale yok. Seçkiyi Arcade modu hazırlar: /arcade → Makaleler.",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "Adreste bölüm yok. Seçkiyi Arcade modu hazırlar: /arcade → Podcast’ler.",
+  "There is no such channel on Twitch": "Twitch’te böyle bir kanal yok",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "Bunlar ses dosyası değil: MP3, M4A, M4B, OGG veya Opus olur",
   "This audiobook is no longer in the browser — open your files again": "Bu sesli kitap artık tarayıcıda yok — dosyalarını yeniden aç",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Bu tarayıcı oyunun fareyi yakalamasına izin vermiyor — ok tuşlarıyla dön. Fareyle oynamak için oyun normal bir tarayıcı penceresinde çalışır.",
@@ -292,7 +297,8 @@
   "level {0}": "seviye {0}",
   "Computer · level {0}": "Bilgisayar · seviye {0}",
   "waiting: {0}": "bekleyen: {0}",
-  "listened {0}%": "%{0} dinlendi"
+  "listened {0}%": "%{0} dinlendi",
+  "viewers: {0}": "izleyici: {0}"
  },
  "words": [
   [

@@ -67,6 +67,7 @@
   "Joining the round": "ラウンドに参加中",
   "Link to this game": "この対局へのリンク",
   "Listen": "聴く",
+  "Live": "配信中",
   "Loading the engine and maps…": "エンジンとマップを読み込み中…",
   "Loading the game…": "ゲームを読み込み中…",
   "Looking for an opponent…": "対戦相手を探しています…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "ロビーに接続できません",
   "No file selected.": "ファイルが選択されていません。",
   "No games here yet.": "まだゲームがありません。",
+  "Offline": "オフライン",
   "Online": "オンライン",
+  "Open on Twitch": "Twitch で開く",
   "Open on YouTube": "YouTube で開く",
   "Open the window again in a minute.": "1分ほどしてから、もう一度ウィンドウを開いてください。",
   "Open your files": "自分のファイルを開く",
@@ -130,9 +133,11 @@
   "The round is starting": "ラウンドが始まります",
   "The video doesn't play here — open it on YouTube.": "この動画はここでは再生できません。YouTube で開いてください。",
   "The video has been removed or hidden.": "動画は削除されたか、非公開になっています。",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "アドレスにチャンネルがありません。チャンネルは Arcade の mod で選びます：/arcade → Twitch。",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "アドレスに動画がありません。おすすめは Arcade の mod が選びます：/arcade → YouTube。",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "アドレスに記事がありません。おすすめは Arcade の mod が選びます：/arcade → 記事。",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "アドレスにエピソードがありません。おすすめは Arcade の mod が選びます：/arcade → ポッドキャスト。",
+  "There is no such channel on Twitch": "そのチャンネルは Twitch にありません",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "音声ファイルではありません：MP3、M4A、M4B、OGG、Opus が使えます",
   "This audiobook is no longer in the browser — open your files again": "このオーディオブックはもうブラウザにありません — もう一度ファイルを開いてください",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "このブラウザーではゲームがマウスをキャプチャできません — 矢印キーで向きを変えてください。マウスで遊ぶには通常のブラウザーウィンドウで開きます。",
@@ -292,7 +297,8 @@
   "level {0}": "レベル {0}",
   "Computer · level {0}": "CPU · レベル {0}",
   "waiting: {0}": "待機中：{0}",
-  "listened {0}%": "{0}%再生済み"
+  "listened {0}%": "{0}%再生済み",
+  "viewers: {0}": "視聴者：{0}"
  },
  "words": [
   [

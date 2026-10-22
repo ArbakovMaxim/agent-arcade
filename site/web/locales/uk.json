@@ -67,6 +67,7 @@
   "Joining the round": "Підключаюся до раунду",
   "Link to this game": "Посилання на партію",
   "Listen": "Слухати",
+  "Live": "В ефірі",
   "Loading the engine and maps…": "Завантажую рушій і карти…",
   "Loading the game…": "Завантажую гру…",
   "Looking for an opponent…": "Шукаю суперника…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "Немає зв’язку з лобі",
   "No file selected.": "Файл не вибрано.",
   "No games here yet.": "Тут поки немає ігор.",
+  "Offline": "Не в ефірі",
   "Online": "Онлайн",
+  "Open on Twitch": "Відкрити на Twitch",
   "Open on YouTube": "Відкрити на YouTube",
   "Open the window again in a minute.": "Відкрий вікно ще раз за хвилину.",
   "Open your files": "Відкрити свої файли",
@@ -130,9 +133,11 @@
   "The round is starting": "Раунд починається",
   "The video doesn't play here — open it on YouTube.": "Відео тут не відтворюється — відкрий його на YouTube.",
   "The video has been removed or hidden.": "Відео видалено або приховано.",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "В адресі немає каналів. Канали вибирає мод Arcade: /arcade → Twitch.",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "В адресі немає відео. Добірку робить мод Arcade: /arcade → YouTube.",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "В адресі немає статті. Добірку робить мод Arcade: /arcade → Статті.",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "В адресі немає випуску. Добірку робить мод Arcade: /arcade → Подкасти.",
+  "There is no such channel on Twitch": "Такого каналу немає на Twitch",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "Це не аудіофайли: підійдуть MP3, M4A, M4B, OGG або Opus",
   "This audiobook is no longer in the browser — open your files again": "Цієї аудіокниги в браузері вже немає — відкрий свої файли ще раз",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Цей браузер не дає грі захопити мишу — повертай стрілками. З мишею гра йде у звичайному вікні браузера.",
@@ -292,7 +297,8 @@
   "level {0}": "сила {0}",
   "Computer · level {0}": "Комп’ютер · сила {0}",
   "waiting: {0}": "чекають: {0}",
-  "listened {0}%": "прослухано {0}%"
+  "listened {0}%": "прослухано {0}%",
+  "viewers: {0}": "глядачі: {0}"
  },
  "words": [
   [

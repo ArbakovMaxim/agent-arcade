@@ -8,6 +8,7 @@ import { LANGS, LANG_NAMES, detectLang, isKept, keep, tr, translateTree } from '
 import { bundledChannels, candidates, channelsFor, clean, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoBlurb, videoMeta, videoStats, watchUrl, PICKS } from './youtube.js'
 import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from './rss.js'
 import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
+import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
@@ -160,6 +161,10 @@ let myTopics = []
 let ownNote = { kind: '', text: '' }
 let ownRequest = 0
 const searchCache = new Map() // «youtube:запрос» → { at, found }: поиск сайта по своей теме — не чаще SEARCH_TTL_MS
+// Twitch: свои каналы (из $.store), что сайт знает о каналах (логин → { name, avatar, live }), каких каналов нет на
+// Twitch, каталог Arcade; at — когда спрашивали сайт, error — что ответил сайт, note — заметка под полем «Добавить
+// канал»; request — номер последнего вопроса: ответ старого вопроса, пришедший позже нового, не нужен
+let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loading: false, error: '', note: '', request: 0 }
 
 function consoles() {
   return catalog.consoles
@@ -184,7 +189,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -203,6 +208,8 @@ function iconSvg(kind) {
     play: `<rect x="6" y="12" width="36" height="24" rx="8" fill="${c}"/><path d="M20 18v12l10-6z" fill="#fff"/>`,
     doc: `<path d="M13 7h15l9 9v25H13z" fill="${c}"/><path d="M28 7v9h9" fill="#fff" opacity=".35"/><path d="M18 23h14M18 28h14M18 33h10" stroke="#fff" stroke-width="2.5"/>`,
     mic: `<rect x="18" y="7" width="12" height="21" rx="6" fill="${c}"/><path d="M12 22a12 12 0 0 0 24 0" stroke="${c}" stroke-width="3" fill="none"/><path d="M24 34v7M17 41h14" stroke="${c}" stroke-width="3"/>`,
+    // Трансляции: экран с антенной и точкой эфира
+    tv: `<rect x="7" y="14" width="34" height="23" rx="5" fill="${c}"/><path d="M18 6l6 8 6-8" stroke="${c}" stroke-width="3" fill="none"/><circle cx="16" cy="25.5" r="3.5" fill="#fff"/><path d="M24 23h11M24 28h8" stroke="#fff" stroke-width="2.5"/>`,
     // Жанры игр: прицел, клетчатый флаг, ладья, компас, кубик
     target: `<circle cx="24" cy="24" r="13" fill="none" stroke="${c}" stroke-width="4"/><circle cx="24" cy="24" r="4" fill="${c}"/><path d="M24 5v10M24 33v10M5 24h10M33 24h10" stroke="${c}" stroke-width="3"/>`,
     flag: `<rect x="10" y="8" width="3" height="33" rx="1.5" fill="#ddd"/><rect x="13" y="9" width="26" height="18" fill="${c}"/><path d="M13 9h6.5v6H13zM26 9h6.5v6H26zM19.5 15H26v6h-6.5zM32.5 15H39v6h-6.5zM13 21h6.5v6H13zM26 21h6.5v6H26z" fill="#fff"/>`,
@@ -210,7 +217,7 @@ function iconSvg(kind) {
     compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -725,6 +732,8 @@ function windowUrl(id) {
   // article:<номер> — переход к статье через страницу /read, episode:<номер> — выпуск подкаста на странице /listen
   if (typeof id === 'string' && id.startsWith('article:')) return readUrl(reads.articles.items[Number(id.slice(8)) || 0], lang)
   if (typeof id === 'string' && id.startsWith('episode:')) return listenUrl(reads.podcasts.items[Number(id.slice(8)) || 0], lang)
+  // live:<логин> — страница /live с плеером Twitch; в списке рядом — свои каналы, если канал свой, иначе каталог
+  if (typeof id === 'string' && id.startsWith('live:')) return liveUrl(twitchList(id.slice(5)), id.slice(5), lang)
   let url
   // tab:<вкладка> или tab:<группа>:<полка>
   if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(...id.slice(4).split(':'))
@@ -758,6 +767,7 @@ function launchNotice(result, id) {
     if (typeof id === 'string' && id.startsWith('video:')) return `Видео открыто в ${where}.`
     if (typeof id === 'string' && id.startsWith('article:')) return `Статья открыта в ${where}.`
     if (typeof id === 'string' && id.startsWith('episode:')) return `Выпуск открыт в ${where}.`
+    if (typeof id === 'string' && id.startsWith('live:')) return `Трансляция открыта в ${where}.`
     return id
       ? `${title} открыт в ${where}. Игра стоит на паузе, пока окно не в фокусе.`
       : `Arcade открыт в ${where}: выбирай приставку и игру.`
@@ -948,9 +958,9 @@ async function askClaude($, url, submit, then) {
 function desktopNotice($, outcome, opened, url) {
   // Адрес для ручной просьбы не убираем через 15 секунд: его ещё надо переписать. Ожидание — пока не кончится
   // инструмент агента или сжатие, сколько бы они ни шли
-  // Что открывается: видео, статья или выпуск (о них — «ссылка») или игра
+  // Что открывается: видео (и трансляция), статья или выпуск (о них — «ссылка») или игра
   const page = (path) => String(url).startsWith(`${SITE}/${path}`)
-  const kind = page('watch') ? 'video' : page('read') || page('listen') ? 'link' : 'game'
+  const kind = page('watch') || page('live') ? 'video' : page('read') || page('listen') ? 'link' : 'game'
   const pick = (video, link, game) => ({ video, link, game })[kind]
   if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
   else if (outcome === 'waiting')
@@ -1155,6 +1165,101 @@ async function forgetTopics($) {
   } catch (err) {
     log(`свои темы не стёрты: ${String(err?.message ?? err).slice(0, 200)}`)
   }
+}
+
+// --- Twitch: свои каналы и каталог Arcade ---------------------------------------------------------------------------
+const TWITCH_TTL_MS = 60_000 // кто в эфире, спрашиваем сайт не чаще раза в минуту — сайт и сам помнит ответ Twitch минуту
+const TWITCH_FETCH_MS = 10_000 // сколько ждать сайт: ему самому надо спросить Twitch
+
+// Почему про эфиры не узнать: ключи Twitch у сайта неверные или их нет, лимит, сайт не ответил
+function twitchNote(error) {
+  if (error === 'keys') return 'Twitch не принял ключи сайта Arcade — эфиры пока не показать.'
+  if (error === 'off') return 'Twitch на сайте Arcade ещё не настроен — эфиры пока не показать.'
+  if (error === 'limit') return 'Вопросы к Twitch на сегодня исчерпаны — попробуй завтра.'
+  if (error) return 'Сайт Arcade не ответил про эфиры Twitch. Попробуй чуть позже.'
+  return ''
+}
+
+// Что сайт сказал о каналах logins — поверх прежнего: эфиры других каналов не теряются
+function rememberTwitch(logins, found) {
+  for (const login of logins) {
+    delete tw.info[login]
+    tw.missing.delete(login)
+  }
+  for (const c of found.channels) tw.info[c.login] = c
+  for (const login of found.missing) tw.missing.add(login)
+}
+
+// Кто в эфире: свои каналы и каталог — одним вопросом к сайту. force — «Обновить»: минуту не ждём
+async function loadTwitch($, force = false) {
+  const now = await $.clock.now()
+  if (tw.loading || (!force && !tw.error && tw.at && now - tw.at < TWITCH_TTL_MS)) return
+  const request = ++tw.request
+  const logins = tw.channels.map((c) => c.login)
+  tw.loading = true
+  $.ui.invalidate('ui.render')
+  const found = parseTwitch(await fetchWithin($, twitchUrl(logins), TWITCH_FETCH_MS))
+  if (request !== tw.request) return
+  tw.loading = false
+  tw.error = found.error
+  if (found.error) log(`twitch: ${found.error}`)
+  else {
+    tw.at = now
+    rememberTwitch(logins, found)
+    tw.catalog = found.catalog
+  }
+  $.ui.invalidate('ui.render')
+}
+
+async function saveChannels($) {
+  try {
+    await $.store.set('twitchChannels', tw.channels)
+  } catch (err) {
+    log(`каналы Twitch не сохранены: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+}
+
+// «Добавить канал»: имя или ссылка на twitch.tv; сайт проверяет, что канал есть. Канал встаёт первым в «Моих каналах»
+let addingChannel = 0
+async function addChannel($, value) {
+  const say = (note) => {
+    tw.note = note
+    $.ui.invalidate('ui.render')
+  }
+  const login = twitchLogin(value)
+  if (!login) return say('Напиши имя канала Twitch или ссылку на него — например, twitch.tv/tsoding.')
+  if (!tw.channels.some((c) => c.login === login) && tw.channels.length >= MY_CHANNELS) return say('Своих каналов уже 20 — сначала убери какой-нибудь.')
+  const request = ++addingChannel
+  say('Ищу канал на Twitch…')
+  const found = parseTwitch(await fetchWithin($, twitchUrl([login]), TWITCH_FETCH_MS))
+  if (request !== addingChannel) return
+  if (found.error) return say(twitchNote(found.error))
+  rememberTwitch([login], found)
+  const channel = found.channels.find((c) => c.login === login)
+  if (!channel) return say('Такого канала нет на Twitch — проверь имя.')
+  tw.channels = rememberChannel(tw.channels, { login, name: channel.name })
+  say(`Канал добавлен: ${channel.name}.`)
+  await saveChannels($)
+}
+
+// «Убрать канал»: из «Моих каналов» и из $.store
+async function removeChannel($, login) {
+  const gone = tw.channels.find((c) => c.login === login)
+  if (!gone) return
+  tw.channels = tw.channels.filter((c) => c.login !== login)
+  tw.note = `Канал убран: ${tw.info[login]?.name ?? gone.name}.`
+  if (!tw.channels.length && menu === 'twitch:remove') {
+    menuFrom = menu
+    menu = 'twitch'
+  }
+  $.ui.invalidate('ui.render')
+  await saveChannels($)
+}
+
+// Каналы для списка страницы /live: свои — если канал свой, иначе каталог; порядок — как в меню
+function twitchList(login) {
+  const own = liveFirst(tw.channels, tw.info).map((c) => c.login)
+  return own.includes(login) ? own : tw.catalog.map((c) => c.login)
 }
 
 // Темы: haiku читает последнюю работу агента; работы ещё нет или модель не ответила — темы по умолчанию
@@ -1407,6 +1512,7 @@ function libraryTitle() {
   if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
   if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
   if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
+  if (menu === 'twitch' || menu.startsWith('twitch:')) return 'Arcade · Twitch'
   if (menu.startsWith('genre:')) return `Arcade · ${shelfView(`shelf:${menu.split(':')[1]}`)?.title ?? ''} · ${genreLabel(menu.split(':').slice(2).join(':'))}`
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
@@ -1484,6 +1590,7 @@ export function register(on) {
       if (SIGNAL_MODES.includes(storedPermission)) onPermission = storedPermission
       mine = restoreMine(await $.store.get('mine'))
       myTopics = restoreMyTopics(await $.store.get('myTopics'))
+      tw.channels = restoreTwitch(await $.store.get('twitchChannels'))
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
         sep = home.includes('\\') ? '\\' : '/'
@@ -2143,7 +2250,8 @@ export function register(on) {
           .replace(/^yt-.+$/, 'youtube')
           .replace(/^ar-.+$/, 'articles')
           .replace(/^pc-.+$/, 'podcasts')
-        const alts = { youtube: 'YouTube', articles: 'Статьи', podcasts: 'Подкасты' }
+          .replace(/^tw-.+$/, 'twitch')
+        const alts = { youtube: 'YouTube', articles: 'Статьи', podcasts: 'Подкасты', twitch: 'Twitch' }
         return Svg({ source: iconSvg(kind), alt: alts[kind] ?? (label || kind), width: 36, height: 36 })
       }
       // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
@@ -2517,6 +2625,93 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
+      } else if (menu === 'twitch' || menu.startsWith('twitch:')) {
+        // Twitch: свои каналы, кто из каталога в эфире, весь каталог по направлениям, «Убрать канал». Имена каналов,
+        // названия эфиров и игр — как на Twitch, без перевода (keep); подпись «в эфире…» переводим здесь
+        const builtin = builtinBrowser(e.surface)
+        const watch = async (login) => {
+          const id = `live:${login}`
+          if (builtin) return desktopWindow($, id, 'Трансляция открыта во встроенном браузере Claude.')
+          if (!platform) {
+            libraryNotice = `Трансляция: https://www.twitch.tv/${login}`
+            $.ui.invalidate('ui.render')
+            return
+          }
+          libraryNotice = 'Открываю окно…'
+          $.ui.invalidate('ui.render')
+          const command = windowCommand(id)
+          try {
+            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+            windowNotice($, launchNotice(result, id))
+            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+          } catch (err) {
+            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+          }
+          $.ui.invalidate('ui.render')
+        }
+        // Плитка канала: имя — кнопкой, под ним — эфир (игра, зрители) и его название
+        const channelTile = (key, c, info, missing, focus) => {
+          const status = tr(liveStatus(info, missing, lang), lang)
+          const note = [status, info?.live?.title].filter(Boolean).join(' — ')
+          return [keep(Button({ key, label: info?.name ?? c.name, ...(focus ? { autoFocus: true } : {}), onPress: () => watch(c.login) })), keep(dim(`  ${note}`))]
+        }
+        const column = (list) => (desktop ? tiles(list, 44) : Box({ flexDirection: 'column', children: list }))
+        const where = builtin || platform ? [gap, dim(`Трансляции открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)] : []
+        const trouble = tw.error ? [gap, dim(twitchNote(tw.error))] : []
+        const waiting = tw.loading && !tw.at ? [Text({ children: ['Спрашиваю Twitch, кто в эфире…'] })] : []
+        const toList = Button({ key: 'arcade-back', label: '← Назад', onPress: open('twitch') })
+        if (menu === 'twitch:catalog') {
+          // Весь каталог: по направлениям, в каждом — сначала эфиры
+          const groups = Object.keys(TOPIC_TITLES)
+            .map((t) => [t, tw.catalog.filter((c) => c.topics[0] === t)])
+            .filter(([, list]) => list.length)
+          items = [
+            toList,
+            gap,
+            dim('Каталог Arcade: эфиры о программировании, технике, науке и ретро-играх, по-английски. Каналы 18+ не показываем.'),
+            ...waiting,
+            ...groups.flatMap(([t, list], g) => [section(TOPIC_TITLES[t]), column(list.flatMap((c, k) => channelTile(`arcade-tw-cat-${c.login}`, c, c, false, g === 0 && k === 0)))]),
+            ...trouble,
+            ...where,
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (menu === 'twitch:remove') {
+          items = [
+            toList,
+            gap,
+            dim('Какой канал убрать из «Моих каналов»?'),
+            gap,
+            ...tw.channels.map((c, k) => keep(Button({ key: `arcade-tw-remove-${c.login}`, label: tw.info[c.login]?.name ?? c.name, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => removeChannel($, c.login) }))),
+            ...(tw.note ? [gap, dim(tw.note)] : []),
+            ...hint,
+          ]
+        } else {
+          const from = menuFrom?.startsWith('twitch:') ? menuFrom : ''
+          const myTiles = liveFirst(tw.channels, tw.info).flatMap((c, k) => channelTile(`arcade-tw-my-${c.login}`, c, tw.info[c.login], tw.missing.has(c.login), !from && k === 0))
+          const onAir = tw.catalog.filter((c) => c.live).slice(0, 8)
+          const airTiles = onAir.flatMap((c, k) => channelTile(`arcade-tw-cat-${c.login}`, c, c, false, !from && !myTiles.length && k === 0))
+          items = [
+            back,
+            gap,
+            dim('Свои каналы и каталог Arcade. Регистрация не нужна: свои каналы хранятся только у тебя.'),
+            section('Мои каналы'),
+            ...(myTiles.length ? [column(myTiles)] : [dim('Своих каналов пока нет — добавь любой канал Twitch по имени или ссылке.')]),
+            gap,
+            Input({ key: 'arcade-twitch-add', label: 'Добавить канал', placeholder: 'имя канала или ссылка twitch.tv/…', onSubmit: (value) => addChannel($, value) }),
+            dim(tw.note || 'Например, tsoding или https://www.twitch.tv/tsoding'),
+            ...(tw.channels.length ? [gap, Button({ key: 'arcade-tw-remove', label: 'Убрать канал', ...(from === 'twitch:remove' ? { autoFocus: true } : {}), onPress: open('twitch:remove') })] : []),
+            section('Сейчас в эфире'),
+            ...(waiting.length ? waiting : airTiles.length ? [column(airTiles)] : tw.error ? [] : [dim('Из каталога сейчас никто не в эфире.')]),
+            gap,
+            Button({ key: 'arcade-tw-catalog', label: 'Весь каталог', ...(from === 'twitch:catalog' ? { autoFocus: true } : {}), onPress: open('twitch:catalog') }),
+            Button({ key: 'arcade-tw-refresh', label: tw.loading ? 'Обновляю…' : 'Обновить', onPress: () => loadTwitch($, true) }),
+            ...trouble,
+            ...where,
+            ...noticeLines,
+            ...hint,
+          ]
+        }
       } else if (menu === 'articles' || menu === 'podcasts') {
         // Статьи и подкасты: темы — те же, что у YouTube, подборка — своя. Названия, которые придумала модель, — уже на
         // языке интерфейса (keep)
@@ -2827,7 +3022,20 @@ export function register(on) {
             ...topicTile('podcasts', 'Подкасты', '  свежие выпуски подкастов по теме работы агента'),
           ]),
           section('Смотреть'),
-          tiles(topicTile('youtube', 'YouTube', '  свежие видео по теме работы агента')),
+          tiles([
+            ...topicTile('youtube', 'YouTube', '  свежие видео по теме работы агента'),
+            Button({
+              key: 'arcade-menu-twitch',
+              label: 'Twitch',
+              ...(menuFrom === 'twitch' ? { autoFocus: true } : {}),
+              onPress: () => {
+                tw.note = ''
+                open('twitch')()
+                loadTwitch($)
+              },
+            }),
+            dim('  свои каналы и эфиры о программировании, технике и ретро-играх'),
+          ]),
           section('Ещё'),
           tiles([
           ...(windowMode() || e.surface === 'desktop'

@@ -12,6 +12,7 @@ import { createFlappy } from '../hooks/flappy.js'
 import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed, parseTopics, videoBlurb, watchUrl } from '../hooks/youtube.js'
 import { bundledFeeds, durationSeconds, durationText, hostOf, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from '../hooks/rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from '../hooks/search.js'
+import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from '../hooks/twitch.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -3339,4 +3340,234 @@ test('search.js: просьба и разбор своей темы, «Мои т
   // Ссылки из поиска: /read и /listen несут подпись сайта, /listen — ещё и название шоу
   expect(readUrl({ link: 'https://a.example.org/t', s: SIG.article }, 'ru')).toBe(`${SITE}/read#u=${encodeURIComponent('https://a.example.org/t')}&s=${SIG.article}`)
   expect(listenUrl({ feed: 'it1', channel: 'Pod & Co', s: SIG.show, audio: 'https://cdn.example.net/a.mp3', title: 'A' }, 'en')).toBe(`${SITE}/listen?lang=en#f=it1&n=Pod%20%26%20Co&s=${SIG.show}&u=https%3A%2F%2Fcdn.example.net%2Fa.mp3&t=A`)
+})
+
+// Twitch: каталог Arcade, который отдаёт сайт (он уже ставит эфиры первыми); канал 18+ мод не показывает
+const TW_CATALOG = [
+  { login: 'retroboi', name: 'RetroBoi', topics: ['retro'], live: { title: 'NES homebrew night', game: 'Retro', viewers: 1234 } },
+  { login: 'spicy', name: 'Spicy', topics: ['gamedev'], live: { title: 'x', game: 'y', viewers: 9000, mature: true } },
+  { login: 'agentsdev', name: 'AgentsDev', topics: ['ai'], live: { title: 'Building agents', game: 'Software and Game Development', viewers: 300 } },
+  { login: 'quietcoder', name: 'QuietCoder', topics: ['ai'], live: null },
+]
+const twAnswer = (channels: any[] = [], missing: string[] = []) => JSON.stringify({ channels, missing, catalog: TW_CATALOG })
+const NIGHTCODER = { login: 'nightcoder', name: 'NightCoder', live: { title: 'Rust at night', game: 'Software and Game Development', viewers: 42 } }
+const fromTwitch = (urls: string[]) => urls.filter((u) => u.startsWith(`${SITE}/api/twitch`))
+const twButtons = async (ui: any, prefix: string) => (await ui.findAll({ type: 'Button' })).map((b: any) => b.key).filter((k: any) => typeof k === 'string' && k.startsWith(prefix))
+
+test('Twitch: свои каналы — эфиры первыми, каталог без 18+, трансляция — окном браузера, минуту сайт не спрашиваем', async ($, on) => {
+  const stored = { twitchChannels: [{ login: 'tsoding', name: 'tsoding' }, { login: 'nightcoder', name: 'nightcoder' }, { login: 'gone_one', name: 'gone_one' }, { login: 'Bad Name', name: 'x' }] }
+  const files = { 'api/twitch?logins=tsoding,nightcoder,gone_one': twAnswer([{ login: 'tsoding', name: 'TsodingDaily', live: null }, NIGHTCODER], ['gone_one']) }
+  const { clock, launches, fetches } = stubs(on, { env: WINDOWS, files, stored })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-menu-twitch' })).toMatchObject({ props: { label: 'Twitch' } })
+  expect(await ui.find({ type: 'Text', text: '  свои каналы и эфиры о программировании, технике и ретро-играх' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-twitch' })
+  expect(fromTwitch(fetches)).toEqual([`${SITE}/api/twitch?logins=tsoding,nightcoder,gone_one`]) // кривое имя из хранилища пропущено
+  // Мои каналы: эфир — первым, дальше — в своём порядке; имена — как на Twitch
+  expect(await twButtons(ui, 'arcade-tw-my-')).toEqual(['arcade-tw-my-nightcoder', 'arcade-tw-my-tsoding', 'arcade-tw-my-gone_one'])
+  expect(await ui.find({ key: 'arcade-tw-my-nightcoder' })).toMatchObject({ props: { label: 'NightCoder', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-tw-my-tsoding' })).toMatchObject({ props: { label: 'TsodingDaily' } })
+  expect(await ui.find({ type: 'Text', text: '  в эфире · Software and Game Development · зрители: 42 — Rust at night' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  не в эфире' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  такого канала нет на Twitch' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-tw-remove' })).toBeDefined()
+  // Сейчас в эфире — только эфиры каталога; канал 18+ не показываем
+  expect(await twButtons(ui, 'arcade-tw-cat-')).toEqual(['arcade-tw-cat-retroboi', 'arcade-tw-cat-agentsdev'])
+  expect(await ui.find({ type: 'Text', text: /^ {2}в эфире · Retro · зрители: .+ — NES homebrew night$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Из каталога сейчас никто не в эфире.' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Трансляции открываются в окне браузера по умолчанию (Google Chrome).' })).toBeDefined()
+  // Свой канал: страница /live со своими каналами в том же порядке
+  await ui.press({ key: 'arcade-tw-my-tsoding' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/live#c=nightcoder,tsoding,gone_one&i=1`)
+  expect(await ui.find({ type: 'Text', text: 'Трансляция открыта в Google Chrome.' })).toBeDefined()
+  // Канал каталога: рядом — каталог
+  await ui.press({ key: 'arcade-tw-cat-retroboi' })
+  expect(launches[1].env.ARCADE_URL).toBe(`${SITE}/live#c=retroboi,agentsdev,quietcoder&i=0`)
+  // Весь каталог: направления по порядку, в каждом — сначала эфиры
+  await ui.press({ key: 'arcade-tw-catalog' })
+  expect(await ui.find({ type: 'Text', text: /^Каталог Arcade: эфиры о программировании/ })).toBeDefined()
+  expect(await twButtons(ui, 'arcade-tw-cat-')).toEqual(['arcade-tw-cat-agentsdev', 'arcade-tw-cat-quietcoder', 'arcade-tw-cat-retroboi'])
+  expect(await ui.find({ type: 'Text', text: 'Искусственный интеллект' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Ретро-игры и ретро-компьютеры' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Разработка игр' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-tw-cat-agentsdev' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-tw-catalog' })).toMatchObject({ props: { autoFocus: true } }) // фокус там, откуда вернулись
+  // «Обновить» спрашивает сайт сразу; вход в Twitch — не чаще раза в минуту
+  await ui.press({ key: 'arcade-tw-refresh' })
+  expect(fromTwitch(fetches).length).toBe(2)
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-twitch' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-menu-twitch' })
+  expect(fromTwitch(fetches).length).toBe(2)
+  await ui.unmount()
+})
+
+test('Twitch: добавить канал по имени или ссылке — сайт проверяет, что он есть; убрать канал', async ($, on) => {
+  const files = {
+    'api/twitch?logins=': twAnswer(),
+    'api/twitch?logins=tsoding': twAnswer([{ login: 'tsoding', name: 'Tsoding', live: { title: 'Making a game in C', game: '', viewers: 7 } }]),
+    'api/twitch?logins=nobody_here': twAnswer([], ['nobody_here']),
+  }
+  const { clock, fetches, saved } = stubs(on, { env: WINDOWS, files })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-twitch' })
+  expect(await ui.find({ type: 'Text', text: 'Своих каналов пока нет — добавь любой канал Twitch по имени или ссылке.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Например, tsoding или https://www.twitch.tv/tsoding' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-twitch-add' })).toMatchObject({ props: { label: 'Добавить канал', placeholder: 'имя канала или ссылка twitch.tv/…' } })
+  expect(await ui.find({ key: 'arcade-tw-remove' })).toBeUndefined()
+  // Ссылка не на канал — сайт не спрашиваем
+  await ui.input({ key: 'arcade-twitch-add', text: 'twitch.tv/directory', kind: 'submit' })
+  expect(await ui.find({ type: 'Text', text: 'Напиши имя канала Twitch или ссылку на него — например, twitch.tv/tsoding.' })).toBeDefined()
+  expect(fromTwitch(fetches).length).toBe(1)
+  // Канала нет на Twitch — не сохраняем
+  await ui.input({ key: 'arcade-twitch-add', text: 'nobody_here', kind: 'submit' })
+  expect(await ui.find({ type: 'Text', text: 'Такого канала нет на Twitch — проверь имя.' })).toBeDefined()
+  expect(saved.get('twitchChannels')).toBeUndefined()
+  // Ссылка на канал: логин — из неё, имя — как на Twitch; канал сохранён и сразу видно, что он в эфире
+  await ui.input({ key: 'arcade-twitch-add', text: 'https://www.twitch.tv/Tsoding?sr=a', kind: 'submit' })
+  expect(fromTwitch(fetches).at(-1)).toBe(`${SITE}/api/twitch?logins=tsoding`)
+  expect(await ui.find({ type: 'Text', text: 'Канал добавлен: Tsoding.' })).toBeDefined()
+  expect(saved.get('twitchChannels')).toEqual([{ login: 'tsoding', name: 'Tsoding' }])
+  expect(await ui.find({ key: 'arcade-tw-my-tsoding' })).toMatchObject({ props: { label: 'Tsoding' } })
+  expect(await ui.find({ type: 'Text', text: '  в эфире · зрители: 7 — Making a game in C' })).toBeDefined()
+  // Убрать: последний канал убран — назад к списку
+  await ui.press({ key: 'arcade-tw-remove' })
+  expect(await ui.find({ type: 'Text', text: 'Какой канал убрать из «Моих каналов»?' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-tw-remove-tsoding' })).toMatchObject({ props: { label: 'Tsoding', autoFocus: true } })
+  await ui.press({ key: 'arcade-tw-remove-tsoding' })
+  expect(saved.get('twitchChannels')).toEqual([])
+  expect(await ui.find({ key: 'arcade-twitch-add' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Канал убран: Tsoding.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-tw-my-tsoding' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-tw-remove' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Twitch: сайт не ответил — понятное сообщение; своих каналов не больше 20; без ОС — ссылка текстом', async ($, on) => {
+  const twitchChannels = Array.from({ length: 20 }, (_, k) => ({ login: `chan_${String(k).padStart(2, '0')}`, name: `Chan ${k}` }))
+  const { fetches } = stubs(on, { site: null, stored: { twitchChannels } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-twitch' })
+  expect(await ui.find({ type: 'Text', text: 'Сайт Arcade не ответил про эфиры Twitch. Попробуй чуть позже.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Из каталога сейчас никто не в эфире.' })).toBeUndefined()
+  expect((await twButtons(ui, 'arcade-tw-my-')).length).toBe(20)
+  await ui.input({ key: 'arcade-twitch-add', text: 'newcomer', kind: 'submit' })
+  expect(await ui.find({ type: 'Text', text: 'Своих каналов уже 20 — сначала убери какой-нибудь.' })).toBeDefined()
+  expect(fromTwitch(fetches).some((u) => u.includes('newcomer'))).toBe(false)
+  // Окна браузера нет — ссылка на канал текстом
+  await ui.press({ key: 'arcade-tw-my-chan_00' })
+  expect(await ui.find({ type: 'Text', text: 'Трансляция: https://www.twitch.tv/chan_00' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /Трансляции открываются/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Twitch в Desktop на английском: подписи переведены, трансляция — во встроенном браузере', async ($, on) => {
+  const stored = { twitchChannels: [{ login: 'tsoding', name: 'tsoding' }, { login: 'nightcoder', name: 'nightcoder' }] }
+  const files = { 'api/twitch?logins=tsoding,nightcoder': twAnswer([{ login: 'tsoding', name: 'Tsoding', live: null }, NIGHTCODER]) }
+  const { browserCalls, launches } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, files, stored, browser: 'ok' })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'your channels and streams about coding, tech and retro games' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-twitch' })
+  expect(await ui.find({ type: 'Text', text: 'My channels' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Live now' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'live · Software and Game Development · viewers: 42 — Rust at night' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'offline' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-twitch-add' })).toMatchObject({ props: { label: 'Add a channel', placeholder: 'channel name or a twitch.tv/… link' } })
+  expect(await ui.find({ type: 'Text', text: "Streams open in Claude's built-in browser." })).toBeDefined()
+  await ui.press({ key: 'arcade-tw-my-nightcoder' })
+  expect(browserCalls[0]).toMatchObject({ server: 'Claude_Browser', tool: 'preview_start', args: { url: `${SITE}/live?lang=en#c=nightcoder,tsoding&i=0` } })
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Text', text: "The stream is open in Claude's built-in browser." })).toBeDefined()
+  await ui.unmount()
+})
+
+test('twitch.js: имя канала из ссылки, свои каналы, ответ сайта, порядок, подпись и адрес страницы /live', () => {
+  // Имя, @имя и ссылка на канал; адреса twitch.tv, которые не каналы, и кривые имена — нет
+  expect(twitchLogin('tsoding')).toBe('tsoding')
+  expect(twitchLogin('  @Tsoding ')).toBe('tsoding')
+  expect(twitchLogin('https://www.twitch.tv/Tsoding')).toBe('tsoding')
+  expect(twitchLogin('twitch.tv/tsoding/')).toBe('tsoding')
+  expect(twitchLogin('m.twitch.tv/some_one?sr=a#x')).toBe('some_one')
+  expect(twitchLogin('http://twitch.tv/directory')).toBeNull()
+  expect(twitchLogin('https://www.twitch.tv/videos/123')).toBeNull()
+  expect(twitchLogin('https://youtube.com/tsoding')).toBeNull()
+  for (const bad of ['a', '_abc', 'two words', '', null]) expect(twitchLogin(bad)).toBeNull()
+  // Свои каналы из хранилища: без повторов и кривых, имя — чистое или логин; не больше 20
+  expect(restoreTwitch('нет')).toEqual([])
+  expect(restoreTwitch([{ login: 'tsoding', name: ' Tsoding\n' }, { login: 'tsoding', name: 'dup' }, { login: 'Bad Name' }, null, { login: 'abc' }])).toEqual([
+    { login: 'tsoding', name: 'Tsoding' },
+    { login: 'abc', name: 'abc' },
+  ])
+  const many = Array.from({ length: 25 }, (_, k) => ({ login: `c${String(k).padStart(2, '0')}`, name: `C${k}` }))
+  expect(restoreTwitch(many).length).toBe(MY_CHANNELS)
+  // Новый канал — первым; уже свой — поднимается наверх без повтора
+  let list = restoreTwitch(many)
+  list = rememberChannel(list, { login: 'new', name: 'New' })
+  expect([list.length, list[0].login, list.at(-1).login]).toEqual([20, 'new', 'c18'])
+  list = rememberChannel(list, { login: 'c05', name: 'C5' })
+  expect([list.length, list[0].login, list.filter((c: any) => c.login === 'c05').length]).toEqual([20, 'c05', 1])
+  expect(twitchUrl(['a1', 'b2'])).toBe(`${SITE}/api/twitch?logins=a1,b2`)
+  expect(twitchUrl([])).toBe(`${SITE}/api/twitch?logins=`)
+  // Ответ сайта: лимит, ключи, Twitch не настроен, сбой и не JSON — ошибки
+  const reply = (status: number, data: any) => ({ status, ok: status === 200, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  const none = (error: string) => ({ channels: [], missing: [], catalog: [], error })
+  expect(parseTwitch(null)).toEqual(none('down'))
+  expect(parseTwitch(reply(429, { error: 'limit' }))).toEqual(none('limit'))
+  expect(parseTwitch(reply(503, { error: 'keys' }))).toEqual(none('keys'))
+  expect(parseTwitch(reply(503, { error: 'off' }))).toEqual(none('off'))
+  expect(parseTwitch(reply(503, { error: 'other' }))).toEqual(none('down'))
+  expect(parseTwitch(reply(500, { channels: [] }))).toEqual(none('down'))
+  expect(parseTwitch(reply(200, '<html>'))).toEqual(none('down'))
+  // Каналы: аватар — только с CDN Twitch, зрители — целое не меньше 0; каталог — без 18+, направления проверены
+  const avatar = 'https://static-cdn.jtvnw.net/jtv_user_pictures/a.png'
+  expect(
+    parseTwitch(
+      reply(200, {
+        channels: [
+          { login: 'tsoding', name: 'Tsoding', avatar, live: { title: 'T', game: 'G', viewers: 12.7, since: 1000 } },
+          { login: 'evil', name: 'E', avatar: 'https://evil.example.com/a.png', live: { title: 'x', viewers: -5 } },
+          { login: 'Bad Name' },
+        ],
+        missing: ['gone_one', 5, 'Bad'],
+        catalog: [
+          { login: 'retroboi', name: 'RetroBoi', topics: ['retro', 'Bad Topic', 'ai', 'news', 'web'], live: null },
+          { login: 'spicy', name: 'S', topics: ['gamedev'], live: { title: 'x', viewers: 1, mature: true } },
+        ],
+      }),
+    ),
+  ).toEqual({
+    channels: [
+      { login: 'tsoding', name: 'Tsoding', avatar, live: { title: 'T', game: 'G', viewers: 12, since: 1000, mature: false } },
+      { login: 'evil', name: 'E', live: { title: 'x', game: '', viewers: 0, mature: false } },
+    ],
+    missing: ['gone_one'],
+    catalog: [{ login: 'retroboi', name: 'RetroBoi', live: null, topics: ['retro', 'ai', 'news'] }],
+    error: '',
+  })
+  // Порядок: эфиры по зрителям, остальные — как были
+  const info = { b: { live: { viewers: 5 } }, c: { live: null }, d: { live: { viewers: 50 } } }
+  expect(liveFirst([{ login: 'a' }, { login: 'b' }, { login: 'c' }, { login: 'd' }], info).map((c: any) => c.login)).toEqual(['d', 'b', 'a', 'c'])
+  // Подпись: числа — в формате языка интерфейса
+  expect(liveStatus(undefined, true, 'ru')).toBe('такого канала нет на Twitch')
+  expect(liveStatus(undefined, false, 'ru')).toBe('')
+  expect(liveStatus({ live: null }, false, 'ru')).toBe('не в эфире')
+  expect(liveStatus({ live: { game: 'Retro', viewers: 1234 } }, false, 'en')).toBe('в эфире · Retro · зрители: 1.2K')
+  expect(liveStatus({ live: { game: '', viewers: 7 } }, false, 'ru')).toBe('в эфире · зрители: 7')
+  // Страница /live: язык — параметром (русский — без него), список — окно из 20 вокруг канала
+  expect(liveUrl(['a1', 'b2'], 'b2', 'ru')).toBe(`${SITE}/live#c=a1,b2&i=1`)
+  expect(liveUrl(['a1', 'b2'], 'b2', 'en')).toBe(`${SITE}/live?lang=en#c=a1,b2&i=1`)
+  expect(liveUrl(['a1', 'Bad', 'a1', 'b2'], 'zz', 'ru')).toBe(`${SITE}/live#c=zz,a1,b2&i=0`)
+  const thirty = Array.from({ length: 30 }, (_, k) => `c${String(k).padStart(2, '0')}`)
+  expect(liveUrl(thirty, 'c25', 'ru')).toBe(`${SITE}/live#c=${thirty.slice(10, 30).join(',')}&i=15`)
+  expect(liveUrl(thirty, 'c03', 'ru')).toBe(`${SITE}/live#c=${thirty.slice(0, PAGE_CHANNELS).join(',')}&i=3`)
+  // Направления каталога — те же 24, что у сайта, новинки — первыми
+  expect([Object.keys(TOPIC_TITLES).length, Object.keys(TOPIC_TITLES)[0], Object.keys(TOPIC_TITLES).at(-1)]).toEqual([24, 'news', 'retro'])
 })

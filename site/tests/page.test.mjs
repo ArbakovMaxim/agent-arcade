@@ -1113,6 +1113,107 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(empty.root.textContent, /нет видео/)
 }
 
+// --- Каналы Twitch (live.html): плеер Twitch для этого сайта, список с эфирами, другие каналы в той же вкладке -------
+{
+  const API = {
+    tsoding: { login: 'tsoding', name: 'Tsoding', avatar: 'https://static-cdn.jtvnw.net/jtv_user_pictures/tsoding.png', live: { title: 'Making a compiler', game: 'Software and Game Development', viewers: 1234, mature: false } },
+    myfriend: { login: 'myfriend', name: 'MyFriend', avatar: 'https://evil.test/me.png', live: null },
+  }
+  async function livePage({ hash, search = '', api = true }) {
+    const page = { replaced: null, fetched: [], handlers: {}, location: { hash, search, pathname: '/live', hostname: 'agent-arcade.test', origin: 'https://agent-arcade.test' } }
+    const node = (tag) => ({
+      tagName: tag, className: '', children: [], attributes: {}, listeners: {}, title: '', own: '',
+      classList: { set: new Set(), toggle(c, on) { if (on) this.set.add(c); else this.set.delete(c) }, contains(c) { return this.set.has(c) } },
+      get textContent() { return this.own + this.children.map((c) => c.textContent).join('') },
+      set textContent(v) { this.own = String(v); this.children = [] },
+      append(...kids) { this.children.push(...kids) },
+      addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
+      setAttribute(k, v) { this.attributes[k] = String(v) },
+      removeAttribute(k) { delete this.attributes[k] },
+      querySelector(selector) {
+        const walk = (x) => { for (const c of x.children) { if (c.className.split(' ').includes(selector.slice(1))) return c; const f = walk(c); if (f) return f } return null }
+        return walk(this)
+      },
+      fire(t) { for (const f of this.listeners[t] ?? []) f({}) },
+    })
+    page.root = node('div')
+    const storage = new Map()
+    const ctx = {
+      location: page.location, URLSearchParams, console, Intl,
+      history: { replaceState: (s, t, url) => { page.replaced = url } },
+      navigator: { language: 'ru-RU' },
+      localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)) },
+      document: { title: '', documentElement: {}, createElement: node, getElementById: () => page.root },
+      addEventListener: (t, f) => (page.handlers[t] ??= []).push(f),
+      fetch: async (url) => {
+        page.fetched.push(url)
+        if (!api) return { ok: false, json: async () => ({ error: 'off' }) }
+        const logins = new URL(url, 'https://agent-arcade.test').searchParams.get('logins').split(',')
+        return { ok: true, json: async () => ({ channels: logins.filter((l) => API[l]).map((l) => API[l]), missing: logins.filter((l) => !API[l]), catalog: [] }) }
+      },
+    }
+    ctx.window = ctx
+    vm.createContext(ctx)
+    for (const file of ['i18n.js', 'live.js']) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
+    await new Promise((r) => setTimeout(r, 5))
+    page.ctx = ctx
+    page.frame = () => page.root.children[0].children[0].children[0]
+    page.under = () => page.root.children[0].children[1]
+    page.items = () => page.root.children[1].children
+    page.status = (k) => page.items()[k].querySelector('.status').textContent
+    page.go = async (next) => {
+      page.location.hash = next
+      for (const f of page.handlers.hashchange) f({})
+      await new Promise((r) => setTimeout(r, 5))
+    }
+    return page
+  }
+
+  // Каналы из адреса: чужое и повторы отбрасываются, открыт канал i; плеер знает адрес сайта (parent)
+  const page = await livePage({ hash: '#c=Tsoding,bad%20name,myfriend,tsoding,<x>&i=1' })
+  assert.equal(page.items().length, 2)
+  assert.equal(page.frame().src, 'https://player.twitch.tv/?channel=myfriend&parent=agent-arcade.test&autoplay=true')
+  assert.equal(page.under().children[1].href, 'https://www.twitch.tv/myfriend')
+  assert.ok(page.items()[1].classList.contains('active') && !page.items()[0].classList.contains('active'))
+  assert.equal(page.replaced, '/live#c=tsoding,myfriend&i=1', 'в адресе — только настоящие каналы')
+  // Эфиры — с нашего сайта, одним вопросом
+  assert.deepEqual(page.fetched, ['/api/twitch?logins=tsoding,myfriend'])
+  assert.equal(page.items()[0].querySelector('.name').textContent, 'Tsoding')
+  assert.match(page.status(0), /^В эфире · Software and Game Development · зрители: 1,2\sтыс\.$/)
+  assert.ok(page.items()[0].classList.contains('on'))
+  assert.equal(page.items()[0].title, 'Making a compiler')
+  assert.equal(page.items()[0].querySelector('.avatar').children[0].src, API.tsoding.avatar)
+  assert.equal(page.status(1), 'Не в эфире')
+  assert.equal(page.items()[1].querySelector('.avatar').textContent, 'm', 'картинка не с CDN Twitch — вместо неё буква')
+  assert.equal(page.under().children[0].textContent, 'MyFriend')
+  assert.equal(page.ctx.document.title, 'MyFriend · Arcade')
+  // Другой канал из списка — плеер и подпись под ним
+  page.items()[0].fire('click')
+  assert.match(page.frame().src, /channel=tsoding&/)
+  assert.equal(page.under().children[0].textContent, 'Making a compiler')
+  assert.equal(page.replaced, '/live#c=tsoding,myfriend&i=0')
+  // Мод открыл другие каналы в той же вкладке; канала нет на Twitch — так и написано
+  await page.go('#c=ghost_user')
+  assert.equal(page.items().length, 1)
+  assert.match(page.frame().src, /channel=ghost_user&/)
+  assert.equal(page.status(0), 'Такого канала нет на Twitch')
+
+  // Сайт не ответил — список без эфиров, плеер всё равно играет; по-английски
+  const en = await livePage({ hash: '#c=tsoding', search: '?lang=en', api: false })
+  assert.equal(en.status(0), '')
+  assert.equal(en.items()[0].querySelector('.name').textContent, 'tsoding')
+  assert.equal(en.under().children[1].textContent, 'Open on Twitch')
+  assert.match(en.frame().src, /channel=tsoding&/)
+  const en2 = await livePage({ hash: '#c=tsoding,myfriend', search: '?lang=en' })
+  assert.equal(en2.status(0), 'Live · Software and Game Development · viewers: 1.2K')
+  assert.equal(en2.status(1), 'Offline')
+
+  // В адресе нет каналов
+  const empty = await livePage({ hash: '' })
+  assert.match(empty.root.textContent, /нет каналов/)
+  assert.equal(empty.fetched.length, 0)
+}
+
 // --- Статьи и подкасты из мода: read.html ведёт только на сайты лент, listen.html — выпуск в проигрывателе аудиокниг --
 {
   // verify — ответ сайта на /api/verify: (параметры) → true/false; без него сайт отвечает 404, 'down' — сеть недоступна

@@ -67,6 +67,7 @@
   "Joining the round": "Entrando na rodada",
   "Link to this game": "Link desta partida",
   "Listen": "Ouvir",
+  "Live": "Ao vivo",
   "Loading the engine and maps…": "Carregando o motor e os mapas…",
   "Loading the game…": "Carregando o jogo…",
   "Looking for an opponent…": "Procurando um adversário…",
@@ -82,7 +83,9 @@
   "No connection to the lobby": "Sem conexão com o lobby",
   "No file selected.": "Nenhum arquivo selecionado.",
   "No games here yet.": "Ainda não há jogos aqui.",
+  "Offline": "Offline",
   "Online": "Online",
+  "Open on Twitch": "Abrir no Twitch",
   "Open on YouTube": "Abrir no YouTube",
   "Open the window again in a minute.": "Abra a janela de novo daqui a um minuto.",
   "Open your files": "Abrir seus arquivos",
@@ -130,9 +133,11 @@
   "The round is starting": "A rodada está começando",
   "The video doesn't play here — open it on YouTube.": "O vídeo não toca aqui — abra-o no YouTube.",
   "The video has been removed or hidden.": "O vídeo foi removido ou ocultado.",
+  "There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.": "Não há canais no endereço. Os canais são escolhidos no mod Arcade: /arcade → Twitch.",
   "There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.": "Não há vídeos no endereço. A seleção é feita pelo mod Arcade: /arcade → YouTube.",
   "There is no article in the address. The Arcade mod makes the picks: /arcade → Articles.": "Não há nenhum artigo no endereço. A seleção é feita pelo mod Arcade: /arcade → Artigos.",
   "There is no episode in the address. The Arcade mod makes the picks: /arcade → Podcasts.": "Não há nenhum episódio no endereço. A seleção é feita pelo mod Arcade: /arcade → Podcasts.",
+  "There is no such channel on Twitch": "Esse canal não existe no Twitch",
   "These are not audio files: MP3, M4A, M4B, OGG or Opus will do": "Estes não são arquivos de áudio: servem MP3, M4A, M4B, OGG ou Opus",
   "This audiobook is no longer in the browser — open your files again": "Este audiolivro não está mais no navegador — abra seus arquivos de novo",
   "This browser doesn't let the game capture the mouse — turn with the arrow keys. With the mouse, the game runs in a regular browser window.": "Este navegador não deixa o jogo capturar o mouse — vire com as setas. Com o mouse, o jogo roda numa janela normal do navegador.",
@@ -292,7 +297,8 @@
   "level {0}": "nível {0}",
   "Computer · level {0}": "Computador · nível {0}",
   "waiting: {0}": "aguardando: {0}",
-  "listened {0}%": "ouvido {0}%"
+  "listened {0}%": "ouvido {0}%",
+  "viewers: {0}": "espectadores: {0}"
  },
  "words": [
   [

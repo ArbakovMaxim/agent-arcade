@@ -270,6 +270,12 @@
     'Видео удалено или скрыто.': 'The video has been removed or hidden.',
     'Автор не разрешил смотреть это видео на других сайтах — открой его на YouTube.': "The author doesn't allow watching this video on other sites — open it on YouTube.",
     'Видео здесь не играет — открой его на YouTube.': "The video doesn't play here — open it on YouTube.",
+    // каналы Twitch из мода
+    'Открыть на Twitch': 'Open on Twitch',
+    'В адресе нет каналов. Каналы выбирает мод Arcade: /arcade → Twitch.': 'There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.',
+    'В эфире': 'Live',
+    'Не в эфире': 'Offline',
+    'Такого канала нет на Twitch': 'There is no such channel on Twitch',
     // статьи и подкасты из мода
     'Статьи': 'Articles',
     'Подкасты': 'Podcasts',
@@ -299,6 +305,7 @@
   [/^(\d+) мин$/, (m) => `${m[1]} min`],
   [/^сила (\d+)$/, (m) => `level ${m[1]}`],
   [/^ждут: (\d+)$/, (m) => `waiting: ${m[1]}`],
+  [/^зрители: (.+)$/, (m) => `viewers: ${m[1]}`],
   [/^прослушано (\d+)%$/, (m) => `listened ${m[1]}%`],
   [/^Компьютер · сила (\d+)$/, (m) => `Computer · level ${m[1]}`],
   // Flappy Arcade
