@@ -23,6 +23,7 @@
   "Checkmate — you lose": "Xeque-mate — você perdeu",
   "Checkmate — you win!": "Xeque-mate — você venceu!",
   "Chess": "Xadrez",
+  "Click here or press any key. It is needed only once: the browser keeps the file, it never goes to the server.": "Clique aqui ou pressione qualquer tecla. Só é preciso uma vez: o navegador guarda o arquivo, ele nunca vai para o servidor.",
   "Click or press any key to continue": "Clique ou pressione qualquer tecla para continuar",
   "Click or press any key to start": "Clique ou pressione qualquer tecla para começar",
   "Co-op": "Cooperativo",
@@ -96,6 +97,7 @@
   "Paused": "Pausado",
   "Picking up where you left off — click or press any key": "Continuando de onde você parou — clique ou pressione qualquer tecla",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "O PlayStation precisa de uma imagem de disco: .chd, .pbp, .iso ou um .zip com .cue e .bin dentro.",
+  "Podcast page": "Página do podcast",
   "Podcasts": "Podcasts",
   "Press Listen again — the browser needs a click to start": "Toque em Ouvir de novo — o navegador precisa de um clique para começar",
   "Press Space, ↑ or click to take off": "Pressione Espaço, ↑ ou clique para decolar",
@@ -294,12 +296,20 @@
  },
  "words": [
   [
+   "Enter",
+   "Enter"
+  ],
+  [
    "Select",
    "Select"
   ],
   [
    "Start",
    "Start"
+  ],
+  [
+   "contents and font size",
+   "sumário e tamanho da fonte"
   ],
   [
    "fire",
@@ -332,6 +342,10 @@
   [
    "run",
    "correr"
+  ],
+  [
+   "scroll or Space",
+   "roda do mouse ou Espaço"
   ],
   [
    "strafe",

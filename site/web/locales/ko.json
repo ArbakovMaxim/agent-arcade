@@ -23,6 +23,7 @@
   "Checkmate — you lose": "체크메이트 — 패배",
   "Checkmate — you win!": "체크메이트 — 승리!",
   "Chess": "체스",
+  "Click here or press any key. It is needed only once: the browser keeps the file, it never goes to the server.": "여기를 클릭하거나 아무 키나 누르세요. 한 번만 하면 됩니다. 브라우저가 파일을 보관하며 서버로 전송되지 않습니다.",
   "Click or press any key to continue": "계속하려면 클릭하거나 아무 키나 누르세요",
   "Click or press any key to start": "시작하려면 클릭하거나 아무 키나 누르세요",
   "Co-op": "협동",
@@ -96,6 +97,7 @@
   "Paused": "일시정지",
   "Picking up where you left off — click or press any key": "중단한 곳부터 이어서 합니다 — 클릭하거나 아무 키나 누르세요",
   "PlayStation needs a disc image: .chd, .pbp, .iso or a .zip with .cue and .bin inside.": "PlayStation에는 디스크 이미지가 필요합니다: .chd, .pbp, .iso 또는 .cue와 .bin이 든 .zip.",
+  "Podcast page": "팟캐스트 페이지",
   "Podcasts": "팟캐스트",
   "Press Listen again — the browser needs a click to start": "‘듣기’를 다시 누르세요 — 브라우저는 재생을 시작하려면 클릭이 필요합니다",
   "Press Space, ↑ or click to take off": "스페이스, ↑ 또는 클릭으로 이륙",
@@ -294,12 +296,20 @@
  },
  "words": [
   [
+   "Enter",
+   "Enter"
+  ],
+  [
    "Select",
    "Select"
   ],
   [
    "Start",
    "Start"
+  ],
+  [
+   "contents and font size",
+   "목차와 글자 크기"
   ],
   [
    "fire",
@@ -332,6 +342,10 @@
   [
    "run",
    "달리기"
+  ],
+  [
+   "scroll or Space",
+   "스크롤 또는 스페이스"
   ],
   [
    "strafe",

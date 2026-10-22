@@ -281,6 +281,7 @@
     'Не получилось проверить подкаст — сайт Arcade не ответил. Попробуй ещё раз.': "Could not check the podcast — the Arcade site didn't respond. Try again.",
     'Этого подкаста нет в лентах Arcade — не включаю выпуск.': "This podcast isn't in the Arcade feeds — not playing the episode.",
     'Страница выпуска': 'Episode page',
+    'Страница подкаста': 'Podcast page',
     'Выпуск дослушан': 'The episode is finished',
     'Не получилось загрузить выпуск — проверь интернет и нажми «Слушать» ещё раз': 'Could not load the episode — check the internet and press Listen again',
   }

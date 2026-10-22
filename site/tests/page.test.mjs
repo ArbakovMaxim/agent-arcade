@@ -1115,8 +1115,10 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
 
 // --- Статьи и подкасты из мода: read.html ведёт только на сайты лент, listen.html — выпуск в проигрывателе аудиокниг --
 {
-  async function feedPage(scripts, { pathname, hash, search = '', net = {} }) {
-    const page = { replaced: null, reloaded: false, handlers: {}, store: new Map() }
+  // verify — ответ сайта на /api/verify: (параметры) → true/false; без него сайт отвечает 404, 'down' — сеть недоступна
+  async function feedPage(scripts, { pathname, hash, search = '', net = {}, verify = null }) {
+    const page = { replaced: null, reloaded: false, handlers: {}, store: new Map(), verified: [] }
+    const files = network(net)
     const node = (tag) => ({
       tagName: tag, className: '', children: [], style: {}, dataset: {}, listeners: {}, own: '', href: '', src: '',
       paused: true, currentTime: 0,
@@ -1145,7 +1147,15 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
       localStorage: { getItem: (k) => page.store.get(k) ?? null, setItem: (k, v) => page.store.set(k, String(v)), removeItem: (k) => page.store.delete(k) },
       document: { title: '', documentElement: {}, createElement: node, getElementById: () => page.root },
       addEventListener: (t, f) => (page.handlers[t] ??= []).push(f),
-      fetch: network(net),
+      fetch: async (url) => {
+        if (!String(url).startsWith('api/verify?')) return files(url)
+        const params = new URLSearchParams(String(url).slice('api/verify?'.length))
+        page.verified.push(Object.fromEntries(params))
+        if (verify === 'down') throw new Error('Failed to fetch')
+        if (!verify) return { ok: false, status: 404, json: async () => ({}) }
+        const ok = verify(params)
+        return { ok: true, status: 200, json: async () => ({ ok }) }
+      },
     }
     ctx.window = ctx
     vm.createContext(ctx)
@@ -1214,6 +1224,42 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const enEp = await listen(episode, { search: '?lang=en' })
   enEp.ctx.ArcadeAudio.player.audio.fire('error')
   assert.match(enEp.root.textContent, /Could not load the episode/)
+
+  // Своя тема: статья не с сайта лент открывается, только если сайт Arcade подтвердил подпись ссылки
+  const found = 'https://blog.example.com/rust?x=1'
+  const sig = 'Abcdefghijklmnopqrstu_'
+  const good = (p) => p.get('kind') === 'read' && p.get('u') === found && p.get('s') === sig
+  const signedRead = await read(`#u=${u(found)}&s=${sig}`, { verify: good })
+  assert.equal(signedRead.replaced, found)
+  assert.deepEqual(signedRead.verified, [{ kind: 'read', u: found, s: sig }])
+  const forged = await read(`#u=${u('https://evil.test/')}&s=${sig}`, { verify: good })
+  assert.equal(forged.replaced, null)
+  assert.match(forged.root.textContent, /не из лент Arcade/)
+  const unsigned = await read(`#u=${u(found)}`, { verify: good })
+  assert.equal(unsigned.replaced, null)
+  assert.deepEqual(unsigned.verified, [], 'без подписи сайт не спрашиваем')
+  const fromFeed = await read(`#u=${u(article)}&s=${sig}`, { verify: () => false })
+  assert.equal(fromFeed.replaced, article, 'сайт из лент открывается и без проверки подписи')
+  assert.deepEqual(fromFeed.verified, [])
+  const noVerify = await read(`#u=${u(found)}&s=${sig}`, { verify: 'down' })
+  assert.equal(noVerify.replaced, null)
+  assert.match(noVerify.root.textContent, /сайт Arcade не ответил/)
+
+  // Своя тема: подкаст из Apple Podcasts — имя из адреса, если подпись верна; ссылка — на страницу подкаста
+  const goodShow = (p) => p.get('kind') === 'listen' && p.get('f') === 'it1234' && p.get('n') === 'Rustacean Station' && p.get('s') === sig
+  const searched = `#f=it1234&n=${u('Rustacean Station')}&s=${sig}&u=${u(audio)}&t=${u('Embedded Rust')}&l=${u('https://evil.test/ep')}`
+  const show = await listen(searched, { verify: goodShow })
+  assert.equal(show.ctx.ArcadeAudio.player.audio.src, audio)
+  assert.match(show.root.textContent, /Embedded Rust.*Rustacean Station/)
+  const links = show.root.querySelectorAll('.page')
+  assert.deepEqual(links.map((a) => [a.href, a.textContent]), [['https://podcasts.apple.com/podcast/id1234', 'Страница подкаста']])
+  assert.deepEqual(show.verified, [{ kind: 'listen', f: 'it1234', n: 'Rustacean Station', s: sig }])
+  assert.match((await listen(searched.replace('Rustacean', 'Fake'), { verify: goodShow })).root.textContent, /нет в лентах Arcade/)
+  assert.match((await listen(`#f=it1234&s=${sig}&u=${u(audio)}`, { verify: () => true })).root.textContent, /нет в лентах Arcade/, 'без названия — нет')
+  assert.match((await listen(searched, { verify: 'down' })).root.textContent, /сайт Arcade не ответил/)
+  const catalogShow = await listen(`${episode}&s=${sig}`, { verify: () => false })
+  assert.equal(catalogShow.root.querySelectorAll('.page')[0].textContent, 'Страница выпуска', 'шоу из лент — как раньше')
+  assert.deepEqual(catalogShow.verified, [])
 }
 
 console.log('окно: все проверки прошли')

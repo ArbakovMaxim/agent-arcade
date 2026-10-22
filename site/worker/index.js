@@ -2,6 +2,9 @@
 // сюда приходят только /api/* и /net/* — для сетевой игры.
 // Комната — Durable Object: по WebSocket пересылает сообщения между игроками в ней. На комнатах будут работать
 // сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom.
+import { discover, verify } from './discover.js'
+
+export { Discover } from './discover.js'
 
 export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт
@@ -67,6 +70,9 @@ export default {
       return new Response('Подключение только со страниц Arcade', { status: 403 })
     }
     if (url.pathname === '/api/ping') return Response.json({ ok: true })
+    // Своя тема пользователя: поиск видео, статей и подкастов с кешем; проверка подписанных ссылок для /read и /listen
+    if (url.pathname === '/api/discover') return discover(request, env, url)
+    if (url.pathname === '/api/verify') return verify(env, url)
     // Кто сейчас ждёт в сети — для мода и окна: { doom: игроков в лобби, games: { номер игры: открытых комнат } }
     if (url.pathname === '/api/lobbies') return env.PRESENCE.get(env.PRESENCE.idFromName('all')).fetch('https://presence/get')
     // Сетевая игра EmulatorJS: список комнат игры и сокет — один Durable Object на игру
