@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build } from '../build.mjs'
+import { build, checkChannels } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 // Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск
@@ -94,7 +94,32 @@ for (const f of ['index.html', 'boot.js', 'library.js', 'game.js', 'stats.js', '
 const headers = fs.readFileSync(path.join(out, '_headers'), 'utf8')
 assert.match(headers, /\/files\/\*\n  Cache-Control: public, max-age=31536000, immutable/)
 assert.match(headers, /\/catalog\.json\n  Cache-Control: public, max-age=60/)
+assert.match(headers, /\/channels\.json\n  Cache-Control: public, max-age=3600\n  Access-Control-Allow-Origin: \*/)
 assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers\n_redirects\n')
+
+// Каналы YouTube для мода: на сайте — как в content/channels.json; копия в моде (запас без сайта) — та же
+{
+  const channels = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'channels.json'), 'utf8'))
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'channels.json'), 'utf8')), channels)
+  const bundled = (await import(new URL('../../mod/hooks/channels.js', import.meta.url))).default
+  assert.deepEqual(bundled, channels, 'mod/hooks/channels.js отстал от site/content/channels.json — скопируй список')
+  // Английские каналы — запас для любой темы: местных может не быть
+  for (const d of channels.directions) assert.ok(channels.channels.some((c) => c.lang === 'en' && c.topics.includes(d.id)), `нет английских каналов для ${d.id}`)
+  assert.ok(fs.existsSync(path.join(out, 'watch.html')) && fs.existsSync(path.join(out, 'watch.js')), 'страница просмотра /watch')
+  const bad = (change) => {
+    const data = structuredClone(channels)
+    change(data)
+    return () => checkChannels(data)
+  }
+  assert.doesNotThrow(bad(() => {}))
+  assert.throws(bad((d) => { d.channels[0].id = 'UCshort' }), /неправильный id "UCshort"/)
+  assert.throws(bad((d) => { d.channels.push({ ...d.channels[0] }) }), /уже есть в списке/)
+  assert.throws(bad((d) => { d.channels[0].lang = 'xx' }), /язык "xx"/)
+  assert.throws(bad((d) => { d.channels[0].topics = ['cooking'] }), /нет направления cooking/)
+  assert.throws(bad((d) => { d.channels[0].topics = [] }), /хотя бы один topic/)
+  assert.throws(bad((d) => { d.directions = d.directions.filter((x) => x.id !== 'news') }), /нет направления news/)
+  assert.throws(bad((d) => { d.directions.push({ ...d.directions[1] }) }), /описано дважды/)
+}
 
 // Повторная сборка даёт те же файлы (кроме времени сборки)
 const again = build({ root: ROOT, out: temp('again'), now: new Date('2026-10-17T12:00:00Z') })

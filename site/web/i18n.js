@@ -264,6 +264,12 @@
     'музыка': 'music',
     'арканоид': 'brick breaker',
     'шуточный симулятор': 'comedy sim',
+    // просмотр подборки YouTube
+    'Открыть на YouTube': 'Open on YouTube',
+    'В адресе нет видео. Подборку делает мод Arcade: /arcade → YouTube.': 'There are no videos in the address. The Arcade mod makes the picks: /arcade → YouTube.',
+    'Видео удалено или скрыто.': 'The video has been removed or hidden.',
+    'Автор не разрешил смотреть это видео на других сайтах — открой его на YouTube.': "The author doesn't allow watching this video on other sites — open it on YouTube.",
+    'Видео здесь не играет — открой его на YouTube.': "The video doesn't play here — open it on YouTube.",
   }
 
   const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')
