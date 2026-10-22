@@ -4,7 +4,7 @@
 // сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom.
 import { discover, verify } from './discover.js'
 import { twitch } from './twitch.js'
-import { account } from './account.js'
+import { account, ticketName } from './account.js'
 
 export { Discover } from './discover.js'
 export { Twitch } from './twitch.js'
@@ -447,6 +447,8 @@ export class Presence {
 // Партия настольной игры (шахматы, шашки, реверси): ходы хранятся в SQLite этого Durable Object — можно закрыть
 // окно, уйти к агенту и вернуться по той же ссылке. Места — за браузерами игроков (жетон в localStorage), сторона 0
 // ходит первой; сервер следит за очерёдностью, а правила проверяют оба окна. Тихая месяц партия удаляется сама.
+// Игрок с аккаунтом Arcade присылает подпись своего @ника (её выдаёт сайт, см. account.js) — комната проверяет её и
+// показывает ник у его места; names — { жетон места: ник }, жетоны в окна не уходят.
 export const BOARD_IDLE_MS = 30 * 24 * 60 * 60 * 1000
 
 export class BoardRoom {
@@ -488,6 +490,13 @@ export class BoardRoom {
     }
   }
 
+  // Ники мест по порядку, если есть хоть один: [ник или null, …]
+  names() {
+    const s = this.s
+    const names = s.seats.map((token) => s.names?.[token] ?? null)
+    return names.some(Boolean) ? { names } : {}
+  }
+
   snapshot(ws) {
     const s = this.s
     // Контроль времени, часы, итог и вариант (доска го) — только если они есть: старые партии выглядят как раньше
@@ -495,6 +504,7 @@ export class BoardRoom {
       type: 'state', game: s.game, seat: ws.deserializeAttachment()?.seat ?? -1, seats: s.seats.length, moves: s.moves,
       ...(s.control ? { control: s.control } : {}), ...(s.variant ? { variant: s.variant } : {}),
       ...(s.clock ? { clock: { ...s.clock, now: Date.now() } } : {}), ...(s.result ? { result: s.result } : {}),
+      ...this.names(),
     }
   }
 
@@ -544,13 +554,19 @@ export class BoardRoom {
         await this.save()
       }
       ws.serializeAttachment({ ...me, seat })
+      // Ник — только у своего места и только с верной подписью; без неё остаётся прежний
+      const name = seat >= 0 && m.me ? await ticketName(this.env.LINK_SECRET, m.me, Date.now()) : null
+      if (name && s.names?.[m.token] !== name) {
+        s.names = { ...s.names, [m.token]: name }
+        await this.save()
+      }
       if (s.seats.length >= 2 && s.control && !s.clock) {
         this.startClock()
         await this.save()
         for (const other of this.ctx.getWebSockets()) if (other !== ws) this.send(other, this.snapshot(other))
       }
       this.send(ws, this.snapshot(ws))
-      for (const other of this.ctx.getWebSockets()) if (other !== ws) this.send(other, { type: 'seats', seats: s.seats.length })
+      for (const other of this.ctx.getWebSockets()) if (other !== ws) this.send(other, { type: 'seats', seats: s.seats.length, ...this.names() })
     } else if (m.type === 'move') {
       // Ходит только тот, чья очередь, и только следующим ходом; иначе — пусть возьмёт свежую позицию
       if (me.seat < 0 || m.ply !== s.moves.length || s.moves.length % 2 !== me.seat || s.seats.length < 2 || s.result) return this.send(ws, this.snapshot(ws))

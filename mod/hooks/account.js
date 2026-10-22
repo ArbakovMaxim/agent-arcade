@@ -2,7 +2,8 @@
 // этого — без него всё работает. Мод просит у сайта код (/api/auth/start), человек вводит его на
 // github.com/login/device, мод спрашивает сайт, вошёл ли он (/api/auth/poll), и получает ключ сессии Arcade — токена
 // GitHub мод не видит. Настройки на сайте — { ключ: { v, at } }: у каждого ключа побеждает более позднее изменение,
-// у рекорда Flappy Arcade — больший счёт. Здесь нет вызовов Claude Code — сеть и хранилище в hooks/register.js.
+// у рекорда Flappy Arcade — больший счёт. Ещё у аккаунта бывает свой @ник — подпись в сетевых играх. Здесь нет вызовов
+// Claude Code — сеть и хранилище в hooks/register.js.
 import { siteUrl } from './catalog.js'
 import { jsonFrom } from './youtube.js'
 
@@ -14,9 +15,12 @@ const DEVICE = /^[A-Za-z0-9_-]{8,100}$/
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/
 const GH_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/
 const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings' }
+// @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
+export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
+const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
+const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle' }
 
-// Адрес сайта для шага входа или настроек: start, poll, logout, me, settings
+// Адрес сайта для шага входа, настроек или ника: start, poll, logout, me, settings, handle
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }
@@ -85,13 +89,46 @@ function settingsFrom(raw) {
   return out
 }
 
-// Ответ /api/me → { user, settings, error }
+// Ник и его подпись из ответа сайта: { handle, ticket }; ника нет — ''; подпись не к этому нику — без подписи
+function handleFrom(data) {
+  const handle = HANDLE.test(data?.handle ?? '') ? data.handle : ''
+  const m = TICKET.exec(typeof data?.ticket === 'string' ? data.ticket : '')
+  return { handle, ticket: handle && m?.[1] === handle ? data.ticket : '' }
+}
+
+// Ответ /api/me → { user, settings, handle, ticket, error }
 export function parseMe(response) {
   const data = jsonFrom(response?.text)
   const error = trouble(response, data)
-  if (error) return { user: null, settings: {}, error }
+  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', error: e })
+  if (error) return none(error)
   const user = parseUser(data.user)
-  return user ? { user, settings: settingsFrom(data.settings), error: '' } : { user: null, settings: {}, error: 'down' }
+  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), error: '' } : none('down')
+}
+
+// Что человек ввёл как ник → ник строчными, без @ и пробелов по краям
+export function normalHandle(text) {
+  return typeof text === 'string' ? text.trim().replace(/^@/, '').toLowerCase() : ''
+}
+
+// Ник, который предложить из имени на GitHub: строчными, - → _; не подходит под правила ника — ''
+export function suggestHandle(login) {
+  const handle = typeof login === 'string' ? login.toLowerCase().replace(/-/g, '_') : ''
+  return HANDLE.test(handle) ? handle : ''
+}
+
+// Ответ PUT /api/me/handle → { handle, ticket, error }. error, кроме общих: 'invalid' — ник не того вида, 'reserved' —
+// запрещён, 'taken' — занят, 'often' — ник меняли слишком часто
+export function parseHandle(response) {
+  const data = jsonFrom(response?.text)
+  const none = (e) => ({ handle: '', ticket: '', error: e })
+  if (response?.status === 400) return none(data?.error === 'reserved' ? 'reserved' : 'invalid')
+  if (response?.status === 409) return none('taken')
+  if (response?.status === 429) return none('often')
+  const error = trouble(response, data)
+  if (error) return none(error)
+  const named = handleFrom(data)
+  return named.handle ? { ...named, error: '' } : none('down')
 }
 
 // Ответ PUT /api/me/settings → { settings, error }: settings — всё, что теперь на сайте

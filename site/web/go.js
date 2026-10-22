@@ -360,7 +360,7 @@
     let waiting = {}
     const draw = () => {
       root.replaceChildren()
-      root.append(el('h2', 'margin:8px 0', game.title), el('p', 'color:#9a9aa3;max-width:640px', T(game.about_en && window.ArcadeI18n && window.ArcadeI18n.lang === 'en' ? game.about_en : game.about)))
+      root.append(el('h2', 'margin:8px 0', game.title), el('p', 'color:#9a9aa3;max-width:640px', window.ArcadeI18n ? window.ArcadeI18n.about(game) : game.about))
       const row = (label, children) => {
         const r = el('div', 'margin:10px 0')
         r.append(el('div', 'color:#9a9aa3;margin-bottom:4px', label), ...children)
@@ -529,18 +529,20 @@
     let go = createGo(size || 9)
     let seat = -1
     let seats = 0
+    let names = []
     let moves = []
     let variant = size ? String(size) : ''
     root.replaceChildren()
     const title = el('h2', 'margin:8px 0', game.title)
     const status = el('p', 'min-height:1.4em;color:#e0c070', T('Подключаюсь к партии…'))
     const grid = el('div')
+    const who = el('p', 'margin:8px 0 0;color:#9a9aa3', '')
     const info = el('p', 'color:#9a9aa3', '')
     const tools = el('div', 'margin-top:10px')
-    root.append(title, status, grid, info, tools)
+    root.append(title, status, grid, who, info, tools)
     const link = `${location.origin}${location.pathname}?game=${encodeURIComponent(id)}&room=${code}${size ? `&size=${size}` : ''}`
     const ws = new WebSocket(B.wsUrl(`/net/board/${code}`))
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: B.tokenFor(code), game: id, variant })))
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: B.tokenFor(code), game: id, variant, ...B.named() })))
     ws.addEventListener('close', () => {
       status.textContent = T('Связь с партией прервалась — открой ссылку ещё раз, ходы сохранены')
     })
@@ -559,13 +561,17 @@
       if (m.type === 'state') {
         seat = m.seat
         seats = m.seats
+        names = m.names || []
         if (m.variant) variant = String(m.variant)
         moves = Array.isArray(m.moves) ? m.moves : []
         replay()
       } else if (m.type === 'move' && m.ply === moves.length) {
         moves.push(m.move)
         go.apply(m.move)
-      } else if (m.type === 'seats') seats = m.seats
+      } else if (m.type === 'seats') {
+        seats = m.seats
+        names = m.names || []
+      }
       render()
     })
     const mine = () => (seat === 0 ? BLACK : seat === 1 ? WHITE : 0)
@@ -586,6 +592,7 @@
       else if (seat < 0) status.textContent = T('Ты смотришь партию: в ней уже двое')
       else if (go.turn === me) status.textContent = `${T('Твой ход')} (${sideName(me)})`
       else status.textContent = T('Ход соперника — можно вернуться к агенту, партия сохранится')
+      who.textContent = B.players([T('чёрные'), T('белые')], names)
       info.textContent = `${T('Взято камней')}: ${T('чёрные')} ${go.captured[BLACK]} · ${T('белые')} ${go.captured[WHITE]}${go.lastMove === 'pass' ? ` · ${T('последний ход — пас')}` : ''}`
       tools.replaceChildren()
       if (!go.over && seat >= 0 && seats >= 2 && go.turn === me) tools.append(button(T('Пас'), () => send('pass')))

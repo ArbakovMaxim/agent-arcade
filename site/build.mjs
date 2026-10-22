@@ -120,6 +120,16 @@ function address(value, where) {
   return n
 }
 
+// Переводы окна на 11 языков: web/locales/<язык>.json → { язык: { exact, templates, words, about } }
+function readLocales(root) {
+  const dir = path.join(root, 'web', 'locales')
+  const locales = {}
+  if (fs.existsSync(dir)) {
+    for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.json'))) locales[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))
+  }
+  return locales
+}
+
 function copy(from, to) {
   fs.mkdirSync(path.dirname(to), { recursive: true })
   fs.copyFileSync(from, to)
@@ -417,6 +427,14 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
     const c = consoles.find((x) => x.id === g.console)
     if (c?.group && !shelves.some((s) => s.id === g.shelf)) fail(`игра ${id}: у игр группы ${c.group} должна быть полка (shelf) из списка shelves`)
   }
+  // Описания на остальных 11 языках — переводы английского описания (раздел about в web/locales/<язык>.json). Перевода
+  // нет или английское описание поменялось — окно и мод покажут английское
+  const locales = readLocales(root)
+  for (const g of Object.values(games)) {
+    if (!g.about_en) continue
+    const translated = Object.entries(locales).filter(([, L]) => typeof L.about?.[g.about_en] === 'string' && L.about[g.about_en])
+    if (translated.length) g.about_i18n = Object.fromEntries(translated.map(([lang, L]) => [lang, L.about[g.about_en]]))
+  }
   // «Поддержать проект» — добровольно; ссылку видят окно и мод, менять её — здесь, в каталоге
   const support = source.support && /^https:\/\//.test(source.support.url ?? '') ? { url: source.support.url, title: source.support.title ?? '' } : null
   const catalog = { version: 1, built: now.toISOString(), consoles, groups, shelves, ...(support ? { support } : {}), games }
@@ -442,16 +460,12 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
     if (fs.statSync(from).isDirectory()) continue // locales/ — вставляются в i18n.js ниже
     copy(from, path.join(out, file))
   }
-  // Переводы окна на 11 языков — прямо в i18n.js: одна загрузка, без лишних запросов
-  const localesDir = path.join(root, 'web', 'locales')
-  const locales = {}
-  if (fs.existsSync(localesDir)) {
-    for (const f of fs.readdirSync(localesDir).filter((n) => n.endsWith('.json'))) locales[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(localesDir, f), 'utf8'))
-  }
+  // Переводы окна на 11 языков — прямо в i18n.js: одна загрузка, без лишних запросов. Описания игр — уже в каталоге
+  const windowLocales = Object.fromEntries(Object.entries(locales).map(([lang, { about, ...rest }]) => [lang, rest]))
   const i18nOut = path.join(out, 'i18n.js')
   const i18nText = fs.readFileSync(i18nOut, 'utf8')
   if (!i18nText.includes('const LOCALES = {} /* LOCALES */')) fail('в web/i18n.js нет места для переводов: const LOCALES = {} /* LOCALES */')
-  fs.writeFileSync(i18nOut, i18nText.replace('const LOCALES = {} /* LOCALES */', `const LOCALES = ${JSON.stringify(locales)}`))
+  fs.writeFileSync(i18nOut, i18nText.replace('const LOCALES = {} /* LOCALES */', `const LOCALES = ${JSON.stringify(windowLocales)}`))
   copy(path.join(root, 'third_party', 'jsnes', 'LICENSE.txt'), path.join(out, 'licenses', 'jsnes', 'LICENSE.txt'))
   copyEmulatorJS(path.join(root, 'vendor', 'emulatorjs'), out)
   // Движок сетевого Doom (doom-wasm, GPL-2.0): собран в GitHub Actions; лицензия, заметка о сборке и исходники — в licenses/

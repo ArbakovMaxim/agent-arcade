@@ -26,6 +26,7 @@ function check(where, lang, data) {
     }
   }
   for (const [word, value] of data.words ?? []) if (!value) problems.push(`${where} ${lang}: не переведено слово подсказки «${word}»`)
+  for (const [key, value] of Object.entries(data.about ?? {})) if (!value) problems.push(`${where} ${lang}: не переведено описание «${key}»`)
 }
 
 for (const lang of LANGS) {

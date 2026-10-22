@@ -10,7 +10,7 @@ import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, re
 import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
 import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
-import { SYNC_KEYS, accountUrl, parseDone, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, syncPlan } from './account.js'
+import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
 
@@ -169,8 +169,10 @@ let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loadi
 // Аккаунт: вход через GitHub (session — { token, user } из $.store или null), вход по коду, который идёт сейчас (flow —
 // { device, code, url, interval, until } или null), starting — просим код у сайта, заметка в меню аккаунта, идёт ли
 // синхронизация (again — за время неё настройку поменяли ещё раз) и когда она последний раз удалась; confirmDelete —
-// «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен
-let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0 }
+// «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен. handle — @ник,
+// ticket — его подпись для сетевых игр (оба с сайта, только в памяти), naming — сайт проверяет новый ник, handleNote —
+// почему ник не взялся, claims — сколько раз ник сменили: ответ синхронизации, спрошенной до смены, ник не трогает
+let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0 }
 let stamps = {} // когда человек менял синхронизируемые настройки: ключ → время; в $.store — syncAt
 // Какие из SYNC_KEYS сохранены на этом компьютере: чего человек здесь не менял, то берём с сайта, а не отправляем туда
 const savedKeys = new Set()
@@ -306,7 +308,8 @@ function shelfView(menuId) {
 function games() {
   return [
     ...catalog.games.map((g) => {
-      const about = lang !== 'ru' && g.about_en ? g.about_en : g.about
+      // Описание: по-русски, перевод с английского или английское, если перевода на этот язык нет
+      const about = lang === 'ru' || !g.about_en ? g.about : g.about_i18n?.[lang] || g.about_en
       return { ...g, note: `${g.author ? `${g.author} · ` : ''}${tr(g.genre, lang)}${about ? ` — ${about}` : ''}`, web: true }
     }),
     ...mine.map((m) => ({
@@ -762,8 +765,16 @@ function windowUrl(id) {
   return url.includes('?') ? `${url}&lang=${lang}` : `${url}?lang=${lang}`
 }
 
+// Сетевая настольная игра: подпись @ника — после #, страница покажет ник соперникам и уберёт его из адреса. Вышли —
+// пустая подпись: страница забудет прежнюю. Только в окна, которые мод открывает сам: в просьбу к Claude подпись не идёт
+function withName(url, id) {
+  if (gameById(id)?.kind !== 'board') return url
+  if (acct.ticket) return `${url}#me=${acct.ticket}`
+  return acct.session ? url : `${url}#me=`
+}
+
 function windowCommand(id) {
-  const url = windowUrl(id)
+  const url = withName(windowUrl(id), id)
   if (platform === 'mac') return { argv: ['open', url], env: {} }
   if (platform === 'linux') return { argv: ['xdg-open', url], env: {} }
   return launchCommand(windowTarget(), url, windowBounds(detection?.screen ?? null), profileRoot)
@@ -874,7 +885,7 @@ async function openDesktopBrowser($, id) {
   const consent = desktopConsent(url)
   let denied = false
   try {
-    const result = await browse($, url, await arcadeTab($, consent), consent)
+    const result = await browse($, withName(url, id), await arcadeTab($, consent), consent)
     if (!result?.isError) {
       await showBrowser($, consent)
       return 'opened'
@@ -1288,6 +1299,15 @@ function accountNote(error) {
   return 'Сайт Arcade не ответил. Попробуй чуть позже.'
 }
 
+// Почему ник не взялся
+function handleNote(error, handle) {
+  if (error === 'invalid') return 'Ник — от 4 до 32 знаков: латинские буквы, цифры и _, первый — буква.'
+  if (error === 'reserved') return 'Такой ник взять нельзя — выбери другой.'
+  if (error === 'taken') return `@${handle} уже занят — выбери другой.`
+  if (error === 'often') return 'Ник сегодня меняли слишком часто — попробуй завтра.'
+  return accountNote(error)
+}
+
 // Вопрос к сайту про вход или настройки. Ключ сессии — только в заголовке и только своему сайту
 function accountFetch($, name, { method = 'GET', body, token } = {}) {
   const headers = { Accept: 'application/json' }
@@ -1362,9 +1382,14 @@ async function syncAccount($) {
   acct.again = false
   $.ui.invalidate('ui.render')
   try {
+    const claims = acct.claims
     const me = parseMe(await accountFetch($, 'me', { token: session.token }))
     if (acct.session !== session) return
     if (me.error) return await syncFailed($, me.error)
+    if (acct.claims === claims) {
+      acct.handle = me.handle
+      acct.ticket = me.ticket
+    }
     const now = await $.clock.now()
     if (acct.session !== session) return
     const renamed = me.user.id === session.user.id && JSON.stringify(me.user) !== JSON.stringify(session.user)
@@ -1417,6 +1442,10 @@ async function forgetSession($, note) {
   acct.note = note
   acct.syncedAt = 0
   acct.confirmDelete = false
+  acct.handle = ''
+  acct.ticket = ''
+  acct.naming = false
+  acct.handleNote = ''
   acct.request++
   syncTimer?.cancel()
   syncTimer = null
@@ -1494,6 +1523,32 @@ function cancelLogin($) {
   acct.flow = null
   acct.starting = false
   acct.note = ''
+  $.ui.invalidate('ui.render')
+}
+
+// «Взять @ник» или свой ник из поля: сайт проверяет, свободен ли он, и отдаёт подпись ника для сетевых игр
+async function claimHandle($, text) {
+  const session = acct.session
+  if (!session || acct.naming) return
+  const handle = normalHandle(text)
+  if (handle === acct.handle) return
+  if (!HANDLE.test(handle)) {
+    acct.handleNote = handleNote('invalid', handle)
+    return $.ui.invalidate('ui.render')
+  }
+  acct.naming = true
+  acct.handleNote = ''
+  $.ui.invalidate('ui.render')
+  const answer = parseHandle(await accountFetch($, 'handle', { method: 'PUT', body: { handle }, token: session.token }))
+  if (acct.session !== session) return
+  acct.naming = false
+  if (answer.error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  if (answer.error) acct.handleNote = handleNote(answer.error, handle)
+  else {
+    acct.claims++
+    acct.handle = answer.handle
+    acct.ticket = answer.ticket
+  }
   $.ui.invalidate('ui.render')
 }
 
@@ -2647,10 +2702,18 @@ export function register(on) {
         const flow = acct.flow
         const note = acct.note ? [Text({ color: 'warning', children: [acct.note] })] : []
         if (acct.session) {
+          // Ника нет, а имя на GitHub подходит под правила — его можно взять одной кнопкой
+          const take = acct.handle ? '' : suggestHandle(acct.session.user.login)
           items = [
             back,
             gap,
             keep(Text({ bold: true, children: [`GitHub: @${acct.session.user.login}`] })),
+            Text({ children: [acct.handle ? `Твой ник: @${acct.handle}` : 'Ника пока нет.'] }),
+            dim('Ник видят соперники в сетевых партиях настольных игр. Сменить его можно когда угодно.'),
+            ...(take ? [Button({ key: 'arcade-account-take', label: `Взять @${take}`, onPress: () => claimHandle($, take) })] : []),
+            Input({ key: 'arcade-account-handle', label: acct.handle ? 'Сменить ник' : 'Свой ник', placeholder: 'латинские буквы, цифры и _, от 4 до 32 знаков', onSubmit: (value) => claimHandle($, value) }),
+            ...(acct.naming ? [dim('Проверяю ник…')] : acct.handleNote ? [Text({ color: 'warning', children: [acct.handleNote] })] : []),
+            gap,
             dim('Общие для всех компьютеров: язык, клавиши, уведомления, размер панели, что делать с игрой по сигналу агента, свои темы, каналы Twitch и рекорд Flappy Arcade.'),
             dim(acct.syncing ? 'Синхронизирую…' : acct.syncedAt ? 'Настройки синхронизированы.' : 'Настройки ещё не синхронизированы.'),
             ...note,
@@ -2683,7 +2746,7 @@ export function register(on) {
           items = [
             back,
             gap,
-            dim('Вход нужен только для того, чтобы настройки были одни на всех твоих компьютерах. Без входа всё работает.'),
+            dim('Вход нужен, чтобы настройки были одни на всех твоих компьютерах и чтобы взять свой @ник для сетевых игр. Без входа всё работает.'),
             dim('Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.'),
             ...note,
             gap,
@@ -3439,7 +3502,7 @@ export function register(on) {
               syncAccount($)
             },
           }),
-          acct.session ? keep(dim(`  GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах'),
+          acct.session ? keep(dim(`  ${acct.handle ? `@${acct.handle} · ` : ''}GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах и свой @ник'),
           // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
           Button({
             key: 'arcade-lang-main',

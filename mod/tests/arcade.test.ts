@@ -13,7 +13,7 @@ import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed
 import { bundledFeeds, durationSeconds, durationText, hostOf, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from '../hooks/rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from '../hooks/search.js'
 import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from '../hooks/twitch.js'
-import { SYNC_KEYS, accountUrl, parseDone, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, syncPlan } from '../hooks/account.js'
+import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -2079,6 +2079,20 @@ test('английские описания игр в меню мода: жан�
   expect(bundledCatalog().games.every((g: any) => typeof g.about_en === 'string' && !/[А-Яа-яЁё]/.test(g.about_en))).toBe(true)
 })
 
+test('переводы описаний из каталога: на украинском — перевод, чужие языки и пустые строки отбрасываются', async ($, on) => {
+  const site = JSON.parse(siteCatalog())
+  site.games.thwaite.about_en = 'Missiles are falling on the town.'
+  site.games.thwaite.about_i18n = { uk: 'На місто падають ракети.', es: '', xx: 'нет такого языка', ru: 'не нужен' }
+  expect(parseCatalog(JSON.stringify(site))?.games.find((g: any) => g.id === 'thwaite')?.about_i18n).toEqual({ uk: 'На місто падають ракети.' })
+  const { clock } = stubs(on, { env: { LANG: 'uk_UA.UTF-8' }, site: JSON.stringify(site) })
+  await start($)
+  await clock.advance(300)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-nes' })
+  expect(await ui.find({ type: 'Text', text: /— На місто падають ракети\.$/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('сообщение «… открыт в Google Chrome» само уходит через 15 секунд: закрытие окна мод увидеть не может', async ($, on) => {
   const { clock, launches } = stubs(on, { env: WINDOWS })
   await start($)
@@ -2167,11 +2181,12 @@ test('настольные игры: мод знает их без ROM, откр
   await $.command.run({ command: 'arcade', args: '' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ key: 'arcade-net-join' })).toMatchObject({ props: { label: 'Присоединиться: Шахматы' } })
+  // Без входа — пустая подпись ника после #: страница забудет подпись прежнего входа
   await ui.press({ key: 'arcade-net-join' })
-  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess`)
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess#me=`)
   await ui.press({ key: 'arcade-menu-board' })
   await ui.press({ key: 'arcade-game-chess' })
-  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess`)
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess#me=`)
   await ui.unmount()
 })
 
@@ -3647,8 +3662,8 @@ test('account.js: ответы сайта про вход и настройки,
   // Настройки сайта: только общие ключи с отметкой времени
   const settings = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 }, junk: { v: 1, at: 1 }, notify: { v: false }, keys: 'нет' }
   const clean = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 } }
-  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, error: '' })
-  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, error: 'auth' })
+  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', error: '' })
+  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', error: 'auth' })
   expect(parseMe(reply(200, { user: { login: 'octocat' } })).error).toBe('down')
   expect(parseSettings(reply(200, { settings }))).toEqual({ settings: clean, error: '' })
   expect(parseSettings(reply(413, { error: 'too big' })).error).toBe('big')
@@ -3692,7 +3707,7 @@ test('аккаунт: вход через GitHub по коду — страни�
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ key: 'arcade-menu-account' })).toMatchObject({ props: { label: 'Войти через GitHub' } })
-  expect(await ui.find({ type: 'Text', text: '  по желанию: одни настройки на всех компьютерах' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  по желанию: одни настройки на всех компьютерах и свой @ник' })).toBeDefined()
   // Без входа сайт про аккаунт не спрашиваем
   await clock.advance(3_000)
   await ui.press({ key: 'arcade-menu-account' })
@@ -3864,5 +3879,149 @@ test('аккаунт: удалить — только со второго наж
   expect(saved.get('onDone')).toBe('close')
   expect(await ui.find({ type: 'Text', text: 'Аккаунт удалён: сайт Arcade забыл тебя и твои настройки. Здесь настройки остались.' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-account-login' })).toBeDefined()
+  await ui.unmount()
+})
+
+// Подпись @ника от сайта: <ник>.<до, секунды>.<HMAC>
+const ticketOf = (handle: string) => `${handle}.1790000000.${'A'.repeat(22)}`
+
+test('account.js: @ник — правила, имя с GitHub, ответы сайта', () => {
+  const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  // Латиница, цифры и _, 4–32 знака, первый — буква
+  expect(['fefa', 'octo_cat', 'a123', 'a'.repeat(32)].every((h) => HANDLE.test(h))).toBe(true)
+  expect(['abc', '1abc', '_abc', 'фефа', 'Fefa', 'fe-fa', 'a'.repeat(33)].some((h) => HANDLE.test(h))).toBe(false)
+  expect(accountUrl('handle')).toBe(`${SITE}/api/me/handle`)
+  // Что ввели: без @ и пробелов по краям, строчными
+  expect(normalHandle('  @FeFa_1 ')).toBe('fefa_1')
+  expect(normalHandle(5)).toBe('')
+  // Имя с GitHub: строчными, - → _; не подходит под правила — не предлагаем
+  expect(suggestHandle('Octo-Cat')).toBe('octo_cat')
+  expect(suggestHandle('abc')).toBe('')
+  expect(suggestHandle('1password')).toBe('')
+  expect(suggestHandle(undefined)).toBe('')
+  // /api/me: ник с подписью; подпись не к этому нику — без подписи; ник не того вида — нет ника
+  expect(parseMe(reply(200, { user: OCTO, handle: 'octocat', ticket: ticketOf('octocat') }))).toMatchObject({ handle: 'octocat', ticket: ticketOf('octocat'), error: '' })
+  expect(parseMe(reply(200, { user: OCTO, handle: 'octocat', ticket: ticketOf('someone') }))).toMatchObject({ handle: 'octocat', ticket: '' })
+  expect(parseMe(reply(200, { user: OCTO, handle: 'octocat', ticket: 'octocat.17.x' }))).toMatchObject({ handle: 'octocat', ticket: '' })
+  expect(parseMe(reply(200, { user: OCTO, handle: 'Bad Name', ticket: ticketOf('octocat') }))).toMatchObject({ handle: '', ticket: '' })
+  // PUT /api/me/handle: взял; без подписи (у сайта нет ключа) — ник всё равно взят
+  expect(parseHandle(reply(200, { handle: 'octocat', ticket: ticketOf('octocat') }))).toEqual({ handle: 'octocat', ticket: ticketOf('octocat'), error: '' })
+  expect(parseHandle(reply(200, { handle: 'octocat' }))).toEqual({ handle: 'octocat', ticket: '', error: '' })
+  expect(parseHandle(reply(400, { error: 'invalid' })).error).toBe('invalid')
+  expect(parseHandle(reply(400, { error: 'reserved' })).error).toBe('reserved')
+  expect(parseHandle(reply(409, { error: 'taken' })).error).toBe('taken')
+  expect(parseHandle(reply(429, { error: 'often' })).error).toBe('often')
+  expect(parseHandle(reply(401, { error: 'auth' })).error).toBe('auth')
+  expect(parseHandle(reply(200, { ok: true })).error).toBe('down')
+  expect(parseHandle(null)).toEqual({ handle: '', ticket: '', error: 'down' })
+})
+
+test('аккаунт: @ник — имя с GitHub одной кнопкой, свой из поля, занят — понятно; подпись ника — только в окно сетевой игры', HEAVY, async ($, on) => {
+  let mine = ''
+  const { api } = accountSite({}, {
+    'GET api/me': () => ({ json: { user: OCTO, settings: {}, ...(mine ? { handle: mine, ticket: ticketOf(mine) } : {}) } }),
+    'PUT api/me/handle': (request: any) => {
+      const handle = request.body.handle
+      if (handle === 'taken_one') return { status: 409, json: { error: 'taken' } }
+      if (handle === 'admin_x') return { status: 400, json: { error: 'reserved' } }
+      mine = handle
+      return { json: { handle, ticket: ticketOf(handle) } }
+    },
+  })
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'board', title: 'Настольные' })
+  site.games.chess = { console: 'board', kind: 'board', board: 'chess', title: 'Шахматы', genre: 'стратегия', about: 'по сети', keys: '…' }
+  const { clock, launches, requests } = stubs(on, { env: WINDOWS, api, site: JSON.stringify(site), stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const chess = async () => {
+    await ui.press({ key: 'arcade-menu-board' })
+    await ui.press({ key: 'arcade-game-chess' })
+    await ui.press({ key: 'arcade-back' })
+    return launches.at(-1).env.ARCADE_URL
+  }
+  // Вошёл, ника нет — адрес как был
+  expect(await chess()).toBe(`${SITE}/?game=chess`)
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Ника пока нет.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-account-take' })).toMatchObject({ props: { label: 'Взять @octocat' } })
+  expect(await ui.find({ key: 'arcade-account-handle' })).toMatchObject({ props: { label: 'Свой ник', placeholder: 'латинские буквы, цифры и _, от 4 до 32 знаков' } })
+  // Не тот вид — сайт не спрашиваем; занят и запрещён — так и говорим
+  await ui.input({ key: 'arcade-account-handle', text: 'фефа', kind: 'submit' })
+  expect(await ui.find({ type: 'Text', text: 'Ник — от 4 до 32 знаков: латинские буквы, цифры и _, первый — буква.' })).toBeDefined()
+  expect(sent(requests, 'api/me/handle', 'PUT')).toEqual([])
+  await ui.input({ key: 'arcade-account-handle', text: ' @Taken_One ', kind: 'submit' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: '@taken_one уже занят — выбери другой.' })).toBeDefined()
+  await ui.input({ key: 'arcade-account-handle', text: 'admin_x', kind: 'submit' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Такой ник взять нельзя — выбери другой.' })).toBeDefined()
+  // Имя с GitHub одной кнопкой: ключ сессии — в заголовке
+  await ui.press({ key: 'arcade-account-take' })
+  await clock.settle()
+  expect(sent(requests, 'api/me/handle', 'PUT').map((r) => [r.body, r.headers.Authorization])).toEqual([
+    [{ handle: 'taken_one' }, `Bearer ${TOKEN}`],
+    [{ handle: 'admin_x' }, `Bearer ${TOKEN}`],
+    [{ handle: 'octocat' }, `Bearer ${TOKEN}`],
+  ])
+  expect(await ui.find({ type: 'Text', text: 'Твой ник: @octocat' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-account-take' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-account-handle' })).toMatchObject({ props: { label: 'Сменить ник' } })
+  expect(await ui.find({ type: 'Text', text: 'Такой ник взять нельзя — выбери другой.' })).toBeUndefined()
+  // Тот же ник ещё раз — сайт не спрашиваем
+  await ui.input({ key: 'arcade-account-handle', text: 'OctoCat', kind: 'submit' })
+  expect(sent(requests, 'api/me/handle', 'PUT').length).toBe(3)
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ type: 'Text', text: '  @octocat · GitHub: @octocat' })).toBeDefined()
+  // Окно сетевой игры: подпись ника — после #, на сервер она не уходит; синхронизация (меню аккаунта) ник сохраняет
+  expect(await chess()).toBe(`${SITE}/?game=chess#me=${ticketOf('octocat')}`)
+  const syncs = sent(requests, 'api/me', 'GET').length
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  expect(sent(requests, 'api/me', 'GET').length).toBe(syncs + 1)
+  await ui.press({ key: 'arcade-back' })
+  expect(await chess()).toBe(`${SITE}/?game=chess#me=${ticketOf('octocat')}`)
+  // Вышел — пустая подпись: страница забудет прежнюю
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  await ui.press({ key: 'arcade-account-logout' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Твой ник: @octocat' })).toBeUndefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(await chess()).toBe(`${SITE}/?game=chess#me=`)
+  await ui.unmount()
+})
+
+test('аккаунт: ник с сайта — в меню, свой из поля его меняет; вход забыт — выходим', HEAVY, async ($, on) => {
+  let mine = 'old_name'
+  let gone = false
+  const { api } = accountSite({}, {
+    'GET api/me': () => ({ json: { user: OCTO, settings: {}, handle: mine, ticket: ticketOf(mine) } }),
+    'PUT api/me/handle': (request: any) => {
+      if (gone) return { status: 401, json: { error: 'auth' } }
+      mine = request.body.handle
+      return { json: { handle: mine, ticket: ticketOf(mine) } }
+    },
+  })
+  const { clock, requests, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Твой ник: @old_name' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-account-take' })).toBeUndefined()
+  await ui.input({ key: 'arcade-account-handle', text: 'new_name', kind: 'submit' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Твой ник: @new_name' })).toBeDefined()
+  // Сайт сказал, что вход больше не действует, — выходим
+  gone = true
+  await ui.input({ key: 'arcade-account-handle', text: 'third_name', kind: 'submit' })
+  await clock.settle()
+  expect(saved.has('account')).toBe(false)
+  expect(await ui.find({ type: 'Text', text: 'Вход на этом компьютере больше не действует — войди через GitHub заново.' })).toBeDefined()
+  expect(sent(requests, 'api/me/handle', 'PUT').length).toBe(2)
   await ui.unmount()
 })

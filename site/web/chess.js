@@ -93,13 +93,32 @@
       grid.append(cell)
     }
   }
-  // Запись ходов: «1. e4 e5 2. Nf3 …»
+  // Запись ходов: «1. e4 e5 2. Nf3 …» строкой с переносами. Видны последние ходы; «Показать все» раскрывает всю партию
+  // (страница прокручивается своей прокруткой), «Скрыть» — обратно. Выбор держится до конца партии
+  const LAST_MOVES = 8
   function paintMoves(box, chess) {
     const history = chess.history()
+    const pairs = Math.ceil(history.length / 2)
+    const all = box.dataset.all === '1'
+    const from = all ? 0 : Math.max(0, pairs - LAST_MOVES)
     box.replaceChildren()
-    for (let i = 0; i < history.length; i += 2) box.append(el('div', '', `${i / 2 + 1}. ${history[i]}${history[i + 1] ? ` ${history[i + 1]}` : ''}`))
-    if (!history.length) box.append(el('div', 'color:#6f6f78', T('ходов пока нет')))
-    box.scrollTop = box.scrollHeight
+    if (from) box.append(el('span', 'color:#6f6f78;margin-right:8px', '…'))
+    for (let i = from * 2; i < history.length; i += 2) {
+      const pair = el('span', '', `${i / 2 + 1}. ${history[i]}${history[i + 1] ? ` ${history[i + 1]}` : ''}`)
+      pair.className = 'pair'
+      box.append(pair)
+    }
+    if (!history.length) box.append(el('span', 'color:#6f6f78', T('ходов пока нет')))
+    if (pairs > LAST_MOVES) {
+      const toggle = el('button', '', all ? T('Скрыть') : `${T('Показать все')} (${pairs})`)
+      toggle.type = 'button'
+      toggle.className = 'chess-all'
+      toggle.addEventListener('click', () => {
+        box.dataset.all = all ? '' : '1'
+        paintMoves(box, chess)
+      })
+      box.append(toggle)
+    }
   }
   function layoutParts(root, titleText) {
     const title = el('h2', 'margin:8px 0', titleText)
@@ -107,12 +126,14 @@
     const top = el('div', 'font:600 18px ui-monospace,monospace;margin:6px 0;color:#c9c9cf', '')
     const bottom = el('div', 'font:600 18px ui-monospace,monospace;margin:6px 0;color:#c9c9cf', '')
     const grid = el('div', 'display:grid;grid-template-columns:repeat(8,1fr);width:min(92vw,62vh,480px);border:2px solid #3a3a44')
-    const moves = el('div', 'min-width:180px;max-width:260px;max-height:62vh;overflow:auto;font:14px ui-monospace,monospace;line-height:1.6;color:#c9c9cf;padding:6px 10px;border:1px solid #3a3a44;border-radius:8px')
+    // Запись ходов второстепенна: под доской, шириной с неё, без своей прокрутки (index.html)
+    const moves = el('div')
     moves.className = 'chess-moves'
     const tools = el('div', 'margin-top:10px')
     const boardBox = el('div')
     boardBox.append(top, grid, bottom)
-    const layout = el('div', 'display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap')
+    const layout = el('div')
+    layout.className = 'chess-layout'
     layout.append(boardBox, moves)
     root.append(title, status, layout, tools)
     return { title, status, top, bottom, grid, moves, tools }
@@ -364,6 +385,7 @@
     let list = []
     let seat = -1
     let seats = 0
+    let names = []
     let selected = null
     let flipped = false
     let clock = null
@@ -373,7 +395,7 @@
     let flaggedAt = 0
     const link = `${location.origin}${location.pathname}?game=${encodeURIComponent(id)}&room=${code}${minutes ? `&control=${minutes}` : ''}`
     const ws = new WebSocket(B.wsUrl(`/net/board/${code}`))
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: B.tokenFor(code), game: id, ...(control ? { control } : {}) })))
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: B.tokenFor(code), game: id, ...(control ? { control } : {}), ...B.named() })))
     ws.addEventListener('close', () => {
       status.textContent = T('Связь с партией прервалась — открой ссылку ещё раз, ходы сохранены')
     })
@@ -401,6 +423,7 @@
       if (m.type === 'state') {
         seat = m.seat
         seats = m.seats
+        names = m.names || []
         list = Array.isArray(m.moves) ? m.moves : []
         control = m.control || 0
         setClock(m.clock)
@@ -415,7 +438,10 @@
           // неверный ход — дальше не идём
         }
         if (m.clock) setClock(m.clock)
-      } else if (m.type === 'seats') seats = m.seats
+      } else if (m.type === 'seats') {
+        seats = m.seats
+        names = m.names || []
+      }
       selected = null
       render()
     })
@@ -444,7 +470,9 @@
       paintMoves(moves, chess)
       const down = flipped ? 'b' : 'w'
       const up = down === 'w' ? 'b' : 'w'
-      const label = (side) => `${side === mySide() ? T('Ты') : T('Соперник')} (${side === 'w' ? T('белые') : T('чёрные')})${clock ? ` · ${clock ? (leftOf(side) === null ? '' : clockText(leftOf(side))) : ''}` : ''}`
+      // «Ты @fefa (белые)»: ник — если игрок взял его в Arcade
+      const nick = (side) => names[side === 'w' ? 0 : 1]
+      const label = (side) => `${side === mySide() ? T('Ты') : T('Соперник')}${nick(side) ? ` @${nick(side)}` : ''} (${side === 'w' ? T('белые') : T('чёрные')})${clock ? ` · ${clock ? (leftOf(side) === null ? '' : clockText(leftOf(side))) : ''}` : ''}`
       top.textContent = label(up)
       bottom.textContent = label(down)
       const done = verdict()

@@ -314,6 +314,37 @@ try {
   assert.deepEqual(last(w).result, { loser: 1, reason: 'time' }, 'у чёрных вышло время')
   await room.webSocketMessage(bl, JSON.stringify({ type: 'move', ply: 1, move: 'e5' }))
   assert.deepEqual(last(bl).moves, ['e4'], 'после конца партии ход не принимается')
+  // Ники: верная подпись сайта — ник у своего места; чужая, истёкшая или подменённая — без ника; у зрителя ника нет;
+  // новая партия — ники уходят вместе с местами
+  const { nameTicket, TICKET_MS } = await import('../worker/account.js')
+  const secret = 'тестовый-секрет'
+  for (const ws of sockets) ws.closed = true
+  store.clear()
+  room = new BoardRoom(ctx, { LINK_SECRET: secret })
+  for (let i = 0; i < 3; i++) await room.fetch({ headers: new Headers() })
+  const [p1, p2, p3] = sockets.slice(-3)
+  const hello = (ws, token, me) => room.webSocketMessage(ws, JSON.stringify({ type: 'hello', token, game: 'checkers', me }))
+  const fefa = await nameTicket(secret, 'fefa', Date.now())
+  assert.match(fefa, /^fefa\.\d{10}\.[A-Za-z0-9_-]{22}$/)
+  await hello(p1, 'tokenname01', fefa)
+  assert.deepEqual(last(p1).names, ['fefa'])
+  await hello(p2, 'tokenname02', await nameTicket('чужой-секрет', 'octo', Date.now()))
+  assert.deepEqual(last(p2).names, ['fefa', null], 'подпись не сайта — без ника')
+  assert.deepEqual(last(p1), { type: 'seats', seats: 2, names: ['fefa', null] })
+  await hello(p2, 'tokenname02', await nameTicket(secret, 'octo', Date.now() - TICKET_MS))
+  assert.deepEqual(last(p2).names, ['fefa', null], 'подпись истекла')
+  await hello(p2, 'tokenname02', fefa.replace('fefa', 'octo'))
+  assert.deepEqual(last(p2).names, ['fefa', null], 'ник в подписи подменён')
+  await hello(p2, 'tokenname02', await nameTicket(secret, 'octo', Date.now()))
+  assert.deepEqual(last(p1), { type: 'seats', seats: 2, names: ['fefa', 'octo'] })
+  await hello(p3, 'tokenname03', await nameTicket(secret, 'watcher', Date.now()))
+  assert.deepEqual(last(p3).names, ['fefa', 'octo'], 'зритель места не занимает — и ника тоже')
+  await hello(p1, 'tokenname01')
+  assert.deepEqual(last(p1).names, ['fefa', 'octo'], 'вернулся без подписи — ник прежний')
+  await room.webSocketMessage(p1, JSON.stringify({ type: 'reset' }))
+  assert.equal(last(p1).seat, 1)
+  assert.deepEqual(last(p1).names, ['octo', 'fefa'])
+  assert.ok(!JSON.stringify(p3.sent).includes('tokenname01'), 'жетоны мест в окна не уходят')
 } finally {
   globalThis.Response = RealResponse
 }
@@ -673,7 +704,7 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS } = await import('../worker/account.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, normalHandle, handleProblem, ticketName } = await import('../worker/account.js')
   const KEY = 'a'.repeat(43)
   assert.equal(sessionId(`Bearer 42.${KEY}`), '42')
   assert.equal(sessionId(`Bearer 42.${KEY}x`), null)
@@ -699,6 +730,12 @@ try {
   assert.equal(mergeSettings({}, null, now0), null)
   const many = Object.fromEntries(Array.from({ length: MAX_KEYS + 1 }, (_, i) => [`k${i}`, { v: i, at: 1 }]))
   assert.equal(mergeSettings({}, many, now0), null)
+
+  // @ник: строчными и без @; латиница, цифры и _, 4–32 знака с буквы; слова Arcade, Claude, GitHub — запрещены
+  assert.deepEqual([' @Fefa ', 'OCTO_cat', '@@x', 42, null].map(normalHandle), ['fefa', 'octo_cat', '@x', '', ''])
+  assert.deepEqual(['fefa', 'a_1_b', 'x'.repeat(32), 'Fefa', 'abc', '1abc', 'ab-cd', 'фефа', 'x'.repeat(33), ''].map(handleProblem), [null, null, null, 'invalid', 'invalid', 'invalid', 'invalid', 'invalid', 'invalid', 'invalid'])
+  assert.deepEqual(['admin', 'arcade_team', 'the_claude', 'github', 'my_anthropic', 'anthropics', 'root', 'support_bot'].map(handleProblem), Array(8).fill('reserved'))
+  assert.deepEqual(['arcadefan', 'claudette', 'rooted'].map(handleProblem), [null, null, null], 'слово внутри другого — можно')
 
   // GitHub — подставной: коды, ответы на «вошёл ли» по очереди и профиль
   const asked = []
@@ -862,11 +899,53 @@ try {
     assert.deepEqual(other.body.user, { id: '7', login: 'other' })
     assert.deepEqual((await go('GET', '/api/me', { token: other.body.token })).body, { user: { id: '7', login: 'other' }, settings: {} })
 
-    // Удалить аккаунт — ничего не остаётся
+    // @ник: сайт проверяет вид и запреты, ник один на весь сайт, без разницы в регистре; с LINK_SECRET — подпись
+    // для сетевых игр
+    env.LINK_SECRET = 'тестовый-секрет'
+    const nick = (handle, token = tokens.at(-1)) => go('PUT', '/api/me/handle', { body: { handle }, token })
+    assert.deepEqual(await nick('ab'), { status: 400, body: { error: 'invalid' } })
+    assert.deepEqual(await nick(42), { status: 400, body: { error: 'invalid' } })
+    assert.deepEqual(await go('PUT', '/api/me/handle', { body: '{', token: tokens.at(-1) }), { status: 400, body: { error: 'invalid' } })
+    assert.deepEqual(await nick('claude_fan'), { status: 400, body: { error: 'reserved' } })
+    assert.deepEqual(await go('PUT', '/api/me/handle', { body: { handle: 'octo_cat' } }), { status: 401, body: { error: 'auth' } })
+    const named = await nick(' @Octo_Cat ')
+    assert.equal(named.status, 200)
+    assert.equal(named.body.handle, 'octo_cat')
+    assert.equal(await ticketName(env.LINK_SECRET, named.body.ticket, Date.now()), 'octo_cat')
+    const me42 = (await go('GET', '/api/me', { token: tokens.at(-1) })).body
+    assert.equal(me42.handle, 'octo_cat')
+    assert.equal(await ticketName(env.LINK_SECRET, me42.ticket, Date.now()), 'octo_cat')
+    assert.equal(await ticketName('чужой', me42.ticket, Date.now()), null)
+    const registry = objects.get('auth').store
+    assert.deepEqual(registry.get('handle:octo_cat'), { id: '42' })
+    assert.deepEqual(await nick('OCTO_CAT', other.body.token), { status: 409, body: { error: 'taken' } }, 'чужой ник, хоть и другими буквами')
+    assert.equal((await nick('octo_cat')).status, 200, 'свой ник ещё раз — не смена')
+    assert.equal(registry.get('owner:42').changes.length, 1)
+    // Смена: прежний ник месяц держится за хозяином — чужому нельзя, хозяину можно вернуть
+    assert.equal((await nick('octo_two')).body.handle, 'octo_two')
+    assert.ok(registry.get('handle:octo_cat').until > Date.now() + HANDLE_HOLD_MS - 60_000)
+    assert.deepEqual(await nick('octo_cat', other.body.token), { status: 409, body: { error: 'taken' } })
+    assert.equal((await nick('octo_cat')).status, 200)
+    assert.deepEqual(registry.get('handle:octo_cat'), { id: '42' })
+    // Не больше HANDLE_CHANGES смен в сутки
+    for (let i = registry.get('owner:42').changes.length; i < HANDLE_CHANGES; i++) assert.equal((await nick(`octo_${i}x`)).status, 200)
+    assert.deepEqual(await nick('octo_more'), { status: 429, body: { error: 'often' } })
+    // Через месяц: отпущенные ники свободны, смены — снова можно
+    Date.now = () => realNow() + 2 * 86_400_000 + HANDLE_HOLD_MS + 1000
+    assert.equal((await nick('octo_cat', other.body.token)).status, 200)
+    assert.equal((await nick('octo_more')).status, 200)
+    assert.equal((await go('GET', '/api/me', { token: other.body.token })).body.handle, 'octo_cat')
+
+    // Удалить аккаунт — ничего не остаётся, а ник месяц держится, потом свободен
     assert.deepEqual(await go('DELETE', '/api/me', { token: tokens.at(-1) }), { status: 200, body: { ok: true } })
     assert.equal(account42.store.size, 0)
     assert.equal(account42.storage.alarm, null)
     assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).status, 401)
+    assert.equal(registry.get('owner:42'), undefined)
+    assert.deepEqual(await nick('octo_more', other.body.token), { status: 409, body: { error: 'taken' } })
+    Date.now = () => realNow() + 2 * 86_400_000 + 2 * HANDLE_HOLD_MS + 2000
+    assert.equal((await nick('octo_more', other.body.token)).status, 200)
+    delete env.LINK_SECRET
 
     // Будильник: год без входа — аккаунт удаляется, заходил — уборка переносится
     const account7 = objects.get('gh:7')

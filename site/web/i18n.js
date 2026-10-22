@@ -1,6 +1,7 @@
 // Язык интерфейса окна: русский (на нём написан код) или английский.
 // Язык — из адреса (lang=en присылает мод), иначе сохранённый выбор, иначе язык браузера.
-// Перевод — по словарю и шаблонам; что не переведено, остаётся по-русски. Описания игр из каталога пока русские.
+// Перевод — по словарю и шаблонам; что не переведено, остаётся по-русски. Описания игр: русское, английское (about_en)
+// или перевод с английского (about_i18n — его кладёт в каталог сборка из locales/*.json).
 ;(function () {
   'use strict'
 
@@ -68,6 +69,10 @@
     // аудиокниги
     'Аудиокниги': 'Audiobooks',
     'Мои аудиокниги': 'My audiobooks',
+    // названия своих игр и подборок (названия чужих игр и книг не переводятся)
+    'Классические квесты': 'Classic adventures',
+    'FreeDM — сетевой deathmatch': 'FreeDM — network deathmatch',
+    'BlasphDM — сетевой deathmatch': 'BlasphDM — network deathmatch',
     'Аудиокниги по языкам, внутри — по жанрам; и свои файлы': 'Audiobooks by language and genre; and your own files',
     'свои файлы': 'your files',
     'аудиокнига': 'audiobook',
@@ -132,6 +137,8 @@
     'сильный соперник': 'a strong opponent',
     'играет сильнее почти любого человека': 'stronger than almost any human',
     'ходов пока нет': 'no moves yet',
+    'Показать все': 'Show all',
+    'Скрыть': 'Hide',
     'Ты': 'You',
     'Вернуть ход': 'Take back',
     'Подсказка': 'Hint',
@@ -411,6 +418,18 @@
   }
 
   const lang = pick()
-  window.ArcadeI18n = { lang, t, set, LANGS, NAMES }
+  // Описание игры из каталога: по-русски, по-английски или перевод с английского; перевода нет — английское
+  function about(game) {
+    if (!game) return ''
+    if (lang === 'ru' || !game.about_en) return game.about || ''
+    return (lang !== 'en' && game.about_i18n && game.about_i18n[lang]) || game.about_en
+  }
+  // Название игры: русские названия своих игр («Шахматы», «Мои аудиокниги») — по словарю; книги и аудиокниги — как есть
+  function title(game) {
+    if (!game || typeof game.title !== 'string') return ''
+    return /[А-Яа-яЁё]/.test(game.title) && !['book', 'audio'].includes(game.kind) ? t(game.title) : game.title
+  }
+
+  window.ArcadeI18n = { lang, t, set, about, title, LANGS, NAMES }
   window.T = t
 })()

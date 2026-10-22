@@ -4,7 +4,9 @@
 // Мод получает свой ключ сессии Arcade — <номер GitHub>.<случайная строка>; сайт хранит только его хеш.
 // Приложение GitHub — OAuth App с включённым Device Flow; его client ID не секрет и лежит в vars (GITHUB_CLIENT_ID),
 // client secret сайту не нужен. Почты и доступа к репозиториям Arcade не просит: scope пустой.
-// Durable Object Account: экземпляр 'auth' — вход и лимиты адресов, экземпляр gh:<номер GitHub> — аккаунт человека.
+// Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
+// аккаунт человека.
+import { sign, signed } from './discover.js'
 
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
@@ -24,6 +26,14 @@ const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/
 const GH_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/
 const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 const KEY = /^[A-Za-z][A-Za-z0-9_]{0,39}$/
+// @ник: латиница, цифры и _, 4–32 знака, первый — буква; хранится строчными — Fefa и fefa один ник
+export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
+export const HANDLE_HOLD_MS = 30 * DAY // сменённый ник месяц держится за прежним хозяином: никто другой его не возьмёт
+export const HANDLE_CHANGES = 5 // смен ника в сутки — чтобы не занимать чужие ники пачкой
+export const TICKET_MS = 12 * 60 * MINUTE // сколько живёт подпись ника для сетевых игр
+// Ники, которыми легко выдать себя за Arcade, Claude или GitHub: сами слова и ники, где они — часть через _
+const RESERVED = new Set(['administrator', 'anonymous', 'everyone', 'guest', 'help', 'helpdesk', 'info', 'moderator', 'mods', 'noreply', 'null', 'owner', 'root', 'security', 'staff', 'system', 'team', 'undefined', 'abuse', 'contact', 'postmaster', 'webmaster', 'robot', 'service', 'settings', 'account'])
+const RESERVED_PARTS = ['arcade', 'admin', 'support', 'claude', 'anthropic', 'github', 'official', 'moderator', 'system']
 
 class AppError extends Error {} // GitHub не принял приложение сайта: неверный client ID или Device Flow выключен
 class LimitError extends Error {}
@@ -36,6 +46,7 @@ const ROUTES = {
   'GET /api/me': ['user', '/me'],
   'DELETE /api/me': ['user', '/delete'],
   'PUT /api/me/settings': ['user', '/settings'],
+  'PUT /api/me/handle': ['user', '/handle'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
@@ -55,9 +66,12 @@ async function readBody(request) {
 // --- Маршрут Worker'а -----------------------------------------------------------------------------------------
 // POST /api/auth/start → { device, code, url, interval, expires }: код для github.com/login/device
 // POST /api/auth/poll { device } → { status: 'pending' | 'expired' | 'denied' } или { status: 'ok', token, user }
-// GET /api/me → { user, settings }, PUT /api/me/settings { settings } → { settings }, POST /api/auth/logout,
-// DELETE /api/me — с ключом сессии. 401 — ключа нет или он не подходит ({ error: 'auth' }), 503 — вход не настроен
-// ({ error: 'off' }) или GitHub не принял приложение ({ error: 'app' }), 429 — лимит адреса, 502 — GitHub не ответил
+// GET /api/me → { user, settings, handle?, ticket? }, PUT /api/me/settings { settings } → { settings },
+// PUT /api/me/handle { handle } → { handle, ticket? }, POST /api/auth/logout, DELETE /api/me — с ключом сессии.
+// 401 — ключа нет или он не подходит ({ error: 'auth' }), 503 — вход не настроен ({ error: 'off' }) или GitHub не
+// принял приложение ({ error: 'app' }), 429 — лимит адреса, 502 — GitHub не ответил. Ник: 400 — не того вида
+// ({ error: 'invalid' }) или запрещён ({ error: 'reserved' }), 409 — занят ({ error: 'taken' }), 429 — слишком
+// часто меняли ({ error: 'often' })
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
@@ -94,6 +108,37 @@ export function mergeSettings(stored, incoming, now) {
   return Object.keys(merged).length > MAX_KEYS ? null : merged
 }
 
+// --- @ник ----------------------------------------------------------------------------------------------------
+// Ник — подпись человека в сетевых играх (дальше — в друзьях и чате). Друзья будут держаться за номер аккаунта, а не
+// за ник, поэтому его можно менять когда угодно. Что пришло → ник строчными, без @ в начале; не строка — ''
+export function normalHandle(text) {
+  return typeof text === 'string' ? text.trim().replace(/^@/, '').toLowerCase() : ''
+}
+
+// Что не так с ником: 'invalid' — не того вида, 'reserved' — запрещён; подходит — null
+export function handleProblem(handle) {
+  if (!HANDLE.test(handle)) return 'invalid'
+  if (RESERVED.has(handle) || handle.includes('anthropic') || handle.split('_').some((part) => RESERVED_PARTS.includes(part))) return 'reserved'
+  return null
+}
+
+// Подпись ника для сетевых игр: мод получает её в /api/me и передаёт странице партии, комната проверяет — так в
+// партии нельзя назваться чужим ником. Вид — <ник>.<до, секунды>.<HMAC> на LINK_SECRET; номера аккаунта в ней нет.
+// Сменённый ник месяц не достанется другому, поэтому старая подпись, пока жива, никого не подставит
+const namePayload = (handle, until) => `name|${handle}|${until}`
+
+export async function nameTicket(secret, handle, now) {
+  const until = Math.floor((now + TICKET_MS) / 1000)
+  return `${handle}.${until}.${await sign(secret, namePayload(handle, until))}`
+}
+
+// Подпись верна и не истекла — ник; иначе null
+export async function ticketName(secret, ticket, now) {
+  const m = /^([a-z][a-z0-9_]{3,31})\.(\d{10})\.([A-Za-z0-9_-]{22})$/.exec(typeof ticket === 'string' ? ticket : '')
+  if (!m || Number(m[2]) * 1000 <= now) return null
+  return (await signed(secret, namePayload(m[1], m[2]), m[3])) ? m[1] : null
+}
+
 const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length
 const today = (now) => new Date(now).toISOString().slice(0, 10)
 
@@ -107,8 +152,10 @@ function randomKey() {
   return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-// Экземпляр 'auth': коды GitHub и выдача ключей сессии; экземпляр gh:<номер> хранит user (номер, имя и картинка
-// профиля), sessions (хеши ключей сессии), settings и seen — когда человек последний раз заходил
+// Экземпляр 'auth': коды GitHub, выдача ключей сессии и реестр ников — handle:<ник> → { id, until? } (чей ник и, если
+// его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle, changes } (ник
+// человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
+// ключей сессии), settings, handle и seen — когда человек последний раз заходил
 export class Account {
   constructor(ctx, env) {
     this.ctx = ctx
@@ -123,10 +170,13 @@ export class Account {
       if (path === '/start') return await this.start(ip)
       if (path === '/poll') return await this.poll(await request.text(), ip)
       if (path === '/login') return await this.login(await request.json())
+      if (path === '/claim') return await this.claim(await request.json())
+      if (path === '/release') return await this.release(await request.json())
       const hash = await this.session(request.headers.get('Authorization'))
       if (!hash) return Response.json({ error: 'auth' }, { status: 401 })
       if (path === '/me') return await this.me()
       if (path === '/settings') return await this.saveSettings(await request.text())
+      if (path === '/handle') return await this.setHandle(await request.text())
       if (path === '/logout') return await this.logout(hash)
       if (path === '/delete') return await this.remove()
       return Response.json({ error: 'not found' }, { status: 404 })
@@ -240,7 +290,64 @@ export class Account {
 
   async me() {
     const { id, login, avatar } = (await this.ctx.storage.get('user')) ?? {}
-    return Response.json({ user: { id, login, ...(avatar ? { avatar } : {}) }, settings: (await this.ctx.storage.get('settings')) ?? {} })
+    const handle = await this.ctx.storage.get('handle')
+    return Response.json({ user: { id, login, ...(avatar ? { avatar } : {}) }, settings: (await this.ctx.storage.get('settings')) ?? {}, ...(await this.named(handle)) })
+  }
+
+  // Ник и его подпись для ответа; без ника — ничего, без LINK_SECRET — ник без подписи
+  async named(handle) {
+    if (!handle) return {}
+    const secret = this.env.LINK_SECRET
+    return { handle, ...(secret ? { ticket: await nameTicket(secret, handle, Date.now()) } : {}) }
+  }
+
+  // Вопрос к реестру ников в экземпляре 'auth'
+  registry(path, body) {
+    const space = this.env.ACCOUNT
+    return space.get(space.idFromName('auth')).fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))
+  }
+
+  // Взять ник: проверить вид, спросить реестр, запомнить у себя
+  async setHandle(text) {
+    let handle = ''
+    try {
+      handle = normalHandle(JSON.parse(text)?.handle)
+    } catch {
+      // не JSON — ник пустой, ниже ответим 400
+    }
+    const problem = handleProblem(handle)
+    if (problem) return Response.json({ error: problem }, { status: 400 })
+    const { id } = (await this.ctx.storage.get('user')) ?? {}
+    const answer = await this.registry('/claim', { id, handle })
+    if (!answer.ok) return answer
+    await this.ctx.storage.put('handle', handle)
+    return Response.json(await this.named(handle))
+  }
+
+  // Реестр: ник свободен, держится за этим же человеком или его месяц прошёл — ник его; прежний ник держится месяц
+  async claim({ id, handle }) {
+    const now = Date.now()
+    const owner = (await this.ctx.storage.get(`owner:${id}`)) ?? { changes: [] }
+    if (owner.handle === handle) return Response.json({ handle })
+    const record = await this.ctx.storage.get(`handle:${handle}`)
+    const held = record && record.id !== id && !(record.until <= now)
+    if (held) return Response.json({ error: 'taken' }, { status: 409 })
+    const changes = owner.changes.filter((t) => now - t < DAY)
+    if (changes.length >= HANDLE_CHANGES) return Response.json({ error: 'often' }, { status: 429 })
+    await this.ctx.storage.put({
+      [`handle:${handle}`]: { id },
+      [`owner:${id}`]: { handle, changes: [...changes, now] },
+      ...(owner.handle ? { [`handle:${owner.handle}`]: { id, until: now + HANDLE_HOLD_MS } } : {}),
+    })
+    return Response.json({ handle })
+  }
+
+  // Реестр: аккаунт удалён — его ник держится месяц, потом свободен
+  async release({ id }) {
+    const owner = await this.ctx.storage.get(`owner:${id}`)
+    if (owner?.handle) await this.ctx.storage.put(`handle:${owner.handle}`, { id, until: Date.now() + HANDLE_HOLD_MS })
+    await this.ctx.storage.delete(`owner:${id}`)
+    return Response.json({ ok: true })
   }
 
   async saveSettings(text) {
@@ -266,6 +373,7 @@ export class Account {
 
   // Удалить аккаунт: всё, что о человеке знает сайт
   async remove() {
+    await this.forget()
     await this.ctx.storage.deleteAlarm()
     await this.ctx.storage.deleteAll()
     return Response.json({ ok: true })
@@ -274,7 +382,18 @@ export class Account {
   // Год без входа — аккаунт удаляется; заходил — будильник переносится на год после последнего входа
   async alarm() {
     const seen = (await this.ctx.storage.get('seen')) ?? 0
-    if (Date.now() - seen >= IDLE_MS) await this.ctx.storage.deleteAll()
-    else await this.ctx.storage.setAlarm(seen + IDLE_MS)
+    if (Date.now() - seen >= IDLE_MS) {
+      await this.forget()
+      await this.ctx.storage.deleteAll()
+    } else await this.ctx.storage.setAlarm(seen + IDLE_MS)
+  }
+
+  // Перед удалением аккаунта — отпустить его ник в реестре
+  async forget() {
+    const { id } = (await this.ctx.storage.get('user')) ?? {}
+    if (id && (await this.ctx.storage.get('handle'))) {
+      const answer = await this.registry('/release', { id })
+      if (!answer.ok) throw new Error(`registry: ${answer.status}`)
+    }
   }
 }

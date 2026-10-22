@@ -631,6 +631,37 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   ws.emit('message', JSON.stringify({ type: 'move', ply: 0, move: [2, 3] }))
   assert.match(textOf(game.byId.stage), /Ход соперника — можно вернуться к агенту/)
   assert.equal(vm.runInContext('ArcadeBoard.game.moves.length', game.ctx), 1)
+  assert.doesNotMatch(textOf(game.byId.stage), /@/, 'без ников — без имён')
+  // @ник: мод кладёт подпись после # — страница прячет её в браузер, убирает из адреса и шлёт в hello
+  const TICKET = `fefa.1790000000.${'A'.repeat(22)}`
+  const namedStore = new Map()
+  const named = await makePage(namedStore, { search: '?game=reversi&room=abcdef1234', hash: `#me=${TICKET}` })
+  await until(() => named.sockets.length > 0)
+  assert.equal(namedStore.get('arcade:me'), TICKET)
+  assert.equal(named.replaced, '?game=reversi&room=abcdef1234', 'подпись убрана из адреса')
+  const nws = named.sockets[0]
+  nws.emit('open')
+  assert.deepEqual(JSON.parse(nws.sent[0]), { type: 'hello', token: JSON.parse(nws.sent[0]).token, game: 'reversi', me: TICKET })
+  nws.emit('message', JSON.stringify({ type: 'state', game: 'reversi', seat: 0, seats: 1, moves: [], names: ['fefa'] }))
+  assert.match(textOf(named.byId.stage), /чёрные — @fefa/)
+  assert.doesNotMatch(textOf(named.byId.stage), /белые — @/)
+  nws.emit('message', JSON.stringify({ type: 'seats', seats: 2, names: ['fefa', 'octo_cat'] }))
+  assert.match(textOf(named.byId.stage), /чёрные — @fefa · белые — @octo_cat/)
+  // Подпись живёт в браузере: следующая партия без # тоже с ником; пустая #me= — забыть (вышел из аккаунта)
+  const later = await makePage(namedStore, { search: '?game=reversi&room=abcdef9999' })
+  await until(() => later.sockets.length > 0)
+  later.sockets[0].emit('open')
+  assert.equal(JSON.parse(later.sockets[0].sent[0]).me, TICKET)
+  assert.equal(later.replaced, undefined, 'адрес без подписи не трогаем')
+  const out = await makePage(namedStore, { search: '?game=reversi&room=abcdef9999', hash: '#me=' })
+  await until(() => out.sockets.length > 0)
+  assert.equal(namedStore.has('arcade:me'), false, 'пустая подпись — забыть прежнюю')
+  out.sockets[0].emit('open')
+  assert.equal('me' in JSON.parse(out.sockets[0].sent[0]), false)
+  // С компьютером — без подписи: соперник не человек
+  const botNamed = await makePage(new Map([['arcade:me', TICKET]]), { search: '?game=reversi&vs=bot' })
+  await until(() => /Твой ход/.test(textOf(botNamed.byId.stage)))
+  assert.doesNotMatch(textOf(botNamed.byId.stage), /@fefa/)
 }
 
 // --- Браузерные игры: HexGL в рамке под полосой окна ----------------------------------------------------------------
@@ -761,6 +792,27 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(g.chess.history().length, 0, '«Вернуть ход» снимает и свой ход, и ответ компьютера')
 }
 
+// --- Шахматы: запись ходов — последние 8, «Show all» раскрывает всю партию до конца партии, «Hide» — обратно ---------
+{
+  const { Chess } = await import(pathToFileURL(path.join(DIST, 'vendor', 'chess', 'chess.js')).href)
+  const p = await makePage(new Map(), { search: '?game=chess&room=abcdef9999&lang=en', globals: { ArcadeChessLib: { Chess } } })
+  await until(() => p.sockets.some((s) => /\/net\/board\/abcdef9999$/.test(s.url)))
+  const ws = p.sockets.find((s) => /\/net\/board\/abcdef9999$/.test(s.url))
+  ws.emit('open')
+  const moves = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7', 'Re1', 'b5', 'Bb3', 'd6', 'c3', 'O-O', 'h3', 'Nb8', 'd4', 'Nbd7']
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'chess', seat: 0, seats: 2, moves, control: 0 }))
+  const box = p.byId.stage.children.find((n) => n.id === 'board-root').querySelectorAll('.chess-moves')[0]
+  const pairs = () => box.querySelectorAll('.pair').map((x) => x.textContent)
+  const toggle = () => box.querySelectorAll('.chess-all')[0]
+  assert.deepEqual([pairs().length, pairs()[0], pairs().at(-1), toggle().textContent], [8, '3. Bb5 a6', '10. d4 Nbd7', 'Show all (10)'])
+  toggle().click()
+  assert.deepEqual([pairs().length, pairs()[0], toggle().textContent], [10, '1. e4 e5', 'Hide'])
+  ws.emit('message', JSON.stringify({ type: 'move', ply: 20, move: 'Nbd2' }))
+  assert.equal(pairs().length, 11, 'после хода запись остаётся раскрытой')
+  toggle().click()
+  assert.deepEqual([pairs().length, pairs()[0], toggle().textContent], [8, '4. Ba4 Nf6', 'Show all (11)'])
+}
+
 // --- Шахматы по сети: контроль времени, лобби варианта, часы с сервера, флажок ------------------------------------
 {
   const { Chess } = await import(pathToFileURL(path.join(DIST, 'vendor', 'chess', 'chess.js')).href)
@@ -773,13 +825,15 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   await until(() => lobby.sockets.some((s) => /\/net\/room\/board-chess-7$/.test(s.url)))
   assert.ok(lobby.sockets.some((s) => /\/net\/room\/board-chess-7$/.test(s.url)), 'подбор — в лобби выбранного контроля')
   // Партия по ссылке: приветствие с контролем, часы с сервера, ход уходит на сервер, флажок — когда время вышло
-  const net = await makePage(new Map(), { search: '?game=chess&room=abcdef5678&control=7&lang=en', globals: { ArcadeChessLib: { Chess } } })
+  const net = await makePage(new Map(), { search: '?game=chess&room=abcdef5678&control=7&lang=en', hash: `#me=fefa.1790000000.${'A'.repeat(22)}`, globals: { ArcadeChessLib: { Chess } } })
   await until(() => net.sockets.some((s) => /\/net\/board\/abcdef5678$/.test(s.url)))
   const ws = net.sockets.find((s) => /\/net\/board\/abcdef5678$/.test(s.url))
   ws.emit('open')
-  assert.deepEqual([JSON.parse(ws.sent[0]).type, JSON.parse(ws.sent[0]).control], ['hello', 420])
+  assert.deepEqual([JSON.parse(ws.sent[0]).type, JSON.parse(ws.sent[0]).control, JSON.parse(ws.sent[0]).me], ['hello', 420, `fefa.1790000000.${'A'.repeat(22)}`])
   const now = Date.now()
-  ws.emit('message', JSON.stringify({ type: 'state', game: 'chess', seat: 0, seats: 2, moves: [], control: 420, clock: { left: [420000, 420000], since: now, now } }))
+  ws.emit('message', JSON.stringify({ type: 'state', game: 'chess', seat: 0, seats: 2, moves: [], control: 420, clock: { left: [420000, 420000], since: now, now }, names: ['fefa', ''] }))
+  assert.match(textOf(net.byId.stage), /You @fefa \(white\)/)
+  assert.match(textOf(net.byId.stage), /Opponent \(black\)/, 'соперник без ника — как раньше')
   const g = net.ctx.ArcadeChess.game
   g.click('e2')
   g.click('e4')
@@ -809,6 +863,14 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   r2.querySelectorAll('.go-start')[0].click()
   await until(() => net.sockets.some((s) => /\/net\/room\/board-go-13$/.test(s.url)))
   assert.ok(net.sockets.some((s) => /\/net\/room\/board-go-13$/.test(s.url)), 'подбор — среди выбравших ту же доску')
+  // Партия по ссылке: подпись ника — в hello, ники игроков — под доской
+  const room = await makePage(new Map([['arcade:me', `octo_cat.1790000000.${'A'.repeat(22)}`]]), { search: '?game=go&room=abcdef4321&size=9&lang=en' })
+  await until(() => room.sockets.some((s) => /\/net\/board\/abcdef4321$/.test(s.url)))
+  const gws = room.sockets.find((s) => /\/net\/board\/abcdef4321$/.test(s.url))
+  gws.emit('open')
+  assert.equal(JSON.parse(gws.sent[0]).me, `octo_cat.1790000000.${'A'.repeat(22)}`)
+  gws.emit('message', JSON.stringify({ type: 'state', game: 'go', seat: 1, seats: 2, moves: [], variant: '9', names: ['fefa', 'octo_cat'] }))
+  assert.match(textOf(room.byId.stage), /black — @fefa · white — @octo_cat/)
 }
 
 // --- Аудиокниги: проигрыватель (главы, скорость, место прослушивания), свои файлы, полка «Аудиокниги» -------------
@@ -973,6 +1035,16 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   // Украинский: описания игр — английские, а не русские
   const uk = await makePage(new Map(), { search: '?tab=nes&lang=uk' })
   assert.ok(!/[ыэъё]/i.test(uk.byId.library.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания не по-русски')
+  // Описания и названия своих игр — на языке окна: «Шахи» с украинским описанием из каталога; в меню реверси — тоже
+  const ukBoard = await makePage(new Map(), { search: '?tab=board&lang=uk' })
+  const ukChess = ukBoard.byId.library.querySelectorAll('.card').find((c) => c.dataset.game === 'chess')
+  assert.equal(ukChess.querySelectorAll('.title')[0].textContent, 'Шахи')
+  assert.equal(ukChess.querySelectorAll('.about')[0].textContent, catalog.games.chess.about_i18n.uk)
+  const enBoard = await makePage(new Map(), { search: '?tab=board&lang=en' })
+  assert.deepEqual(enBoard.byId.library.querySelectorAll('.title').map((t) => t.textContent), ['Chess', 'Russian draughts', 'Reversi', 'Go'])
+  const ukMenu = await makePage(new Map(), { search: '?game=reversi&lang=uk' })
+  await until(() => ukMenu.ctx.ArcadeBoard)
+  assert.ok(textOf(ukMenu.byId.stage).includes(catalog.games.reversi.about_i18n.uk), 'меню реверси — украинское описание')
   // Своя книга (TXT) — во вкладке «Книги»: добавить и открыть в читалке
   const lib = await makePage(new Map(), { search: '?tab=books' })
   lib.byId.library.querySelectorAll('.open-rom')[0].click()

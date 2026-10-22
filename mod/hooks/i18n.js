@@ -147,7 +147,7 @@ const EXACT = {
   'Arcade · аккаунт': 'Arcade · account',
   'Аккаунт': 'Account',
   'Войти через GitHub': 'Sign in with GitHub',
-  '  по желанию: одни настройки на всех компьютерах': '  optional: the same settings on all your computers',
+  '  по желанию: одни настройки на всех компьютерах и свой @ник': '  optional: the same settings on all your computers and your own @handle',
   'Общие для всех компьютеров: язык, клавиши, уведомления, размер панели, что делать с игрой по сигналу агента, свои темы, каналы Twitch и рекорд Flappy Arcade.':
     'Shared across all computers: language, keys, notifications, panel size, what to do with the game when the agent signals, your topics, Twitch channels and your Flappy Arcade best.',
   'Синхронизирую…': 'Syncing…',
@@ -165,8 +165,8 @@ const EXACT = {
     '  the page opens in your regular browser; after the code GitHub will ask whether to let Agent Arcade in',
   'Жду, когда ты подтвердишь вход на GitHub…': 'Waiting for you to confirm the sign-in on GitHub…',
   'Отмена': 'Cancel',
-  'Вход нужен только для того, чтобы настройки были одни на всех твоих компьютерах. Без входа всё работает.':
-    'Signing in only keeps your settings the same on all your computers. Everything works without it.',
+  'Вход нужен, чтобы настройки были одни на всех твоих компьютерах и чтобы взять свой @ник для сетевых игр. Без входа всё работает.':
+    'Signing in keeps your settings the same on all your computers and lets you take your own @handle for online games. Everything works without it.',
   'Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.':
     'Arcade only learns your GitHub profile name and picture — no email, no access to repositories.',
   'Прошу код у GitHub…': 'Asking GitHub for a code…',
@@ -184,6 +184,18 @@ const EXACT = {
     'Account deleted: the Arcade site forgot you and your settings. Your settings here stay.',
   'Открываю GitHub в браузере — введи там код.': 'Opening GitHub in the browser — enter the code there.',
   'Браузер не открылся — открой адрес выше сам.': "The browser didn't open — open the address above yourself.",
+  // @ник в меню аккаунта
+  'Ника пока нет.': 'No handle yet.',
+  'Ник видят соперники в сетевых партиях настольных игр. Сменить его можно когда угодно.':
+    'Opponents see your handle in online board games. You can change it any time.',
+  'Сменить ник': 'Change handle',
+  'Свой ник': 'Your own handle',
+  'латинские буквы, цифры и _, от 4 до 32 знаков': 'Latin letters, digits and _, 4 to 32 characters',
+  'Проверяю ник…': 'Checking the handle…',
+  'Ник — от 4 до 32 знаков: латинские буквы, цифры и _, первый — буква.':
+    'A handle is 4 to 32 characters: Latin letters, digits and _, starting with a letter.',
+  'Такой ник взять нельзя — выбери другой.': "This handle can't be taken — choose another one.",
+  'Ник сегодня меняли слишком часто — попробуй завтра.': 'The handle was changed too often today — try again tomorrow.',
   // Направления каталога Twitch (часть — общие с темами YouTube)
   'Искусственный интеллект': 'Artificial intelligence',
   'Бэкенд и базы данных': 'Backend and databases',
@@ -358,6 +370,9 @@ const RULES = [
   [/^Агент работает (.+) — сыграть\?$/, (m) => `Agent has been working for ${dur(m[1])} — play?`],
   [/^Присоединиться: (.+)$/, (m) => `Join: ${m[1]}`],
   [/^Язык: (.+)$/, (m) => `Language: ${m[1]}`],
+  [/^Твой ник: @(.+)$/, (m) => `Your handle: @${m[1]}`],
+  [/^Взять @(.+)$/, (m) => `Take @${m[1]}`],
+  [/^@(.+) уже занят — выбери другой\.$/, (m) => `@${m[1]} is taken — choose another one.`],
   [/^в сети ждут: (.+)$/, (m) => `waiting online: ${waiting(m[1])}`],
   // Flappy Arcade
   [/^Удар! Счёт: (\d+) · рекорд: (\d+) — любая кнопка, ещё раз$/, (m) => `Crash! Score: ${m[1]} · best: ${m[2]} — any button to try again`],

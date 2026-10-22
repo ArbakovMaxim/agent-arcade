@@ -264,6 +264,15 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
     assert.ok(!/[А-Яа-яЁё]/.test(g.about_en), `${id}: описание по-английски`)
   }
 }
+// Переводы описаний — из web/locales/<язык>.json в каталог (about_i18n); в i18n.js их нет, окно берёт их из каталога
+{
+  const dir = temp('about-i18n')
+  const built = build({ root: ROOT, out: dir })
+  const de = JSON.parse(fs.readFileSync(path.join(ROOT, 'web', 'locales', 'de.json'), 'utf8'))
+  assert.equal(built.games.chess.about_i18n.de, de.about[built.games.chess.about_en])
+  assert.ok(Object.values(built.games).every((g) => !g.about_i18n || (g.about_en && !('en' in g.about_i18n) && !('ru' in g.about_i18n))))
+  assert.ok(!fs.readFileSync(path.join(dir, 'i18n.js'), 'utf8').includes(built.games.chess.about_i18n.de), 'описаний нет в i18n.js')
+}
 assert.throws(broken((d) => { delete d.games.find((g) => g.id === 'thwaite').about_en }), /игра thwaite: нет поля about_en/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').about_en = 'Ракеты' }), /в about_en русские буквы/)
 // Doom: ядро PrBoom, две игры Freedoom в .zip, игра не в .zip — ошибка сборки

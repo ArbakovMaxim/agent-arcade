@@ -3,12 +3,21 @@
 import THWAITE_ROM from './roms/thwaite.mjs'
 import CROOM_ROM from './roms/croom.mjs'
 import RFK_ROM from './roms/rfk.mjs'
+import { LANGS } from './i18n.js'
 
 // Сайт Arcade: окно, каталог и файлы игр (репозиторий agent-arcade, папка site/)
 export const SITE = 'https://agent-arcade.fefaodessa.workers.dev'
 
 const ID = /^[a-z0-9-]+$/
 const SHA256 = /^[0-9a-f]{64}$/
+
+// Описание по-английски и его переводы на остальные языки (about_i18n — их кладёт в каталог сборка сайта)
+function aboutOf(g) {
+  const en = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
+  if (!en.about_en || !g.about_i18n || typeof g.about_i18n !== 'object') return en
+  const i18n = Object.entries(g.about_i18n).filter(([lang, text]) => LANGS.includes(lang) && !['en', 'ru'].includes(lang) && typeof text === 'string' && text)
+  return i18n.length ? { ...en, about_i18n: Object.fromEntries(i18n.map(([lang, text]) => [lang, text.slice(0, 300)])) } : en
+}
 
 // Игры, которые лежат в самом моде: по хешу мод узнаёт их в каталоге и не скачивает
 const BUNDLED_ROMS = {
@@ -71,31 +80,30 @@ export function parseCatalog(text) {
     // У книги описание необязательно: в списке — автор и жанр
     // У книги и аудиокниги описание необязательно: в списке — автор и жанр
     if (![g.title, g.genre].every((s) => typeof s === 'string' && s) || (!['book', 'audio'].includes(g.kind) && !(typeof g.about === 'string' && g.about))) continue
-    const aboutEnBoard = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
+    const texts = aboutOf(g)
     // Настольные игры (шахматы, шашки, реверси) — без ROM: только в окне браузера
     // Своя игра прямо в панели: движок из списка известных (сейчас — Flappy Arcade)
     if (g.kind === 'pane') {
       if (!['flappy'].includes(g.engine)) continue
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...(typeof g.about_en === 'string' ? { about_en: g.about_en } : {}), kind: 'pane', engine: g.engine, keys: typeof g.keys === 'string' ? g.keys : '', ...shelfOf(g) })
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...texts, kind: 'pane', engine: g.engine, keys: typeof g.keys === 'string' ? g.keys : '', ...shelfOf(g) })
       continue
     }
     // Аудиокниги (LibriVox) и «Мои аудиокниги» — проигрыватель в окне: панель Claude Code звук не играет
     if (g.kind === 'audio' || g.kind === 'audio-mine') {
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...aboutEnBoard, kind: g.kind, ...shelfOf(g), ...(g.kind === 'audio' ? { author: String(g.author ?? '').slice(0, 80) } : {}) })
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...texts, kind: g.kind, ...shelfOf(g), ...(g.kind === 'audio' ? { author: String(g.author ?? '').slice(0, 80) } : {}) })
       continue
     }
     if (g.kind === 'board' || g.kind === 'web' || g.kind === 'book') {
       // У книги — ещё автор и путь к тексту: читалка в окне (а потом и в панели)
       const book = g.kind === 'book' && typeof g.text === 'string' && /^books\/[\w-]+\/book\.json$/.test(g.text) ? { author: String(g.author ?? '').slice(0, 80), text: g.text } : {}
       if (g.kind === 'book' && !book.text) continue
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...aboutEnBoard, kind: g.kind, ...shelfOf(g), ...book })
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...texts, kind: g.kind, ...shelfOf(g), ...book })
       continue
     }
     const rom = g.rom ?? {}
     if (!SHA256.test(rom.sha256 ?? '') || typeof rom.base64 !== 'string' || !rom.base64.startsWith('files/')) continue
-    const aboutEn = typeof g.about_en === 'string' && g.about_en ? { about_en: g.about_en.slice(0, 300) } : {}
     const net = ['doom', 'heretic', 'heretic-dm'].includes(g.net) ? { net: g.net } : {}
-    games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...aboutEn, ...net, ...shelfOf(g), rom: { sha256: rom.sha256, base64: rom.base64 } })
+    games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...texts, ...net, ...shelfOf(g), rom: { sha256: rom.sha256, base64: rom.base64 } })
   }
   if (!consoles.length) return null
   return { source: 'site', consoles, groups, shelves, ...(support ? { support } : {}), games }

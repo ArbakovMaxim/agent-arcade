@@ -217,7 +217,7 @@
       const top = el('div', 'card-top')
       // У книги — автор рядом с жанром
       top.append(el('span', 'title', game.title), el('span', 'genre', game.author ? `${game.author} · ${T(game.genre)}` : T(game.genre)))
-      // Описание: по-английски на всех языках, кроме русского. У книги вместо «сыграно» — сколько прочитано, по закладке
+      // Описание — на языке окна (перевода нет — по-английски). У книги вместо «сыграно» — сколько прочитано, по закладке
       const reading = () => {
         let at = null
         try {
@@ -239,7 +239,7 @@
         return at && total ? T(`прослушано ${Math.min(100, Math.round(((Number(at.chapter) || 0) / total) * 100))}%`) : T('ещё не слушали')
       }
       const stats = game.kind === 'book' ? reading() : game.kind === 'audio' ? listened() : game.kind === 'audio-mine' ? T('свои файлы — только в этом браузере') : ArcadeStats.summary(id, game.score)
-      card.append(top, el('div', 'about', window.ArcadeI18n && window.ArcadeI18n.lang !== 'ru' && game.about_en ? game.about_en : game.about), el('div', 'stats', stats))
+      card.append(top, el('div', 'about', window.ArcadeI18n ? window.ArcadeI18n.about(game) : game.about), el('div', 'stats', stats))
       list.append(card)
     }
     if (mineList.length) list.append(el('div', 'mine-head', T('Мои игры — только в этом браузере')))

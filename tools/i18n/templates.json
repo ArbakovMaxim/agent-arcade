@@ -100,7 +100,10 @@
   "Channel added: {0}.",
   "Channel removed: {0}.",
   "live · viewers: {0}",
-  "live · {0} · viewers: {1}"
+  "live · {0} · viewers: {1}",
+  "Your handle: @{0}",
+  "Take @{0}",
+  "@{0} is taken — choose another one."
  ],
  "site": [
   "Played in total: {0}",

@@ -9,6 +9,36 @@
   const randomCode = () => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => (b % 36).toString(36)).join('')
   const leaderOf = (ids) => [...ids].sort()[0]
 
+  // @ник в сетевых партиях: мод передаёт подпись ника после # (#me=…) — страница хранит её в браузере и убирает из
+  // адреса, пустая подпись — забыть прежнюю. Подпись идёт в hello, комната проверяет её и показывает ник соперникам
+  const ME_KEY = 'arcade:me'
+  {
+    const local = new URLSearchParams(location.hash.slice(1))
+    if (local.has('me')) {
+      const ticket = local.get('me')
+      try {
+        if (ticket) localStorage.setItem(ME_KEY, ticket)
+        else localStorage.removeItem(ME_KEY)
+      } catch {}
+      local.delete('me')
+      const rest = local.toString()
+      // replaceState не вызывает hashchange — страница не перезагрузится
+      history.replaceState(history.state, '', `${location.search}${rest ? `#${rest}` : ''}`)
+    }
+  }
+  // Подпись ника для hello: { me } или ничего
+  function named() {
+    let me = null
+    try {
+      me = localStorage.getItem(ME_KEY)
+    } catch {}
+    return me ? { me } : {}
+  }
+  // Ники игроков от комнаты: «белые — @fefa · чёрные — @octo»; ников нет — ''
+  function players(sides, names) {
+    return sides.map((side, i) => (names?.[i] ? `${side} — @${names[i]}` : '')).filter(Boolean).join(' · ')
+  }
+
   // Мои партии — в этом браузере: код, игра, когда открывали
   function myGames() {
     try {
@@ -222,7 +252,7 @@
 
   // Меню: найти соперника, пригласить друга, мои партии
   function menu(game, id, root) {
-    root.append(el('h2', 'margin:8px 0', game.title), el('p', 'color:#9a9aa3', T(game.about_en && window.ArcadeI18n && window.ArcadeI18n.lang === 'en' ? game.about_en : game.about)))
+    root.append(el('h2', 'margin:8px 0', game.title), el('p', 'color:#9a9aa3', window.ArcadeI18n ? window.ArcadeI18n.about(game) : game.about))
     const status = el('p', 'min-height:1.4em;color:#e0c070', '')
     const go = (c) => {
       location.search = `?game=${encodeURIComponent(id)}&room=${c}`
@@ -356,17 +386,19 @@
     const title = el('h2', 'margin:8px 0', game.title)
     const status = el('p', 'min-height:1.4em;color:#e0c070', T('Подключаюсь к партии…'))
     const grid = el('div', 'display:grid;grid-template-columns:repeat(8,1fr);width:min(92vw,62vh,480px);margin:0 auto;border:2px solid #3a3a44')
+    const who = el('p', 'margin:8px 0 0;color:#9a9aa3', '')
     const tools = el('div', 'margin-top:10px')
-    root.append(title, status, grid, tools)
+    root.append(title, status, grid, who, tools)
     const link = code ? `${location.origin}${location.pathname}?game=${encodeURIComponent(id)}&room=${code}` : null
 
     let position = rules.start()
     let moves = []
     let seat = -1
     let seats = 0
+    let names = []
     let selected = null
     const ws = options.bot ? botSocket(rules, id) : new WebSocket(wsUrl(`/net/board/${code}`))
-    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: tokenFor(code), game: id })))
+    ws.addEventListener('open', () => ws.send(JSON.stringify({ type: 'hello', token: tokenFor(code), game: id, ...(code ? named() : {}) })))
     ws.addEventListener('close', () => {
       status.textContent = T('Связь с партией прервалась — открой ссылку ещё раз, ходы сохранены')
     })
@@ -380,6 +412,7 @@
       if (m.type === 'state') {
         seat = m.seat
         seats = m.seats
+        names = m.names || []
         moves = []
         position = rules.start()
         for (const mv of m.moves || []) {
@@ -397,7 +430,10 @@
         } catch {
           return
         }
-      } else if (m.type === 'seats') seats = m.seats
+      } else if (m.type === 'seats') {
+        seats = m.seats
+        names = m.names || []
+      }
       selected = null
       render()
     })
@@ -424,6 +460,7 @@
         cell.addEventListener('click', () => click(r, c))
         grid.append(cell)
       }
+      who.textContent = players(rules.sides, names)
       tools.replaceChildren()
       const mySide = seat >= 0 ? rules.sides[seat] : null
       const extra = rules.extra(position)
@@ -471,6 +508,7 @@
     window.ArcadeBoard.game = { get position() { return position }, get moves() { return moves }, get seat() { return seat }, click, rules, reset: () => ws.send(JSON.stringify({ type: 'reset' })) }
   }
 
-  // Помощники — модулям шахмат (chess.js) и го (go.js): поиск соперника, жетон места, «Мои партии», адрес сокета
-  window.ArcadeBoard = { start, adapter, seek, randomCode, tokenFor, remember, myGames, wsUrl }
+  // Помощники — модулям шахмат (chess.js) и го (go.js): поиск соперника, жетон места, «Мои партии», адрес сокета,
+  // подпись ника и ники игроков
+  window.ArcadeBoard = { start, adapter, seek, randomCode, tokenFor, remember, myGames, wsUrl, named, players }
 })()

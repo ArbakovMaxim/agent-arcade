@@ -193,6 +193,7 @@
     const response = await fetch('catalog.json', { cache: 'no-cache' })
     if (!response.ok) throw new Error(T(`сервер ответил ${response.status}`))
     catalog = await response.json()
+    if (window.ArcadeI18n && catalog && catalog.games) for (const game of Object.values(catalog.games)) game.title = window.ArcadeI18n.title(game)
   } catch (err) {
     overlay(T('Нет связи с Arcade'), T(`Не удалось получить список игр: ${err.message}`))
     return

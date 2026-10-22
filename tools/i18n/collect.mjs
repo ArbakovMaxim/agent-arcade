@@ -1,7 +1,8 @@
 // Переводы Arcade: собирает английские фразы интерфейса мода и окна и обновляет заготовки 11 языков.
-// Запуск: node tools/i18n/collect.mjs — после правок интерфейса. Потом — заполнить пустые строки в
+// Запуск: node tools/i18n/collect.mjs — после правок интерфейса и описаний игр. Потом — заполнить пустые строки в
 // mod/hooks/locales/<язык>.js и site/web/locales/<язык>.json (см. tools/i18n/README.md).
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -110,7 +111,7 @@ function merge(previous, source, tpl) {
   const words = source.words.map((w) => [w, prevWords.get(w) ?? ''])
   return { exact, templates: temps, words }
 }
-const empty = (o) => Object.values(o.exact).filter((v) => !v).length + Object.values(o.templates).filter((v) => !v).length + o.words.filter(([, v]) => !v).length
+const empty = (o) => Object.values(o.exact).filter((v) => !v).length + Object.values(o.templates).filter((v) => !v).length + o.words.filter(([, v]) => !v).length + Object.values(o.about ?? {}).filter((v) => !v).length
 
 // --- Мод ---------------------------------------------------------------------------------------------------------
 const { tr } = await import(pathToFileURL(path.join(ROOT, 'mod', 'hooks', 'i18n.js')).href)
@@ -134,11 +135,20 @@ vm.runInContext(fs.readFileSync(path.join(ROOT, 'site', 'web', 'i18n.js'), 'utf8
 const T = ctx.T ?? ctx.window.T
 const siteFiles = fs.readdirSync(path.join(ROOT, 'site', 'web')).filter((f) => f.endsWith('.js') && !['i18n.js', 'jsnes.js', 'mapper28.js'].includes(f)).map((f) => path.join(ROOT, 'site', 'web', f))
 const siteSource = collect(siteFiles, (s) => T(s), [...dictionary(path.join(ROOT, 'site', 'web', 'i18n.js')), ...(templates.siteExact ?? [])])
+// Описания игр каталога (about): английское описание → перевод. Английские описания — из сборки сайта во временную папку
+const { build } = await import(pathToFileURL(path.join(ROOT, 'site', 'build.mjs')).href)
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'arcade-i18n-'))
+let abouts
+try {
+  abouts = [...new Set(Object.values(build({ root: path.join(ROOT, 'site'), out: temp }).games).map((g) => g.about_en).filter(Boolean))].sort()
+} finally {
+  fs.rmSync(temp, { recursive: true, force: true })
+}
 fs.mkdirSync(path.join(ROOT, 'site', 'web', 'locales'), { recursive: true })
 for (const lang of LANGS) {
   const file = path.join(ROOT, 'site', 'web', 'locales', `${lang}.json`)
   const previous = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null
-  const next = merge(previous, siteSource, templates.site)
+  const next = { ...merge(previous, siteSource, templates.site), about: Object.fromEntries(abouts.map((k) => [k, previous?.about?.[k] ?? ''])) }
   fs.writeFileSync(file, JSON.stringify(next, null, 1) + '\n')
-  console.log(`окно ${lang}: фраз ${siteSource.exact.length}, шаблонов ${templates.site.length}, слов ${siteSource.words.length}; не переведено ${empty(next)}`)
+  console.log(`окно ${lang}: фраз ${siteSource.exact.length}, шаблонов ${templates.site.length}, слов ${siteSource.words.length}, описаний ${abouts.length}; не переведено ${empty(next)}`)
 }
