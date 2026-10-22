@@ -57,6 +57,25 @@ const EXACT = {
   'Arcade попросил Claude открыть ссылку во встроенном браузере.': 'Arcade asked Claude to open the link in the built-in browser.',
   'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.': 'The link is in the prompt box: press Enter, and Claude will open it in the built-in browser.',
   'Не получилось открыть встроенный браузер: сначала ответь на вопрос Claude Code.': "Could not open the built-in browser: answer Claude Code's question first.",
+  // YouTube: темы по работе агента и свежие видео
+  'Смотреть': 'Watch',
+  'свежие видео по теме работы агента': "fresh videos on what the agent is working on",
+  'по теме работы агента': "on what the agent is working on",
+  'презентации и обзоры обновлений': 'launches and update reviews',
+  'Темы — по тому, над чем сейчас работает агент; видео — свежие, с проверенных каналов.': 'Topics follow what the agent is working on now; videos are fresh, from hand-picked channels.',
+  'Подбираю темы…': 'Picking topics…',
+  'Подбираю видео…': 'Picking videos…',
+  'Другие темы': 'Other topics',
+  'Другая подборка': 'Different picks',
+  'ИИ-агенты и программирование': 'AI agents and coding',
+  'Веб-разработка': 'Web development',
+  'Инструменты разработчика': 'Developer tools',
+  'Новинки и презентации': 'Launches and keynotes',
+  'Видео открыто во встроенном браузере Claude.': "The video is open in Claude's built-in browser.",
+  'Arcade прервал Claude: он откроет видео во встроенном браузере и вернётся к работе.': 'Arcade interrupted Claude: it will open the video in the built-in browser and get back to work.',
+  'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть видео во встроенном браузере.': 'Claude is finishing its current step — Arcade will interrupt it when the step ends or after 10 seconds to open the video in the built-in browser.',
+  'Свежих видео на языке интерфейса по этой теме нет — показываю английские.': 'No fresh videos in the interface language on this topic — showing English ones.',
+  'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.': "Could not load videos: YouTube didn't respond. Try again a bit later.",
   'Журнал агента': 'Agent log',
   '▶ Продолжить': '▶ Continue',
   // Настройки
@@ -243,6 +262,10 @@ const RULES = [
   [/^(.+) открыт в (.+)\. Игра стоит на паузе, пока окно не в фокусе\.$/, (m) => `${m[1]} is open in ${where(m[2])}. The game is paused while the window is not in focus.`],
   [/^Arcade открыт в (.+): выбирай приставку и игру\.$/, (m) => `Arcade is open in ${where(m[1])}: pick a console and a game.`],
   [/^(.+) открыт во встроенном браузере Claude\.$/, (m) => `${m[1]} is open in Claude's built-in browser.`],
+  [/^Видео открыто в (.+)\.$/, (m) => `The video is open in ${where(m[1])}.`],
+  [/^Видео открываются (.+)\.$/, (m) => `Videos open ${m[1] === 'во встроенном браузере Claude' ? "in Claude's built-in browser" : `in ${where(m[1].replace(/^в /, ''))}`}.`],
+  [/^Видео: (https:\/\/\S+)$/, (m) => `Video: ${m[1]}`],
+  [/^Не получилось загрузить видео: (.+)$/, (m) => `Could not load videos: ${m[1]}`],
   // Просьба в поле ввода для Claude в Desktop: адрес не переводим
   [/^Открой во встроенном браузере: (.+)$/, (m) => `Open in the built-in browser: ${m[1]}`],
   [/^Попроси Claude открыть во встроенном браузере: (.+)$/, (m) => `Ask Claude to open this in the built-in browser: ${m[1]}`],
@@ -301,10 +324,19 @@ function trEn(text) {
   return text
 }
 
+// Чужой текст в интерфейсе (название видео, тема от модели) переводить нельзя: словарь заменил бы в нём слова.
+// keep(узел) — узел и всё внутри него translateTree оставляет как есть
+const KEPT = new WeakSet()
+export function keep(node) {
+  if (node && typeof node === 'object') KEPT.add(node)
+  return node
+}
+
 // Перевод готового дерева интерфейса: строки-дети, подписи кнопок, подписи и подсказки полей
 export function translateTree(node, lang) {
   if (lang === 'ru' || node == null) return node
   if (typeof node === 'string') return tr(node, lang)
+  if (KEPT.has(node)) return node
   if (Array.isArray(node)) return node.map((n) => translateTree(n, lang))
   if (typeof node !== 'object') return node
   const out = { ...node }

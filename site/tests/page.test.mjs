@@ -1009,4 +1009,108 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   await assert.rejects(vm.runInContext(`ArcadeMine.add(new File([new Uint8Array(4096)], 'x.gg'), 'gg')`, lib.ctx), /не поддерживает свои файлы/)
 }
 
+// --- Просмотр подборки YouTube (watch.html): плеер, список, ошибки встраивания, новая подборка в той же вкладке --------
+{
+  const PLAYER = 'https://www.youtube-nocookie.com'
+  async function watchPage({ hash, search = '', oembed = true }) {
+    const page = { posted: [], replaced: null, fetched: [], handlers: {}, location: { hash, search, pathname: '/watch', origin: 'https://agent-arcade.test' } }
+    const node = (tag) => {
+      const n = {
+        tagName: tag, className: '', children: [], attributes: {}, listeners: {}, hidden: false, title: '', own: '',
+        classList: { set: new Set(), toggle(c, on) { if (on) this.set.add(c); else this.set.delete(c) }, contains(c) { return this.set.has(c) } },
+        get textContent() { return this.own + this.children.map((c) => c.textContent).join('') },
+        set textContent(v) { this.own = String(v); this.children = [] },
+        append(...kids) { this.children.push(...kids) },
+        addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
+        setAttribute(k, v) { this.attributes[k] = String(v) },
+        removeAttribute(k) { delete this.attributes[k] },
+        querySelector(selector) {
+          const walk = (x) => { for (const c of x.children) { if (c.className.split(' ').includes(selector.slice(1))) return c; const f = walk(c); if (f) return f } return null }
+          return walk(this)
+        },
+        fire(t) { for (const f of this.listeners[t] ?? []) f({}) },
+      }
+      if (tag === 'iframe') n.contentWindow = { postMessage: (data, origin) => page.posted.push({ ...JSON.parse(data), origin }) }
+      return n
+    }
+    page.root = node('div')
+    const storage = new Map()
+    const ctx = {
+      location: page.location, URLSearchParams, console,
+      history: { replaceState: (s, t, url) => { page.replaced = url } },
+      navigator: { language: 'ru-RU' },
+      localStorage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, String(v)) },
+      document: { title: '', documentElement: {}, createElement: node, getElementById: () => page.root },
+      addEventListener: (t, f) => (page.handlers[t] ??= []).push(f),
+      fetch: async (url) => {
+        page.fetched.push(url)
+        if (!oembed) throw new Error('Failed to fetch')
+        const id = new URL(new URL(url).searchParams.get('url')).searchParams.get('v')
+        return { ok: true, json: async () => ({ title: `Видео ${id}`, author_name: 'Канал' }) }
+      },
+    }
+    ctx.window = ctx
+    vm.createContext(ctx)
+    for (const file of ['i18n.js', 'watch.js']) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
+    await new Promise((r) => setTimeout(r, 5))
+    page.ctx = ctx
+    page.frame = () => page.root.children[0].children[0].children[0]
+    page.items = () => page.root.children[1].children
+    page.note = () => page.root.children[0].children[2]
+    page.send = (data, origin = PLAYER, source = page.frame().contentWindow) => { for (const f of page.handlers.message ?? []) f({ data: JSON.stringify(data), origin, source }) }
+    return page
+  }
+
+  // Подборка из адреса: чужие id и повторы отбрасываются, открыто видео i
+  const page = await watchPage({ hash: '#v=aaaaaaaaaaa,bad,bbbbbbbbbbb,aaaaaaaaaaa,<script>xx&i=1' })
+  assert.equal(page.items().length, 2)
+  assert.match(page.frame().src, /^https:\/\/www\.youtube-nocookie\.com\/embed\/bbbbbbbbbbb\?/)
+  assert.match(page.frame().src, /enablejsapi=1/)
+  assert.match(page.frame().src, /hl=ru/)
+  assert.equal(page.root.children[0].children[1].children[1].href, 'https://www.youtube.com/watch?v=bbbbbbbbbbb')
+  assert.ok(page.items()[1].classList.contains('active') && !page.items()[0].classList.contains('active'))
+  assert.equal(page.replaced, '/watch#v=aaaaaaaaaaa,bbbbbbbbbbb&i=1', 'в адресе — только настоящая подборка')
+  // Названия — из oEmbed YouTube
+  assert.equal(page.fetched.length, 2)
+  assert.equal(page.items()[0].querySelector('.name').textContent, 'Видео aaaaaaaaaaa')
+  assert.equal(page.root.children[0].children[1].children[0].textContent, 'Видео bbbbbbbbbbb')
+  assert.equal(page.ctx.document.title, 'Видео bbbbbbbbbbb · Arcade')
+  // Плеер загрузился — страница подписывается на его ошибки и конец видео
+  page.frame().fire('load')
+  assert.deepEqual(page.posted.map((m) => [m.event, m.args?.[0], m.origin]), [['listening', undefined, PLAYER], ['command', 'onError', PLAYER], ['command', 'onStateChange', PLAYER]])
+  // Сообщения не от плеера не слушаем
+  page.send({ event: 'onError', info: 150 }, 'https://evil.test')
+  page.send({ event: 'onError', info: 150 }, PLAYER, {})
+  assert.equal(page.note().hidden, true)
+  page.send({ event: 'onError', info: 150 })
+  assert.equal(page.note().hidden, false)
+  assert.match(page.note().textContent, /Автор не разрешил/)
+  // Другое видео из списка — подсказка уходит; кончилось — следующее
+  page.items()[0].fire('click')
+  assert.match(page.frame().src, /embed\/aaaaaaaaaaa\?/)
+  assert.equal(page.note().hidden, true)
+  page.send({ event: 'onStateChange', info: 0 })
+  assert.match(page.frame().src, /embed\/bbbbbbbbbbb\?/)
+  page.send({ event: 'onStateChange', info: 0 })
+  assert.match(page.frame().src, /embed\/bbbbbbbbbbb\?/, 'последнее видео — дальше некуда')
+  // Мод открыл новую подборку в той же вкладке
+  page.location.hash = '#v=ccccccccccc&i=0'
+  for (const f of page.handlers.hashchange) f({})
+  assert.equal(page.items().length, 1)
+  assert.match(page.frame().src, /embed\/ccccccccccc\?/)
+
+  // Без oEmbed — только миниатюры; по-английски — и плеер по-английски
+  const en = await watchPage({ hash: '#v=ddddddddddd', search: '?lang=en', oembed: false })
+  assert.equal(en.items()[0].querySelector('.name').textContent, '')
+  assert.equal(en.items()[0].children[0].src, 'https://i.ytimg.com/vi/ddddddddddd/mqdefault.jpg')
+  assert.equal(en.root.children[0].children[1].children[1].textContent, 'Open on YouTube')
+  assert.match(en.frame().src, /hl=en/)
+  en.send({ event: 'onError', info: 100 })
+  assert.equal(en.note().textContent, 'The video has been removed or hidden.')
+
+  // В адресе нет видео
+  const empty = await watchPage({ hash: '' })
+  assert.match(empty.root.textContent, /нет видео/)
+}
+
 console.log('окно: все проверки прошли')

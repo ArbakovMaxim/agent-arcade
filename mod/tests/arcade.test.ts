@@ -9,6 +9,7 @@ import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
 import { installMapper28, prgBank } from '../hooks/mapper28.js'
 import THWAITE_ROM from '../hooks/roms/thwaite.mjs'
 import { createFlappy } from '../hooks/flappy.js'
+import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed, parseTopics, wanted, watchUrl } from '../hooks/youtube.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -76,7 +77,7 @@ async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes }: any = {}) {
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, web = {} }: any = {}) {
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
@@ -141,6 +142,8 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   // Сайт Arcade: каталог и файлы игр; site: null — сайт недоступен
   on('http.fetch', ($: any, e: any) => {
     fetches.push(e.url)
+    // Другие сайты (ленты YouTube): адрес → текст ответа
+    if (e.url in web) return { value: { status: 200, ok: true, headers: {}, text: web[e.url] } }
     if (site === null) return { deny: 'getaddrinfo ENOTFOUND agent-arcade.fefaodessa.workers.dev' }
     if (e.url === `${SITE}/catalog.json`) return { value: { status: 200, ok: true, headers: {}, text: site } }
     const path = e.url.slice(SITE.length + 1)
@@ -2459,5 +2462,220 @@ test('Desktop: главное меню — карточки с иконками,
 test('названия настольных игр с сайта — только по-русски, но под «Продолжить» и в списке переведены', async () => {
   expect(['Шахматы', 'Русские шашки', 'Реверси', 'Го'].map((s) => tr(s, 'en'))).toEqual(['Chess', 'Russian checkers', 'Reversi', 'Go'])
   expect(tr('Шахматы', 'de')).toBe('Schach')
+})
+
+// --- YouTube ----------------------------------------------------------------------------------------------------------
+const YT = { a: `UC${'a'.repeat(22)}`, b: `UC${'b'.repeat(22)}`, c: `UC${'c'.repeat(22)}`, d: `UC${'d'.repeat(22)}` }
+// Список каналов с сайта: про ИИ — два английских канала и один русский, про веб — один английский
+const YT_CHANNELS = JSON.stringify({
+  version: 1,
+  directions: [
+    { id: 'news', about: 'launches, keynotes and update reviews' },
+    { id: 'ai', about: 'AI and AI coding agents' },
+    { id: 'web', about: 'web development' },
+  ],
+  channels: [
+    { id: YT.a, name: 'AI En One', lang: 'en', topics: ['ai'] },
+    { id: YT.b, name: 'AI En Two', lang: 'en', topics: ['ai', 'news'] },
+    { id: YT.c, name: 'ИИ по-русски', lang: 'ru', topics: ['ai'] },
+    { id: YT.d, name: 'Web En', lang: 'en', topics: ['web'] },
+  ],
+})
+
+// Лента канала, как её отдаёт YouTube: видео — [id, название, сколько дней назад, Shorts]
+function ytFeedXml(name: string, now: number, videos: any[]) {
+  const entries = videos.map(
+    ([id, title, days, short]) =>
+      `<entry><id>yt:video:${id}</id><yt:videoId>${id}</yt:videoId><title>${title}</title><link rel="alternate" href="https://www.youtube.com/${short ? 'shorts/' : 'watch?v='}${id}"/><author><name>${name}</name></author><published>${new Date(now - days * 86_400_000).toISOString()}</published><media:group><media:description>Про ${title}</media:description><media:community><media:statistics views="${1000 * (days + 1)}"/></media:community></media:group></entry>`,
+  )
+  return `<?xml version="1.0" encoding="UTF-8"?><feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"><title>${name}</title><author><name>${name}</name></author>${entries.join('')}</feed>`
+}
+
+// Ленты тестовых каналов на момент now: у первого — Shorts и старое видео, которых в подборке быть не должно
+function ytFeeds(now: number) {
+  return {
+    [feedUrl(YT.a)]: ytFeedXml('AI En One', now, [['aaaaaaaaa01', 'Agents in the terminal', 1], ['aaaaaaaaa02', 'Prompt caching explained', 3], ['aaaaaaaaa03', 'MCP servers from scratch', 5], ['aaaaaaaaa04', 'One quick tip', 2, true], ['aaaaaaaaa05', 'An old talk', 200]]),
+    [feedUrl(YT.b)]: ytFeedXml('AI En Two', now, [['bbbbbbbbb01', 'Evals for coding agents', 2], ['bbbbbbbbb02', 'Claude Code &amp; hooks', 6]]),
+    [feedUrl(YT.c)]: ytFeedXml('ИИ по-русски', now, [['ccccccccc01', 'Агенты в IDE', 1], ['ccccccccc02', 'Субагенты на практике', 4], ['ccccccccc03', 'Ревью кода с ИИ', 7]]),
+    [feedUrl(YT.d)]: ytFeedXml('Web En', now, [['ddddddddd01', 'CSS in 2026', 1]]),
+  }
+}
+
+// Работа агента в сессии и ответы haiku: topics и picks — текст ответа, null — модель не ответила. Возвращает, о чём
+// модель спрашивали
+function ytModel(on: any, { topics, picks }: any) {
+  const prompts: any[] = []
+  on('session.messages', () => ({
+    value: [
+      { role: 'user', text: 'Сделай вход через OAuth в Next.js', toolUses: [] },
+      { role: 'assistant', text: 'Добавляю NextAuth', toolUses: [{ tool_use_id: 'tu1', tool: 'Edit', input: { file_path: 'app/auth.ts' } }] },
+    ],
+  }))
+  const usage = { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 }
+  on('model.complete', ($: any, e: any) => {
+    prompts.push(e)
+    const text = e.prompt.includes('Suggest 3 topics') ? topics : picks
+    return { value: text === null ? { isAnswered: false, reason: 'empty-reply', usage } : { isAnswered: true, text, usage } }
+  })
+  return prompts
+}
+
+// Подписи кнопок с ключами prefix0, prefix1, …: undefined — такой кнопки нет
+async function labels(ui: any, prefix: string, count: number) {
+  const out = []
+  for (let i = 0; i < count; i++) out.push((await ui.find({ key: `${prefix}${i}` }))?.props.label)
+  return out
+}
+
+const fromYouTube = (urls: string[]) => urls.filter((u) => u.startsWith('https://www.youtube.com/'))
+
+test('YouTube: темы по работе агента и новинки, подборка — 2 русских и 2 английских, видео — окном браузера', async ($, on) => {
+  const web: Record<string, string> = {}
+  const { clock, launches, fetches, saved } = stubs(on, { env: WINDOWS, files: { 'channels.json': YT_CHANNELS }, web })
+  const prompts = ytModel(on, {
+    topics: JSON.stringify({
+      topics: [
+        { title: 'Авторизация в Next.js', direction: 'web', query: 'Next.js authentication' },
+        { title: 'ИИ-агенты для кода', direction: 'ai', query: 'AI coding agents' },
+        { title: 'Что нового в Next.js', direction: 'news', query: 'Next.js conf keynote' },
+        { title: 'OAuth без боли', direction: 'web', query: 'OAuth explained' },
+      ],
+    }),
+    picks: 'Вот: {"picks":["ccccccccc02","aaaaaaaaa03","zzzzzzzzzzz","bbbbbbbbb01","ccccccccc01","aaaaaaaaa01"]}',
+  })
+  await start($)
+  await clock.advance(200)
+  Object.assign(web, ytFeeds(clock.now()))
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '  свежие видео по теме работы агента' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-youtube' })
+  // Три темы по работе агента, новинки — последними; названия от модели — как есть
+  expect(await labels(ui, 'arcade-yt-topic-', 5)).toEqual(['Авторизация в Next.js', 'ИИ-агенты для кода', 'OAuth без боли', 'Что нового в Next.js', undefined])
+  expect(await ui.find({ type: 'Text', text: '  презентации и обзоры обновлений' })).toBeDefined()
+  expect(prompts.length).toBe(1)
+  expect(prompts[0]).toMatchObject({ model: 'haiku' })
+  expect(prompts[0].prompt).toContain('Agent: Добавляю NextAuth')
+  expect(prompts[0].prompt).toContain('"title" is in Russian')
+  expect((saved.get('ytChannels') as any).list.channels.length).toBe(4) // список каналов сохранён на 6 часов
+  // Тема про ИИ: читаются ленты только её каналов; Shorts и старые видео модели не показываем
+  await ui.press({ key: 'arcade-yt-topic-1' })
+  expect(fromYouTube(fetches).sort()).toEqual([feedUrl(YT.a), feedUrl(YT.b), feedUrl(YT.c)].sort())
+  expect(prompts[1].prompt).toContain('Topic: ИИ-агенты для кода')
+  expect(prompts[1].prompt).toContain('Videos in Russian')
+  for (const id of ['aaaaaaaaa04', 'aaaaaaaaa05', 'ddddddddd01']) expect(prompts[1].prompt).not.toContain(id)
+  // Выбор модели: два русских и два английских, выдуманный id отброшен
+  expect(await labels(ui, 'arcade-yt-video-', 5)).toEqual(['Субагенты на практике', 'Агенты в IDE', 'MCP servers from scratch', 'Evals for coding agents', undefined])
+  expect(await ui.find({ type: 'Text', text: /^ {2}ИИ по-русски · .+ · .+/ })).toBeDefined() // канал · дата · просмотры
+  expect(await ui.find({ type: 'Text', text: 'Видео открываются в окне браузера по умолчанию (Google Chrome).' })).toBeDefined()
+  // Страница просмотра на сайте Arcade с подборкой, открыта на нажатом видео
+  await ui.press({ key: 'arcade-yt-video-1' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/watch#v=ccccccccc02,ccccccccc01,aaaaaaaaa03,bbbbbbbbb01&i=1`)
+  expect(await ui.find({ type: 'Text', text: 'Видео открыто в Google Chrome.' })).toBeDefined()
+  // Другая подборка — без уже показанных; модель выбрала одно — второе добираем свежим
+  await ui.press({ key: 'arcade-yt-more' })
+  expect(prompts.length).toBe(3)
+  expect(prompts[2].prompt).not.toContain('ccccccccc02')
+  expect(await labels(ui, 'arcade-yt-video-', 3)).toEqual(['Ревью кода с ИИ', 'Agents in the terminal', undefined])
+  expect(fromYouTube(fetches).length).toBe(3) // ленты — из кеша
+  await ui.unmount()
+})
+
+test('YouTube: модель и сеть не ответили — темы по умолчанию и понятное сообщение', async ($, on) => {
+  const { clock, fetches } = stubs(on, { env: WINDOWS, site: null })
+  const prompts = ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-youtube' })
+  expect(prompts.length).toBe(1)
+  expect(await labels(ui, 'arcade-yt-topic-', 4)).toEqual(['ИИ-агенты и программирование', 'Веб-разработка', 'Новинки и презентации', undefined])
+  await ui.press({ key: 'arcade-yt-topic-0' })
+  expect(fromYouTube(fetches).length).toBeGreaterThan(0) // каналы — из запаса мода
+  expect(await ui.find({ type: 'Text', text: 'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-yt-video-0' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-yt-more' })).toMatchObject({ props: { label: 'Другая подборка' } })
+  expect(prompts.length).toBe(1) // выбирать не из чего — модель не спрашиваем
+  await ui.unmount()
+})
+
+test('YouTube в Desktop на английском: четыре английских видео, страница просмотра — во встроенном браузере', async ($, on) => {
+  const web: Record<string, string> = {}
+  const { clock, fetches, browserCalls, launches } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, files: { 'channels.json': YT_CHANNELS }, web, browser: 'ok' })
+  const prompts = ytModel(on, {
+    topics: JSON.stringify({
+      topics: [
+        { title: 'Auth in Next.js', direction: 'web', query: 'Next.js auth' },
+        { title: 'AI coding agents', direction: 'ai', query: 'AI coding agents' },
+        { title: 'Next.js news', direction: 'news', query: 'Next.js conf' },
+      ],
+    }),
+    picks: JSON.stringify({ picks: ['aaaaaaaaa02', 'bbbbbbbbb01', 'aaaaaaaaa01', 'bbbbbbbbb02'] }),
+  })
+  await start($)
+  await clock.advance(200)
+  Object.assign(web, ytFeeds(clock.now()))
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'Watch' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /fresh videos on what the agent is working on/ })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-youtube' })
+  expect(prompts[0].prompt).toContain('"title" is in English')
+  expect(await labels(ui, 'arcade-yt-topic-', 4)).toEqual(['Auth in Next.js', 'AI coding agents', 'Next.js news', undefined])
+  await ui.press({ key: 'arcade-yt-topic-1' })
+  expect(fetches).not.toContain(feedUrl(YT.c)) // для английского интерфейса русские каналы не читаем
+  expect(prompts[1].prompt).not.toContain('Russian')
+  expect(await labels(ui, 'arcade-yt-video-', 5)).toEqual(['Prompt caching explained', 'Evals for coding agents', 'Agents in the terminal', 'Claude Code & hooks', undefined])
+  expect(await ui.find({ key: 'card-yt-video-3' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: "Videos open in Claude's built-in browser." })).toBeDefined()
+  await ui.press({ key: 'arcade-yt-video-0' })
+  expect(browserCalls[0]).toMatchObject({ server: 'Claude_Browser', tool: 'preview_start', args: { url: `${SITE}/watch?lang=en#v=aaaaaaaaa02,bbbbbbbbb01,aaaaaaaaa01,bbbbbbbbb02&i=0` } })
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Text', text: "The video is open in Claude's built-in browser." })).toBeDefined()
+  await ui.unmount()
+})
+
+test('youtube.js: список каналов, лента, темы, подборка и адрес страницы просмотра', () => {
+  // Список каналов: без направления новинок — не список; каналы с ошибками пропускаются
+  expect(parseChannels('not json')).toBeNull()
+  expect(parseChannels({ directions: [{ id: 'ai', about: 'AI' }], channels: [{ id: YT.a, name: 'A', lang: 'en', topics: ['ai'] }] })).toBeNull()
+  expect(parseChannels(YT_CHANNELS.replace(`"${YT.d}"`, '"UCshort"')).channels.map((c: any) => c.id)).toEqual([YT.a, YT.b, YT.c])
+  // Запас мода: на каждое направление есть английские каналы
+  const bundled = bundledChannels()
+  for (const d of bundled.directions) expect([d.id, bundled.channels.some((c: any) => c.lang === 'en' && c.topics.includes(d.id))]).toEqual([d.id, true])
+  // Лента: сущности раскрыты, Shorts помечены, запись с кривым id пропущена
+  const at = Date.UTC(2026, 9, 1)
+  const feed = parseFeed(ytFeedXml('AI En Two', at, [['bbbbbbbbb02', 'Claude Code &amp; hooks &#x1F680;', 6], ['bbbbbbbbb03', 'Tip', 1, true], ['bad id', 'Broken', 1]]))
+  expect(feed.map((v: any) => [v.id, v.title, v.channel, v.short])).toEqual([
+    ['bbbbbbbbb02', 'Claude Code & hooks 🚀', 'AI En Two', false],
+    ['bbbbbbbbb03', 'Tip', 'AI En Two', true],
+  ])
+  expect(feed[0]).toMatchObject({ published: at - 6 * 86_400_000, views: 7000 })
+  // Темы: мусор и повторы отброшены, новинки — последними; модель не ответила — темы по умолчанию
+  const directions = [{ id: 'news', about: '' }, { id: 'ai', about: '' }, { id: 'web', about: '' }]
+  const answer = 'Sure! {"topics":[{"title":"Новое в React","direction":"news"},{"title":"Next.js","direction":"web"},{"title":"next.js","direction":"web"},{"title":"X","direction":"ai"},{"title":"Кино","direction":"movies"},{"title":"Агенты","direction":"ai","query":"agents"}]}'
+  expect(parseTopics(answer, directions).map((t: any) => [t.title, t.direction])).toEqual([['Next.js', 'web'], ['Агенты', 'ai'], ['Новое в React', 'news']])
+  expect(parseTopics('', directions).map((t: any) => t.direction)).toEqual(['ai', 'web', 'news'])
+  // Подборка: местных не хватило — место английским; модель не ответила — самые свежие с разных каналов;
+  // подошло одно — второе добираем
+  const v = (id: string, channel: string) => ({ id, channel })
+  const local = [v('ru1', 'R')]
+  const en = [v('en1', 'A'), v('en2', 'A'), v('en3', 'B'), v('en4', 'C')]
+  const ids = (list: any[]) => list.map((x) => x.id)
+  expect(ids(choose(['ru1', 'en2', 'en1', 'en3', 'en4'], local, en, { local: 2, en: 2 }))).toEqual(['ru1', 'en2', 'en1', 'en3'])
+  expect(ids(choose([], local, en, { local: 2, en: 2 }))).toEqual(['ru1', 'en1', 'en3', 'en4'])
+  expect(ids(choose(['en4'], [], en, { local: 0, en: 4 }))).toEqual(['en4', 'en1'])
+  expect([wanted('ai', 'ru'), wanted('news', 'ru'), wanted('news', 'en')]).toEqual([{ local: 2, en: 2 }, { local: 1, en: 3 }, { local: 0, en: 4 }])
+  // Страница просмотра: id после #, номер видео в пределах подборки, русский — без параметра языка
+  const videos = [v('aaaaaaaaa01', 'A'), v('bad', 'A'), v('bbbbbbbbb01', 'B')]
+  expect(watchUrl(videos, 7, 'ru')).toBe(`${SITE}/watch#v=aaaaaaaaa01,bbbbbbbbb01&i=1`)
+  expect(watchUrl(videos, -1, 'de')).toBe(`${SITE}/watch?lang=de#v=aaaaaaaaa01,bbbbbbbbb01&i=0`)
+  // Работа агента для модели: реплики и инструменты; длинная — с конца
+  const work = [{ role: 'user', text: 'Почини тесты', toolUses: [] }, { role: 'assistant', text: '', toolUses: [{ tool: 'Bash', input: { command: 'npm test' } }] }]
+  expect(contextFrom(work)).toBe('Developer: Почини тесты\nAgent used Bash {"command":"npm test"}')
+  expect(contextFrom([{ role: 'user', text: 'a'.repeat(40), toolUses: [] }, { role: 'assistant', text: 'done', toolUses: [] }], 30)).toMatch(/^a+\nAgent: done$/)
+  // Новые строки интерфейса переведены
+  expect(tr('Смотреть', 'en')).toBe('Watch')
+  expect(tr('Видео открыто во встроенном браузере Claude.', 'de')).toBe('Das Video ist im integrierten Browser von Claude geöffnet.')
+  expect(tr('Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.', 'en')).toBe("Could not load videos: YouTube didn't respond. Try again a bit later.")
 })
 

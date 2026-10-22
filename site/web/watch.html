@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arcade · YouTube</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; min-height: 100%; background: #0d0d0f; color: #d8d8dc;
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  /* Подборка видео из мода: плеер и список рядом, в узком окне — список под плеером */
+  #watch { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; max-width: 1280px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+  @media (max-width: 860px) { #watch { grid-template-columns: minmax(0, 1fr); } }
+  .player { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 8px; overflow: hidden; }
+  .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .under { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .under .title { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .under a { color: #d8d8dc; text-decoration: none; background: #26262b; border: 1px solid #34343a; border-radius: 6px; padding: 5px 12px; white-space: nowrap; }
+  .under a:hover, .under a:focus { background: #303036; }
+  #note { margin-top: 10px; padding: 8px 12px; background: #2a1d1d; border: 1px solid #5a3434; border-radius: 6px; color: #f0c8c8; }
+  #note[hidden] { display: none; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+  .item { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 6px; background: #17171b; border: 1px solid #26262c; border-radius: 8px;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .item:hover, .item:focus { border-color: #5b78b8; background: #1b2130; outline: none; }
+  .item.active { border-color: #4a5c85; background: #1f2738; }
+  .item img { flex: none; width: 120px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: #000; }
+  .item .text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .item .name { color: #fff; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .channel { color: #9a9aa3; font-size: 12px; }
+  .empty { max-width: 560px; margin: 40px auto; padding: 18px; color: #9a9aa3; background: #17171b; border: 1px dashed #2c2c32; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="watch"></div>
+<script src="i18n.js"></script>
+<script src="watch.js"></script>
+</body>
+</html>

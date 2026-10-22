@@ -81,7 +81,11 @@
   "{0} audiobooks",
   "{0} — {1}",
   "{0}, {1}",
-  "{0}: {1}"
+  "{0}: {1}",
+  "Videos open in {0}.",
+  "The video is open in {0}.",
+  "Video: {0}",
+  "Could not load videos: {0}"
  ],
  "site": [
   "Played in total: {0}",
@@ -121,6 +125,7 @@
   "the default browser window",
   "Games open here, in the pane.",
   "Games open in Claude's built-in browser.",
+  "Videos open in Claude's built-in browser.",
   "open in: Claude's built-in browser",
   "play here, in the pane",
   "auto",

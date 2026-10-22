@@ -4,7 +4,8 @@
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { SITE, bundledCatalog, bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
-import { LANGS, LANG_NAMES, detectLang, tr, translateTree } from './i18n.js'
+import { LANGS, LANG_NAMES, detectLang, keep, tr, translateTree } from './i18n.js'
+import { bundledChannels, candidates, channelsFor, choose, contextFrom, feedUrl, parseChannels, parseFeed, parsePicks, parseTopics, picksPrompt, topicsPrompt, videoMeta, wanted, watchUrl } from './youtube.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
@@ -140,6 +141,10 @@ let bandToken = '' // VS Code: «пустое» значение строки �
 let bandResetWanted = false // VS Code: после нажатия стереть набранное при следующей отрисовке
 let bandId = null // VS Code: requestId полосы над вводом — чтобы попробовать поставить фокус в поле при старте игры
 let bandFocusWanted = false // VS Code: игра только что открылась — попробовать один раз
+// YouTube: темы (null — ещё не подобраны), подборка открытой темы, что сейчас грузится ('topics' | 'videos' | ''),
+// заметка к подборке; request — номер последней загрузки: ответ старой загрузки, пришедший позже новой, не нужен
+let yt = { topics: null, topicsAt: 0, topicsLang: '', topic: -1, videos: [], seen: new Set(), loading: '', note: '', request: 0 }
+const feedCache = new Map() // id канала → { at, entries }: ленты перечитываем не чаще FEED_TTL_MS
 
 function consoles() {
   return catalog.consoles
@@ -164,7 +169,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033' }
 function iconSvg(kind) {
   const c = ICON_COLORS[kind] ?? '#6e56cf'
   const shapes = {
@@ -178,8 +183,9 @@ function iconSvg(kind) {
     globe: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><ellipse cx="24" cy="24" rx="6" ry="15" fill="none" stroke="${c}" stroke-width="2.5"/><path d="M9 24h30" stroke="${c}" stroke-width="2.5"/>`,
     cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
     window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
+    play: `<rect x="6" y="12" width="36" height="24" rx="8" fill="${c}"/><path d="M20 18v12l10-6z" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', lang: 'globe', support: 'cup', library: 'window', youtube: 'play' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Обложка игры или книги: цвет от названия, крупные буквы
@@ -647,6 +653,8 @@ function windowTarget() {
 // Команда, которая открывает окно с игрой (или с библиотекой, если id нет) на сайте Arcade.
 // На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
 function windowUrl(id) {
+  // video:<номер> — страница просмотра с подборкой YouTube; язык она берёт сама
+  if (typeof id === 'string' && id.startsWith('video:')) return watchUrl(yt.videos, Number(id.slice(6)) || 0, lang)
   let url
   // tab:<вкладка> или tab:<группа>:<полка>
   if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(...id.slice(4).split(':'))
@@ -677,6 +685,7 @@ function launchNotice(result, id) {
   if (result?.exitCode === 0) {
     const target = platform === 'windows' ? windowTarget() : { kind: 'default' }
     const where = target.kind === 'browser' ? target.browser.name : 'браузере по умолчанию'
+    if (typeof id === 'string' && id.startsWith('video:')) return `Видео открыто в ${where}.`
     return id
       ? `${title} открыт в ${where}. Игра стоит на паузе, пока окно не в фокусе.`
       : `Arcade открыт в ${where}: выбирай приставку и игру.`
@@ -856,15 +865,21 @@ async function askClaude($, url, submit, then) {
 function desktopNotice($, outcome, opened, url) {
   // Адрес для ручной просьбы не убираем через 15 секунд: его ещё надо переписать. Ожидание — пока не кончится
   // инструмент агента, сколько бы он ни шёл
+  const video = String(url).startsWith(`${SITE}/watch`)
   if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
-  else if (outcome === 'waiting') libraryNotice = 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.'
+  else if (outcome === 'waiting')
+    libraryNotice = video
+      ? 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть видео во встроенном браузере.'
+      : 'Claude доделывает текущий шаг — Arcade прервёт его, когда шаг кончится или через 10 секунд, чтобы открыть игру во встроенном браузере.'
   else
     windowNotice(
       $,
       outcome === 'opened'
         ? opened
         : outcome === 'interrupted'
-          ? 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.'
+          ? video
+            ? 'Arcade прервал Claude: он откроет видео во встроенном браузере и вернётся к работе.'
+            : 'Arcade прервал Claude: он откроет игру во встроенном браузере и вернётся к работе.'
           : outcome === 'sent'
             ? 'Arcade попросил Claude открыть ссылку во встроенном браузере.'
             : outcome === 'filled'
@@ -892,6 +907,119 @@ async function openedForArcade($, e) {
   opening = false
   await showBrowser($, desktopConsent(e.url))
   if (paneOpen) await $.ui.close({ id: PANE })
+}
+
+// --- YouTube: темы по работе агента, свежие видео из лент каналов --------------------------------------------------
+const FEED_TTL_MS = 2 * 3_600_000
+const CHANNELS_TTL_MS = 6 * 3_600_000 // список каналов с сайта — не чаще раза в 6 часов
+const TOPICS_TTL_MS = 20 * 60_000 // темы подбираем заново, если с прошлого раза работа агента ушла вперёд
+const YT_FETCH_MS = 8_000 // сколько ждать сайт и каждую ленту
+const YT_MODEL_MS = 20_000 // сколько ждать haiku
+const YT_POOL = 30 // сколько кандидатов каждого языка показывать модели
+
+// Ответ сети или null, если не пришёл за ms: у $.http.fetch своего срока нет
+function fetchWithin($, url, ms) {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (value) => {
+      if (done) return
+      done = true
+      resolve(value)
+    }
+    $.clock.after(ms, () => finish(null))
+    $.http.fetch(url).then(finish, () => finish(null))
+  })
+}
+
+// Список каналов: сохранённый, если свежий, иначе с сайта; сайт не ответил — старый сохранённый или запас мода
+async function ytChannels($, now) {
+  let stored = null
+  try {
+    const saved = await $.store.get('ytChannels')
+    stored = saved?.list ? parseChannels(saved.list) : null
+    if (stored && now - saved.at < CHANNELS_TTL_MS) return stored
+    const response = await fetchWithin($, siteUrl('channels.json'), YT_FETCH_MS)
+    const fresh = response?.ok ? parseChannels(response.text) : null
+    if (fresh) {
+      await $.store.set('ytChannels', { at: now, list: fresh })
+      return fresh
+    }
+  } catch (err) {
+    log(`каналы YouTube с сайта не получены: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  return stored ?? bundledChannels()
+}
+
+// Записи ленты канала; лента не ответила — что было в прошлый раз
+async function ytFeed($, id, now) {
+  const hit = feedCache.get(id)
+  if (hit && now - hit.at < FEED_TTL_MS) return hit.entries
+  const response = await fetchWithin($, feedUrl(id), YT_FETCH_MS)
+  const entries = response?.ok ? parseFeed(response.text) : []
+  if (entries.length) feedCache.set(id, { at: now, entries })
+  return entries.length ? entries : hit?.entries ?? []
+}
+
+// Темы: haiku читает последнюю работу агента; работы ещё нет или модель не ответила — темы по умолчанию
+async function loadTopics($) {
+  const request = ++yt.request
+  yt.loading = 'topics'
+  $.ui.invalidate('ui.render')
+  const now = await $.clock.now()
+  const list = await ytChannels($, now)
+  let text = ''
+  try {
+    const context = contextFrom(await $.session.messages())
+    if (context) {
+      const answer = await $.model.complete({ model: 'haiku', ...topicsPrompt(context, lang, list.directions), maxTokens: 400, timeoutMs: YT_MODEL_MS })
+      if (answer.isAnswered) text = answer.text
+      else log(`темы YouTube: модель не ответила (${answer.reason})`)
+    }
+  } catch (err) {
+    log(`темы YouTube не подобраны: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  if (request !== yt.request) return
+  yt = { ...yt, topics: parseTopics(text, list.directions), topicsAt: now, topicsLang: lang, topic: -1, videos: [], seen: new Set(), loading: '', note: '' }
+  $.ui.invalidate('ui.render')
+}
+
+// Подборка по теме: ленты каналов темы → свежие кандидаты → haiku выбирает. again — другая подборка: уже показанные
+// видео не повторяем, пока есть из чего выбрать
+async function loadVideos($, index, again = false) {
+  const topic = yt.topics?.[index]
+  if (!topic) return
+  const request = ++yt.request
+  const seen = again && yt.topic === index ? new Set([...yt.seen, ...yt.videos.map((v) => v.id)]) : new Set()
+  yt = { ...yt, topic: index, videos: [], loading: 'videos', note: '' }
+  $.ui.invalidate('ui.render')
+  const now = await $.clock.now()
+  const want = wanted(topic.direction, lang)
+  let videos = []
+  let note = ''
+  let used = seen
+  try {
+    const { local, en } = channelsFor(await ytChannels($, now), topic.direction, lang, now)
+    const pool = async (channels) => candidates(await Promise.all(channels.map((c) => ytFeed($, c.id, now))), topic.direction, now)
+    let [mine, english] = await Promise.all([pool(local), pool(en)])
+    // Всё уже показывали — начинаем круг заново
+    if (mine.length + english.length - [...mine, ...english].filter((v) => seen.has(v.id)).length < want.local + want.en) used = new Set()
+    mine = mine.filter((v) => !used.has(v.id)).slice(0, YT_POOL)
+    english = english.filter((v) => !used.has(v.id)).slice(0, YT_POOL)
+    if (!mine.length && !english.length) note = 'Не получилось загрузить видео: YouTube не ответил. Попробуй чуть позже.'
+    else {
+      let ranked = []
+      const answer = await $.model.complete({ model: 'haiku', ...picksPrompt(topic, mine, english, lang), maxTokens: 300, timeoutMs: YT_MODEL_MS })
+      if (answer.isAnswered) ranked = parsePicks(answer.text, [...mine, ...english])
+      else log(`видео YouTube: модель не ответила (${answer.reason})`)
+      videos = choose(ranked, mine, english, want)
+      if (want.local > 0 && !videos.some((v) => mine.includes(v))) note = 'Свежих видео на языке интерфейса по этой теме нет — показываю английские.'
+    }
+  } catch (err) {
+    note = `Не получилось загрузить видео: ${String(err?.message ?? err).slice(0, 200)}`
+  }
+  if (request !== yt.request) return
+  yt = { ...yt, videos, seen: used, loading: '', note }
+  $.ui.invalidate('ui.render')
 }
 
 // Варианты «где открывать» по кругу: браузер по умолчанию, каждый найденный браузер, панель
@@ -959,6 +1087,7 @@ function settingsNote(surface) {
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
+  if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
   if (menu.startsWith('genre:')) return `Arcade · ${shelfView(`shelf:${menu.split(':')[1]}`)?.title ?? ''} · ${genreLabel(menu.split(':').slice(2).join(':'))}`
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
@@ -1625,8 +1754,9 @@ export function register(on) {
         const game = key.startsWith('arcade-game-') ? gameById(key.slice(12)) : key === 'arcade-continue' && played ? gameById(lastGame) : null
         if (game) return Svg({ source: coverSvg(game), alt: game.title, width: 44, height: 44 })
         // arcade-menu-shelf-books → books, arcade-lang-main → lang, arcade-support → support; жанр — иконкой своей полки
-        const kind = key.replace(/^arcade-(menu-(shelf-)?)?/, '').replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '').replace(/^lang-main$/, 'lang').replace(/^open-library$/, 'library')
-        return Svg({ source: iconSvg(kind), alt: label || kind, width: 36, height: 36 })
+        // Темы YouTube (arcade-yt-topic-…) — иконкой YouTube; их названия придумала модель, в alt не ставим
+        const kind = key.replace(/^arcade-(menu-(shelf-)?)?/, '').replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '').replace(/^lang-main$/, 'lang').replace(/^open-library$/, 'library').replace(/^yt-.+$/, 'youtube')
+        return Svg({ source: iconSvg(kind), alt: kind === 'youtube' ? 'YouTube' : label || kind, width: 36, height: 36 })
       }
       // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
       // Блок с ключом — сам зона наведения
@@ -1848,6 +1978,100 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
+      } else if (menu === 'youtube') {
+        // Темы: три по работе агента и новинки. Названия, которые придумала модель, — уже на языке интерфейса (keep)
+        const focus = menuFrom?.startsWith('youtube:') ? Number(menuFrom.slice(8)) : 0
+        const topicTiles = (yt.topics ?? []).flatMap((t, i) => {
+          const button = Button({
+            key: `arcade-yt-topic-${i}`,
+            label: t.title,
+            ...(i === focus ? { autoFocus: true } : {}),
+            onPress: () => {
+              open(`youtube:${i}`)()
+              if (yt.topic !== i || (!yt.videos.length && !yt.loading)) loadVideos($, i)
+            },
+          })
+          return [t.fixed ? button : keep(button), dim(t.direction === 'news' ? '  презентации и обзоры обновлений' : '  по теме работы агента')]
+        })
+        items = [
+          back,
+          gap,
+          dim('Темы — по тому, над чем сейчас работает агент; видео — свежие, с проверенных каналов.'),
+          gap,
+          ...(yt.loading === 'topics' || !yt.topics
+            ? [Text({ children: ['Подбираю темы…'] })]
+            : [
+                desktop ? tiles(topicTiles) : Box({ flexDirection: 'column', children: topicTiles }),
+                gap,
+                Button({ key: 'arcade-yt-retopic', label: 'Другие темы', onPress: () => loadTopics($) }),
+              ]),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu.startsWith('youtube:')) {
+        const index = Number(menu.slice(8))
+        const topic = yt.topics?.[index]
+        const builtin = builtinBrowser(e.surface)
+        const playVideo = async (k) => {
+          const id = `video:${k}`
+          if (builtin) return desktopWindow($, id, 'Видео открыто во встроенном браузере Claude.')
+          if (!platform) {
+            libraryNotice = `Видео: https://www.youtube.com/watch?v=${yt.videos[k].id}`
+            $.ui.invalidate('ui.render')
+            return
+          }
+          libraryNotice = 'Открываю окно…'
+          $.ui.invalidate('ui.render')
+          const command = windowCommand(id)
+          try {
+            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+            windowNotice($, launchNotice(result, id))
+            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+          } catch (err) {
+            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+          }
+          $.ui.invalidate('ui.render')
+        }
+        // Видео — названия и каналы как есть, без перевода (keep). В Desktop — карточка во всю строку
+        const videoItem = (v, k) => {
+          const label = v.title.length > 100 ? `${v.title.slice(0, 99)}…` : v.title
+          const button = Button({ key: `arcade-yt-video-${k}`, label, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => playVideo(k) })
+          const meta = videoMeta(v, lang, now)
+          return keep(
+            desktop
+              ? Box({
+                  key: `card-yt-video-${k}`,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  columnGap: 'sm',
+                  borderStyle: 'round',
+                  borderColor: 'subtle',
+                  padding: 'sm',
+                  hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
+                  children: [
+                    Svg({ source: iconSvg('youtube'), alt: 'YouTube', width: 36, height: 36 }),
+                    Box({ flexDirection: 'column', rowGap: 'xs', flexShrink: 1, children: [button, Text({ size: 'footnote', dimColor: true, children: [meta] })] }),
+                  ],
+                })
+              : Box({ flexDirection: 'column', children: [button, Text({ dimColor: true, children: [`  ${meta}`] })] }),
+          )
+        }
+        items = [
+          Button({ key: 'arcade-back', label: '← Назад', ...(yt.loading ? { autoFocus: true } : {}), onPress: open('youtube') }),
+          gap,
+          ...(topic ? [topic.fixed ? Text({ bold: true, children: [topic.title] }) : keep(Text({ bold: true, children: [topic.title] }))] : []),
+          gap,
+          ...(yt.loading === 'videos'
+            ? [Text({ children: ['Подбираю видео…'] })]
+            : yt.videos.length
+              ? [Box({ flexDirection: 'column', rowGap: desktop ? 'sm' : 0, children: yt.videos.map(videoItem) })]
+              : []),
+          ...(yt.note ? [gap, dim(yt.note)] : []),
+          ...(topic && !yt.loading ? [gap, Button({ key: 'arcade-yt-more', label: 'Другая подборка', ...(yt.videos.length ? {} : { autoFocus: true }), onPress: () => loadVideos($, index, true) })] : []),
+          ...(yt.videos.length && (builtin || platform) ? [gap, dim(`Видео открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)] : []),
+          ...noticeLines,
+          ...hint,
+        ]
       } else if (menu === 'mine') {
         // Свои игры: файлы человека. Arcade их не раздаёт — копия лежит только у него, в ~/.claude/arcade
         const remove = (m) =>
@@ -2014,6 +2238,19 @@ export function register(on) {
             ...tabItems(menuTabs().filter((c) => !reading.includes(c))),
           ]),
           ...(reading.length ? [section(reading.some((c) => ['listening', 'audiobooks'].includes(c.id)) ? 'Читать и слушать' : 'Читать'), tiles(tabItems(reading))] : []),
+          section('Смотреть'),
+          tiles([
+            Button({
+              key: 'arcade-menu-youtube',
+              label: 'YouTube',
+              ...(menuFrom === 'youtube' ? { autoFocus: true } : {}),
+              onPress: () => {
+                open('youtube')()
+                if (!yt.topics || yt.topicsLang !== lang || now - yt.topicsAt > TOPICS_TTL_MS) loadTopics($)
+              },
+            }),
+            dim('  свежие видео по теме работы агента'),
+          ]),
           section('Ещё'),
           tiles([
           ...(windowMode() || e.surface === 'desktop'

@@ -18,10 +18,44 @@ const HEADERS = `/files/*
 /catalog.json
   Cache-Control: public, max-age=60
   Access-Control-Allow-Origin: *
+/channels.json
+  Cache-Control: public, max-age=3600
+  Access-Control-Allow-Origin: *
 `
 
 function fail(message) {
   throw new Error(`каталог: ${message}`)
+}
+
+// Каналы YouTube для мода (content/channels.json): мод пропускает каналы с ошибками молча, поэтому сборка строже —
+// опечатка ловится здесь, а не пропавшим каналом у пользователей
+const LANGS = ['en', 'ru', 'uk', 'es', 'fr', 'de', 'pt', 'it', 'pl', 'tr', 'ja', 'zh', 'ko']
+export function checkChannels(data) {
+  const bad = (message) => {
+    throw new Error(`каналы: ${message}`)
+  }
+  if (data?.version !== 1) bad('нужно "version": 1')
+  if (!Array.isArray(data.directions) || !Array.isArray(data.channels)) bad('нужны списки directions и channels')
+  const directions = new Set()
+  for (const d of data.directions) {
+    if (!/^[a-z]{2,20}$/.test(d?.id ?? '')) bad(`неправильный id направления ${JSON.stringify(d?.id)}`)
+    if (directions.has(d.id)) bad(`направление ${d.id} описано дважды`)
+    if (typeof d.about !== 'string' || !d.about || d.about.length > 200) bad(`направление ${d.id}: нужно описание about до 200 знаков`)
+    directions.add(d.id)
+  }
+  if (!directions.has('news')) bad('нет направления news — новинок и презентаций')
+  const ids = new Set()
+  for (const c of data.channels) {
+    const where = `канал ${c?.name ?? c?.id}`
+    if (!/^UC[\w-]{22}$/.test(c?.id ?? '')) bad(`${where}: неправильный id ${JSON.stringify(c?.id)} — нужен UC и 22 знака`)
+    if (ids.has(c.id)) bad(`${where}: ${c.id} уже есть в списке`)
+    if (typeof c.name !== 'string' || !c.name || c.name.length > 80) bad(`${where}: нужно имя до 80 знаков`)
+    if (!LANGS.includes(c.lang)) bad(`${where}: язык ${JSON.stringify(c.lang)} не из ${LANGS.join(', ')}`)
+    if (!Array.isArray(c.topics) || !c.topics.length) bad(`${where}: нужен хотя бы один topic`)
+    for (const t of c.topics) if (!directions.has(t)) bad(`${where}: нет направления ${t}`)
+    ids.add(c.id)
+  }
+  return data
 }
 
 // "0x3d9" или 985 → 985; адрес в памяти приставки
@@ -332,6 +366,9 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
   const support = source.support && /^https:\/\//.test(source.support.url ?? '') ? { url: source.support.url, title: source.support.title ?? '' } : null
   const catalog = { version: 1, built: now.toISOString(), consoles, groups, shelves, ...(support ? { support } : {}), games }
   fs.writeFileSync(path.join(out, 'catalog.json'), `${JSON.stringify(catalog, null, 2)}\n`)
+  // Каналы для YouTube в моде — как есть, после проверки
+  const channels = checkChannels(JSON.parse(fs.readFileSync(path.join(content, 'channels.json'), 'utf8')))
+  fs.writeFileSync(path.join(out, 'channels.json'), `${JSON.stringify(channels)}\n`)
 
   // Окно Arcade и лицензии сторонних библиотек
   // Движки своих игр — из мода, как есть: export убирается, движок — в window.ArcadeFlappy
