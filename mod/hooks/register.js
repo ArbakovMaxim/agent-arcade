@@ -143,6 +143,7 @@ let detection = null // что нашёл поиск браузеров: { brows
 let opener = null // где открывать игры: 'window' или 'pane'; null — по умолчанию (на Windows — окно)
 let browserChoice = 'default' // каким браузером: 'default' или id найденного
 let desktopOpener = 'builtin' // в Desktop: 'builtin' — встроенный браузер приложения, 'window' — окно браузера, как в терминале
+let keepMenu = false // в Desktop: встроенный браузер открылся — false: панель Arcade закрываем, true: оставляем, браузер встаёт под ней
 let libraryNotice = '' // что случилось при последнем запуске окна
 let opening = false // игру во встроенном браузере Desktop по просьбе Arcade открывает Claude
 let agentTurn = null // ход агента (главного цикла), который идёт сейчас: его id для $.turn.abort
@@ -1089,17 +1090,18 @@ async function desktopWindow($, id, opened) {
   $.ui.invalidate('ui.render')
   const outcome = await openDesktopBrowser($, id)
   desktopNotice($, outcome, opened, url)
-  // Браузер встаёт под панелью Arcade, и игре тесно — панель закрываем. Назад — /arcade или «Библиотека» на сайте
-  if (outcome === 'opened') await $.ui.close({ id: PANE })
+  // Браузер встаёт под панелью Arcade, и игре тесно — панель закрываем, если в настройках не выбрано оставлять меню.
+  // Назад — /arcade или «Библиотека» на сайте
+  if (outcome === 'opened' && !keepMenu) await $.ui.close({ id: PANE })
 }
 
-// Игру открыл Claude по просьбе Arcade: панель Arcade закрываем. Вызов Claude панель браузера не показывает —
-// показываем сами (в авто-режиме может и не выйти)
+// Игру открыл Claude по просьбе Arcade: панель Arcade закрываем (или оставляем — keepMenu). Вызов Claude панель
+// браузера не показывает — показываем сами (в авто-режиме может и не выйти)
 async function openedForArcade($, e) {
   opening = false
   asking = null
   await showBrowser($, desktopConsent(e.url))
-  if (paneOpen) await $.ui.close({ id: PANE })
+  if (paneOpen && !keepMenu) await $.ui.close({ id: PANE })
 }
 
 // --- YouTube: темы по работе агента, свежие видео из лент каналов --------------------------------------------------
@@ -1375,10 +1377,11 @@ function applySetting(key, value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false
     const fine = (list) => Array.isArray(list) && list.length <= 64 && list.every((k) => typeof k === 'string' && k.length <= 30)
     keymap = restoreKeymap(Object.fromEntries(Object.entries(value).filter(([, list]) => fine(list))))
-  } else if (key === 'notify' || key === 'wide') {
+  } else if (key === 'notify' || key === 'wide' || key === 'keepMenu') {
     if (typeof value !== 'boolean') return false
     if (key === 'notify') osNotify = value
-    else wide = value
+    else if (key === 'wide') wide = value
+    else keepMenu = value
   } else if (key === 'onDone' || key === 'onPermission') {
     if (!SIGNAL_MODES.includes(value)) return false
     if (key === 'onDone') onDone = value
@@ -1406,7 +1409,7 @@ function applySetting(key, value) {
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang, keys: keymap, notify: osNotify, wide, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites }[key]
+  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites }[key]
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
@@ -3958,6 +3961,21 @@ export function register(on) {
                     : '  игра откроется в браузере; пауза, пока окно не в фокусе; прогресс сохраняется',
                 ),
                 ...(builtinBrowser(e.surface) ? [dim(`  ${MOUSE_NOTE}`)] : []),
+              ]
+            : []),
+          // Desktop сам ставит встроенный браузер под панель Arcade: рядом их не поставить, поэтому — закрыть или оставить
+          ...(builtinBrowser(e.surface)
+            ? [
+                Button({
+                  key: 'arcade-keep-menu',
+                  label: `Когда открывается браузер: ${keepMenu ? 'оставлять меню' : 'закрывать меню'}`,
+                  onPress: async () => {
+                    keepMenu = !keepMenu
+                    $.ui.invalidate('ui.render')
+                    await saveSetting($, 'keepMenu', keepMenu)
+                  },
+                }),
+                dim('  закрывать — браузер во всю высоту; оставлять — браузер встаёт под меню Arcade'),
               ]
             : []),
           ...(e.surface !== 'desktop' && platform
