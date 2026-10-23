@@ -19,7 +19,8 @@
   // Twitch — свой Durable Object и секреты TWITCH_CLIENT_ID и TWITCH_CLIENT_SECRET (приложение на dev.twitch.tv);
   // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров.
   // Аккаунты — свой Durable Object Account: вход через GitHub по коду (worker/account.js); чаты друзей — Chat
-  // (worker/chat.js), по экземпляру на чат; отчёты об ошибках — Reports (worker/reports.js), один на сайт
+  // (worker/chat.js), по экземпляру на чат; отчёты об ошибках — Reports (worker/reports.js), один на сайт;
+  // общие доски проектов — Desk (worker/desk.js), по экземпляру на доску
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
@@ -31,7 +32,8 @@
       { "name": "TWITCH", "class_name": "Twitch" },
       { "name": "ACCOUNT", "class_name": "Account" },
       { "name": "CHAT", "class_name": "Chat" },
-      { "name": "REPORTS", "class_name": "Reports" }
+      { "name": "REPORTS", "class_name": "Reports" },
+      { "name": "DESK", "class_name": "Desk" }
     ]
   },
   "migrations": [
@@ -48,7 +50,9 @@
     // Чаты: переписка друзей один на один и в группах (worker/chat.js)
     { "tag": "v8", "new_sqlite_classes": ["Chat"] },
     // Отчёты об ошибках из мода (worker/reports.js)
-    { "tag": "v9", "new_sqlite_classes": ["Reports"] }
+    { "tag": "v9", "new_sqlite_classes": ["Reports"] },
+    // Доски проектов: общие доски друзей (worker/desk.js)
+    { "tag": "v10", "new_sqlite_classes": ["Desk"] }
   ],
   // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет; client secret сайту не нужен.
   // ADMINS — номера GitHub тех, кто читает отчёты об ошибках (номер профиля публичный, не секрет)
@@ -68,7 +72,8 @@
         { "name": "TWITCH", "class_name": "Twitch" },
         { "name": "ACCOUNT", "class_name": "Account" },
         { "name": "CHAT", "class_name": "Chat" },
-        { "name": "REPORTS", "class_name": "Reports" }
+        { "name": "REPORTS", "class_name": "Reports" },
+        { "name": "DESK", "class_name": "Desk" }
       ]
     }
   }

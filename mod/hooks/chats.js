@@ -69,7 +69,7 @@ function messageFrom(m) {
 }
 
 // Ники по номерам: { номер: ник }; у удалённого аккаунта ника нет
-function namesFrom(raw) {
+export function namesFrom(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   return Object.fromEntries(
     Object.entries(raw)

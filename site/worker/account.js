@@ -5,10 +5,12 @@
 // Приложение GitHub — OAuth App с включённым Device Flow; его client ID не секрет и лежит в vars (GITHUB_CLIENT_ID),
 // client secret сайту не нужен. Почты и доступа к репозиториям Arcade не просит: scope пустой.
 // Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
-// аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js).
+// аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js),
+// список его общих досок проектов (сами доски — в worker/desk.js).
 import { sign, signed } from './discover.js'
 import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName } from './chat.js'
 import { addReport, admins, askReports, cleanReport } from './reports.js'
+import { BOARD_ID, MAX_MEMBERS as BOARD_MEMBERS, MAX_OPS, cleanCols, cleanTitle } from './desk.js'
 
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
@@ -17,6 +19,7 @@ export const MAX_SESSIONS = 10 // компьютеров с входом; оди
 export const SETTINGS_MAX = 16 * 1024 // настроек — не больше 16 КБ JSON
 export const MAX_KEYS = 50
 const MAX_BODY = 32 * 1024
+const SYNC_BODY = 512 * 1024 // сверка доски везёт карточки: мод шлёт их пачками до 100 000 знаков
 // С одного адреса в сутки: кодов и вопросов «вошёл ли». Код живёт 15 минут, вопрос — раз в 5 секунд: 180 на код.
 // Счётчики — в памяти объекта 'auth', адрес — только меткой
 export const PER_IP_DAILY = { starts: 30, polls: 1500 }
@@ -52,11 +55,18 @@ export const CHAT_TICKET_MS = 30 * DAY
 export const CHAT_LINK_MS = 10 * MINUTE // пока Claude дожидается конца шага или сжатия, а человек — нажимает Enter
 export const CHAT_PROTOCOL = 'arcade-chat' // подпротокол WebSocket страницы чата; второй — сам билет
 const PREVIEW = 80 // знаков последнего сообщения в списке чатов
+// Доски проектов: своих общих досок — не больше MAX_OWNED (больше — потом, по подписке), новых в сутки — BOARDS_DAILY,
+// сверок в минуту — SYNCS_PER_MINUTE (мод сверяет открытую доску раз в несколько секунд), в списке — не больше MAX_BOARDS
+export const MAX_OWNED = 3
+export const BOARDS_DAILY = 10
+export const SYNCS_PER_MINUTE = 60
+export const MAX_BOARDS = 100
 const MAX_SOCKETS = 5 // открытых страниц чата у человека
 const CHAT_TICKET = /^(\d{1,20})\.(\d{10})\.([0-9a-f]{12})\.([A-Za-z0-9_-]{22})$/
 const TICKET_PATHS = new Set(['/friends', '/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/socket'])
 const CHAT_PATHS = new Set(['/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/chatticket', '/socket'])
 const REPORT_PATHS = new Set(['/report', '/reports', '/closereport'])
+const BOARD_PATHS = new Set(['/boards', '/boardsync', '/boardnew', '/boardmembers', '/boarddelete'])
 const ACCOUNT_ID = /^\d{1,20}$/
 // Ники, которыми легко выдать себя за Arcade, Claude или GitHub: сами слова и ники, где они — часть через _
 const RESERVED = new Set(['administrator', 'anonymous', 'everyone', 'guest', 'help', 'helpdesk', 'info', 'moderator', 'mods', 'noreply', 'null', 'owner', 'root', 'security', 'staff', 'system', 'team', 'undefined', 'abuse', 'contact', 'postmaster', 'webmaster', 'robot', 'service', 'settings', 'account'])
@@ -89,6 +99,11 @@ const ROUTES = {
   'POST /api/me/report': ['user', '/report'],
   'GET /api/me/reports': ['user', '/reports'],
   'POST /api/me/reports/close': ['user', '/closereport'],
+  'GET /api/me/boards': ['user', '/boards'],
+  'POST /api/me/boards/sync': ['user', '/boardsync'],
+  'POST /api/me/boards/new': ['user', '/boardnew'],
+  'POST /api/me/boards/members': ['user', '/boardmembers'],
+  'POST /api/me/boards/delete': ['user', '/boarddelete'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
@@ -99,11 +114,11 @@ export function sessionId(header) {
   return m ? ((m[1] === 'Bearer' ? TOKEN : CHAT_TICKET).exec(m[2])?.[1] ?? null) : null
 }
 
-// Тело запроса — не больше MAX_BODY; больше — null
-async function readBody(request) {
-  if (Number(request.headers.get('Content-Length')) > MAX_BODY) return null
+// Тело запроса — не больше limit; больше — null
+async function readBody(request, limit) {
+  if (Number(request.headers.get('Content-Length')) > limit) return null
   const text = await request.text()
-  return text.length > MAX_BODY ? null : text
+  return text.length > limit ? null : text
 }
 
 // --- Маршрут Worker'а -----------------------------------------------------------------------------------------
@@ -139,6 +154,16 @@ async function readBody(request) {
 // Отчёты об ошибках (worker/reports.js): POST /api/me/report { text, version?, surface?, lang?, os? } → { ok, id } —
 // отчёт с подписью; GET /api/me/reports → { reports, open } и POST /api/me/reports/close { id } → { ok, open } —
 // только админам ({ role: 'admin' } в /api/me), остальным 403 ({ error: 'admin' }); 503 — отчёты выключены ('off')
+// Доски проектов (worker/desk.js): GET /api/me/boards → { me, boards, names } — общие доски человека, недавние сверху,
+// { id, name, owner, rev, at } (rev — номер последней правки), и ники хозяев; POST /api/me/boards/new { name, cols?,
+// members? } → { board, cards, full, names } — новая общая доска, сразу с друзьями; POST /api/me/boards/sync { board,
+// since, ops?, names? } → { board, cards, full?, refused?, names? } — отдать правки и взять поменявшееся после since
+// (правки и ответ — в worker/desk.js; names: true — с никами участников); POST /api/me/boards/members { board, add?,
+// remove? } → { board, names } или { board, leave: true } → { ok }; POST /api/me/boards/delete { board } → { ok } —
+// удалить доску у всех. 400 — пустое название ('name'), 403 — не друг ('friend') или не хозяин доски ('owner'), 404 —
+// доски нет или тебя на ней нет ('gone'), 409 — своих общих досок уже MAX_OWNED ('many'), на доске много людей
+// ('full') или нет своего ника ('nohandle'), 413 — слишком большая пачка правок, 429 — слишком часто ('often'), 503 —
+// доски выключены ('off')
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
@@ -150,7 +175,7 @@ export async function account(request, env, url) {
     if (!id) return Response.json({ error: 'auth' }, { status: 401 })
     name = `gh:${id}`
   }
-  const body = request.method === 'POST' || request.method === 'PUT' ? await readBody(request) : ''
+  const body = request.method === 'POST' || request.method === 'PUT' ? await readBody(request, path === '/boardsync' ? SYNC_BODY : MAX_BODY) : ''
   if (body === null) return Response.json({ error: 'too big' }, { status: 413 })
   const forward = new Request(`https://account${path}${url.search}`, {
     method: request.method === 'GET' ? 'GET' : 'POST',
@@ -277,13 +302,15 @@ function randomKey() {
 // его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle, changes } (ник
 // человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
 // ключей сессии), settings, handle, seen — когда человек последний раз заходил, circle — его друзей и заявки, chats —
-// его чаты и made — когда он создавал группы за последние сутки. Отчёты об ошибках — в своём объекте (worker/reports.js)
+// его чаты и made — когда он создавал группы за последние сутки, boards — его общие доски и boardsMade — когда он их
+// заводил. Отчёты об ошибках — в своём объекте (worker/reports.js)
 export class Account {
   constructor(ctx, env) {
     this.ctx = ctx
     this.env = env
     this.ips = new Map()
     this.sends = [] // когда человек писал в чаты за последнюю минуту
+    this.syncs = [] // когда он сверял доски за последнюю минуту
     // На 'ping' страницы чата отвечает сама платформа: объект ради этого не просыпается
     if (typeof WebSocketRequestResponsePair === 'function') ctx.setWebSocketAutoResponse?.(new WebSocketRequestResponsePair('ping', 'pong'))
   }
@@ -307,6 +334,9 @@ export class Account {
       // От чатов: в чате новое сообщение, чата больше нет
       if (path === '/chatnote') return await this.chatnote(await request.json())
       if (path === '/chatgone') return await this.chatgone(await request.json())
+      // От досок: доска поменялась, доски у него больше нет
+      if (path === '/boardnote') return await this.boardnote(await request.json())
+      if (path === '/boardgone') return await this.boardgone(await request.json())
       // С билетом чата — только чаты и список друзей, с кодом ссылки — только обменять его на билет
       const who = await this.session(request.headers.get('Authorization'))
       if (!who || (who.ticket && !TICKET_PATHS.has(path)) || (who.link && path !== '/chatticket')) return Response.json({ error: 'auth' }, { status: 401 })
@@ -333,6 +363,12 @@ export class Account {
       if (path === '/members') return await this.changeMembers(await request.text())
       if (path === '/chatticket') return await this.issueTicket(who, await request.text())
       if (path === '/socket') return this.socket(request, who)
+      if (BOARD_PATHS.has(path) && !this.env.DESK) return refuse('off', 503)
+      if (path === '/boards') return await this.boardList()
+      if (path === '/boardsync') return await this.syncBoard(await request.text())
+      if (path === '/boardnew') return await this.makeBoard(await request.text())
+      if (path === '/boardmembers') return await this.boardMembers(await request.text())
+      if (path === '/boarddelete') return await this.deleteBoard(await request.text())
       return Response.json({ error: 'not found' }, { status: 404 })
     } catch (error) {
       if (error instanceof LimitError) return Response.json({ error: 'limit' }, { status: 429 })
@@ -770,7 +806,7 @@ export class Account {
     } else await this.ctx.storage.setAlarm(seen + IDLE_MS)
   }
 
-  // Перед удалением аккаунта — закрыть его чаты двоих и выйти из групп, убрать его у друзей и у тех, с кем были
+  // Перед удалением аккаунта — закрыть его чаты двоих и выйти из групп и досок, убрать его у друзей и у тех, с кем были
   // заявки, и отпустить ник в реестре. Кто не ответил, уберёт его сам: у номера в реестре больше нет ника
   async forget() {
     const { id } = (await this.ctx.storage.get('user')) ?? {}
@@ -782,6 +818,7 @@ export class Account {
       const groups = chats.filter((chat) => chat.startsWith('g'))
       await Promise.allSettled([...[...dms].map((chat) => this.chat(chat, '/close', {})), ...groups.map((chat) => this.chat(chat, '/members', { leave: true }))])
     }
+    if (this.env.DESK) await Promise.allSettled(Object.keys(await this.boards()).map((board) => this.desk(board, '/members', { leave: true })))
     const others = new Set([...Object.keys(circle.friends), ...Object.keys(circle.incoming), ...Object.keys(circle.outgoing)])
     await Promise.allSettled([...others].map((other) => this.person(other, '/drop', { id })))
     if (await this.ctx.storage.get('handle')) {
@@ -1023,6 +1060,165 @@ export class Account {
       return Response.json({ ok: true })
     }
     return Response.json({ chat: data.chat })
+  }
+
+  // --- Доски проектов ---------------------------------------------------------------------------------------------
+  // Список общих досок человека — boards: { доска: { name, owner, rev (номер последней правки), at (когда она была) } }.
+  // Сами доски — в объектах Desk; они сообщают сюда о каждой правке. Карточки мод сверяет с доской сам
+  async boards() {
+    return (await this.ctx.storage.get('boards')) ?? {}
+  }
+
+  // Вопрос к доске от имени этого человека
+  async desk(id, path, body) {
+    const space = this.env.DESK
+    const by = await this.myId()
+    return space.get(space.idFromName(id)).fetch(new Request(`https://desk${path}`, { method: 'POST', body: JSON.stringify({ ...body, board: id, by }) }))
+  }
+
+  // Запомнить, что доска знает о себе, если это новее
+  async keepBoard(about) {
+    const boards = await this.boards()
+    const old = boards[about.id]
+    if (old && old.rev >= about.rev && old.name === about.name && old.owner === about.owner) return
+    if (!old && Object.keys(boards).length >= MAX_BOARDS) return
+    const rev = Math.max(old?.rev ?? 0, about.rev)
+    await this.ctx.storage.put('boards', { ...boards, [about.id]: { name: about.name, owner: about.owner, rev, at: rev > (old?.rev ?? 0) ? Date.now() : old.at } })
+  }
+
+  async loseBoard(id) {
+    const boards = await this.boards()
+    if (boards[id]) await this.ctx.storage.put('boards', without(boards, id))
+  }
+
+  // Доска сообщает о правке: в списке новый номер, название и хозяин. Аккаунта уже нет — 404
+  async boardnote({ board, name, owner, rev }) {
+    if (!(await this.myId())) return refuse('nobody', 404)
+    if (typeof board !== 'string' || !BOARD_ID.test(board) || typeof name !== 'string' || typeof owner !== 'string' || !Number.isSafeInteger(rev)) return refuse('bad request', 400)
+    await this.keepBoard({ id: board, name, owner, rev })
+    return Response.json({ ok: true })
+  }
+
+  // Доски больше нет: её удалили, его убрали или он вышел
+  async boardgone({ board }) {
+    if (typeof board !== 'string' || !BOARD_ID.test(board)) return refuse('bad request', 400)
+    await this.loseBoard(board)
+    return Response.json({ ok: true })
+  }
+
+  async boardList() {
+    const boards = await this.boards()
+    const list = Object.entries(boards)
+      .sort((a, b) => b[1].at - a[1].at)
+      .map(([id, b]) => ({ id, name: b.name, owner: b.owner, rev: b.rev, at: b.at }))
+    const names = list.length ? await this.handles(list.map((b) => b.owner)) : {}
+    return Response.json({ me: await this.whoami(), boards: list, names })
+  }
+
+  // Друзья для доски: номера без повторов и без себя, только друзья. Не так — ответ с отказом
+  async friendsOnly(value, me) {
+    if (value === undefined) return []
+    if (!Array.isArray(value) || !value.every((id) => typeof id === 'string' && ACCOUNT_ID.test(id))) return refuse('bad request', 400)
+    const people = [...new Set(value)].filter((id) => id !== me)
+    if (!people.length) return people
+    const circle = await this.circle()
+    return people.some((id) => !circle.friends[id]) ? refuse('friend', 403) : people
+  }
+
+  // Новая общая доска; хозяин — кто завёл, сразу можно позвать друзей. Нужен свой ник: по нему видно, кто позвал.
+  // Своих общих досок — не больше MAX_OWNED
+  async makeBoard(text) {
+    const body = parsed(text)
+    const name = cleanTitle(body.name)
+    if (!name) return refuse('name', 400)
+    const cols = body.cols === undefined ? undefined : cleanCols(body.cols)
+    if (cols === null) return refuse('bad request', 400)
+    if (!(await this.ctx.storage.get('handle'))) return refuse('nohandle', 409)
+    const me = await this.myId()
+    const people = await this.friendsOnly(body.members, me)
+    if (people instanceof Response) return people
+    if (people.length > BOARD_MEMBERS - 1) return refuse('full', 409)
+    if (Object.values(await this.boards()).filter((b) => b.owner === me).length >= MAX_OWNED) return refuse('many', 409)
+    const now = Date.now()
+    const made = ((await this.ctx.storage.get('boardsMade')) ?? []).filter((at) => now - at < DAY)
+    if (made.length >= BOARDS_DAILY) return refuse('often', 429)
+    await this.ctx.storage.put('boardsMade', [...made, now])
+    const board = `b${randomKey().slice(0, 16)}`
+    const opened = await this.desk(board, '/open', { name, ...(cols ? { cols } : {}) })
+    if (!opened.ok) throw new Error(`desk: ${opened.status}`)
+    let data = await opened.json()
+    if (people.length) {
+      const added = await this.desk(board, '/members', { add: people })
+      if (added.ok) data = { ...data, board: (await added.json()).board }
+    }
+    await this.keepBoard(data.board)
+    return Response.json({ ...data, names: await this.handles(data.board.members) })
+  }
+
+  // Сверка с доской: отдать правки и взять поменявшееся. Доски нет или его на ней нет — она уходит из списка
+  async syncBoard(text) {
+    const { board, since, ops, names } = parsed(text)
+    if (typeof board !== 'string' || !BOARD_ID.test(board) || (ops !== undefined && (!Array.isArray(ops) || ops.length > MAX_OPS))) return refuse('bad request', 400)
+    const now = Date.now()
+    this.syncs = this.syncs.filter((at) => now - at < MINUTE)
+    if (this.syncs.length >= SYNCS_PER_MINUTE) return refuse('often', 429)
+    this.syncs.push(now)
+    const answer = await this.desk(board, '/sync', { since, ops: ops ?? [] })
+    if (answer.status === 403 || answer.status === 404) {
+      await this.loseBoard(board)
+      return refuse('gone', 404)
+    }
+    if (answer.status === 400) return refuse('bad request', 400)
+    if (!answer.ok) throw new Error(`desk: ${answer.status}`)
+    const data = await answer.json()
+    await this.keepBoard(data.board)
+    return Response.json(names === true ? { ...data, names: await this.handles(data.board.members) } : data)
+  }
+
+  // Участники доски: хозяин зовёт друзей и убирает людей; выйти может любой
+  async boardMembers(text) {
+    const body = parsed(text)
+    const board = body.board
+    if (typeof board !== 'string' || !BOARD_ID.test(board)) return refuse('bad request', 400)
+    let change = { leave: true }
+    if (body.leave !== true) {
+      const me = await this.myId()
+      const add = await this.friendsOnly(body.add, me)
+      if (add instanceof Response) return add
+      const remove = body.remove === undefined ? [] : body.remove
+      if (!Array.isArray(remove) || !remove.every((id) => typeof id === 'string' && ACCOUNT_ID.test(id))) return refuse('bad request', 400)
+      change = { add, remove }
+    }
+    const answer = await this.desk(board, '/members', change)
+    const data = await answer.json().catch(() => ({}))
+    if (data.error === 'owner' || data.error === 'full') return refuse(data.error, answer.status)
+    if (answer.status === 403 || answer.status === 404) {
+      await this.loseBoard(board)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`desk: ${answer.status}`)
+    if (change.leave) {
+      await this.loseBoard(board)
+      return Response.json({ ok: true })
+    }
+    await this.keepBoard(data.board)
+    return Response.json({ board: data.board, names: await this.handles(data.board.members) })
+  }
+
+  // Удалить доску у всех — только хозяин
+  async deleteBoard(text) {
+    const { board } = parsed(text)
+    if (typeof board !== 'string' || !BOARD_ID.test(board)) return refuse('bad request', 400)
+    const answer = await this.desk(board, '/delete', {})
+    const data = await answer.json().catch(() => ({}))
+    if (data.error === 'owner') return refuse('owner', 403)
+    if (answer.status === 403 || answer.status === 404) {
+      await this.loseBoard(board)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`desk: ${answer.status}`)
+    await this.loseBoard(board)
+    return Response.json({ ok: true })
   }
 
   // Билет для страницы чата: мод открывает её, не отдавая браузеру ключ сессии. С ключом сессии и { link: true } —

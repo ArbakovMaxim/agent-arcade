@@ -12,6 +12,7 @@ export { Twitch } from './twitch.js'
 export { Account } from './account.js'
 export { Chat } from './chat.js'
 export { Reports } from './reports.js'
+export { Desk } from './desk.js'
 
 export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт

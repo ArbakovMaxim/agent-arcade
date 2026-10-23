@@ -713,9 +713,10 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS } = await import('../worker/account.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE } = await import('../worker/account.js')
   const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, dmId, cleanText, groupName } = await import('../worker/chat.js')
   const { Reports, cleanReport, admins, MAX_REPORT, PER_SENDER_DAILY, DAILY, KEEP: REPORTS_KEEP } = await import('../worker/reports.js')
+  const { Desk, DEFAULT_COLS, MAX_CARDS, MAX_TOTAL, MAX_TITLE, MAX_OPS, KEEP_GONE, MAX_MEMBERS: DESK_MEMBERS, cleanTitle, cleanCols } = await import('../worker/desk.js')
   const KEY = 'a'.repeat(43)
   assert.equal(sessionId(`Bearer 42.${KEY}`), '42')
   assert.equal(sessionId(`Bearer 42.${KEY}x`), null)
@@ -781,7 +782,8 @@ try {
   }
   const realNow = Date.now
   try {
-    // Хранилище на экземпляр: 'auth', gh:<номер>, чаты — chat:<чат> и отчёты — reports:all; у Account — свои сокеты
+    // Хранилище на экземпляр: 'auth', gh:<номер>, чаты — chat:<чат>, отчёты — reports:all и доски — desk:<доска>; у
+    // Account — свои сокеты
     const objects = new Map()
     const env = { GITHUB_CLIENT_ID: 'gh-client' }
     const instance = (name) => {
@@ -797,6 +799,7 @@ try {
             for (const k of [].concat(keys)) store.delete(k)
           },
           deleteAll: async () => store.clear(),
+          list: async ({ prefix = '' } = {}) => new Map([...store].filter(([k]) => k.startsWith(prefix)).map(([k, v]) => [k, structuredClone(v)])),
           getAlarm: async () => storage.alarm,
           setAlarm: async (t) => {
             storage.alarm = t
@@ -807,7 +810,7 @@ try {
         }
         const sockets = []
         const ctx = { storage, acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed) }
-        const Kind = name.startsWith('chat:') ? Chat : name.startsWith('reports:') ? Reports : Account
+        const Kind = name.startsWith('chat:') ? Chat : name.startsWith('reports:') ? Reports : name.startsWith('desk:') ? Desk : Account
         objects.set(name, { store, storage, sockets, object: new Kind(ctx, env) })
       }
       return objects.get(name).object
@@ -1389,6 +1392,105 @@ try {
     assert.deepEqual(await added.json(), { ok: true, id: REPORTS_KEEP + 1 })
     assert.deepEqual([spareStore.get('meta').open.length, spareStore.get('meta').open[0], spareStore.has('r:0000000001')], [REPORTS_KEEP, 2, false])
 
+    // Доски проектов (worker/desk.js): без привязки DESK — выключены; с билетом чата — нельзя
+    assert.deepEqual(await go('GET', '/api/me/boards', { token: t42 }), { status: 503, body: { error: 'off' } })
+    env.DESK = { idFromName: (name) => `desk:${name}`, get: instance }
+    assert.equal((await go('GET', '/api/me/boards', { auth: `Chat ${ticket9}` })).status, 401)
+    const boardsOf = (token) => go('GET', '/api/me/boards', { token })
+    const newBoard = (body, token) => go('POST', '/api/me/boards/new', { body, token })
+    const sync = (body, token) => go('POST', '/api/me/boards/sync', { body, token })
+    const boardMembers = (body, token) => go('POST', '/api/me/boards/members', { body, token })
+    const boardsListOf = (id) => objects.get(`gh:${id}`).store.get('boards') ?? {}
+    const card = (id, title, col = 'todo', pos = 1, body = '') => ({ put: { id, title, body, col, pos } })
+    assert.deepEqual([cleanTitle(`  План\nрелиза ${rlo} `), cleanTitle('я'.repeat(MAX_TITLE + 5)), cleanTitle(7)], ['План релиза', 'я'.repeat(MAX_TITLE), ''])
+    assert.deepEqual(cleanCols([{ id: 'todo' }, { id: 'x1', name: ' Идеи ' }]), [{ id: 'todo' }, { id: 'x1', name: 'Идеи' }])
+    assert.deepEqual([[], [{ id: 'a' }, { id: 'a' }], [{ id: 'A' }], [{ id: 'a', name: ' ' }], Array.from({ length: 9 }, (_, i) => ({ id: `c${i}` })), 'x'].map(cleanCols), [null, null, null, null, null, null])
+
+    // Новая общая доска — сразу с другом; не друг — нельзя
+    assert.deepEqual(await newBoard({ name: ' ' }, t42), { status: 400, body: { error: 'name' } })
+    assert.deepEqual(await newBoard({ name: 'План', members: ['12345'] }, t42), { status: 403, body: { error: 'friend' } })
+    const made = await newBoard({ name: 'План релиза', members: ['7', '42'] }, t42)
+    const plan = made.body.board.id
+    assert.match(plan, /^b[A-Za-z0-9_-]{16}$/)
+    assert.deepEqual(made, { status: 200, body: { board: { id: plan, name: 'План релиза', owner: '42', members: ['7', '42'], cols: DEFAULT_COLS, rev: 2 }, cards: [], full: true, names: { 7: 'octo_cat', 42: 'octo_more' } } })
+    const listed7 = await boardsOf(t7)
+    assert.deepEqual([listed7.body.boards.map(({ at, ...b }) => b), listed7.body.names], [[{ id: plan, name: 'План релиза', owner: '42', rev: 2 }], { 42: 'octo_more' }])
+    const deskStore = objects.get(`desk:${plan}`).store
+    const deskMeta = () => deskStore.get('meta')
+    const direct = (path, body) => objects.get(`desk:${plan}`).object.fetch(new Request(`https://desk${path}`, { method: 'POST', body: JSON.stringify({ board: plan, ...body }) }))
+    assert.equal((await direct('/open', { by: '9', name: 'Чужая' })).status, 409, 'доска уже есть')
+    assert.equal((await direct('/sync', { by: '12345', since: 0 })).status, 403, 'не участник')
+
+    // Сверка: правки уходят, поменявшееся после since приходит; каждая правка — следующий номер
+    const pushed = await sync({ board: plan, since: 2, ops: [card('pa1', 'Тесты'), card('pa2', 'Деплой', 'doing', 2, '- [ ] staging')] }, t42)
+    assert.deepEqual([pushed.body.board.rev, pushed.body.cards.map((c) => [c.id, c.rev, c.col, c.by])], [4, [['pa1', 3, 'todo', '42'], ['pa2', 4, 'doing', '42']]])
+    const pulled = await sync({ board: plan, since: 0, names: true }, t7)
+    assert.deepEqual([pulled.body.full, pulled.body.cards.map((c) => c.title), pulled.body.names], [true, ['Тесты', 'Деплой'], { 7: 'octo_cat', 42: 'octo_more' }])
+    // Перенести, удалить, новая карточка в незнакомой колонке — в первой; та же карточка ещё раз — не правка
+    const moved = await sync({ board: plan, since: 4, ops: [card('pa1', 'Тесты', 'done', 1), { del: 'pa2' }, card('pa3', 'Куда?', 'nowhere', 5)] }, t7)
+    assert.deepEqual(moved.body.cards.map((c) => [c.id, c.rev, c.gone ?? c.col]), [['pa1', 5, 'done'], ['pa2', 6, true], ['pa3', 7, 'todo']])
+    assert.deepEqual((await sync({ board: plan, since: 7, ops: [card('pa1', 'Тесты', 'done', 1), { del: 'pa2' }, { del: 'nope' }] }, t7)).body, { board: { ...made.body.board, rev: 7 }, cards: [] })
+    const back = await sync({ board: plan, since: 4 }, t42)
+    assert.deepEqual([back.body.full, back.body.cards.map((c) => c.id), back.body.cards[1]], [undefined, ['pa1', 'pa2', 'pa3'], { id: 'pa2', rev: 6, gone: true }])
+    // Название и колонки меняет любой участник; другие узнают о правке
+    const renamed = await sync({ board: plan, since: 7, ops: [{ name: ' Релиз 1.0 ' }, { cols: [...DEFAULT_COLS, { id: 'ideas', name: 'Идеи' }] }] }, t7)
+    assert.deepEqual([renamed.body.board.name, renamed.body.board.rev, renamed.body.board.cols.length], ['Релиз 1.0', 9, 4])
+    assert.deepEqual([boardsListOf(42)[plan].name, boardsListOf(42)[plan].rev], ['Релиз 1.0', 9])
+    for (const ops of [[{ put: { id: 'X!', title: 't', col: 'todo', pos: 1 } }], [card('ok', ' ')], [{ put: { id: 'ok', title: 't', col: 'todo', pos: 'x' } }], [{ name: '' }], [{ cols: [] }], [{ what: 1 }], 'x', Array(MAX_OPS + 1).fill({ del: 'pa1' })]) {
+      assert.deepEqual(await sync({ board: plan, since: 9, ops }, t42), { status: 400, body: { error: 'bad request' } }, JSON.stringify(ops).slice(0, 60))
+    }
+    assert.equal(deskMeta().rev, 9, 'неверная пачка не пишет ничего')
+    assert.deepEqual(await go('POST', '/api/me/boards/sync', { body: { board: plan, since: 9, ops: [card('pa9', 'x', 'todo', 1, 'x'.repeat(600 * 1024))] }, token: t42 }), { status: 413, body: { error: 'too big' } })
+    // Не помещается — доска не берёт: карточек MAX_CARDS или знаков MAX_TOTAL; править старые можно
+    deskStore.set('meta', { ...deskMeta(), cards: MAX_CARDS })
+    const crowded = await sync({ board: plan, since: 9, ops: [card('pa4', 'Лишняя'), card('pa1', 'Тесты!', 'done', 1)] }, t42)
+    assert.deepEqual([crowded.body.refused, crowded.body.cards.map((c) => c.id)], [['pa4'], ['pa1']])
+    deskStore.set('meta', { ...deskMeta(), cards: 2, size: MAX_TOTAL - 5 })
+    const heavy = await sync({ board: plan, since: 10, ops: [card('pa5', 'Пять!'), card('pa6', 'Шесть')] }, t42)
+    assert.deepEqual([heavy.body.refused, heavy.body.cards.map((c) => c.id)], [['pa6'], ['pa5']])
+    deskStore.set('meta', { ...deskMeta(), size: 16 })
+    // Следов удаления больше KEEP_GONE + 100 — старые забываются; кто сверялся до них, получает доску целиком
+    const before = deskMeta()
+    for (let i = 0; i < KEEP_GONE + 100; i++) deskStore.set(`c:g${i}`, { id: `g${i}`, rev: before.rev + 1 + i, gone: true })
+    deskStore.set('meta', { ...before, rev: before.rev + KEEP_GONE + 100, gone: before.gone + KEEP_GONE + 100 })
+    const pruned = await sync({ board: plan, since: before.rev, ops: [{ del: 'pa5' }] }, t7)
+    assert.deepEqual([pruned.body.full, pruned.body.cards.map((c) => c.id), deskMeta().gone, deskMeta().floor, deskStore.has('c:pa2')], [true, ['pa3', 'pa1'], KEEP_GONE, before.rev + 101, false])
+    // Сверок в минуту — не больше SYNCS_PER_MINUTE
+    const box7 = objects.get('gh:7').object
+    for (let i = box7.syncs.length; i < SYNCS_PER_MINUTE; i++) assert.equal((await sync({ board: plan, since: deskMeta().rev }, t7)).status, 200)
+    assert.deepEqual(await sync({ board: plan, since: deskMeta().rev }, t7), { status: 429, body: { error: 'often' } })
+    box7.syncs = []
+
+    // Участники: зовёт и убирает хозяин, только друзей; убранный теряет доску
+    assert.deepEqual(await boardMembers({ board: plan, add: ['9'] }, t7), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(await boardMembers({ board: plan, remove: ['42'] }, t7), { status: 403, body: { error: 'owner' } })
+    assert.deepEqual((await boardMembers({ board: plan, add: ['9'] }, t42)).body.board.members, ['7', '9', '42'])
+    assert.deepEqual((await boardsOf(t9)).body.boards.map((b) => b.id), [plan])
+    assert.deepEqual((await boardMembers({ board: plan, remove: ['9'] }, t42)).body.board.members, ['7', '42'])
+    assert.deepEqual([(await boardsOf(t9)).body.boards, await sync({ board: plan, since: 1 }, t9)], [[], { status: 404, body: { error: 'gone' } }])
+    const fakeMembers = Object.fromEntries(Array.from({ length: DESK_MEMBERS - 2 }, (_, i) => [String(1000 + i), 1]))
+    deskStore.set('meta', { ...deskMeta(), members: { ...deskMeta().members, ...fakeMembers } })
+    assert.deepEqual(await boardMembers({ board: plan, add: ['9'] }, t42), { status: 409, body: { error: 'full' } })
+    deskStore.set('meta', { ...deskMeta(), members: { 7: deskMeta().members[7], 42: deskMeta().members[42] } })
+    // Вышел хозяин — доска у того, кто на ней дольше всех
+    assert.deepEqual(await boardMembers({ board: plan, leave: true }, t42), { status: 200, body: { ok: true } })
+    assert.deepEqual([deskMeta().owner, boardsListOf(7)[plan].owner, boardsListOf(42)[plan]], ['7', '7', undefined])
+
+    // Своих общих досок — не больше MAX_OWNED, новых в сутки — не больше BOARDS_DAILY
+    const twoCols = (await newBoard({ name: 'Вторая', members: ['7'], cols: [{ id: 'a', name: 'Надо' }, { id: 'b', name: 'Готово' }] }, t42)).body.board
+    assert.deepEqual([twoCols.owner, twoCols.members, twoCols.cols], ['42', ['7', '42'], [{ id: 'a', name: 'Надо' }, { id: 'b', name: 'Готово' }]])
+    const third = (await newBoard({ name: 'Третья' }, t42)).body.board.id
+    const fourth = (await newBoard({ name: 'Четвёртая' }, t42)).body.board.id
+    assert.equal(MAX_OWNED, 3)
+    assert.deepEqual(await newBoard({ name: 'Пятая' }, t42), { status: 409, body: { error: 'many' } })
+    objects.get('gh:7').store.set('boardsMade', Array(BOARDS_DAILY).fill(Date.now()))
+    assert.deepEqual(await newBoard({ name: 'Ещё' }, t7), { status: 429, body: { error: 'often' } })
+    // Удалить у всех — только хозяин
+    assert.deepEqual(await go('POST', '/api/me/boards/delete', { body: { board: twoCols.id }, token: t7 }), { status: 403, body: { error: 'owner' } })
+    assert.deepEqual(await go('POST', '/api/me/boards/delete', { body: { board: third }, token: t42 }), { status: 200, body: { ok: true } })
+    assert.deepEqual([objects.get(`desk:${third}`).store.size, boardsListOf(42)[third]], [0, undefined])
+    assert.deepEqual(await go('POST', '/api/me/boards/delete', { body: { board: third }, token: t42 }), { status: 404, body: { error: 'gone' } })
+
     // Удалить аккаунт — ничего не остаётся, а ник месяц держится, потом свободен
     assert.deepEqual(await go('DELETE', '/api/me', { token: tokens.at(-1) }), { status: 200, body: { ok: true } })
     assert.equal(account42.store.size, 0)
@@ -1398,6 +1500,7 @@ try {
     assert.deepEqual(objects.get('gh:7').store.get('circle').friends, {}, 'удалённый аккаунт уходит у друзей')
     assert.deepEqual([objects.get(`chat:${dm}`).store.size, listOf(7)[dm]], [0, undefined], 'чата двоих с ним больше нет')
     assert.deepEqual(Object.keys(objects.get(`chat:${allChat}`).store.get('meta').members), ['7', '9'], 'из групп он вышел')
+    assert.deepEqual([objects.get(`desk:${fourth}`).store.size, objects.get(`desk:${twoCols.id}`).store.get('meta').owner, boardsListOf(7)[twoCols.id].owner], [0, '7', '7'], 'из досок он вышел')
     assert.deepEqual([reportsStore().get('r:0000000002').text, reportsStore().get('r:0000000002').from], ['Чат не открывается', undefined], 'его отчёт — без подписи')
     delete env.ADMINS
     assert.deepEqual(await nick('octo_more', other.body.token), { status: 409, body: { error: 'taken' } })
@@ -1434,6 +1537,121 @@ try {
     globalThis.fetch = realFetch
     Date.now = realNow
   }
+}
+
+// Доска проектов: два мода (их блокноты и сверка — mod/hooks/notes.js и desks.js) сверяются через настоящую Desk
+{
+  const { Desk } = await import('../worker/desk.js')
+  const notesM = await import('../../mod/hooks/notes.js')
+  const desks = await import('../../mod/hooks/desks.js')
+  const mem = new Map()
+  const storage = {
+    get: async (k) => (Array.isArray(k) ? new Map(k.filter((x) => mem.has(x)).map((x) => [x, structuredClone(mem.get(x))])) : structuredClone(mem.get(k))),
+    put: async (k, v) => {
+      for (const [a, b] of typeof k === 'object' ? Object.entries(k) : [[k, v]]) mem.set(a, structuredClone(b))
+    },
+    list: async ({ prefix = '' } = {}) => new Map([...mem].filter(([k]) => k.startsWith(prefix)).map(([k, v]) => [k, structuredClone(v)])),
+    delete: async (keys) => {
+      for (const k of [].concat(keys)) mem.delete(k)
+    },
+    deleteAll: async () => mem.clear(),
+  }
+  const desk = new Desk({ storage }, { ACCOUNT: { idFromName: (name) => name, get: () => ({ fetch: async () => Response.json({ ok: true }) }) } })
+  const call = async (path, body) => {
+    const r = await desk.fetch(new Request(`https://desk${path}`, { method: 'POST', body: JSON.stringify(body) }))
+    return { status: r.status, ok: r.ok, text: await r.text() }
+  }
+  const BOARD = 'bAAAAAAAAAAAAAAAA'
+  let clock = 1000
+  const tick = () => ++clock
+  const sync = async (notes, base, who) => {
+    const { ops, sent } = desks.planSync(notes, base)
+    const answer = desks.parseBoard(await call('/sync', { board: BOARD, by: who, since: base.rev, ops }))
+    assert.equal(answer.error, '')
+    return { ops, ...desks.applySync(notes, base, answer, sent, tick()) }
+  }
+  const cardOf = (notes, id) => notes.find((p) => p.id === id)
+
+  // A заводит доску с двумя карточками и делится с B: карточки уходят первой сверкой
+  let A = notesM.addPage([], { title: 'Проект', board: {} }, tick()).notes
+  const boardA = A[0].id
+  A = notesM.addPage(A, { title: 'one', parent: boardA, id: 'c1' }, tick()).notes
+  A = notesM.addPage(A, { title: 'two', parent: boardA, id: 'c2' }, tick()).notes
+  const opened = desks.parseBoard(await call('/open', { board: BOARD, by: '1', name: 'Проект' }))
+  assert.equal((await call('/members', { board: BOARD, by: '1', add: ['2'] })).status, 200)
+  A = notesM.updatePage(A, boardA, { board: { ...A.find((p) => p.id === boardA).board, share: BOARD } }, tick())
+  let baseA = { ...desks.freshBase(A, A.find((p) => p.id === boardA), '1'), rev: opened.board.rev, cards: {} }
+  let r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  assert.equal(r.ops.length, 2, 'A отдал две карточки')
+
+  // B берёт доску из списка — карточки приходят первой сверкой
+  const adopted = desks.adoptBoard([], { id: BOARD, name: 'Проект', owner: '1', rev: 0, at: 0 }, tick())
+  let [B, baseB] = [adopted.notes, adopted.base]
+  const boardB = adopted.page.id
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  assert.deepEqual(notesM.columnCards(B, cardOf(B, boardB), 'todo').map((p) => p.title), ['one', 'two'], 'B получил карточки по порядку')
+
+  // B переносит одну и правит другую, A переименовывает колонку — каждый видит правки другого
+  B = notesM.moveCard(B, 'c1', 'right', tick())
+  B = notesM.updatePage(B, 'c2', { body: 'от B' }, tick())
+  A = notesM.renameColumn(A, boardA, 'done', 'Сдано', tick()).notes
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  assert.deepEqual([cardOf(A, 'c1').col, cardOf(A, 'c2').body], ['doing', 'от B'], 'A видит правки B')
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  assert.equal(cardOf(B, boardB).board.cols[2].name, 'Сдано', 'B видит колонку A')
+
+  // Одновременно: A удаляет c2, B правит её — правка B возвращает карточку
+  A = notesM.removePage(A, 'c2')
+  B = notesM.updatePage(B, 'c2', { body: 'снова B' }, tick())
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  assert.ok(cardOf(B, 'c2'), 'у B карточка осталась: он её правил')
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  assert.equal(cardOf(A, 'c2')?.body, 'снова B', 'к A карточка вернулась')
+
+  // Правка, пока шёл ответ: сайт её не перезаписывает, она уходит следующей сверкой и побеждает у обоих
+  {
+    const { ops, sent } = desks.planSync(B, baseB)
+    const answer = desks.parseBoard(await call('/sync', { board: BOARD, by: '2', since: baseB.rev, ops }))
+    A = notesM.updatePage(A, 'c1', { title: 'one от A' }, tick())
+    B = notesM.updatePage(B, 'c1', { title: 'one от B' }, tick())
+    r = desks.applySync(B, baseB, answer, sent, tick())
+    ;[B, baseB] = [r.notes, r.base]
+  }
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  assert.deepEqual([cardOf(A, 'c1').title, cardOf(B, 'c1').title], ['one от B', 'one от B'], 'поздняя правка победила у обоих')
+
+  // Основа потерялась: B сверяется с нуля — где расходятся, побеждает сайт; несверенная карточка уходит на сайт
+  B = notesM.addPage(B, { title: 'local', parent: boardB, id: 'c9' }, tick()).notes
+  const lost = { ...desks.freshBase(B, cardOf(B, boardB), '1'), cards: Object.fromEntries(B.filter((p) => p.parent === boardB && p.id !== 'c9').map((p) => [p.id, p.at])) }
+  r = await sync(B, lost, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  assert.equal(cardOf(A, 'c9')?.title, 'local', 'карточка B дошла до A')
+  assert.deepEqual(
+    notesM.notesOrder(A).map((p) => p.title),
+    notesM.notesOrder(B).map((p) => p.title),
+    'доски у A и B одинаковые',
+  )
+
+  // Основа и блокнот переживают $.store
+  const restored = desks.restoreDesks(JSON.parse(JSON.stringify({ [BOARD]: baseB })), notesM.restoreNotes(JSON.parse(JSON.stringify(B))))
+  assert.deepEqual([restored[BOARD]?.rev, restored[BOARD]?.page], [baseB.rev, boardB], 'основа переживает $.store')
 }
 
 console.log('комнаты: все проверки прошли')
