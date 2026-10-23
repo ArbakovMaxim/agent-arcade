@@ -281,6 +281,7 @@ const EXACT = {
   'Список чатов не загрузился.': "The chat list didn't load.",
   'Переписка хранится на сайте Arcade и не шифруется — не пиши туда пароли и ключи.':
     'Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.',
+  'Переписка не шифруется — не пиши сюда пароли и ключи.': 'Messages are not encrypted — never write passwords or keys here.',
   'Слишком часто — подожди минуту.': 'Too often — wait a minute.',
   'Групп сегодня создано слишком много — попробуй завтра.': 'Too many groups were created today — try again tomorrow.',
   'Писать можно только друзьям.': 'You can only write to friends.',
@@ -638,11 +639,18 @@ export function tr(text, lang = 'ru') {
   return lang === 'en' ? en : fromEnglish(en, lang)
 }
 
+// Фразы словаря с отступом ('  по желанию: …') — ещё и без него: плитка Desktop переводит описание уже обрезанным
+const TRIMMED = Object.fromEntries(
+  Object.entries(EXACT)
+    .filter(([key]) => key !== key.trim())
+    .map(([key, out]) => [key.trim(), out.trim()]),
+)
+
 function trEn(text) {
   if (!/[А-Яа-яЁё]/.test(text)) return text
   const lead = text.match(/^\s*/)[0]
   const trail = text.match(/\s*$/)[0]
-  const exact = EXACT[text] ?? EXACT[text.trim()]
+  const exact = EXACT[text] ?? EXACT[text.trim()] ?? TRIMMED[text.trim()]
   if (exact !== undefined) return EXACT[text] !== undefined ? exact : `${lead}${exact}${trail}`
   const core = text.trim()
   for (const [re, make] of RULES) {

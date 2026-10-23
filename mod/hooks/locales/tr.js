@@ -151,6 +151,7 @@ export default {
   "Member removed.": "Üye çıkarıldı.",
   "Members": "Üyeler",
   "Message": "Mesaj",
+  "Messages are not encrypted — never write passwords or keys here.": "Mesajlar şifrelenmez — buraya asla parola veya anahtar yazma.",
   "Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.": "Mesajlar Arcade sitesinde saklanır ve şifrelenmez — oraya asla parola veya anahtar yazma.",
   "Mobile development": "Mobil geliştirme",
   "More": "Diğer",

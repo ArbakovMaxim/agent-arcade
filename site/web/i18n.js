@@ -313,6 +313,7 @@
     'Вчера': 'Yesterday',
     'Сообщение': 'Message',
     'Отправить': 'Send',
+    'Переписка не шифруется — не пиши сюда пароли и ключи.': 'Messages are not encrypted — never write passwords or keys here.',
     'Группа': 'Group',
     'участники: {0}': 'members: {0}',
     'Участники': 'Members',

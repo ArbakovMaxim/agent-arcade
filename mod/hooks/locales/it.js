@@ -151,6 +151,7 @@ export default {
   "Member removed.": "Membro rimosso.",
   "Members": "Membri",
   "Message": "Messaggio",
+  "Messages are not encrypted — never write passwords or keys here.": "I messaggi non sono cifrati — non scrivere mai qui password o chiavi.",
   "Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.": "I messaggi sono salvati sul sito di Arcade e non sono cifrati — non scriverci mai password o chiavi.",
   "Mobile development": "Sviluppo mobile",
   "More": "Altro",

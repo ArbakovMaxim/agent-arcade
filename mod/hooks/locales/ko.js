@@ -151,6 +151,7 @@ export default {
   "Member removed.": "멤버를 내보냈습니다.",
   "Members": "멤버",
   "Message": "메시지",
+  "Messages are not encrypted — never write passwords or keys here.": "메시지는 암호화되지 않습니다 — 여기에 비밀번호나 키는 절대 쓰지 마세요.",
   "Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.": "메시지는 Arcade 사이트에 저장되며 암호화되지 않습니다 — 비밀번호나 키는 절대 쓰지 마세요.",
   "Mobile development": "모바일 개발",
   "More": "더 보기",
