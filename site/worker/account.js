@@ -8,6 +8,7 @@
 // аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js).
 import { sign, signed } from './discover.js'
 import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName } from './chat.js'
+import { addReport, admins, askReports, cleanReport } from './reports.js'
 
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
@@ -55,6 +56,7 @@ const MAX_SOCKETS = 5 // открытых страниц чата у челов�
 const CHAT_TICKET = /^(\d{1,20})\.(\d{10})\.([0-9a-f]{12})\.([A-Za-z0-9_-]{22})$/
 const TICKET_PATHS = new Set(['/friends', '/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/socket'])
 const CHAT_PATHS = new Set(['/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/chatticket', '/socket'])
+const REPORT_PATHS = new Set(['/report', '/reports', '/closereport'])
 const ACCOUNT_ID = /^\d{1,20}$/
 // Ники, которыми легко выдать себя за Arcade, Claude или GitHub: сами слова и ники, где они — часть через _
 const RESERVED = new Set(['administrator', 'anonymous', 'everyone', 'guest', 'help', 'helpdesk', 'info', 'moderator', 'mods', 'noreply', 'null', 'owner', 'root', 'security', 'staff', 'system', 'team', 'undefined', 'abuse', 'contact', 'postmaster', 'webmaster', 'robot', 'service', 'settings', 'account'])
@@ -84,6 +86,9 @@ const ROUTES = {
   'POST /api/me/chats/group': ['user', '/group'],
   'POST /api/me/chats/members': ['user', '/members'],
   'POST /api/me/chats/ticket': ['user', '/chatticket'],
+  'POST /api/me/report': ['user', '/report'],
+  'GET /api/me/reports': ['user', '/reports'],
+  'POST /api/me/reports/close': ['user', '/closereport'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
@@ -104,7 +109,8 @@ async function readBody(request) {
 // --- Маршрут Worker'а -----------------------------------------------------------------------------------------
 // POST /api/auth/start → { device, code, url, interval, expires }: код для github.com/login/device
 // POST /api/auth/poll { device } → { status: 'pending' | 'expired' | 'denied' } или { status: 'ok', token, user }
-// GET /api/me → { user, settings, handle?, ticket?, friends?, requests? } (сколько друзей и заявок тебе),
+// GET /api/me → { user, settings, handle?, ticket?, friends?, requests?, unread?, role? } (сколько друзей, заявок тебе
+// и непрочитанных сообщений; role: 'admin' — у админа),
 // PUT /api/me/settings { settings } → { settings },
 // PUT /api/me/handle { handle } → { handle, ticket? }, POST /api/auth/logout, DELETE /api/me — с ключом сессии.
 // 401 — ключа нет или он не подходит ({ error: 'auth' }), 503 — вход не настроен ({ error: 'off' }) или GitHub не
@@ -130,6 +136,9 @@ async function readBody(request) {
 // или длинное ('long') сообщение, пустое название ('name'), 403 — не друг ('friend') или не хозяин группы ('owner'),
 // 404 — чата нет или тебя в нём нет ('gone'), 409 — в группе много людей ('full') или нет своего ника ('nohandle'),
 // 429 — слишком часто ('often'), 503 — чаты выключены ('off')
+// Отчёты об ошибках (worker/reports.js): POST /api/me/report { text, version?, surface?, lang?, os? } → { ok, id } —
+// отчёт с подписью; GET /api/me/reports → { reports, open } и POST /api/me/reports/close { id } → { ok, open } —
+// только админам ({ role: 'admin' } в /api/me), остальным 403 ({ error: 'admin' }); 503 — отчёты выключены ('off')
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
@@ -268,7 +277,7 @@ function randomKey() {
 // его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle, changes } (ник
 // человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
 // ключей сессии), settings, handle, seen — когда человек последний раз заходил, circle — его друзей и заявки, chats —
-// его чаты и made — когда он создавал группы за последние сутки
+// его чаты и made — когда он создавал группы за последние сутки. Отчёты об ошибках — в своём объекте (worker/reports.js)
 export class Account {
   constructor(ctx, env) {
     this.ctx = ctx
@@ -310,6 +319,10 @@ export class Account {
       if (path === '/befriend') return await this.befriend(await request.text())
       if (path === '/accept') return await this.accept(await request.text())
       if (path === '/unfriend') return await this.unfriend(await request.text())
+      if (REPORT_PATHS.has(path) && !this.env.REPORTS) return refuse('off', 503)
+      if (path === '/report') return await this.sendReport(await request.text())
+      if (path === '/reports') return await this.reportList()
+      if (path === '/closereport') return await this.closeReport(await request.text())
       if (CHAT_PATHS.has(path) && !this.env.CHAT) return refuse('off', 503)
       if (path === '/chats') return await this.chatList()
       if (path === '/messages') return await this.messages(url.searchParams)
@@ -476,6 +489,7 @@ export class Account {
       ...(friends ? { friends } : {}),
       ...(requests ? { requests } : {}),
       ...(unread ? { unread } : {}),
+      ...(admins(this.env).has(id) ? { role: 'admin' } : {}),
     })
   }
 
@@ -774,6 +788,31 @@ export class Account {
       const answer = await this.registry('/release', { id })
       if (!answer.ok) throw new Error(`registry: ${answer.status}`)
     }
+    if (this.env.REPORTS) {
+      const answer = await askReports(this.env, '/forget', { id })
+      if (!answer.ok) throw new Error(`reports: ${answer.status}`)
+    }
+  }
+
+  // Отчёт об ошибке со входом: подписан номером и @ником, лимит — на аккаунт, а не на адрес
+  async sendReport(text) {
+    const clean = cleanReport(parsed(text))
+    if (clean.error) return refuse(clean.error, 400)
+    const from = await this.whoami()
+    return addReport(this.env, { ...clean.report, from }, `gh:${from.id}`)
+  }
+
+  // Список и закрытие отчётов — только админам
+  async reportList() {
+    if (!admins(this.env).has(await this.myId())) return refuse('admin', 403)
+    return askReports(this.env, '/list')
+  }
+
+  async closeReport(text) {
+    if (!admins(this.env).has(await this.myId())) return refuse('admin', 403)
+    const { id } = parsed(text)
+    if (!Number.isSafeInteger(id) || id < 1) return refuse('bad request', 400)
+    return askReports(this.env, '/close', { id })
   }
 
   // --- Чаты -----------------------------------------------------------------------------------------------------

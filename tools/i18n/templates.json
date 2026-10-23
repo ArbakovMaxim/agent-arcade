@@ -115,7 +115,13 @@
   "@{0} is no longer your friend.",
   "unread: {0}",
   "members: {0}",
-  "Chats are open in {0}."
+  "Chats are open in {0}.",
+  "marked: {0}",
+  "found: {0}",
+  "Showing the first {0} — narrow the search.",
+  "Favorites already has {0} — unstar something first.",
+  "★ {0}",
+  "Open reports: {0}"
  ],
  "site": [
   "Played in total: {0}",

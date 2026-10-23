@@ -14,6 +14,8 @@ import { bundledFeeds, durationSeconds, durationText, hostOf, itemStats, listenU
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from '../hooks/search.js'
 import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from '../hooks/twitch.js'
 import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from '../hooks/chats.js'
+import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
+import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
@@ -153,8 +155,8 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
     if (site === null) return { deny: 'getaddrinfo ENOTFOUND agent-arcade.fefaodessa.workers.dev' }
     if (e.url === `${SITE}/catalog.json`) return { value: { status: 200, ok: true, headers: {}, text: site } }
     const path = e.url.slice(SITE.length + 1)
-    // Вход и настройки аккаунта (api/auth/…, api/me…): api(путь, запрос) → { status, json }; запросы — в requests
-    if (api && /^api\/(auth|me)\b/.test(path)) {
+    // Вход, аккаунт и отчёты об ошибках (api/auth/…, api/me…, api/report): api(путь, запрос) → { status, json }; запросы — в requests
+    if (api && /^api\/(auth|me|report)\b/.test(path)) {
       const request = { path, method: e.init?.method ?? 'GET', headers: e.init?.headers ?? {}, body: e.init?.body === undefined ? undefined : JSON.parse(e.init.body) }
       requests.push(request)
       const answer = api(path, request)
@@ -3663,8 +3665,11 @@ test('account.js: ответы сайта про вход и настройки,
   // Настройки сайта: только общие ключи с отметкой времени
   const settings = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 }, junk: { v: 1, at: 1 }, notify: { v: false }, keys: 'нет' }
   const clean = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 } }
-  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, error: '' })
-  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, error: 'auth' })
+  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, role: '', error: '' })
+  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, role: '', error: 'auth' })
+  // Роль: только «admin» от сайта, остальное — обычный человек
+  expect(parseMe(reply(200, { user, role: 'admin' })).role).toBe('admin')
+  expect(parseMe(reply(200, { user, role: 'root' })).role).toBe('')
   expect(parseMe(reply(200, { user: { login: 'octocat' } })).error).toBe('down')
   expect(parseSettings(reply(200, { settings }))).toEqual({ settings: clean, error: '' })
   expect(parseSettings(reply(413, { error: 'too big' })).error).toBe('big')
@@ -3674,7 +3679,7 @@ test('account.js: ответы сайта про вход и настройки,
   expect(restoreStamps({ lang: 5, wide: 'x', junk: 3, notify: -1, keys: 0 })).toEqual({ lang: 5 })
   expect(restoreStamps(null)).toEqual({})
   // Встреча: сайт новее — оттуда; здесь новее — туда; на сайте нет — туда; не менял здесь (нет отметки) — с сайта
-  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest'])
+  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites'])
   expect(
     syncPlan(
       { lang: 'ru', wide: true, notify: false, onDone: 'pause' },
@@ -4745,6 +4750,481 @@ test('чаты по-английски: экраны, служебные соо�
   expect(await ui.find({ type: 'Text', text: '@octocat created the group “All friends”' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'members: 3' })).toBeDefined()
   await press('arcade-chat-members')
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+// --- 0.25: разделы главного меню, поиск и избранное ---
+
+test('find.js: без регистра и диакритики, сначала совпадения в начале названия; избранное — без повторов и не больше лимита', () => {
+  expect(fold('Шерлок ÉCOLE Ёлка')).toBe('шерлок ecole елка')
+  expect(queryWords('  Шерлок, Холмс! ')).toEqual(['шерлок', 'холмс'])
+  expect(queryWords(' , ')).toEqual([])
+  expect(rank(['Sherlock Holmes', 'Arthur Conan Doyle'], 'sher')).toBe(0)
+  expect(rank(['The Adventures of Sherlock Holmes'], 'sherlock holmes')).toBe(1)
+  expect(rank(['Holmes and Sherlock'], 'sherlock holmes')).toBe(2)
+  expect(rank(['Emma', 'Jane Austen', 'роман'], 'austen')).toBe(3)
+  expect(rank(['Emma', 'Jane Austen'], 'emma tolstoy')).toBe(-1) // найтись должно каждое слово
+  expect(rank(['Ёжик в тумане'], 'ежик')).toBe(0)
+  expect(rank(['Emma'], '  ')).toBe(-1)
+  const list = [{ t: 'The Sherlock' }, { t: 'Doyle', a: 'sherlock fan' }, { t: 'Sherlock' }, { t: 'Emma' }]
+  expect(find(list, 'sherlock', (x: any) => [x.t, x.a]).map((x: any) => x.t)).toEqual(['Sherlock', 'The Sherlock', 'Doyle'])
+  expect([MIN_QUERY, FIND_LIMIT]).toEqual([2, 60])
+  // Избранное из хранилища и с сайта: только похожее на id, без повторов, последние limit
+  expect(restoreFavorites(['a', 'b', 'a', '../x', 5, 'c'], 2)).toEqual(['b', 'c'])
+  expect(restoreFavorites('a', 2)).toBeNull()
+  expect(toggleIn(['a'], 'a', 2)).toEqual({ list: [], added: false })
+  expect(toggleIn(['a'], 'b', 2)).toEqual({ list: ['a', 'b'], added: true })
+  expect(toggleIn(['a', 'b'], 'c', 2)).toEqual({ list: ['a', 'b'], added: null })
+})
+
+test('главное меню: разделы сворачиваются, у свёрнутого — число плиток и новое в «Общении»; свёрнутое помнится и уходит на сайт', HEAVY, async ($, on) => {
+  const me = { user: OCTO, settings: {}, handle: 'octocat', ticket: ticketOf('octocat'), friends: 2, requests: 1, unread: 3 }
+  const { api, remote } = accountSite({}, { 'GET api/me': () => ({ json: me }) })
+  const { clock, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  for (const [id, title] of [['play', 'Играть'], ['read', 'Читать и слушать'], ['watch', 'Смотреть'], ['talk', 'Общение'], ['more', 'Ещё']])
+    expect(await ui.find({ key: `arcade-fold-${id}` })).toMatchObject({ props: { label: `▾ ${title}` } })
+  expect(await ui.find({ key: 'arcade-menu-search' })).toMatchObject({ props: { label: '🔍 Найти' } })
+  expect(await ui.find({ key: 'arcade-menu-favorites' })).toMatchObject({ props: { label: '★ Избранное' } })
+  // Шапка: свой @ник, непрочитанные и заявки в друзья
+  expect(await ui.find({ key: 'arcade-head-account' })).toMatchObject({ props: { label: '@octocat' } })
+  expect(await ui.find({ key: 'arcade-head-chats' })).toMatchObject({ props: { label: '💬 3' } })
+  expect(await ui.find({ key: 'arcade-head-friends' })).toMatchObject({ props: { label: '👥 1' } })
+  // Свернули «Общение»: плиток не видно, в заголовке — сколько их и что нового
+  await ui.press({ key: 'arcade-fold-talk' })
+  expect(await ui.find({ key: 'arcade-fold-talk' })).toMatchObject({ props: { label: '▸ Общение · 3 · 💬 3 · 👥 1' } })
+  expect(await ui.find({ key: 'arcade-menu-friends' })).toBeUndefined()
+  expect(saved.get('collapsed')).toEqual(['talk'])
+  await ui.press({ key: 'arcade-fold-play' })
+  expect(saved.get('collapsed')).toEqual(['play', 'talk'])
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeUndefined()
+  // На сайт — через пару секунд, как другие настройки
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(remote.collapsed).toMatchObject({ v: ['play', 'talk'] })
+  await ui.press({ key: 'arcade-fold-play' })
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
+  expect(saved.get('collapsed')).toEqual(['talk'])
+  // @ник в шапке ведёт в аккаунт
+  await ui.press({ key: 'arcade-head-account' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · аккаунт' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('главное меню: свёрнутое с прошлого раза так и остаётся; непонятное в настройке не берём', async ($, on) => {
+  stubs(on, { stored: { collapsed: ['more', 'junk', 'read'] } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-fold-read' })).toMatchObject({ props: { label: expect.stringMatching(/^▸ Читать и слушать · \d+$/) } })
+  expect(await ui.find({ key: 'arcade-fold-more' })).toMatchObject({ props: { label: '▸ Ещё · 4' } }) // настройки, язык, отчёт об ошибке, поддержка
+  expect(await ui.find({ key: 'arcade-menu-settings' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
+  await ui.unmount()
+})
+
+// Каталог с группами «Игры» и «Книги»: шутер и три книги на английской полке
+function libraryCatalog() {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'books', title: 'Книги', group: 'reading' })
+  site.groups = [{ id: 'games', title: 'Игры' }, { id: 'reading', title: 'Книги' }]
+  site.shelves = [{ id: 'shooters', title: 'Шутеры' }, { id: 'books-en', title: 'English' }]
+  const sha = 'e'.repeat(64)
+  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  const book = (id: string, title: string, author: string, genre: string) => ({ console: 'books', kind: 'book', shelf: 'books-en', text: `books/${id}/book.json`, title, author, genre, about: '', keys: '…' })
+  site.games.hound = book('hound', 'The Hound of the Baskervilles', 'Arthur Conan Doyle', 'детектив')
+  site.games.study = book('study', 'A Study in Scarlet', 'Arthur Conan Doyle', 'детектив')
+  site.games.emma = book('emma', 'Émma', 'Jane Austen', 'роман')
+  return JSON.stringify(site)
+}
+
+test('поиск: от двух букв, без регистра и диакритики, по названию, автору и жанру — разделами; каналы Twitch; ☆ прямо в найденном', async ($, on) => {
+  const { clock, saved } = stubs(on, { env: WINDOWS, site: libraryCatalog(), stored: { twitchChannels: [{ login: 'tsoding', name: 'Tsoding' }] } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const short = 'От двух букв: название, автор или жанр. Ищу в играх, книгах, аудиокнигах и каналах Twitch.'
+  await ui.press({ key: 'arcade-menu-search' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · поиск' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-search-1' })).toMatchObject({ props: { label: 'Найти', value: '', autoFocus: true } })
+  expect(await ui.find({ type: 'Text', text: short })).toBeDefined()
+  await ui.input({ key: 'arcade-search-1', text: 'd', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: short })).toBeDefined()
+  // Автор: обе книги Дойла — под «Книги · Детектив»
+  await ui.input({ key: 'arcade-search-1', text: 'DOYLE', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'найдено: 2' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Книги · Детектив' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-hound' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-study' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-emma' })).toBeUndefined()
+  // Без диакритики; слова — в любом порядке
+  await ui.input({ key: 'arcade-search-1', text: 'emma', kind: 'change' })
+  expect(await ui.find({ key: 'arcade-game-emma' })).toBeDefined()
+  await ui.input({ key: 'arcade-search-1', text: 'baskervilles hound', kind: 'change' })
+  expect(await ui.find({ key: 'arcade-game-hound' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-study' })).toBeUndefined()
+  // Жанр; игры — своим разделом
+  await ui.input({ key: 'arcade-search-1', text: 'шутер', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'Игры · Шутер' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-freedm' })).toBeDefined()
+  // Каналы Twitch — свои и из каталога сайта
+  await ui.input({ key: 'arcade-search-1', text: 'tsod', kind: 'change' })
+  expect(await ui.find({ key: 'arcade-tw-find-tsoding' })).toMatchObject({ props: { label: 'Tsoding' } })
+  expect(await ui.find({ type: 'Text', text: 'найдено: 1' })).toBeDefined()
+  await ui.input({ key: 'arcade-search-1', text: 'zzz', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'Ничего не нашлось — попробуй другое слово.' })).toBeDefined()
+  // ☆ в найденном — сразу в избранное
+  await ui.input({ key: 'arcade-search-1', text: 'scarlet', kind: 'change' })
+  expect(await ui.find({ key: 'arcade-fav-study' })).toMatchObject({ props: { label: '☆' } })
+  await ui.press({ key: 'arcade-fav-study' })
+  expect(await ui.find({ key: 'arcade-fav-study' })).toMatchObject({ props: { label: '★' } })
+  expect(saved.get('favorites')).toEqual(['study'])
+  // Вернулись в меню и снова в поиск — запрос остался
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-search' })).toMatchObject({ props: { autoFocus: true } })
+  expect(await ui.find({ type: 'Text', text: '  отмечено: 1' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-search' })
+  expect(await ui.find({ key: 'arcade-search-2' })).toMatchObject({ props: { value: 'scarlet' } })
+  expect(await ui.find({ key: 'arcade-game-study' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('избранное: ☆ у игр и книг, «★ Избранное» в группе и среди жанров полки, всё отмеченное — разделами; не больше 100', async ($, on) => {
+  const gone = Array.from({ length: 97 }, (_, i) => `gone-${i}`) // отмечено на другом компьютере, а в каталоге этого нет
+  const { clock, saved } = stubs(on, { env: WINDOWS, site: libraryCatalog(), stored: { favorites: [...gone, 'freedm'] } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const order = async (...labels: string[]) => {
+    const texts = await drawnTexts(ui)
+    return labels.map((x) => texts.indexOf(x))
+  }
+  expect(await ui.find({ type: 'Text', text: '  отмечено: 1' })).toBeDefined()
+  // Книги: «★ Избранное» — первой плиткой группы и первой среди жанров полки
+  await ui.press({ key: 'arcade-menu-reading' })
+  expect(await ui.find({ key: 'arcade-menu-favorites-reading' })).toMatchObject({ props: { label: '★ Избранное' } })
+  expect(await ui.find({ type: 'Text', text: '  отмечай ☆ — соберётся здесь' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-shelf-books-en' })
+  expect(await ui.find({ key: 'arcade-genre-fav' })).toMatchObject({ props: { label: '★ Избранное' } })
+  await ui.press({ key: 'arcade-genre-0' })
+  await ui.press({ key: 'arcade-fav-hound' })
+  await ui.press({ key: 'arcade-fav-study' })
+  expect(await ui.find({ key: 'arcade-fav-hound' })).toMatchObject({ props: { label: '★' } })
+  expect((saved.get('favorites') as string[]).slice(-3)).toEqual(['freedm', 'hound', 'study'])
+  // Сотая отметка — последняя
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ type: 'Text', text: '  отмечено: 2' })).toBeDefined()
+  await ui.press({ key: 'arcade-genre-1' })
+  await ui.press({ key: 'arcade-fav-emma' })
+  expect(await ui.find({ type: 'Text', text: 'В избранном уже 100 — сними звёздочку с чего-нибудь.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fav-emma' })).toMatchObject({ props: { label: '☆' } })
+  expect((saved.get('favorites') as string[]).length).toBe(100)
+  // Избранное полки: только её книги, отмеченное последним — первым
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-genre-fav' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ English' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-freedm' })).toBeUndefined()
+  const [study, hound] = await order('A Study in Scarlet', 'The Hound of the Baskervilles')
+  expect(study).toBeGreaterThan(-1)
+  expect(hound).toBeGreaterThan(study)
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-genre-fav' })).toMatchObject({ props: { autoFocus: true } })
+  // Группа «Игры»: своё избранное
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-games' })
+  expect(await ui.find({ type: 'Text', text: '  отмечено: 1' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-favorites-games' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ Игры' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-freedm' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-hound' })).toBeUndefined()
+  // Всё избранное: разделы по порядку отметки; сняли звёздочку — пропало
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-favorites' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · избранное' })).toBeDefined()
+  const [books, shooters] = await order('Книги · Детектив', 'Игры · Шутер')
+  expect(books).toBeGreaterThan(-1)
+  expect(shooters).toBeGreaterThan(books)
+  await ui.press({ key: 'arcade-fav-study' })
+  expect(await ui.find({ key: 'arcade-game-study' })).toBeUndefined()
+  expect((saved.get('favorites') as string[]).slice(-2)).toEqual(['freedm', 'hound'])
+  await ui.unmount()
+})
+
+test('избранное пустое — подсказка; поиск и избранное по-английски — без русских букв', async ($, on) => {
+  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, site: libraryCatalog() })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(2_500)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  expect(await ui.find({ key: 'arcade-fold-talk' })).toMatchObject({ props: { label: '▾ Social' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-menu-favorites' })
+  expect(await ui.find({ type: 'Text', text: 'Nothing here yet. Mark games, books and audiobooks with the ☆ star — they gather here.' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-search' })
+  expect(await cyrillic()).toEqual([])
+  await ui.input({ key: 'arcade-search-1', text: 'detective', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'Books · Detective' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'found: 2' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-fav-hound' })
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-favorites' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · favorites' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-reading' })
+  await ui.press({ key: 'arcade-menu-favorites-reading' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ Books' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+// --- 0.25: отчёты об ошибках ---
+
+test('reports.js: тело отчёта, версия из plugin.json, роль в /api/me, ответы сайта про отчёты и список', () => {
+  const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  expect([accountUrl('report'), accountUrl('myReport'), accountUrl('reports'), accountUrl('closeReport')]).toEqual([`${SITE}/api/report`, `${SITE}/api/me/report`, `${SITE}/api/me/reports`, `${SITE}/api/me/reports/close`])
+  // Роль — только admin; остальное и ошибки — ''
+  expect(parseMe(reply(200, { user: OCTO, role: 'admin' }))).toMatchObject({ role: 'admin', error: '' })
+  expect(parseMe(reply(200, { user: OCTO, role: 'root' })).role).toBe('')
+  expect(parseMe(reply(401, { error: 'auth' })).role).toBe('')
+  // Версия мода — из его plugin.json, только вида 0.25.0
+  expect(versionFrom('{"name":"arcade","version":"0.25.0"}')).toBe('0.25.0')
+  expect(['{"version":"0.25"}', '{"version":25}', 'not json', undefined].map(versionFrom)).toEqual(['', '', '', ''])
+  // Тело: без управляющих знаков и пробелов по краям; приметы — только знакомого вида
+  expect(reportBody('  Шашки\r\nзависли ‮ ', { version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })).toEqual({ text: 'Шашки\nзависли', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })
+  expect(reportBody('x', { version: '1.2', surface: 'web', lang: 'rus', os: null })).toEqual({ text: 'x' })
+  expect(reportBody(undefined, {})).toEqual({ text: '' })
+  // Отправка: номер отчёта; пустой, длинный, часто, у всех слишком много, выключено, ключ не действует
+  expect(parseReportSent(reply(200, { ok: true, id: 7 }))).toEqual({ id: 7, error: '' })
+  expect(parseReportSent(reply(200, { ok: true }))).toEqual({ id: 0, error: 'down' })
+  expect(['empty', 'long', 'bad request'].map((e) => parseReportSent(reply(400, { error: e })).error)).toEqual(['empty', 'long', 'down'])
+  expect(parseReportSent(reply(413, { error: 'too big' })).error).toBe('long')
+  expect(parseReportSent(reply(429, { error: 'often' })).error).toBe('often')
+  expect(['full', 'off', 'other'].map((e) => parseReportSent(reply(503, { error: e })).error)).toEqual(['full', 'off', 'down'])
+  expect(parseReportSent(reply(401, { error: 'auth' })).error).toBe('auth')
+  expect(parseReportSent(reply(404, 'not found')).error).toBe('down') // сайт без отчётов
+  expect(parseReportSent(null).error).toBe('down')
+  // Список: как пришёл (новые сверху), не больше 50; кривые — мимо; текст без управляющих знаков и не длиннее MAX_REPORT
+  const signed = { id: 2, at: 2000, text: 'Чат\u001b не открывается', surface: 'terminal', from: { id: '583231', handle: 'octocat' } }
+  const anon = { id: 1, at: 1000, text: 'Doom', version: '0.25.0', lang: 'ru', os: 'windows', from: { id: 'x' } }
+  const bad = [null, { id: 0, at: 1, text: 'x' }, { id: 3, at: 'x', text: 'x' }, { id: 4, at: 1, text: ' \u0007 ' }]
+  expect(parseReports(reply(200, { reports: [signed, ...bad, anon], open: 9 }))).toEqual({
+    reports: [
+      { id: 2, at: 2000, text: 'Чат не открывается', surface: 'terminal', from: { id: '583231', handle: 'octocat' } },
+      { id: 1, at: 1000, text: 'Doom', version: '0.25.0', lang: 'ru', os: 'windows' },
+    ],
+    open: 9,
+    error: '',
+  })
+  expect(parseReports(reply(200, { reports: [{ ...signed, from: { id: '7', handle: 'Bad Name' } }] })).reports[0].from).toEqual({ id: '7' })
+  expect(parseReports(reply(200, { reports: [{ ...signed, text: 'я'.repeat(MAX_REPORT + 5) }] }))).toMatchObject({ open: 1 })
+  expect(parseReports(reply(200, { reports: [{ ...signed, text: 'я'.repeat(MAX_REPORT + 5) }] })).reports[0].text.length).toBe(MAX_REPORT)
+  expect(parseReports(reply(200, { reports: Array.from({ length: 80 }, (_, i) => ({ ...signed, id: i + 1 })), open: 80 })).reports.length).toBe(50)
+  expect(parseReports(reply(200, { open: 1 }))).toEqual({ reports: [], open: 0, error: 'down' })
+  expect(parseReports(reply(403, { error: 'admin' })).error).toBe('admin')
+  expect(parseReports(reply(503, { error: 'off' })).error).toBe('off')
+  // Закрыть: сколько открытых осталось; уже закрыт, не админ, ключ не действует
+  expect(parseClosed(reply(200, { ok: true, open: 4 }))).toEqual({ open: 4, error: '' })
+  expect([[404, 'gone'], [403, 'admin'], [401, 'auth'], [404, 'x']].map(([s, e]) => parseClosed(reply(s as number, { error: e })).error)).toEqual(['gone', 'admin', 'auth', 'down'])
+})
+
+test('отчёт об ошибке без входа: плитка в «Ещё» у всех, списка нет; пустой и длинный — сразу здесь; ушёл без подписи с версией, языком и системой', HEAVY, async ($, on) => {
+  let answer: any = { json: { ok: true, id: 7 } }
+  const { api } = accountSite({}, { 'POST api/report': () => answer })
+  const { clock, requests } = stubs(on, { env: WINDOWS, api, disk: { '.claude-plugin/plugin.json': '{"name":"arcade","version":"0.25.0"}' } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  const report = async (key: string, value: string) => {
+    await ui.input({ key, text: value, kind: 'submit' })
+    await clock.settle()
+  }
+  expect(await ui.find({ key: 'arcade-menu-report' })).toMatchObject({ props: { label: '🐞 Сообщить об ошибке' } })
+  expect(await text('  что сломалось — прямо автору Arcade')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-menu-reports' })).toBeUndefined()
+  await ui.press({ key: 'arcade-menu-report' })
+  await clock.settle()
+  expect(await text('Arcade · отчёт об ошибке')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-report-text-0' })).toMatchObject({ props: { label: 'Отчёт', rows: 4, submitLabel: 'Отправить', autoFocus: true } })
+  expect(await text('Без входа отчёт уйдёт без подписи.')).toBeDefined()
+  // Пустой и длиннее 2000 знаков — сразу здесь, на сайт не уходит
+  await report('arcade-report-text-0', '   ')
+  expect(await text('Напиши, что сломалось.')).toBeDefined()
+  await report('arcade-report-text-0', 'я'.repeat(MAX_REPORT + 1))
+  expect(await text('Отчёт длиннее 2000 знаков — сократи его.')).toBeDefined()
+  expect(sent(requests, 'api/report', 'POST')).toEqual([])
+  // Ушёл: без ключа, с версией из plugin.json, языком и системой; поле — новое, пустое
+  await report('arcade-report-text-0', '  Шашки зависают после хода дамкой‮ ')
+  const [first] = sent(requests, 'api/report', 'POST')
+  expect(first.body).toEqual({ text: 'Шашки зависают после хода дамкой', version: '0.25.0', surface: 'terminal', lang: 'ru', os: 'windows' })
+  expect(first.headers.Authorization).toBeUndefined()
+  expect(await text('Спасибо! Отчёт отправлен.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-report-text-0' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-report-text-1' })).toBeDefined()
+  // Часто — понятно, поле то же
+  answer = { status: 429, json: { error: 'often' } }
+  await report('arcade-report-text-1', 'ещё один')
+  expect(await text('Отчётов от тебя сегодня уже много — попробуй завтра.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-report-text-1' })).toBeDefined()
+  // Отчёты на сайте выключены
+  answer = { status: 503, json: { error: 'off' } }
+  await report('arcade-report-text-1', 'ещё один')
+  expect(await text('Отчёты на сайте сейчас выключены.')).toBeDefined()
+  // Назад — фокус на плитке отчёта
+  await ui.press({ key: 'arcade-back' })
+  await clock.settle()
+  expect(await ui.find({ key: 'arcade-menu-report' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+})
+
+test('отчёт об ошибке со входом: подписан аккаунтом — на api/me/report; вход забыт — отправить ещё раз, уже без подписи; списка нет', HEAVY, async ($, on) => {
+  let signed: any = { json: { ok: true, id: 3 } }
+  const { api } = accountSite({}, { 'POST api/me/report': () => signed, 'POST api/report': { json: { ok: true, id: 4 } } })
+  const { clock, requests, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  const report = async (key: string, value: string) => {
+    await ui.input({ key, text: value, kind: 'submit' })
+    await clock.settle()
+  }
+  // Вошёл, но не админ: отправить можно, плитки списка нет
+  expect(await ui.find({ key: 'arcade-menu-reports' })).toBeUndefined()
+  await ui.press({ key: 'arcade-menu-report' })
+  await clock.settle()
+  expect(await text('Со входом через GitHub отчёт подписан твоим аккаунтом.')).toBeDefined()
+  await report('arcade-report-text-0', 'Чат не открывается')
+  const [mine] = sent(requests, 'api/me/report', 'POST')
+  expect(mine.headers.Authorization).toBe(`Bearer ${TOKEN}`)
+  expect(mine.body).toEqual({ text: 'Чат не открывается', surface: 'terminal', lang: 'ru', os: 'windows' })
+  expect(await text('Спасибо! Отчёт отправлен.')).toBeDefined()
+  // Ключ на сайте больше не действует: вход забыт, отчёт — ещё раз, теперь без подписи
+  signed = { status: 401, json: { error: 'auth' } }
+  await report('arcade-report-text-1', 'Шашки зависают')
+  expect(await text('Отчёт не ушёл — отправь его ещё раз: теперь он уйдёт без подписи.')).toBeDefined()
+  expect(await text('Без входа отчёт уйдёт без подписи.')).toBeDefined()
+  expect(saved.get('account')).toBeUndefined()
+  await report('arcade-report-text-1', 'Шашки зависают')
+  expect(sent(requests, 'api/report', 'POST').map((r) => [r.body.text, r.headers.Authorization])).toEqual([['Шашки зависают', undefined]])
+  expect(await text('Спасибо! Отчёт отправлен.')).toBeDefined()
+  await ui.unmount()
+})
+
+// Сайт с отчётами: открытые — новые сверху; admin — ты админ (так говорят и /api/me, и список)
+function reportsSite() {
+  const state = {
+    admin: true,
+    reports: [
+      { id: 2, at: Date.UTC(2026, 9, 20, 9, 30), text: 'Чат не открывается', surface: 'terminal', from: { id: '583231', handle: 'octocat' } },
+      { id: 1, at: Date.UTC(2026, 9, 19, 18, 5), text: 'Doom не грузится', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' },
+    ] as any[],
+  }
+  const { api } = accountSite(
+    {},
+    {
+      'GET api/me': () => ({ json: { user: OCTO, settings: {}, ...(state.admin ? { role: 'admin' } : {}) } }),
+      'GET api/me/reports': () => (state.admin ? { json: { reports: state.reports, open: state.reports.length } } : { status: 403, json: { error: 'admin' } }),
+      'POST api/me/reports/close': (request: any) => {
+        if (!state.admin) return { status: 403, json: { error: 'admin' } }
+        if (!state.reports.some((r) => r.id === request.body.id)) return { status: 404, json: { error: 'gone' } }
+        state.reports = state.reports.filter((r) => r.id !== request.body.id)
+        return { json: { ok: true, open: state.reports.length } }
+      },
+    },
+  )
+  return { api, state }
+}
+
+test('отчёты об ошибках — только админу: плитка, список новых сверху, «Закрыть»; закрытый в другом месте — уходит; сайт сказал «не админ» — плитки нет', HEAVY, async ($, on) => {
+  const { api, state } = reportsSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string | RegExp) => ui.find({ type: 'Text', text: t })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  expect(await ui.find({ key: 'arcade-menu-reports' })).toMatchObject({ props: { label: '📋 Отчёты об ошибках' } })
+  expect(await text('  видишь только ты: ты админ Arcade')).toBeDefined()
+  await press('arcade-menu-reports')
+  expect(sent(requests, 'api/me/reports', 'GET').map((r) => r.headers.Authorization)).toEqual([`Bearer ${TOKEN}`])
+  expect(await text('Arcade · отчёты об ошибках')).toBeDefined()
+  expect(await text('Открытых отчётов: 2')).toBeDefined()
+  expect(await text('Чат не открывается')).toBeDefined()
+  expect(await text('@octocat')).toBeDefined()
+  expect(await text(/^#1 · .+ · 0\.25\.0 · desktop · ru · windows$/)).toBeDefined()
+  expect(await text('без подписи')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-report-close-2' })).toMatchObject({ props: { label: 'Закрыть', autoFocus: true } })
+  // «Закрыть» — сайт удаляет, из списка уходит
+  await press('arcade-report-close-2')
+  expect(sent(requests, 'api/me/reports/close', 'POST').map((r) => r.body)).toEqual([{ id: 2 }])
+  expect(await ui.find({ key: 'arcade-report-close-2' })).toBeUndefined()
+  expect(await text('Отчёт закрыт.')).toBeDefined()
+  expect(await text('Открытых отчётов: 1')).toBeDefined()
+  // Закрыт с другого компьютера — тоже уходит из списка
+  state.reports = []
+  await press('arcade-report-close-1')
+  expect(await text('Этот отчёт уже закрыт.')).toBeDefined()
+  expect(await text('Открытых отчётов нет.')).toBeDefined()
+  expect(await text(/^Открытых отчётов: /)).toBeUndefined()
+  // Сайт больше не считает тебя админом — списка не показываем, плитки нет
+  state.admin = false
+  await press('arcade-reports-refresh')
+  expect(sent(requests, 'api/me/reports', 'GET').length).toBe(2)
+  expect(await text('Список отчётов — только у автора Arcade.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-reports-refresh' })).toBeUndefined()
+  await press('arcade-back')
+  expect(await ui.find({ key: 'arcade-menu-reports' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-menu-report' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('отчёты по-английски: экран отчёта, список у админа и плитки без русских букв', HEAVY, async ($, on) => {
+  const { api, state } = reportsSite()
+  state.reports = [
+    { id: 5, at: Date.UTC(2026, 9, 20, 9, 30), text: 'Chess freezes after castling', surface: 'desktop', from: { id: '583231' } },
+    { id: 4, at: Date.UTC(2026, 9, 19, 18, 5), text: 'Doom is black', os: 'mac' },
+  ]
+  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  expect(await ui.find({ key: 'arcade-menu-report' })).toMatchObject({ props: { label: '🐞 Report a bug' } })
+  expect(await ui.find({ key: 'arcade-menu-reports' })).toMatchObject({ props: { label: '📋 Bug reports' } })
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-menu-report')
+  expect(await ui.find({ key: 'arcade-report-text-0' })).toMatchObject({ props: { label: 'Report', submitLabel: 'Send' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.input({ key: 'arcade-report-text-0', text: ' ', kind: 'submit' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Describe what broke.' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-back')
+  await press('arcade-menu-reports')
+  expect(await ui.find({ type: 'Text', text: 'Open reports: 2' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'GitHub #583231' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-report-close-5')
+  expect(await ui.find({ type: 'Text', text: 'Report closed.' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })

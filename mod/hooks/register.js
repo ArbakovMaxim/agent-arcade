@@ -12,6 +12,8 @@ import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch,
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
 import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
+import { FIND_LIMIT, MIN_QUERY, find, restoreFavorites, toggleIn } from './find.js'
+import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from './reports.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
 
@@ -109,6 +111,15 @@ let langReturn = 'main' // куда вернуться из выбора язы�
 let menuFrom = null // откуда вернулись в главное меню — туда ставим фокус
 let lastGame = 'thwaite'
 let played = false // во что-то уже играли (или читали, слушали) — тогда первой плиткой главного меню идёт «Продолжить»
+// Разделы главного меню, которые можно свернуть, и какие свёрнуты; избранное — id игр, книг и аудиокниг по порядку
+// добавления. И то и другое общее для всех компьютеров (SYNC_KEYS)
+const SECTIONS = ['play', 'read', 'watch', 'talk', 'more']
+const FAV_LIMIT = 100
+let collapsed = []
+let favorites = []
+// Поиск: query — что вписано. Поле рисуется заново (field — его номер) с тем, что было вписано (seed), когда экран
+// поиска открывают снова: само поле, пока его нет на экране, вписанное не помнит. shown — экран поиска сейчас на виду
+const finder = { query: '', seed: '', field: 0, shown: false }
 let player = { x: 2, y: 3 }
 let pressed = []
 let events = []
@@ -173,8 +184,9 @@ let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loadi
 // «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен. handle — @ник,
 // ticket — его подпись для сетевых игр (оба с сайта, только в памяти), naming — сайт проверяет новый ник, handleNote —
 // почему ник не взялся, claims — сколько раз ник сменили: ответ синхронизации, спрошенной до смены, ник не трогает;
-// friends и requests — сколько друзей и заявок человеку (для плитки «Друзья»), unread — непрочитанных в чатах
-let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0, unread: 0 }
+// friends и requests — сколько друзей и заявок человеку (для плитки «Друзья»), unread — непрочитанных в чатах;
+// role — 'admin' у админа: ему видны отчёты об ошибках
+let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0, unread: 0, role: '' }
 // Друзья: list — { friends, incoming, outgoing } с сайта или null, пока не спрашивали; loading — спрашиваем список,
 // busy — какое действие ждёт ответа сайта, note — заметка под полем «Добавить друга» (bad — что-то не вышло);
 // request — номер последнего вопроса: ответ старого вопроса не нужен
@@ -192,6 +204,13 @@ const CHAT_SHOWN = 30 // сколько последних сообщений ч
 const NO_CHATS = { list: null, names: {}, me: '', loading: false, talk: '', about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: false, older: false, polling: false, busy: '', note: '', bad: false, groupName: '', field: 0, confirmLeave: false }
 let ch = { ...NO_CHATS, picked: new Set(), request: 0 }
 let chatLink = '' // код ссылки на страницу чатов: его страница один раз обменяет на свой билет
+// Отчёт об ошибке: field — номер поля (после отправки — новое, пустое), sending — отчёт ждёт ответа сайта, note —
+// заметка под полем (bad — не вышло). Список у админа: list — открытые отчёты с сайта (новые сверху) или null, пока не
+// спрашивали; open — сколько открытых всего, loading — спрашиваем список, busy — номер закрываемого отчёта,
+// listNote — заметка (listBad — не вышло); request — номер последнего вопроса про список: ответ старого не нужен
+const NO_REPORTS = { list: null, open: 0, loading: false, busy: 0, listNote: '', listBad: false }
+let rp = { field: 0, sending: false, note: '', bad: false, ...NO_REPORTS, request: 0 }
+let modVersion = null // версия мода из его plugin.json: читается один раз; не прочли — ''
 let stamps = {} // когда человек менял синхронизируемые настройки: ключ → время; в $.store — syncAt
 // Какие из SYNC_KEYS сохранены на этом компьютере: чего человек здесь не менял, то берём с сайта, а не отправляем туда
 const savedKeys = new Set()
@@ -220,7 +239,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -251,9 +270,12 @@ function iconSvg(kind) {
     flag: `<rect x="10" y="8" width="3" height="33" rx="1.5" fill="#ddd"/><rect x="13" y="9" width="26" height="18" fill="${c}"/><path d="M13 9h6.5v6H13zM26 9h6.5v6H26zM19.5 15H26v6h-6.5zM32.5 15H39v6h-6.5zM13 21h6.5v6H13zM26 21h6.5v6H26z" fill="#fff"/>`,
     rook: `<path d="M13 9h5v4h4V9h4v4h4V9h5v9l-4 4v12h4v5H13v-5h4V22l-4-4z" fill="${c}"/>`,
     compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
+    // Поиск — лупа, избранное — звезда
+    lens: `<circle cx="21" cy="21" r="11" fill="none" stroke="${c}" stroke-width="5"/><path d="M29 29l10 10" stroke="${c}" stroke-width="6" stroke-linecap="round"/>`,
+    star: `<polygon points="${star(24, 25, 17)}" fill="${c}"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -1371,13 +1393,20 @@ function applySetting(key, value) {
     const best = Math.floor(Number(value))
     if (!Number.isFinite(best) || best < 0) return false
     flappyBest = Math.max(flappyBest, best)
+  } else if (key === 'collapsed') {
+    if (!Array.isArray(value)) return false
+    collapsed = SECTIONS.filter((id) => value.includes(id))
+  } else if (key === 'favorites') {
+    const list = restoreFavorites(value, FAV_LIMIT)
+    if (!list) return false
+    favorites = list
   } else return false
   return true
 }
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang, keys: keymap, notify: osNotify, wide, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest }[key]
+  return { lang, keys: keymap, notify: osNotify, wide, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites }[key]
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
@@ -1388,6 +1417,26 @@ async function saveSetting($, key, value) {
   await $.store.set(key, value)
   await $.store.set('syncAt', stamps)
   if (acct.session) scheduleSync($, SYNC_DELAY_MS)
+}
+
+// Свернуть или развернуть раздел главного меню
+async function toggleSection($, id) {
+  collapsed = collapsed.includes(id) ? collapsed.filter((x) => x !== id) : SECTIONS.filter((x) => x === id || collapsed.includes(x))
+  $.ui.invalidate('ui.render')
+  await saveSetting($, 'collapsed', collapsed)
+}
+
+// Отметить игру, книгу или аудиокнигу звёздочкой — или снять отметку
+async function toggleFavorite($, id) {
+  const { list, added } = toggleIn(favorites, id, FAV_LIMIT)
+  if (added === null) {
+    libraryNotice = `В избранном уже ${FAV_LIMIT} — сними звёздочку с чего-нибудь.`
+    $.ui.invalidate('ui.render')
+    return
+  }
+  favorites = list
+  $.ui.invalidate('ui.render')
+  await saveSetting($, 'favorites', favorites)
 }
 
 function scheduleSync($, ms) {
@@ -1421,6 +1470,7 @@ async function syncAccount($) {
     acct.friends = me.friends
     acct.requests = me.requests
     acct.unread = me.unread
+    acct.role = me.role
     const now = await $.clock.now()
     if (acct.session !== session) return
     const renamed = me.user.id === session.user.id && JSON.stringify(me.user) !== JSON.stringify(session.user)
@@ -1480,9 +1530,11 @@ async function forgetSession($, note) {
   acct.friends = 0
   acct.requests = 0
   acct.unread = 0
+  acct.role = ''
   acct.request++
   fr = { ...NO_FRIENDS, request: fr.request + 1 }
   ch = { ...NO_CHATS, picked: new Set(), request: ch.request + 1 }
+  rp = { ...rp, ...NO_REPORTS, request: rp.request + 1 }
   chatLink = ''
   syncTimer?.cancel()
   syncTimer = null
@@ -1649,6 +1701,107 @@ async function addFriend($, text) {
     return $.ui.invalidate('ui.render')
   }
   await friendsCall($, 'friends', { handle }, handle)
+}
+
+// --- Отчёты об ошибках: отправить может каждый, список и «Закрыть» — только админ ------------------------------------
+
+// Почему отчёт не ушёл или список не загрузился
+function reportNote(error) {
+  if (error === 'empty') return 'Напиши, что сломалось.'
+  if (error === 'long') return 'Отчёт длиннее 2000 знаков — сократи его.'
+  if (error === 'often') return 'Отчётов от тебя сегодня уже много — попробуй завтра.'
+  if (error === 'full') return 'Сегодня отчётов пришло слишком много — попробуй завтра.'
+  if (error === 'off') return 'Отчёты на сайте сейчас выключены.'
+  if (error === 'admin') return 'Список отчётов — только у автора Arcade.'
+  if (error === 'gone') return 'Этот отчёт уже закрыт.'
+  return accountNote(error)
+}
+
+// Версия мода — из его plugin.json, один раз
+async function arcadeVersion($) {
+  if (modVersion === null) modVersion = versionFrom(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`).catch(() => ''))
+  return modVersion
+}
+
+// «Отправить»: со входом — подписан аккаунтом, без входа — без подписи. К тексту — версия Arcade, где он открыт
+// (surface), язык и система; больше ничего. Пустой или слишком длинный — сразу здесь, на сайт не уходит
+async function sendReport($, text, surface) {
+  if (rp.sending) return
+  const body = reportBody(text, { version: await arcadeVersion($), surface, lang, os: platform })
+  const problem = !body.text ? 'empty' : body.text.length > MAX_REPORT ? 'long' : ''
+  if (problem) {
+    rp.note = reportNote(problem)
+    rp.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  const session = acct.session
+  rp.sending = true
+  rp.note = ''
+  $.ui.invalidate('ui.render')
+  const answer = parseReportSent(await accountFetch($, session ? 'myReport' : 'report', { method: 'POST', body, ...(session ? { token: session.token } : {}) }))
+  rp.sending = false
+  if (answer.error === 'auth' && session) {
+    if (acct.session === session) await forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+    rp.note = 'Отчёт не ушёл — отправь его ещё раз: теперь он уйдёт без подписи.'
+    rp.bad = true
+  } else if (answer.error) {
+    rp.note = reportNote(answer.error)
+    rp.bad = true
+  } else {
+    // Отправлен — поле новое, пустое
+    rp.field++
+    rp.note = 'Спасибо! Отчёт отправлен.'
+    rp.bad = false
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Список открытых отчётов — у админа. Сайт сказал, что ты больше не админ, — плитка пропадает
+async function loadReports($) {
+  const session = acct.session
+  if (!session || acct.role !== 'admin' || rp.loading || rp.busy) return
+  const request = ++rp.request
+  rp.loading = true
+  $.ui.invalidate('ui.render')
+  const answer = parseReports(await accountFetch($, 'reports', { token: session.token }))
+  if (acct.session !== session || request !== rp.request) return
+  rp.loading = false
+  if (answer.error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  if (answer.error === 'admin') acct.role = ''
+  if (answer.error) {
+    rp.listNote = reportNote(answer.error)
+    rp.listBad = true
+  } else {
+    rp.list = answer.reports
+    rp.open = answer.open
+    if (rp.listBad) rp.listNote = ''
+    rp.listBad = false
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// «Закрыть»: отчёт разобран — сайт удаляет его. Уже закрытый (с другого компьютера) — тоже уходит из списка
+async function closeReport($, id) {
+  const session = acct.session
+  if (!session || rp.loading || rp.busy) return
+  const request = ++rp.request
+  rp.busy = id
+  $.ui.invalidate('ui.render')
+  const answer = parseClosed(await accountFetch($, 'closeReport', { method: 'POST', body: { id }, token: session.token }))
+  if (acct.session !== session || request !== rp.request) return
+  rp.busy = 0
+  if (answer.error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  if (answer.error === 'admin') acct.role = ''
+  if (answer.error && answer.error !== 'gone') {
+    rp.listNote = reportNote(answer.error)
+    rp.listBad = true
+  } else {
+    rp.list = (rp.list ?? []).filter((r) => r.id !== id)
+    rp.open = answer.error ? Math.max(rp.list.length, rp.open - 1) : answer.open
+    rp.listNote = answer.error ? reportNote('gone') : 'Отчёт закрыт.'
+    rp.listBad = false
+  }
+  $.ui.invalidate('ui.render')
 }
 
 // --- Чаты: с друзьями один на один и в группах ---------------------------------------------------------------------
@@ -2294,12 +2447,35 @@ function settingsNote(surface) {
   return windowMode() ? where : `${where} · графика: ${GRAPHICS_LABEL[graphics]}`
 }
 
+// Пункт главного меню, где лежит игра или книга: группа («Игры», «Книги») или приставка без группы
+function tabOf(g) {
+  const c = consoles().find((x) => x.id === g.console)
+  return (c?.group && groupsList().find((x) => x.id === c.group)) || c || null
+}
+// Избранное: игры и книги по порядку отметки. Чего нет в каталоге (своя игра с другого компьютера) — не показываем
+function favoriteGames() {
+  return favorites.map((id) => gameById(id)).filter((g) => g && g.id !== FIELD.id)
+}
+// Избранное внутри группы («Игры») или полки книг: заголовок и что в него входит. null — всё избранное
+function favoritesScope(scope) {
+  const shelf = shelfView(scope)
+  if (shelf) return { title: shelf.title, has: (g) => shelf.list.some((x) => x.id === g.id) }
+  const group = groupsList().find((x) => x.id === scope)
+  if (group) return { title: group.title, has: (g) => groupConsoles(group.id).includes(g.console) }
+  return null
+}
+
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
   if (menu === 'account') return 'Arcade · аккаунт'
   if (menu === 'friends' || menu.startsWith('friends:')) return 'Arcade · друзья'
   if (menu === 'chats' || menu.startsWith('chats:')) return 'Arcade · чаты'
+  if (menu === 'report') return 'Arcade · отчёт об ошибке'
+  if (menu === 'reports') return 'Arcade · отчёты об ошибках'
+  if (menu === 'search') return 'Arcade · поиск'
+  if (menu === 'favorites') return 'Arcade · избранное'
+  if (menu.startsWith('favorites:')) return `Arcade · ★ ${favoritesScope(menu.slice(10))?.title ?? ''}`
   if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
   if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
   if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
@@ -2876,11 +3052,14 @@ export function register(on) {
     const terminal = e.surface === 'terminal'
     const game = gameById(view)
     remoteSurface = terminal ? null : e.surface
+    // Поле поиска рисуется заново, когда на экран поиска приходят с другого: запрос остаётся, а пока человек печатает,
+    // поле то же — набранное не сбивается
+    if (game || menu !== 'search') finder.shown = false
 
     // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает — жёлтый, ждёт разрешения —
     // красный, закончил — зелёный, свободен — серый. Цвета — ключи темы: читаются и на светлой, и на тёмной
     const statusColor = status === 'permission' ? 'error' : status === 'working' ? 'warning' : status === 'done' ? 'success' : 'inactive'
-    const header = Box({
+    const headerOf = (extra = []) => Box({
       flexDirection: 'row',
       columnGap: 2,
       alignItems: 'center',
@@ -2900,8 +3079,10 @@ export function register(on) {
             Text({ color: statusColor, children: [statusText(now)] }),
           ],
         }),
+        ...extra,
       ],
     })
+    const header = headerOf()
     // Журнал агента — с подписью и только когда в нём что-то есть: одинокое «пока ничего» внизу меню выглядело обломком
     const eventLines = events.length
       ? [Text({ bold: true, dimColor: true, children: ['Журнал агента'] }), ...events.slice(0, 3).map((text) => Text({ dimColor: true, children: [text] }))]
@@ -3044,6 +3225,8 @@ export function register(on) {
         // модель, в alt не ставим
         const kind = key
           .replace(/^arcade-(menu-(shelf-)?)?/, '')
+          .replace(/^genre-fav$/, 'favorites')
+          .replace(/^favorites-.+$/, 'favorites')
           .replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '')
           .replace(/^lang-main$/, 'lang')
           .replace(/^open-library$/, 'library')
@@ -3124,7 +3307,10 @@ export function register(on) {
                   )
                 i++
               }
-              out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body })], cardKey, width))
+              // У игры и книги — звёздочка избранного в углу карточки
+              const starred = cardKey.startsWith('arcade-game-') ? gameById(cardKey.slice(12)) : null
+              const corner = starred && starred.id !== FIELD.id ? [favButton(starred)] : []
+              out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body }), ...corner], cardKey, width))
             } else out.push(x)
           }
           return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: TILE_GAP, rowGap: 'md', children: out })
@@ -3143,8 +3329,54 @@ export function register(on) {
       }
       const noticeLines = libraryNotice ? [gap, Text({ color: 'warning', children: [libraryNotice] })] : []
       const hint = [gap, dim('↑ ↓ или Tab — выбрать, Enter — открыть. Можно кликнуть мышью.')]
+      // Звёздочка избранного у игры или книги: ☆ — отметить, ★ — уже в избранном, нажать — снять
+      const favButton = (g) => {
+        const marked = favorites.includes(g.id)
+        return keep(Button({ key: `arcade-fav-${g.id}`, label: marked ? '★' : '☆', plain: true, ...(marked ? {} : { dimColor: true }), onPress: () => toggleFavorite($, g.id) }))
+      }
+      // Игры или книги списком: в Desktop — плитками со звёздочкой, в терминале — строкой «название ☆», описание ниже
+      const gameRows = (list, focusId) =>
+        desktop
+          ? [tiles(list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))]
+          : list.flatMap((g) => [Box({ flexDirection: 'row', columnGap: 2, children: [gameButton(g, g.id === focusId), favButton(g)] }), dim(`  ${g.note}`)])
+      // Найденное и избранное — разделами «Игры · Платформер», «Книги · Роман»; разделы — в порядке первой записи
+      const byGenre = (list, focusId) => {
+        const parts = new Map()
+        for (const g of list) {
+          const id = `${tabOf(g)?.id ?? ''}|${g.genre ?? ''}`
+          if (!parts.has(id)) parts.set(id, { first: g, list: [] })
+          parts.get(id).list.push(g)
+        }
+        return [...parts.values()].flatMap(({ first, list: part }) => {
+          const tab = tabOf(first)
+          const title = [tab && tr(tab.title, lang), first.genre && genreLabel(first.genre)].filter(Boolean).join(' · ')
+          return [keep(section(title)), ...gameRows(part, focusId)]
+        })
+      }
+      // Трансляция Twitch: во встроенном браузере Claude, в окне браузера или ссылкой, если окно открыть нечем
+      const watchLive = async (login) => {
+        const id = `live:${login}`
+        if (builtinBrowser(e.surface)) return desktopWindow($, id, 'Трансляция открыта во встроенном браузере Claude.')
+        if (!platform) {
+          libraryNotice = `Трансляция: https://www.twitch.tv/${login}`
+          $.ui.invalidate('ui.render')
+          return
+        }
+        libraryNotice = 'Открываю окно…'
+        $.ui.invalidate('ui.render')
+        const command = windowCommand(id)
+        try {
+          const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+          windowNotice($, launchNotice(result, id))
+          if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+        } catch (err) {
+          libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+        }
+        $.ui.invalidate('ui.render')
+      }
 
       let items
+      let headerExtra = []
       if (menu === 'lang') {
         // Выбор языка: плитки, как остальное меню, в Desktop — с флажком; каждый язык подписан на самом себе, текущий
         // отмечен
@@ -3227,6 +3459,67 @@ export function register(on) {
             ...hint,
           ]
         }
+      } else if (menu === 'report') {
+        // Отчёт об ошибке: что сломалось — словами. Читает его только автор Arcade; к тексту — версия, где открыт Arcade,
+        // язык и система. Со входом отчёт подписан аккаунтом, без входа — без подписи
+        const note = rp.note ? [rp.bad ? Text({ color: 'warning', children: [rp.note] }) : dim(rp.note)] : []
+        items = [
+          back,
+          gap,
+          Text({ children: ['Что сломалось? Опиши, что ты делал и что пошло не так.'] }),
+          dim('Отчёты читает только автор Arcade. Не пиши пароли, ключи и личные данные.'),
+          gap,
+          Input({
+            key: `arcade-report-text-${rp.field}`,
+            label: 'Отчёт',
+            placeholder: 'например: шашки зависают после хода дамкой',
+            rows: 4,
+            autoFocus: true,
+            submitLabel: tr('Отправить', lang),
+            onSubmit: (value) => sendReport($, value, e.surface),
+          }),
+          ...(rp.sending ? [dim('Отправляю отчёт…')] : note),
+          gap,
+          dim('К отчёту приложится версия Arcade, где он открыт, язык интерфейса и система — больше ничего.'),
+          dim(acct.session ? 'Со входом через GitHub отчёт подписан твоим аккаунтом.' : 'Без входа отчёт уйдёт без подписи.'),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu === 'reports') {
+        // Отчёты об ошибках — только у админа: открытые, новые сверху. Текст отчёта и подпись — как есть (keep)
+        const note = rp.listNote ? [rp.listBad ? Text({ color: 'warning', children: [rp.listNote] }) : dim(rp.listNote)] : []
+        const list = rp.list ?? []
+        const signed = (r) => (r.from ? keep(dim(r.from.handle ? `@${r.from.handle}` : `GitHub #${r.from.id}`)) : dim('без подписи'))
+        const about = (r) => keep(dim([`#${r.id}`, when(r.at, now), r.version, r.surface, r.lang, r.os].filter(Boolean).join(' · ')))
+        const entry = (r, k) => [
+          gap,
+          keep(Text({ children: [r.text] })),
+          Box({
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            columnGap: 2,
+            children: [
+              about(r),
+              signed(r),
+              Button({ key: `arcade-report-close-${r.id}`, label: rp.busy === r.id ? 'Закрываю…' : 'Закрыть', ...(k === 0 ? { autoFocus: true } : {}), onPress: () => closeReport($, r.id) }),
+            ],
+          }),
+        ]
+        items =
+          acct.role === 'admin'
+            ? [
+                back,
+                gap,
+                ...(list.length ? [Text({ children: [`Открытых отчётов: ${rp.open}`] })] : []),
+                dim('Закрытый отчёт сайт удаляет. Здесь — последние 50, новые сверху.'),
+                ...note,
+                ...(list.length ? list.flatMap(entry) : [gap, dim(rp.list ? 'Открытых отчётов нет.' : rp.loading ? 'Загружаю отчёты…' : 'Список отчётов не загрузился.')]),
+                gap,
+                Button({ key: 'arcade-reports-refresh', label: rp.loading ? 'Обновляю…' : 'Обновить', ...(list.length ? {} : { autoFocus: true }), onPress: () => loadReports($) }),
+                ...noticeLines,
+                ...hint,
+              ]
+            : [back, gap, Text({ color: 'warning', children: [reportNote('admin')] }), ...noticeLines, ...hint]
       } else if (menu === 'friends' || menu === 'friends:remove') {
         // Друзья: взаимные заявки по точному @нику. Без входа и без ника — что сделать сначала
         const login = Button({
@@ -3890,26 +4183,7 @@ export function register(on) {
         // Twitch: свои каналы, кто из каталога в эфире, весь каталог по направлениям, «Убрать канал». Имена каналов,
         // названия эфиров и игр — как на Twitch, без перевода (keep); подпись «в эфире…» переводим здесь
         const builtin = builtinBrowser(e.surface)
-        const watch = async (login) => {
-          const id = `live:${login}`
-          if (builtin) return desktopWindow($, id, 'Трансляция открыта во встроенном браузере Claude.')
-          if (!platform) {
-            libraryNotice = `Трансляция: https://www.twitch.tv/${login}`
-            $.ui.invalidate('ui.render')
-            return
-          }
-          libraryNotice = 'Открываю окно…'
-          $.ui.invalidate('ui.render')
-          const command = windowCommand(id)
-          try {
-            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-            windowNotice($, launchNotice(result, id))
-            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
-          } catch (err) {
-            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
-          }
-          $.ui.invalidate('ui.render')
-        }
+        const watch = watchLive
         // Плитка канала: имя — кнопкой, под ним — эфир (игра, зрители) и его название
         const channelTile = (key, c, info, missing, focus) => {
           const status = tr(liveStatus(info, missing, lang), lang)
@@ -4102,6 +4376,68 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
+      } else if (menu === 'search') {
+        // Поиск: игры, книги и аудиокниги — разделами по жанрам, за ними каналы Twitch. От двух букв, без регистра
+        // и диакритики: ищется в названии (и в его переводе), авторе, жанре и разделе
+        if (!finder.shown) {
+          finder.seed = finder.query
+          finder.field++
+          finder.shown = true
+        }
+        const query = finder.query.trim()
+        const ready = query.length >= MIN_QUERY
+        const pool = games().filter((g) => !g.mine && g.console && g.id !== FIELD.id)
+        const found = ready
+          ? find(pool, query, (g) => {
+              const tab = tabOf(g)
+              return [g.title, tr(g.title, lang), g.author, g.genre && genreLabel(g.genre), g.genre, tab && tab.title, tab && tr(tab.title, lang)]
+            })
+          : []
+        const channels = [...tw.channels, ...tw.catalog.filter((c) => !tw.channels.some((x) => x.login === c.login))]
+        const live = ready ? find(channels, query, (c) => [tw.info[c.login]?.name ?? c.name, c.login]) : []
+        const shown = found.slice(0, FIND_LIMIT)
+        // Канал: имя — кнопкой, ниже — в эфире ли он. Имена — как на Twitch, без перевода
+        const liveTiles = live.flatMap((c) => {
+          const info = tw.info[c.login] ?? (tw.catalog.includes(c) ? c : null)
+          const status = tr(liveStatus(info, tw.missing.has(c.login), lang) || 'канал Twitch', lang)
+          return [keep(Button({ key: `arcade-tw-find-${c.login}`, label: info?.name ?? c.name, onPress: () => watchLive(c.login) })), keep(dim(`  ${status}`))]
+        })
+        const set = (value) => {
+          finder.query = value
+          $.ui.invalidate('ui.render')
+        }
+        items = [
+          back,
+          gap,
+          Input({ key: `arcade-search-${finder.field}`, label: 'Найти', placeholder: 'название, автор или жанр', value: finder.seed, autoFocus: true, onInput: set, onSubmit: set }),
+          dim(
+            !ready
+              ? 'От двух букв: название, автор или жанр. Ищу в играх, книгах, аудиокнигах и каналах Twitch.'
+              : found.length || live.length
+                ? `найдено: ${found.length + live.length}`
+                : 'Ничего не нашлось — попробуй другое слово.',
+          ),
+          ...byGenre(shown, null),
+          ...(found.length > shown.length ? [gap, dim(`Показаны первые ${FIND_LIMIT} — уточни запрос.`)] : []),
+          ...(liveTiles.length ? [section('Twitch'), desktop ? tiles(liveTiles, 44) : Box({ flexDirection: 'column', children: liveTiles })] : []),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu === 'favorites' || menu.startsWith('favorites:')) {
+        // Избранное: всё отмеченное ☆ или только в группе («Игры») и на полке книг. Сначала — отмеченное последним
+        const scopeId = menu.slice(10)
+        const scope = favoritesScope(scopeId)
+        const list = favoriteGames()
+          .filter((g) => !scope || scope.has(g))
+          .reverse()
+        const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
+        items = [
+          scope ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(scopeId) }) : back,
+          gap,
+          ...(list.length ? byGenre(list, focusId) : [dim('Пока пусто. Отмечай звёздочкой ☆ игры, книги и аудиокниги — они соберутся здесь.')]),
+          ...noticeLines,
+          ...hint,
+        ]
       } else if (menu === 'mine') {
         // Свои игры: файлы человека. Arcade их не раздаёт — копия лежит только у него, в ~/.claude/arcade
         const remove = (m) =>
@@ -4145,13 +4481,18 @@ export function register(on) {
         // Вкладка группы («Игры»): полки с играми
         const group = groupsList().find((x) => x.id === menu)
         const shelvesHere = shelvesList().filter((s) => shelfGames(s.id).some((g) => groupConsoles(group.id).includes(g.console)))
-        const shelfItems = shelvesHere.flatMap((s, i) => {
+        const favHere = favoriteGames().filter((g) => groupConsoles(group.id).includes(g.console)).length
+        const shelfItems = [
+          Button({ key: `arcade-menu-favorites-${group.id}`, label: '★ Избранное', ...(menuFrom === `favorites:${group.id}` ? { autoFocus: true } : {}), onPress: open(`favorites:${group.id}`) }),
+          dim(favHere ? `  отмечено: ${favHere}` : '  отмечай ☆ — соберётся здесь'),
+          ...shelvesHere.flatMap((s, i) => {
           const n = shelfGames(s.id).length
           return [
             Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
             dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : shelfGames(s.id).every((g) => ['audio', 'audio-mine'].includes(g.kind)) ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'игра', 'игры', 'игр')}`),
           ]
-        })
+        }),
+        ]
         // В Desktop полки — плитками с иконкой жанра, как разделы главного меню
         items = [
           back,
@@ -4169,11 +4510,14 @@ export function register(on) {
         const books = shelf ? shelf.list : []
         if (!inGenre) {
           const genres = [...new Set(books.map((g) => g.genre))]
+          const favHere = favoriteGames().filter((g) => books.some((b) => b.id === g.id)).length
           items = [
             Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }),
             gap,
-            tiles(
-              genres.flatMap((g, i) => {
+            tiles([
+              Button({ key: 'arcade-genre-fav', label: '★ Избранное', ...(menuFrom === `favorites:${shelfMenu}` ? { autoFocus: true } : {}), onPress: open(`favorites:${shelfMenu}`) }),
+              dim(favHere ? `  отмечено: ${favHere}` : '  отмечай ☆ — соберётся здесь'),
+              ...genres.flatMap((g, i) => {
                 const n = books.filter((b) => b.genre === g).length
                 const audio = books.every((b) => b.kind === 'audio')
                 return [
@@ -4181,7 +4525,7 @@ export function register(on) {
                   dim(`  ${n} ${audio ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'книга', 'книги', 'книг')}`),
                 ]
               }),
-            ),
+            ]),
             ...noticeLines,
             ...hint,
           ]
@@ -4191,7 +4535,7 @@ export function register(on) {
           items = [
             Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelfMenu) }),
             gap,
-            ...(desktop ? [tiles(list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))] : list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])),
+            ...gameRows(list, focusId),
             ...noticeLines,
             ...hint,
           ]
@@ -4207,7 +4551,7 @@ export function register(on) {
           shelf ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }) : back,
           gap,
           ...(list.length
-            ? desktop ? [tiles(list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)]))] : list.flatMap((g) => [gameButton(g, g.id === focusId), dim(`  ${g.note}`)])
+            ? gameRows(list, focusId)
             : [Text({ children: [c.empty ?? c.soon ?? 'Здесь пока нет игр.'] })]),
           // Всё, кроме Денди и своих игр (Flappy Arcade), идёт только в окне браузера: там и свои файлы — кнопкой «Открыть свой файл»
           ...(!own
@@ -4264,8 +4608,109 @@ export function register(on) {
           if (!yt.topics || yt.topicsLang !== lang || now - yt.topicsAt > TOPICS_TTL_MS) loadTopics($)
         }
         const topicTile = (id, label, note) => [Button({ key: `arcade-menu-${id}`, label, ...(menuFrom === id ? { autoFocus: true } : {}), onPress: openTopics(id) }), dim(note)]
+        // Аккаунт, друзья и чаты открываются и плитками «Общения», и из шапки
+        const toAccount = () => {
+          acct.confirmDelete = false
+          open('account')()
+          syncAccount($)
+        }
+        const toFriends = () => {
+          fr.note = ''
+          fr.bad = false
+          open('friends')()
+          if (!acct.session) return
+          if (!acct.syncedAt) syncAccount($)
+          friendsCall($, 'friends')
+        }
+        // Непрочитанные — с сайта при синхронизации и по таймеру
+        const toChats = async () => {
+          ch.note = ''
+          ch.bad = false
+          open('chats')()
+          if (!acct.session) return
+          if (!acct.syncedAt) await syncAccount($)
+          if (acct.handle) await loadChats($)
+        }
+        // Шапка главного меню: свой @ник — в аккаунт; непрочитанные чаты и заявки в друзья — числом, если они есть
+        if (acct.session)
+          headerExtra = [
+            keep(Button({ key: 'arcade-head-account', label: acct.handle ? `@${acct.handle}` : acct.session.user.login, plain: true, dimColor: true, onPress: toAccount })),
+            ...(acct.unread ? [keep(Button({ key: 'arcade-head-chats', label: `💬 ${acct.unread}`, plain: true, onPress: toChats }))] : []),
+            ...(acct.requests ? [keep(Button({ key: 'arcade-head-friends', label: `👥 ${acct.requests}`, plain: true, onPress: toFriends }))] : []),
+          ]
+        // Раздел главного меню сворачивается: заголовок — кнопка ▾ / ▸, у свёрнутого — сколько в нём плиток. Что
+        // свёрнуто — в настройках, со входом — на всех компьютерах
+        const foldable = (id, title, list, badge = '') => {
+          const shut = collapsed.includes(id)
+          const count = list.filter((x) => x?.type === 'Button').length
+          const label = `${shut ? '▸' : '▾'} ${tr(title, lang)}${shut ? ` · ${count}${badge}` : ''}`
+          const head = keep(
+            Button({
+              key: `arcade-fold-${id}`,
+              label,
+              plain: true,
+              children: [Text(desktop ? { size: 'heading', weight: 'semibold', children: [label] } : { bold: true, ...(shut ? { dimColor: true } : {}), children: [label] })],
+              onPress: () => toggleSection($, id),
+            }),
+          )
+          return [desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [head] }) : head, ...(shut ? [] : [tiles(list)])]
+        }
+        // Окно Arcade и «Присоединиться» — где есть окно браузера или встроенный браузер Desktop
+        const windowed = windowMode() || e.surface === 'desktop'
+        const windowTiles = windowed
+          ? [
+              Button({
+                key: 'arcade-open-library',
+                label: 'Окно Arcade',
+                onPress: async () => {
+                  if (builtinBrowser(e.surface)) return desktopWindow($, null, 'Arcade открыт во встроенном браузере Claude.')
+                  libraryNotice = 'Открываю окно…'
+                  $.ui.invalidate('ui.render')
+                  const command = windowCommand(null)
+                  try {
+                    const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                    windowNotice($, launchNotice(result, null))
+                    if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+                  } catch (err) {
+                    libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+                  }
+                  $.ui.invalidate('ui.render')
+                },
+              }),
+              dim('  все игры и статистика в окне браузера'),
+            ]
+          : []
+        // Кто-то ждёт в сети — можно сразу к нему
+        const joinTiles =
+          windowed && netWaiting.length
+            ? [
+                Button({
+                  key: 'arcade-net-join',
+                  label: `Присоединиться: ${netWaiting[0].title}`,
+                  onPress: async () => {
+                    const target = netWaiting[0]
+                    lastGame = target.id
+                    const where = target.console === 'nes' ? `net:${target.id}` : target.coop ? `coop:${target.id}` : target.id
+                    if (builtinBrowser(e.surface, mouseGame(target.id))) return desktopWindow($, where, `${target.title} открыт во встроенном браузере Claude.`)
+                    libraryNotice = 'Открываю окно…'
+                    $.ui.invalidate('ui.render')
+                    const command = windowCommand(where)
+                    try {
+                      const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                      windowNotice($, launchNotice(result, target.id))
+                      if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+                    } catch (err) {
+                      libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+                    }
+                    $.ui.invalidate('ui.render')
+                  },
+                }),
+                dim(`  в сети ждут: ${waitingText()}`),
+              ]
+            : []
+        const favCount = favoriteGames().length
         items = [
-          section('Играть'),
+          // Сверху, без заголовка: продолжить последнее, найти, избранное
           tiles([
             ...(resume
               ? [
@@ -4273,17 +4718,38 @@ export function register(on) {
                   dim(`  ${resume.title}`),
                 ]
               : []),
+            Button({
+              key: 'arcade-menu-search',
+              label: '🔍 Найти',
+              ...(menuFrom === 'search' ? { autoFocus: true } : {}),
+              onPress: () => {
+                open('search')()
+                // каналы Twitch для поиска — из каталога сайта
+                if (!tw.at) loadTwitch($)
+              },
+            }),
+            dim('  игры, книги, аудиокниги и каналы Twitch'),
+            Button({ key: 'arcade-menu-favorites', label: '★ Избранное', ...(menuFrom === 'favorites' ? { autoFocus: true } : {}), onPress: open('favorites') }),
+            dim(favCount ? `  отмечено: ${favCount}` : '  отмечай ☆ игры и книги — они соберутся здесь'),
+          ]),
+          ...foldable('play', 'Играть', [
             ...tabItems(menuTabs().filter((c) => !reading.includes(c))),
+            ...joinTiles,
+            Button({
+              key: 'arcade-menu-mine',
+              label: 'Мои игры',
+              ...(menuFrom === 'mine' ? { autoFocus: true } : {}),
+              onPress: open('mine'),
+            }),
+            dim(`  ${mine.length ? `${mine.length} ${plural(mine.length, 'игра', 'игры', 'игр')}` : 'добавь свой файл ROM'}`),
           ]),
           // Книги и аудиокниги из каталога, за ними — свежие статьи и подкасты по теме работы агента
-          section('Читать и слушать'),
-          tiles([
+          ...foldable('read', 'Читать и слушать', [
             ...tabItems(reading),
             ...topicTile('articles', 'Статьи', '  свежие статьи по теме работы агента'),
             ...topicTile('podcasts', 'Подкасты', '  свежие выпуски подкастов по теме работы агента'),
           ]),
-          section('Смотреть'),
-          tiles([
+          ...foldable('watch', 'Смотреть', [
             ...topicTile('youtube', 'YouTube', '  свежие видео по теме работы агента'),
             Button({
               key: 'arcade-menu-twitch',
@@ -4297,174 +4763,132 @@ export function register(on) {
             }),
             dim('  свои каналы и эфиры о программировании, технике и ретро-играх'),
           ]),
-          section('Ещё'),
-          tiles([
-          ...(windowMode() || e.surface === 'desktop'
-            ? [
-                Button({
-                  key: 'arcade-open-library',
-                  label: 'Окно Arcade',
-                  onPress: async () => {
-                    if (builtinBrowser(e.surface)) return desktopWindow($, null, 'Arcade открыт во встроенном браузере Claude.')
-                    libraryNotice = 'Открываю окно…'
-                    $.ui.invalidate('ui.render')
-                    const command = windowCommand(null)
-                    try {
-                      const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                      windowNotice($, launchNotice(result, null))
-                      if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
-                    } catch (err) {
-                      libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
-                    }
-                    $.ui.invalidate('ui.render')
-                  },
-                }),
-                dim('  все игры и статистика в окне браузера'),
-                // Кто-то ждёт в сети — можно сразу к нему
-                ...(netWaiting.length
-                  ? [
-                      Button({
-                        key: 'arcade-net-join',
-                        label: `Присоединиться: ${netWaiting[0].title}`,
-                        onPress: async () => {
-                          const target = netWaiting[0]
-                          lastGame = target.id
-                          const where = target.console === 'nes' ? `net:${target.id}` : target.coop ? `coop:${target.id}` : target.id
-                          if (builtinBrowser(e.surface, mouseGame(target.id))) return desktopWindow($, where, `${target.title} открыт во встроенном браузере Claude.`)
-                          libraryNotice = 'Открываю окно…'
-                          $.ui.invalidate('ui.render')
-                          const command = windowCommand(where)
-                          try {
-                            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                            windowNotice($, launchNotice(result, target.id))
-                            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
-                          } catch (err) {
-                            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
-                          }
-                          $.ui.invalidate('ui.render')
-                        },
-                      }),
-                      dim(`  в сети ждут: ${waitingText()}`),
-                    ]
-                  : []),
-              ]
-            : []),
-          Button({
-            key: 'arcade-menu-mine',
-            label: 'Мои игры',
-            ...(menuFrom === 'mine' ? { autoFocus: true } : {}),
-            onPress: open('mine'),
-          }),
-          dim(`  ${mine.length ? `${mine.length} ${plural(mine.length, 'игра', 'игры', 'игр')}` : 'добавь свой файл ROM'}`),
-          Button({
-            key: 'arcade-menu-settings',
-            label: 'Настройки',
-            ...(menuFrom === 'settings' ? { autoFocus: true } : {}),
-            onPress: open('settings'),
-          }),
-          dim(`  ${settingsNote(e.surface)}`),
-          // Вход — по желанию: настройки одни на всех компьютерах человека
-          Button({
-            key: 'arcade-menu-account',
-            label: acct.session ? 'Аккаунт' : 'Войти через GitHub',
-            ...(menuFrom === 'account' ? { autoFocus: true } : {}),
-            onPress: () => {
-              acct.confirmDelete = false
-              open('account')()
-              syncAccount($)
-            },
-          }),
-          acct.session ? keep(dim(`  ${acct.handle ? `@${acct.handle} · ` : ''}GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах и свой @ник'),
-          // Друзья — плитка видна всем; без входа и без ника экран скажет, что сделать сначала
-          Button({
-            key: 'arcade-menu-friends',
-            label: 'Друзья',
-            ...(menuFrom === 'friends' || menuFrom === 'friends:remove' ? { autoFocus: true } : {}),
-            onPress: () => {
-              fr.note = ''
-              fr.bad = false
-              open('friends')()
-              if (!acct.session) return
-              if (!acct.syncedAt) syncAccount($)
-              friendsCall($, 'friends')
-            },
-          }),
-          // Ника нет, а сайт ещё не спрашивали — может, он есть: пока без «возьми ник»
-          dim(
-            !acct.session
-              ? '  по @нику: заявки и список друзей; нужен вход через GitHub'
-              : !acct.handle
-                ? acct.syncedAt
-                  ? '  сначала возьми свой @ник'
-                  : '  по @нику: заявки и список друзей'
-                : acct.requests
-                  ? `  заявок тебе: ${acct.requests} · друзей: ${acct.friends}`
-                  : acct.friends
-                    ? `  друзей: ${acct.friends}`
-                    : '  позови друзей по их @нику',
+          // Друзья, чаты и аккаунт; у свёрнутого раздела видно, что кто-то написал или зовёт в друзья
+          ...foldable(
+            'talk',
+            'Общение',
+            [
+              // Друзья — плитка видна всем; без входа и без ника экран скажет, что сделать сначала
+              Button({
+                key: 'arcade-menu-friends',
+                label: 'Друзья',
+                ...(menuFrom === 'friends' || menuFrom === 'friends:remove' ? { autoFocus: true } : {}),
+                onPress: toFriends,
+              }),
+              // Ника нет, а сайт ещё не спрашивали — может, он есть: пока без «возьми ник»
+              dim(
+                !acct.session
+                  ? '  по @нику: заявки и список друзей; нужен вход через GitHub'
+                  : !acct.handle
+                    ? acct.syncedAt
+                      ? '  сначала возьми свой @ник'
+                      : '  по @нику: заявки и список друзей'
+                    : acct.requests
+                      ? `  заявок тебе: ${acct.requests} · друзей: ${acct.friends}`
+                      : acct.friends
+                        ? `  друзей: ${acct.friends}`
+                        : '  позови друзей по их @нику',
+              ),
+              // Чаты — плитка видна всем, как «Друзья»
+              Button({
+                key: 'arcade-menu-chats',
+                label: 'Чаты',
+                ...(String(menuFrom ?? '').startsWith('chats') ? { autoFocus: true } : {}),
+                onPress: toChats,
+              }),
+              dim(
+                !acct.session
+                  ? '  с друзьями: один на один и группы; нужен вход через GitHub'
+                  : !acct.handle && acct.syncedAt
+                    ? '  сначала возьми свой @ник'
+                    : acct.unread
+                      ? `  непрочитанных: ${acct.unread}`
+                      : '  с друзьями: один на один и группы',
+              ),
+              // Вход — по желанию: настройки одни на всех компьютерах человека
+              Button({
+                key: 'arcade-menu-account',
+                label: acct.session ? 'Аккаунт' : 'Войти через GitHub',
+                ...(menuFrom === 'account' ? { autoFocus: true } : {}),
+                onPress: toAccount,
+              }),
+              acct.session ? keep(dim(`  ${acct.handle ? `@${acct.handle} · ` : ''}GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах и свой @ник'),
+            ],
+            `${acct.unread ? ` · 💬 ${acct.unread}` : ''}${acct.requests ? ` · 👥 ${acct.requests}` : ''}`,
           ),
-          // Чаты — плитка видна всем, как «Друзья»; непрочитанные — с сайта при синхронизации и по таймеру
-          Button({
-            key: 'arcade-menu-chats',
-            label: 'Чаты',
-            ...(String(menuFrom ?? '').startsWith('chats') ? { autoFocus: true } : {}),
-            onPress: async () => {
-              ch.note = ''
-              ch.bad = false
-              open('chats')()
-              if (!acct.session) return
-              if (!acct.syncedAt) await syncAccount($)
-              if (acct.handle) await loadChats($)
-            },
-          }),
-          dim(
-            !acct.session
-              ? '  с друзьями: один на один и группы; нужен вход через GitHub'
-              : !acct.handle && acct.syncedAt
-                ? '  сначала возьми свой @ник'
-                : acct.unread
-                  ? `  непрочитанных: ${acct.unread}`
-                  : '  с друзьями: один на один и группы',
-          ),
-          // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
-          Button({
-            key: 'arcade-lang-main',
-            label: `🌐 ${LANG_NAMES[lang] ?? lang}`,
-            onPress: () => {
-              langReturn = 'main'
-              open('lang')()
-            },
-          }),
-          dim('  язык интерфейса — 13 на выбор'),
-          // Добровольно, без напоминаний: одна строка внизу меню, ссылка открывается в обычном браузере
-          Button({
-            key: 'arcade-support',
-            label: '☕ Поддержать проект',
-            onPress: async () => {
-              const url = supportUrl()
-              const command = openUrlCommand(platform, url)
-              if (!command) {
-                libraryNotice = `Страница поддержки: ${url}`
+          ...foldable('more', 'Ещё', [
+            ...windowTiles,
+            Button({
+              key: 'arcade-menu-settings',
+              label: 'Настройки',
+              ...(menuFrom === 'settings' ? { autoFocus: true } : {}),
+              onPress: open('settings'),
+            }),
+            dim(`  ${settingsNote(e.surface)}`),
+            // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
+            Button({
+              key: 'arcade-lang-main',
+              label: `🌐 ${LANG_NAMES[lang] ?? lang}`,
+              onPress: () => {
+                langReturn = 'main'
+                open('lang')()
+              },
+            }),
+            dim('  язык интерфейса — 13 на выбор'),
+            Button({
+              key: 'arcade-menu-report',
+              label: '🐞 Сообщить об ошибке',
+              ...(menuFrom === 'report' ? { autoFocus: true } : {}),
+              onPress: () => {
+                rp.note = ''
+                open('report')()
+              },
+            }),
+            dim('  что сломалось — прямо автору Arcade'),
+            // Список отчётов — только админу: остальные этой плитки не видят, а сайт им список и не отдаст
+            ...(acct.role === 'admin'
+              ? [
+                  Button({
+                    key: 'arcade-menu-reports',
+                    label: '📋 Отчёты об ошибках',
+                    ...(menuFrom === 'reports' ? { autoFocus: true } : {}),
+                    onPress: () => {
+                      open('reports')()
+                      loadReports($)
+                    },
+                  }),
+                  dim('  видишь только ты: ты админ Arcade'),
+                ]
+              : []),
+            // Добровольно, без напоминаний: одна строка внизу меню, ссылка открывается в обычном браузере
+            Button({
+              key: 'arcade-support',
+              label: '☕ Поддержать проект',
+              onPress: async () => {
+                const url = supportUrl()
+                const command = openUrlCommand(platform, url)
+                if (!command) {
+                  libraryNotice = `Страница поддержки: ${url}`
+                  $.ui.invalidate('ui.render')
+                  return
+                }
+                try {
+                  const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+                  windowNotice($, result?.exitCode === 0 ? 'Открываю страницу поддержки в браузере. Спасибо!' : `Страница поддержки: ${url}`)
+                } catch {
+                  libraryNotice = `Страница поддержки: ${url}`
+                }
                 $.ui.invalidate('ui.render')
-                return
-              }
-              try {
-                const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                windowNotice($, result?.exitCode === 0 ? 'Открываю страницу поддержки в браузере. Спасибо!' : `Страница поддержки: ${url}`)
-              } catch {
-                libraryNotice = `Страница поддержки: ${url}`
-              }
-              $.ui.invalidate('ui.render')
-            },
-          }),
-          dim(`  добровольно, на развитие Arcade — ${supportUrl().replace(/^https:\/\//, '')}`),
+              },
+            }),
+            dim(`  добровольно, на развитие Arcade — ${supportUrl().replace(/^https:\/\//, '')}`),
           ]),
           ...noticeLines,
           ...hint,
           ...(eventLines.length ? [gap, ...eventLines] : []),
         ]
       }
-      return Box({ flexDirection: 'column', children: [header, gap, ...items] })
+      return Box({ flexDirection: 'column', children: [headerExtra.length ? headerOf(headerExtra) : header, gap, ...items] })
     }
 
     const libraryButton = Button({
