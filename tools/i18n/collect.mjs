@@ -136,7 +136,9 @@ const T = ctx.T ?? ctx.window.T
 const siteFiles = fs.readdirSync(path.join(ROOT, 'site', 'web')).filter((f) => f.endsWith('.js') && !['i18n.js', 'jsnes.js', 'mapper28.js'].includes(f)).map((f) => path.join(ROOT, 'site', 'web', f))
 const siteSource = collect(siteFiles, (s) => T(s), [...dictionary(path.join(ROOT, 'site', 'web', 'i18n.js')), ...(templates.siteExact ?? [])])
 // Описания игр каталога (about): английское описание → перевод. Английские описания — из сборки сайта во временную папку
-const { build } = await import(pathToFileURL(path.join(ROOT, 'site', 'build.mjs')).href)
+const { build, download } = await import(pathToFileURL(path.join(ROOT, 'site', 'build.mjs')).href)
+// Игры, которые сборка скачивает (download в каталоге), должны быть в кеше — иначе сборка остановится
+await download({ root: path.join(ROOT, 'site') })
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'arcade-i18n-'))
 let abouts
 try {

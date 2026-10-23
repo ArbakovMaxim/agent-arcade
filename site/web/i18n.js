@@ -63,6 +63,7 @@
     'Все': 'All',
     'градостроитель': 'city builder',
     'мышь — строить · инструменты — на панели слева': 'mouse — build · tools — on the left panel',
+    'мышь — выбирать и отдавать приказы · стрелки — камера · колёсико — масштаб': 'mouse — select and give orders · arrows — camera · wheel — zoom',
     'Квесты': 'Adventures',
     'квест': 'adventure',
     'мышь — ходить, смотреть, брать · F5 — меню и сохранение': 'mouse — walk, look, take · F5 — menu and saving',

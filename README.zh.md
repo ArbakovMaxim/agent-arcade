@@ -102,7 +102,7 @@ claude plugin install arcade@agent-arcade
 | **游戏 → 街机** | Flappy Arcade — Arcade 自己的单键游戏：可直接在面板和 Arcade 窗口中玩；每天的赛道对所有人相同，会保存你的最佳成绩 |
 | **游戏 → 射击** | Freedoom Phase 1 和 2（Doom 的免费替代品）、FreeDM 死亡竞赛、Blasphemer（Heretic 的免费替代品）、BlasphDM 死亡竞赛 |
 | **游戏 → 竞速** | HexGL — 未来风格的反重力竞速 |
-| **游戏 → 策略** | OpenTTD — 运输大亨（GPL-2.0）；Micropolis — 1989 年经典城市建造游戏的开源代码，城市保存在浏览器中（micropolisJS，带附加条款的 GPL-3.0 和 Micropolis Public Name License） |
+| **游戏 → 策略** | OpenTTD — 运输大亨（GPL-2.0）；Micropolis — 1989 年经典城市建造游戏的开源代码，城市保存在浏览器中（micropolisJS，带附加条款的 GPL-3.0 和 Micropolis Public Name License）；Warzone 2100 — 即时战略游戏，有战役和对战电脑的遭遇战，单位由你自己设计，存档保存在浏览器中（GPL-2.0-or-later） |
 | **游戏 → 冒险** | 在 ScummVM（GPL-3.0-or-later）中运行的四款 90 年代免费经典冒险游戏：Beneath a Steel Sky、Flight of the Amazon Queen、Lure of the Temptress 和 Nippon Safes, Inc. — 允许再分发的免费游戏数据；随时按 F5 存档 |
 | **游戏 → 棋类** | 国际象棋 — 与真人或电脑（Stockfish，1–10 级）对弈，联网对局带棋钟；9×9、13×13 和 19×19 棋盘的围棋；俄罗斯跳棋、黑白棋；全部支持 *认输* |
 | **书籍** | 136 部公有领域经典作品，按语言分书架、按类型排列：英语 98 部（奥斯汀、狄更斯、马克·吐温、柯南·道尔、威尔斯、雪莱，以及译本形式的托尔斯泰和陀思妥耶夫斯基……），乌克兰语 38 部（弗兰科、莱霞·乌克兰卡、科秋宾斯基、科特利亚列夫斯基、库利什……）。书签自动保存：再次打开书，就会回到上次停下的地方。你自己的 EPUB、FB2 和 TXT 可以在 Arcade 窗口中打开 |

@@ -7,9 +7,15 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import zlib from 'node:zlib'
 
 const MAX_FILE = 25 * 1024 * 1024 // предел Cloudflare Pages на один файл
+const PART = 24 * 1024 * 1024 // кусок большого файла чужой сборки — с запасом до предела
 const ID = /^[a-z0-9-]+$/
+// Чужие сборки, которых нет в git (Warzone 2100 — архив на 100 МБ): скачанный архив — в .cache/downloads/,
+// разобранный — в .cache/web/. Папка — рядом со сборкой, а не в root: тесты собирают из временных копий root
+const CACHE = path.join(path.dirname(fileURLToPath(import.meta.url)), '.cache')
+const archiveFile = (d) => path.join(CACHE, 'downloads', `${d.sha256}.zip`)
 
 // Правила кеширования для Cloudflare Pages: файлы по хешам — навсегда, каталог — на минуту
 const HEADERS = `/files/*
@@ -154,6 +160,122 @@ function copyEmulatorJS(from, out) {
   fs.writeFileSync(emulator, code.replace(marker, `${marker}        return // Arcade: без запроса к cdn.emulatorjs.org\n`))
 }
 
+// Скачивает архивы браузерных игр (поле download в каталоге), которых ещё нет в .cache/downloads/, и сверяет
+// размер и SHA-256 с каталогом. Сама сборка (build) — без сети: без скачанного архива она останавливается
+export async function download({ root, log = console.log }) {
+  const source = JSON.parse(fs.readFileSync(path.join(root, 'content', 'catalog.json'), 'utf8'))
+  for (const g of source.games ?? []) {
+    const d = g.download
+    if (!d || fs.existsSync(archiveFile(d))) continue
+    log(`Скачиваю ${g.id}: ${d.url} (${Math.round(d.size / 1e6)} МБ)`)
+    const res = await fetch(d.url)
+    if (!res.ok) throw new Error(`игра ${g.id}: ${d.url} ответил ${res.status}`)
+    const data = Buffer.from(await res.arrayBuffer())
+    if (data.length !== d.size) throw new Error(`игра ${g.id}: скачалось ${data.length} байт, а в каталоге ${d.size}`)
+    const sha256 = createHash('sha256').update(data).digest('hex')
+    if (sha256 !== d.sha256) throw new Error(`игра ${g.id}: SHA-256 архива ${sha256}, а в каталоге ${d.sha256}`)
+    const file = archiveFile(d)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(`${file}.tmp`, data)
+    fs.renameSync(`${file}.tmp`, file)
+  }
+}
+
+// Файлы zip-архива: { путь: Buffer } для тех, что пропускает keep. Только обычные архивы: без zip64 и шифрования,
+// сжатие deflate или без сжатия
+function unzip(zip, where, keep) {
+  let end = zip.length - 22
+  while (end >= 0 && zip.readUInt32LE(end) !== 0x06054b50) end--
+  if (end < 0) fail(`${where}: архив — не zip`)
+  const files = {}
+  let at = zip.readUInt32LE(end + 16)
+  for (let i = zip.readUInt16LE(end + 10); i > 0; i--) {
+    if (zip.readUInt32LE(at) !== 0x02014b50) fail(`${where}: испорчено оглавление архива`)
+    const flags = zip.readUInt16LE(at + 8)
+    const method = zip.readUInt16LE(at + 10)
+    const packed = zip.readUInt32LE(at + 20)
+    const size = zip.readUInt32LE(at + 24)
+    const local = zip.readUInt32LE(at + 42)
+    const nameEnd = at + 46 + zip.readUInt16LE(at + 28)
+    const name = zip.toString('utf8', at + 46, nameEnd)
+    at = nameEnd + zip.readUInt16LE(at + 30) + zip.readUInt16LE(at + 32)
+    if (name.endsWith('/') || !keep(name)) continue
+    if (name.startsWith('/') || name.includes('\\') || name.split('/').includes('..')) fail(`${where}: в архиве опасный путь ${name}`)
+    if (flags & 1) fail(`${where}: ${name} в архиве зашифрован`)
+    if ([packed, size, local].includes(0xffffffff)) fail(`${where}: архив zip64 — такие не разбираем`)
+    if (zip.readUInt32LE(local) !== 0x04034b50) fail(`${where}: испорчен архив у ${name}`)
+    const start = local + 30 + zip.readUInt16LE(local + 26) + zip.readUInt16LE(local + 28)
+    const raw = zip.subarray(start, start + packed)
+    if (method !== 0 && method !== 8) fail(`${where}: ${name} сжат способом ${method} — разбираем только deflate`)
+    const data = method === 8 ? zlib.inflateRawSync(raw) : raw
+    if (data.length !== size) fail(`${where}: ${name} распаковался не целиком`)
+    files[name] = data
+  }
+  return files
+}
+
+// Скачанная игра → папка в .cache/web/<id>-<ключ>: без лишних файлов (skip), с правками (edit — каждая находит
+// ровно одно место, иначе архив другой версии), файлы больше 25 МиБ — кусками по 24 МиБ, сжатыми gzip, если так
+// меньше. Куски склеивает на странице arcade-parts.js (манифест + web/parts.js), его сборка вставит первым скриптом.
+// Ключ — от описания в каталоге и этого кода: поменялось что-то из них — папка собирается заново
+function prepare(root, g, where) {
+  const d = g.download
+  for (const field of ['url', 'sha256', 'size']) if (!d[field]) fail(`${where}: в download нет поля ${field}`)
+  const shim = fs.readFileSync(path.join(root, 'web', 'parts.js'), 'utf8')
+  const key = createHash('sha256').update(JSON.stringify(d)).update(String(prepare)).update(String(unzip)).update(shim).digest('hex').slice(0, 16)
+  const dir = path.join(CACHE, 'web', `${g.id}-${key}`)
+  if (fs.existsSync(dir)) return dir
+  const file = archiveFile(d)
+  if (!fs.existsSync(file)) fail(`${where}: архива ещё нет — node build.mjs сначала скачает его из ${d.url}`)
+  const zip = fs.readFileSync(file)
+  if (createHash('sha256').update(zip).digest('hex') !== d.sha256) fail(`${where}: архив в кеше испорчен — удалите ${file}`)
+  // Шаблон без / — по имени файла в любой папке; * — любые символы, кроме /
+  const skip = (d.skip ?? []).map((p) => {
+    const re = new RegExp(`^${p.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*')}$`)
+    return (name) => re.test(p.includes('/') ? name : path.posix.basename(name))
+  })
+  const files = unzip(zip, where, (name) => !skip.some((test) => test(name)))
+  for (const [name, edits] of Object.entries(d.edit ?? {})) {
+    if (!files[name]) fail(`${where}: правка для ${name}, а такого файла в архиве нет`)
+    let text = files[name].toString('utf8')
+    for (const e of edits) {
+      const re = new RegExp(e.find, 'g')
+      const found = text.match(re)?.length ?? 0
+      if (found !== 1) fail(`${where}: в ${name} правка «${e.why}» нашла мест: ${found}, а нужно одно — другая версия архива?`)
+      text = text.replace(re, () => e.replace)
+    }
+    files[name] = Buffer.from(text, 'utf8')
+  }
+  const parts = {}
+  for (const [name, data] of Object.entries(files)) {
+    if (data.length <= MAX_FILE) continue
+    const gz = zlib.gzipSync(data)
+    const body = gz.length < data.length * 0.9 ? gz : data
+    // В имени кусков — хеш файла: после выкладки новой версии браузер не склеит старый кусок с новым
+    const hash = createHash('sha256').update(data).digest('hex').slice(0, 12)
+    const list = []
+    for (let i = 0; i * PART < body.length; i++) {
+      const part = `${name}.${hash}.part${i}`
+      files[part] = body.subarray(i * PART, (i + 1) * PART)
+      list.push(path.posix.basename(part))
+    }
+    parts[name] = { size: data.length, gzip: body === gz, parts: list }
+    delete files[name]
+  }
+  if (Object.keys(parts).length) files['arcade-parts.js'] = Buffer.from(`// Собрано build.mjs: куски больших файлов игры и их склейка (web/parts.js)\nwindow.ARCADE_PARTS = ${JSON.stringify(parts)}\n${shim}`)
+  // Старые разборы этой игры больше не нужны; новый пишется рядом и встаёт на место целиком
+  fs.mkdirSync(path.dirname(dir), { recursive: true })
+  const mine = new RegExp(`^${g.id}-[0-9a-f]{16}(\\.tmp)?$`)
+  for (const old of fs.readdirSync(path.dirname(dir)).filter((n) => mine.test(n))) fs.rmSync(path.join(path.dirname(dir), old), { recursive: true, force: true })
+  const tmp = `${dir}.tmp`
+  for (const [name, data] of Object.entries(files)) {
+    fs.mkdirSync(path.dirname(path.join(tmp, name)), { recursive: true })
+    fs.writeFileSync(path.join(tmp, name), data)
+  }
+  fs.renameSync(tmp, dir)
+  return dir
+}
+
 // audiobooks — список аудиокниг вместо content/audiobooks/index.json (для тестов)
 export function build({ root, out, now = new Date(), audiobooks = null }) {
   const content = path.join(root, 'content')
@@ -234,27 +356,35 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
 
     // Браузерная игра — своя страница: папка игры целиком в web-games/<id>/, окно открывает её в рамке
     if (g.kind === 'web') {
-      const pagePath = path.join(content, g.page)
-      if (!fs.existsSync(pagePath)) fail(`${where}: нет страницы игры ${g.page}`)
-      const folder = path.dirname(pagePath)
-      const walk = (dir) => {
+      // Скачанная игра (download): файлы архива поверх своей папки игры — в ней лицензии и заметка о сборке
+      const folder = path.dirname(path.join(content, g.page))
+      const prepared = g.download ? prepare(root, g, where) : null
+      const folders = [folder, ...(prepared ? [prepared] : [])].filter((f) => fs.existsSync(f))
+      if (!folders.some((f) => fs.existsSync(path.join(f, path.basename(g.page))))) fail(`${where}: нет страницы игры ${g.page}`)
+      if (g.isolated !== undefined && g.isolated !== true) fail(`${where}: isolated — только true`)
+      if (g.offline !== undefined && g.offline !== true) fail(`${where}: offline — только true`)
+      const walk = (base, dir) => {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           const full = path.join(dir, entry.name)
-          if (entry.isDirectory()) walk(full)
+          if (entry.isDirectory()) walk(base, full)
           else {
             if (fs.statSync(full).size > MAX_FILE) fail(`${where}: файл ${entry.name} больше 25 МиБ`)
             // Никаких счётчиков и аналитики в чужих играх: игроки Arcade не должны уходить в чужие аккаунты
-            if (/\.(html?|js)$/i.test(entry.name) && /google-analytics|googletagmanager|_gaq\b|gtag\(/.test(fs.readFileSync(full, 'utf8'))) {
-              fail(`${where}: в ${path.relative(folder, full)} счётчик аналитики — уберите его`)
+            if (/\.(html?|js)$/i.test(entry.name) && /google-analytics|googletagmanager|_gaq\b|gtag\(|cloudflareinsights/.test(fs.readFileSync(full, 'utf8'))) {
+              fail(`${where}: в ${path.relative(base, full)} счётчик аналитики — уберите его`)
             }
-            copy(full, path.join(out, 'web-games', g.id, path.relative(folder, full)))
+            const to = path.join(out, 'web-games', g.id, path.relative(base, full))
+            if (fs.existsSync(to)) fail(`${where}: ${path.relative(base, full)} есть и в архиве, и в папке игры`)
+            copy(full, to)
           }
         }
       }
-      walk(folder)
-      // Свои скрипты Arcade — в страницу игры, перед её первым скриптом (у OpenTTD — графика OpenGFX до старта)
-      for (const script of g.inject ?? []) {
-        if (!fs.existsSync(path.join(folder, script))) fail(`${where}: нет скрипта ${script}`)
+      for (const f of folders) walk(f, f)
+      // Свои скрипты Arcade — в страницу игры, перед её первым скриптом (у OpenTTD — графика OpenGFX до старта).
+      // Каждый следующий встаёт перед предыдущим, поэтому склейка кусков (arcade-parts.js) — последней в списке
+      const inject = [...(g.inject ?? []), ...(prepared && fs.existsSync(path.join(prepared, 'arcade-parts.js')) ? ['arcade-parts.js'] : [])]
+      for (const script of inject) {
+        if (!folders.some((f) => fs.existsSync(path.join(f, script)))) fail(`${where}: нет скрипта ${script}`)
         const pageOut = path.join(out, 'web-games', g.id, path.basename(g.page))
         const html = fs.readFileSync(pageOut, 'utf8')
         const at = html.search(/<script[^>]*\ssrc=/i)
@@ -482,12 +612,26 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
   // Stockfish 19 lite (GPL-3.0) — компьютер в шахматах: загрузчик и WebAssembly рядом, лицензия — к остальным
   for (const file of ['stockfish-19-lite-single.js', 'stockfish-19-lite-single.wasm']) copy(path.join(root, 'vendor', 'stockfish', file), path.join(out, 'vendor', 'stockfish', file))
   copy(path.join(root, 'vendor', 'stockfish', 'LICENSE.txt'), path.join(out, 'licenses', 'stockfish', 'LICENSE.txt'))
+  // Bootstrap 5.3.2 (MIT) — оформление страницы Warzone 2100: с нашего сайта, а не с cdnjs (правка в каталоге)
+  for (const file of ['bootstrap.min.css', 'bootstrap.bundle.min.js']) copy(path.join(root, 'vendor', 'bootstrap', file), path.join(out, 'vendor', 'bootstrap', file))
+  copy(path.join(root, 'vendor', 'bootstrap', 'LICENSE.txt'), path.join(out, 'licenses', 'bootstrap', 'LICENSE.txt'))
   // Сетевая игра EmulatorJS — через наш сервер: вместо socket.io эмулятор получает нашу прослойку (web/netplay-io.js)
   copy(path.join(root, 'web', 'netplay-io.js'), path.join(out, 'emulatorjs', 'src', 'socket.io.min.js'))
   // Маппер 28 (Action 53) — общий с модом: из модуля мода делаем обычный скрипт для страницы
   const mapper28 = fs.readFileSync(path.join(root, '..', 'mod', 'hooks', 'mapper28.js'), 'utf8').replace(/^export /gm, '')
   fs.writeFileSync(path.join(out, 'mapper28.js'), `;(function () {\n'use strict'\n${mapper28}\ninstallMapper28(window.jsnes && window.jsnes.Mappers)\n})()\n`)
-  fs.writeFileSync(path.join(out, '_headers'), HEADERS)
+  // Игре на WebAssembly с потоками (isolated) нужен SharedArrayBuffer — только в изолированной странице (COOP + COEP).
+  // Здесь — страница игры в рамке; окно с ней (/?game=<id>) изолирует worker/index.js, список там сверяют тесты.
+  // Игра offline сама в сеть не ходит: fetch, XHR и WebSocket — только к сайту Arcade. Заголовок, а не <meta>: он
+  // действует и на потоки игры (Warzone 2100 иначе спрашивает обновления у wz2100.net)
+  const rules = (source.games ?? []).filter((g) => g.kind === 'web' && (g.isolated || g.offline)).map((g) => {
+    const lines = [
+      ...(g.isolated ? ['Cross-Origin-Embedder-Policy: require-corp', 'Cross-Origin-Opener-Policy: same-origin', 'Cross-Origin-Resource-Policy: same-origin'] : []),
+      ...(g.offline ? ["Content-Security-Policy: connect-src 'self'"] : []),
+    ]
+    return `/web-games/${g.id}/*\n${lines.map((l) => `  ${l}\n`).join('')}`
+  })
+  fs.writeFileSync(path.join(out, '_headers'), HEADERS + rules.join(''))
   // Короткие адреса приставок: /sega — сразу вкладка Sega
   fs.writeFileSync(path.join(out, '_redirects'), [...catalog.consoles, ...catalog.groups].map((c) => `/${c.id} /?tab=${c.id} 302`).join('\n') + '\n')
   // Wrangler читает _headers как правила, но не выкладывает его как обычный файл
@@ -499,6 +643,7 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = path.dirname(fileURLToPath(import.meta.url))
   const out = path.resolve(process.argv[2] ?? path.join(root, 'dist'))
+  await download({ root })
   const catalog = build({ root, out })
   console.log(`Готово. Игр в каталоге: ${Object.keys(catalog.games).length}. Сайт — в ${out}`)
 }

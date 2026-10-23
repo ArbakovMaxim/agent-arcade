@@ -7,11 +7,12 @@ import path from 'node:path'
 import vm from 'node:vm'
 import { webcrypto } from 'node:crypto'
 import { pathToFileURL, fileURLToPath } from 'node:url'
-import { build } from '../build.mjs'
+import { build, download } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'arcade-site-'))
 process.on('exit', () => fs.rmSync(DIST, { recursive: true, force: true })) // собранный сайт — только на время теста
+await download({ root: ROOT }) // игры из каталога, которые сборка скачивает: Warzone 2100
 build({ root: ROOT, out: DIST })
 
 // Сеть: файлы из собранного сайта; можно подменить ответ или «уронить» адрес
@@ -749,7 +750,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(support.target, '_blank')
   assert.equal(support.rel, 'noopener')
   const strategy = await makePage(new Map(), { search: '?tab=games&shelf=strategy' })
-  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd', 'micropolis'])
+  assert.deepEqual(strategy.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['openttd', 'micropolis', 'warzone2100'])
   const quests = await makePage(new Map(), { search: '?tab=games&shelf=quests' })
   assert.deepEqual(quests.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['scummvm'], 'полка квестов — ScummVM')
   // по умолчанию — первая полка, аркады: Flappy Arcade
@@ -799,7 +800,38 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(ttd.byId['overlay-title'].textContent, 'Пауза')
   ttd.byId.overlay.click()
   assert.deepEqual(vmCalls, ['suspend', 'resume'])
+  // Warzone 2100 останавливается сама (arcade-pause.js на её странице): окно зовёт arcadePause, клик — её «продолжить»
+  const wzCalls = []
+  ttdFrame.contentWindow = { arcadePause: () => { wzCalls.push('pause'); return () => wzCalls.push('play') }, Module: ttdModule, addEventListener() {} }
+  ttd.fire('blur')
+  for (let i = 0; i < 10 && !wzCalls.length; i++) await pause()
+  assert.deepEqual(wzCalls, ['pause'])
+  assert.equal(ttd.byId['overlay-title'].textContent, 'Пауза')
+  ttd.byId.overlay.click()
+  assert.deepEqual(wzCalls, ['pause', 'play'])
+  assert.deepEqual(ttdCalls, ['pause', 'suspend', 'resume', 'play'], 'Module страницы не трогали')
   assert.equal(lib.byId.library.querySelectorAll('.open-rom').length, 1, 'только кнопка языка')
+}
+
+// --- Пауза Warzone 2100: arcade-pause.js со страницы игры — главный цикл и звук OpenAL ------------------------------
+{
+  const calls = []
+  class FakeAudio {
+    constructor() { this.state = 'running' }
+    suspend() { calls.push('suspend'); this.state = 'suspended' }
+    resume() { calls.push('resume'); this.state = 'running' }
+  }
+  const win = vm.createContext({ AudioContext: FakeAudio })
+  win.window = win
+  vm.runInContext(fs.readFileSync(path.join(DIST, 'web-games', 'warzone2100', 'arcade-pause.js'), 'utf8'), win)
+  assert.equal(win.arcadePause(), null, 'игра ещё грузится — останавливать нечего')
+  vm.runInContext('new AudioContext(); new AudioContext().state = "suspended"', win)
+  // Так модуль выглядит в идущей игре: postRun уже был (main() вернулся), а главный цикл крутится
+  win.LaunchedModule = { calledRun: true, wzEncounteredPostRun: true, pauseMainLoop: () => calls.push('pause'), resumeMainLoop: () => calls.push('play') }
+  const resume = win.arcadePause()
+  assert.deepEqual(calls, ['pause', 'suspend'], 'звук, который уже молчал, не трогаем')
+  resume()
+  assert.deepEqual(calls, ['pause', 'suspend', 'resume', 'play'])
 }
 
 // --- Шахматы с компьютером: экран выбора (сила 1–10, цвет, таймер), партия, запись ходов, вернуть ход, PGN ---------

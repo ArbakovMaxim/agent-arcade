@@ -1,5 +1,5 @@
 // Код сайта Arcade на Cloudflare Workers. Статику (dist/) Cloudflare отдаёт сам, без этого кода;
-// сюда приходят только /api/* и /net/* — для сетевой игры.
+// сюда приходят только /api/* и /net/* — для сетевой игры, и корень / — заголовки изоляции для плеера с Warzone 2100.
 // Комната — Durable Object: по WebSocket пересылает сообщения между игроками в ней. На комнатах будут работать
 // сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom.
 import { discover, verify } from './discover.js'
@@ -18,6 +18,10 @@ export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт
 const ROOM_NAME = /^[A-Za-z0-9_-]{1,64}$/
 export const MAX_PER_IP = 4 // подключений с одного адреса в одну комнату: две вкладки для проверки пройдут, сотня — нет
+// Игры на WebAssembly с потоками (isolated: true в каталоге): им нужен SharedArrayBuffer, а он есть только в
+// изолированной странице (COOP + COEP). Изолируем плеер только с ними: внешние картинки и рамки других игр под COEP
+// не загрузились бы. Тест сверяет список с каталогом
+export const ISOLATED_GAMES = new Set(['warzone2100'])
 
 // Ограничение частоты — «ведро жетонов» на каждый сокет: сообщения и байты в секунду с запасом на всплеск.
 // Лишнее отбрасывается; кто долго превышает лимит, того комната отключает. Состояние в памяти: после «спячки»
@@ -117,6 +121,15 @@ export default {
       const forward = new Request(request, { headers: new Headers(request.headers) })
       forward.headers.set('X-Room', room[2])
       return space.get(space.idFromName(room[2])).fetch(forward)
+    }
+    // Плеер с игрой, которой нужна изоляция (isolated в каталоге): заголовки страницы — здесь, _headers к ответам
+    // кода не применяется. Остальные страницы — статика как есть
+    if (url.pathname === '/' && ISOLATED_GAMES.has(url.searchParams.get('game'))) {
+      const page = await env.ASSETS.fetch(request)
+      const isolated = new Response(page.body, page)
+      isolated.headers.set('Cross-Origin-Opener-Policy', 'same-origin')
+      isolated.headers.set('Cross-Origin-Embedder-Policy', 'require-corp')
+      return isolated
     }
     return env.ASSETS.fetch(request)
   },
