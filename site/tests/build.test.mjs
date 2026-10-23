@@ -392,7 +392,9 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'warzone2100').offlin
   for (const f of files) assert.ok(fs.statSync(path.join(oa, f)).size <= 25 * 1024 * 1024, `${f} больше 25 МиБ`)
   assert.deepEqual(files.filter((f) => f.endsWith('.pk3')).sort(), paks.filter(([name]) => !parts[`${baseoa}/${name}`]).map(([name]) => `${baseoa}/${name}`).sort())
   assert.deepEqual(files.filter((f) => /mature|missionpack|\.(exe|dll|x86|x86_64|ub|dylib)$|^openarena-0\.8\.8\/[^/]+$/.test(f)), [], 'программы, missionpack и mature-пак не выложены')
-  for (const f of ['COPYING', 'README', 'CREDITS', 'readme_088.txt', 'BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses/openarena', f)), f)
+  // Движок из Actions выложен вместе с исходниками; два BUILD.txt (игры и движка) — с именем папки
+  for (const f of ['ioquake3.js', 'ioquake3.wasm', 'COPYING.txt', 'BUILD.txt', 'ioq3-src.tar.gz']) assert.ok(files.includes(`engine/${f}`), `engine/${f}`)
+  for (const f of ['COPYING', 'README', 'CREDITS', 'readme_088.txt', 'openarena-BUILD.txt', 'COPYING.txt', 'engine-BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses/openarena', f)), f)
   const headers = fs.readFileSync(path.join(dir, '_headers'), 'utf8')
   assert.match(headers, /\/web-games\/openarena\/\*\n  Content-Security-Policy: connect-src 'self'\n/)
 }

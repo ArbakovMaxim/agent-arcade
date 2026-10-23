@@ -1377,7 +1377,9 @@
           "games/openarena/README",
           "games/openarena/CREDITS",
           "games/openarena/readme_088.txt",
-          "games/openarena/BUILD.txt"
+          "games/openarena/BUILD.txt",
+          "games/openarena/engine/COPYING.txt",
+          "games/openarena/engine/BUILD.txt"
         ]
       }
     },
