@@ -151,6 +151,7 @@ export default {
   "Member removed.": "メンバーを外しました。",
   "Members": "メンバー",
   "Message": "メッセージ",
+  "Messages are not encrypted — never write passwords or keys here.": "メッセージは暗号化されません — パスワードやキーはここに絶対に書かないでください。",
   "Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.": "メッセージは Arcade サイトに保存され、暗号化されません — パスワードやキーは絶対に書かないでください。",
   "Mobile development": "モバイル開発",
   "More": "その他",

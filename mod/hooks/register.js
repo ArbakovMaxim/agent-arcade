@@ -3814,7 +3814,13 @@ export function register(on) {
             gap,
             ...(olderShown() ? [Button({ key: 'arcade-chat-older', label: ch.older ? 'Загружаю…' : 'Раньше', onPress: () => olderMessages($) })] : []),
             ...(ch.opening ? [dim('Загружаю переписку…')] : about && !ch.messages.length ? [dim('Здесь пока пусто — напиши первым.')] : ch.messages.slice(-ch.shown).map(line)),
-            ...(about ? [gap, Input({ key: `arcade-chat-input-${ch.field}`, label: 'Сообщение', autoFocus: true, submitLabel: tr('Отправить', lang), onSubmit: (value) => sendMessage($, value) })] : []),
+            ...(about
+              ? [
+                  gap,
+                  Input({ key: `arcade-chat-input-${ch.field}`, label: 'Сообщение', autoFocus: true, submitLabel: tr('Отправить', lang), onSubmit: (value) => sendMessage($, value) }),
+                  dim('Переписка не шифруется — не пиши сюда пароли и ключи.'),
+                ]
+              : []),
             ...(ch.busy === 'send' ? [dim('Отправляю…')] : note),
             gap,
             pageButton,

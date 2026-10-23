@@ -261,7 +261,7 @@
     const left = el('span', { className: 'left' })
     const sendButton = button(T('Отправить'), () => send(), 'main')
     Object.assign(parts, { input, send: sendButton, left })
-    talk.append(el('div', { className: 'compose' }, [input, left, sendButton]))
+    talk.append(el('div', { className: 'compose' }, [input, left, sendButton]), el('div', { className: 'plain', textContent: T('Переписка не шифруется — не пиши сюда пароли и ключи.') }))
     counter()
   }
 

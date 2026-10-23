@@ -151,6 +151,7 @@ export default {
   "Member removed.": "已移除成员。",
   "Members": "成员",
   "Message": "消息",
+  "Messages are not encrypted — never write passwords or keys here.": "消息不加密 — 切勿在这里写密码或密钥。",
   "Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.": "消息保存在 Arcade 网站上，且不加密 — 切勿在其中写密码或密钥。",
   "Mobile development": "移动开发",
   "More": "更多",

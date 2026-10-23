@@ -1674,6 +1674,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(text.children[1].rel, 'noopener noreferrer')
   assert.equal(text.children[2], '. и javascript:alert(1)')
   assert.equal(page.all('more').length, 0, 'вся история уже здесь')
+  assert.equal(page.one('plain').textContent, 'Переписка не шифруется — не пиши сюда пароли и ключи.')
 
   // Отправка: Enter, текст — на сайт, сообщение — в переписке, поле пустое
   await page.send('  салют  ')

@@ -1,5 +1,10 @@
 # Changelog · Список изменений
 
+## 0.25.1 — в открытом чате под полем ввода и на странице чатов `/chat` — строка, что переписка не шифруется; в английском меню Desktop подпись под «Войти через GitHub» больше не остаётся по-русски · an open chat and the `/chat` page say under the message box that messages are not encrypted; in the English Desktop menu the note under “Sign in with GitHub” is no longer left in Russian
+
+- Under the message box, in the Arcade pane and on the site page: “Messages are not encrypted — never write passwords or keys here.”; the chat list already said so · под полем для сообщения — в окне Arcade и на странице сайта: «Переписка не шифруется — не пиши сюда пароли и ключи.»; в списке чатов это уже было
+- Desktop translates tile notes without their leading spaces, and the dictionary phrase with spaces was not found; now it is found either way, in every language · Desktop переводит подписи плиток без отступа в начале, и фраза словаря с отступом не находилась; теперь находится и так, на всех языках
+
 ## 0.25.0 — главное меню как у платформы: разделы «Играть», «Читать и слушать», «Смотреть», «Общение» и «Ещё» сворачиваются; «🔍 Найти» ищет сразу по играм, книгам, аудиокнигам и каналам Twitch; «★ Избранное» собирает то, что ты отметил звёздочкой; «🐞 Сообщить об ошибке» шлёт отчёт прямо автору Arcade · the main menu as a platform: the “Play”, “Read & listen”, “Watch”, “Social” and “More” sections fold; “🔍 Search” looks through games, books, audiobooks and Twitch channels at once; “★ Favorites” gathers what you starred; “🐞 Report a bug” sends a report straight to the author of Arcade
 
 - At the top, without a heading: “▶ Continue” the last game, then “🔍 Search” and “★ Favorites” · сверху, без заголовка: «▶ Продолжить» последнюю игру, за ней «🔍 Найти» и «★ Избранное»

@@ -2068,6 +2068,18 @@ test('английский интерфейс: главное меню без р
   await ui.unmount()
 })
 
+test('английский интерфейс в Desktop: описания плиток главного меню без русских букв', HEAVY, async ($, on) => {
+  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' } })
+  await start($)
+  await clock.advance(300)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  // Плитка переводит описание уже без отступа — фраза словаря с отступом должна находиться и так
+  const cyrillic = (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  expect(cyrillic).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'optional: the same settings on all your computers and your own @handle' })).toBeDefined()
+  await ui.unmount()
+})
+
 test('английские описания игр в меню мода: жанр и описание по-английски, и в запасном каталоге тоже', async ($, on) => {
   const site = JSON.parse(siteCatalog())
   site.games.thwaite.about_en = 'Missiles are falling on the town — shoot them down with fireworks while the houses still stand.'
@@ -4568,6 +4580,7 @@ test('чаты: список, переписка, отправка, новые �
   expect(await text('ready?')).toBeDefined()
   expect(await text('@octocat')).toBeDefined()
   expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Сообщение', submitLabel: 'Отправить' } })
+  expect(await text('Переписка не шифруется — не пиши сюда пароли и ключи.')).toBeDefined()
   // Отправить: без пробелов по краям; поле — новое
   const before = (await ui.find({ type: 'Input' }))!.key
   await write('  sure, chess at 8  ')

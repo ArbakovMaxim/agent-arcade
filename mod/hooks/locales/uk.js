@@ -151,6 +151,7 @@ export default {
   "Member removed.": "Учасника прибрано.",
   "Members": "Учасники",
   "Message": "Повідомлення",
+  "Messages are not encrypted — never write passwords or keys here.": "Листування не шифрується — не пиши сюди паролі й ключі.",
   "Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.": "Листування зберігається на сайті Arcade і не шифрується — не пиши туди паролі й ключі.",
   "Mobile development": "Мобільна розробка",
   "More": "Ще",
