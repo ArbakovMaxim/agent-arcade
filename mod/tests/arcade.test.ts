@@ -16,7 +16,7 @@ import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUr
 import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from '../hooks/chats.js'
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
-import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
+import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 
@@ -3915,7 +3915,7 @@ test('account.js: ответы сайта про вход и настройки,
   expect(restoreStamps({ lang: 5, wide: 'x', junk: 3, notify: -1, keys: 0 })).toEqual({ lang: 5 })
   expect(restoreStamps(null)).toEqual({})
   // Встреча: сайт новее — оттуда; здесь новее — туда; на сайте нет — туда; не менял здесь (нет отметки) — с сайта
-  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites'])
+  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites', 'hideOnline'])
   expect(
     syncPlan(
       { lang: 'ru', wide: true, notify: false, onDone: 'pause' },
@@ -4300,6 +4300,52 @@ test('account.js: друзья — адреса, счётчики в /api/me, о
   expect(parseFriends(null).error).toBe('down')
 })
 
+test('account.js: «в сети» и приглашения — адреса и ответы сайта', () => {
+  const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  expect([accountUrl('pulse'), accountUrl('invite'), accountUrl('answer')]).toEqual([`${SITE}/api/me/pulse`, `${SITE}/api/me/invite`, `${SITE}/api/me/invites/answer`])
+  // Комната настольной игры: 6–16 строчных латинских букв и цифр
+  expect(['abcdef', 'abcdef123456', 'a'.repeat(16)].every((r) => ROOM.test(r))).toBe(true)
+  expect(['abcde', 'a'.repeat(17), 'ABCDEF', 'abc-def', 'abcdef\n'].some((r) => ROOM.test(r))).toBe(false)
+  // Отметка: друзья в сети — номера; приглашения — с ником, игрой и временем как надо, комната — только как надо
+  const chess = { from: '12', handle: 'asker_one', game: 'chess', room: 'abcdef123456', at: 5 }
+  const freedm = { from: 7, handle: 'octo_pal', game: 'freedm', at: 4 }
+  const broken = [
+    { ...chess, from: 'x' },
+    { ...chess, handle: 'Bad Name' },
+    { ...chess, game: 'Chess!' },
+    { ...chess, game: 5 },
+    { ...chess, room: 'ab' },
+    { ...chess, room: 7 },
+    { ...chess, at: 'now' },
+    null,
+  ]
+  expect(parsePulse(reply(200, { online: ['7', 12, 'x', null], invites: [chess, freedm, ...broken], unread: 3, requests: 2 }))).toEqual({
+    online: ['7', '12'],
+    invites: [chess, { from: '7', handle: 'octo_pal', game: 'freedm', at: 4 }],
+    unread: 3,
+    requests: 2,
+    error: '',
+  })
+  expect(parsePulse(reply(200, { online: Array.from({ length: 300 }, (_, k) => String(k)), invites: Array.from({ length: 80 }, () => chess), unread: -1, requests: 'x' }))).toMatchObject({ unread: 0, requests: 0 })
+  expect(parsePulse(reply(200, { online: Array.from({ length: 300 }, (_, k) => String(k)), invites: [] })).online.length).toBe(200)
+  expect(parsePulse(reply(200, { online: [], invites: Array.from({ length: 80 }, () => chess) })).invites.length).toBe(50)
+  // Сайт без «в сети» (404) и ответ не того вида — 'down'; вход не действует — 'auth'
+  const none = { online: [], invites: [], unread: 0, requests: 0 }
+  expect(parsePulse(reply(404, 'not found'))).toEqual({ ...none, error: 'down' })
+  expect(parsePulse(reply(200, { online: [] }))).toEqual({ ...none, error: 'down' })
+  expect(parsePulse(reply(401, { error: 'auth' }))).toEqual({ ...none, error: 'auth' })
+  expect(parsePulse(null).error).toBe('down')
+  // Позвать и ответить: не друг, нет ника, часто, вход не действует
+  expect(parseInvite(reply(200, { ok: true }))).toEqual({ error: '' })
+  expect(parseInvite(reply(403, { error: 'friend' }))).toEqual({ error: 'friend' })
+  expect(parseInvite(reply(409, { error: 'nohandle' }))).toEqual({ error: 'nohandle' })
+  expect(parseInvite(reply(409, { error: 'other' }))).toEqual({ error: 'down' })
+  expect(parseInvite(reply(429, { error: 'often' }))).toEqual({ error: 'often' })
+  expect(parseInvite(reply(401, { error: 'auth' }))).toEqual({ error: 'auth' })
+  expect(parseInvite(reply(400, { error: 'invalid' }))).toEqual({ error: 'down' })
+  expect(parseInvite(null)).toEqual({ error: 'down' })
+})
+
 test('друзья без входа: плитка видна, экран зовёт войти через GitHub, сайт не спрашиваем', HEAVY, async ($, on) => {
   const { api } = accountSite()
   const { clock, requests } = stubs(on, { env: WINDOWS, api })
@@ -4499,6 +4545,182 @@ test('друзья по-английски: экран, заметки и пли
   expect(await ui.find({ key: 'arcade-friends-add' })).toMatchObject({ props: { label: 'Add a friend', placeholder: "your friend's @handle, exactly" } })
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-fr-remove' })
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+// --- В сети и приглашения в игру ---
+
+// Сайт с друзьями octocat, отметкой «в сети» и приглашениями: live.online — кто из друзей в сети, live.invites — кто
+// зовёт сыграть; live.pulse и live.invite — чем сайт отвечает (404 — сайт без «в сети», 403 — уже не друг). Ответ на
+// приглашение сайт запоминает, но из отметки не убирает: мод не должен показать его снова
+function onlineSite() {
+  const { api: friends, circle, state } = friendsSite()
+  const live = { online: ['7'], invites: [] as any[], pulse: 200, invite: 200 }
+  const api = (path: string, request: any) => {
+    if (path === 'api/me/pulse') return live.pulse === 404 ? undefined : { json: { online: live.online, invites: live.invites, unread: 0, requests: circle.incoming.length } }
+    if (path === 'api/me/invite') return live.invite === 200 ? { json: { ok: true } } : { status: live.invite, json: { error: 'friend' } }
+    if (path === 'api/me/invites/answer') return { json: { ok: true } }
+    if (path === 'api/me/chats/unread') return { json: { unread: 4 } }
+    return friends(path, request)
+  }
+  return { api, circle, state, live }
+}
+
+// Каталог с сетевыми играми: шахматы (комната на двоих) и FreeDM (общее лобби deathmatch); игры Денди позвать нельзя
+function netCatalog() {
+  const site = JSON.parse(siteCatalog())
+  site.consoles.push({ id: 'board', title: 'Настольные' }, { id: 'doom', title: 'Doom' })
+  site.games.chess = { console: 'board', kind: 'board', board: 'chess', title: 'Шахматы', genre: 'стратегия', about: 'по сети', keys: '…' }
+  const sha = 'a'.repeat(64)
+  site.games.freedm = { console: 'doom', net: 'doom', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  return JSON.stringify(site)
+}
+const CHESS_INVITE = { from: '12', handle: 'asker_one', game: 'chess', room: 'abcdef123456', at: 1 }
+
+test('в сети: отметка по таймеру, друг в сети, позвать в шахматы и FreeDM, принять, «Не сейчас», прятаться', HEAVY, async ($, on) => {
+  const { api, circle, live } = onlineSite()
+  circle.incoming = []
+  live.invites = [CHESS_INVITE]
+  const { clock, requests, launches, toasts, saved } = stubs(on, { env: WINDOWS, site: netCatalog(), api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string | RegExp) => ui.find({ type: 'Text', text: t })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const pulses = () => sent(requests, 'api/me/pulse', 'POST')
+  const me = `#me=${ticketOf('octocat')}`
+  // Отметка — по таймеру, пока меню открыто; новое приглашение — тостом и сверху главного меню
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(pulses().map((r) => r.body)).toEqual([{}])
+  expect(pulses()[0].headers.Authorization).toBe(`Bearer ${TOKEN}`)
+  expect(toasts).toContain('@asker_one зовёт сыграть: Шахматы')
+  expect(await text('@asker_one зовёт сыграть: Шахматы')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-inv-accept-12' })).toMatchObject({ props: { label: 'Принять' } })
+  expect(await ui.find({ key: 'arcade-inv-later-12' })).toMatchObject({ props: { label: 'Не сейчас' } })
+  expect(await text('  друзей: 1 · в сети: 1')).toBeDefined()
+  // Следующая отметка — не раньше чем через 30 секунд; тост — один раз
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(pulses().length).toBe(1)
+  // Друзья: кто в сети — так и написано, у друга — «Позвать»; приглашение — и здесь
+  await press('arcade-menu-friends')
+  expect(await text('в сети')).toBeDefined()
+  expect(await text('Зовут сыграть')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fr-invite-7' })).toMatchObject({ props: { label: 'Позвать' } })
+  // Позвать: в какие игры — настольные и Doom; Денди — нет
+  await press('arcade-fr-invite-7')
+  expect(await text('Во что позвать @octo_pal?')).toBeDefined()
+  expect(await text('Друг увидит приглашение в Arcade, когда меню открыто, — оно действует 10 минут. Игра откроется и у тебя.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-inv-game-chess' })).toMatchObject({ props: { label: 'Шахматы' } })
+  expect(await ui.find({ key: 'arcade-inv-game-freedm' })).toMatchObject({ props: { label: 'FreeDM' } })
+  expect(await ui.find({ key: 'arcade-inv-game-thwaite' })).toBeUndefined()
+  expect(await text('  своя комната на двоих')).toBeDefined()
+  expect(await text('  общее лобби deathmatch')).toBeDefined()
+  // Шахматы: новая комната — и другу, и себе в окно; обратно на экран друзей с заметкой
+  await press('arcade-inv-game-chess')
+  const invite = sent(requests, 'api/me/invite', 'POST').at(-1)
+  expect(invite.body).toMatchObject({ to: '7', game: 'chess' })
+  expect(invite.body.room).toMatch(/^[0-9a-f]{12}$/)
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess&room=${invite.body.room}${me}`)
+  expect(await text('Приглашение для @octo_pal отправлено: Шахматы. Оно действует 10 минут.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-friends-add' })).toBeDefined()
+  // FreeDM: лобби общее — без комнаты
+  await press('arcade-fr-invite-7')
+  await press('arcade-inv-game-freedm')
+  expect(sent(requests, 'api/me/invite', 'POST').at(-1).body).toEqual({ to: '7', game: 'freedm' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=freedm`)
+  // Друг удалил из друзей — заметка, окно не открываем
+  live.invite = 403
+  const opened = launches.length
+  await press('arcade-fr-invite-7')
+  await press('arcade-inv-game-chess')
+  expect(await text('@octo_pal больше не в друзьях.')).toBeDefined()
+  expect(launches.length).toBe(opened)
+  await press('arcade-back')
+  // Принять: сайт забывает приглашение, игра открывается в комнате друга; приглашение больше не показываем
+  await press('arcade-inv-accept-12')
+  expect(sent(requests, 'api/me/invites/answer', 'POST').at(-1).body).toEqual({ from: '12' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=chess&room=abcdef123456${me}`)
+  expect(await ui.find({ key: 'arcade-inv-accept-12' })).toBeUndefined()
+  // Новое приглашение — со следующей отметкой; принятое не возвращается, «Не сейчас» — убирает без окна
+  live.invites = [{ from: '7', handle: 'octo_pal', game: 'freedm', at: 2 }, CHESS_INVITE]
+  await clock.advance(35_000)
+  await clock.settle()
+  expect(toasts.filter((t) => t.startsWith('@asker_one'))).toEqual(['@asker_one зовёт сыграть: Шахматы'])
+  expect(toasts).toContain('@octo_pal зовёт сыграть: FreeDM')
+  expect(await ui.find({ key: 'arcade-inv-accept-12' })).toBeUndefined()
+  const before = launches.length
+  await press('arcade-inv-later-7')
+  expect(sent(requests, 'api/me/invites/answer', 'POST').at(-1).body).toEqual({ from: '7' })
+  expect(launches.length).toBe(before)
+  expect(await ui.find({ key: 'arcade-inv-later-7' })).toBeUndefined()
+  expect(await text('Зовут сыграть')).toBeUndefined()
+  // Прятаться: настройка запоминается, отметка уходит сразу и с hidden
+  expect(await ui.find({ key: 'arcade-fr-hide' })).toMatchObject({ props: { label: 'Показывать друзьям, что я в сети: да' } })
+  await clock.advance(5_000)
+  await press('arcade-fr-hide')
+  expect(await ui.find({ key: 'arcade-fr-hide' })).toMatchObject({ props: { label: 'Показывать друзьям, что я в сети: нет' } })
+  expect(saved.get('hideOnline')).toBe(true)
+  expect(pulses().at(-1).body).toEqual({ hidden: true })
+  // Сайт без «в сети»: непрочитанные для плитки «Чаты» — как раньше
+  const unread = sent(requests, 'api/me/chats/unread', 'GET').length
+  live.pulse = 404
+  await clock.advance(35_000)
+  await clock.settle()
+  expect(sent(requests, 'api/me/chats/unread', 'GET').length).toBe(unread + 1)
+  await ui.unmount()
+})
+
+test('в сети без окна браузера: «Позвать» нет, у приглашения — подсказка про окно и «Не сейчас»', HEAVY, async ($, on) => {
+  const { api, live } = onlineSite()
+  live.invites = [CHESS_INVITE]
+  const { clock } = stubs(on, { env: WINDOWS, site: netCatalog(), api, stored: { account: { token: TOKEN, user: OCTO }, opener: { opener: 'pane' } } })
+  await start($)
+  await clock.advance(8_200)
+  await clock.settle()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '@asker_one зовёт сыграть: Шахматы' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-inv-accept-12' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Сетевые игры открываются в окне браузера — выбери его в настройках.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-inv-later-12' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-friends' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'в сети' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fr-invite-7' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('в сети по-английски: друзья, выбор игры и приглашение без русских букв', HEAVY, async ($, on) => {
+  const { api, live } = onlineSite()
+  live.invites = [CHESS_INVITE, { from: '7', handle: 'octo_pal', game: 'freedm', at: 2 }]
+  const { clock, toasts } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, site: netCatalog(), api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(toasts).toContain('@asker_one invites you to play: Chess')
+  expect(await ui.find({ type: 'Text', text: '@asker_one invites you to play: Chess' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'more invitations: 1 — in “Friends”' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-menu-friends' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'online' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fr-hide' })).toMatchObject({ props: { label: 'Show friends that I am online: on' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-fr-invite-7' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'What to play with @octo_pal?' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-inv-game-freedm' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Invitation sent to @octo_pal: FreeDM. It is valid for 10 minutes.' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })

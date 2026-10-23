@@ -6,7 +6,8 @@
 // client secret сайту не нужен. Почты и доступа к репозиториям Arcade не просит: scope пустой.
 // Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
 // аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js),
-// список его общих досок проектов (сами доски — в worker/desk.js).
+// список его общих досок проектов (сами доски — в worker/desk.js) и приглашения в игру от друзей; экземпляр 'online' —
+// кто сейчас в сети.
 import { sign, signed } from './discover.js'
 import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName } from './chat.js'
 import { addReport, admins, askReports, cleanReport } from './reports.js'
@@ -61,6 +62,15 @@ export const MAX_OWNED = 3
 export const BOARDS_DAILY = 10
 export const SYNCS_PER_MINUTE = 60
 export const MAX_BOARDS = 100
+// В сети и приглашения в игру: мод, пока открыто меню, отмечается раз в полминуты и узнаёт, кто из друзей в сети и кто
+// зовёт его в игру. Друг в сети, если отмечался за последние ONLINE_MS; отметок в минуту — не больше PULSES_PER_MINUTE.
+// Приглашение живёт INVITE_MS, от каждого друга — последнее; звать — не чаще INVITES_PER_MINUTE
+export const ONLINE_MS = 90_000
+export const PULSES_PER_MINUTE = 12
+export const INVITE_MS = 10 * MINUTE
+export const INVITES_PER_MINUTE = 10
+const GAME_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
+const ROOM = /^[a-z0-9]{6,16}$/
 const MAX_SOCKETS = 5 // открытых страниц чата у человека
 const CHAT_TICKET = /^(\d{1,20})\.(\d{10})\.([0-9a-f]{12})\.([A-Za-z0-9_-]{22})$/
 const TICKET_PATHS = new Set(['/friends', '/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/socket'])
@@ -104,6 +114,9 @@ const ROUTES = {
   'POST /api/me/boards/new': ['user', '/boardnew'],
   'POST /api/me/boards/members': ['user', '/boardmembers'],
   'POST /api/me/boards/delete': ['user', '/boarddelete'],
+  'POST /api/me/pulse': ['user', '/pulse'],
+  'POST /api/me/invite': ['user', '/invite'],
+  'POST /api/me/invites/answer': ['user', '/answer'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
@@ -164,6 +177,12 @@ async function readBody(request, limit) {
 // доски нет или тебя на ней нет ('gone'), 409 — своих общих досок уже MAX_OWNED ('many'), на доске много людей
 // ('full') или нет своего ника ('nohandle'), 413 — слишком большая пачка правок, 429 — слишком часто ('often'), 503 —
 // доски выключены ('off')
+// В сети и приглашения: POST /api/me/pulse { hidden? } → { online, invites, unread, requests } — отметка «в сети»
+// (hidden: true — не показываться друзьям, но видеть их) и что нового: номера друзей в сети, приглашения в игру
+// { from, handle, game, room?, at } (новые сверху), непрочитанные сообщения и заявки в друзья; POST /api/me/invite
+// { to, game, room? } → { ok } — позвать друга в сетевую игру (room — код комнаты настольной игры; у Doom лобби общее);
+// POST /api/me/invites/answer { from } → { ok } — приглашение принято или отклонено, оно уходит. 403 — не друг
+// ('friend'), 409 — нет своего ника ('nohandle'), 429 — слишком часто ('often')
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
@@ -253,6 +272,7 @@ const without = (map, id) => Object.fromEntries(Object.entries(map).filter(([key
 const chatPayload = (id, until, prefix) => `chat|${id}|${until}|${prefix}`
 const linkPayload = (id, until, prefix) => `link|${id}|${until}|${prefix}`
 const unreadOf = (chats) => Object.values(chats).reduce((sum, c) => sum + Math.max(0, c.last - c.read), 0)
+const gameInvite = (game, room) => typeof game === 'string' && GAME_ID.test(game) && (room === undefined || (typeof room === 'string' && ROOM.test(room)))
 
 // Последнее сообщение для списка чатов: начало текста одной строкой или служебное целиком
 function preview(msg) {
@@ -303,7 +323,8 @@ function randomKey() {
 // человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
 // ключей сессии), settings, handle, seen — когда человек последний раз заходил, circle — его друзей и заявки, chats —
 // его чаты и made — когда он создавал группы за последние сутки, boards — его общие доски и boardsMade — когда он их
-// заводил. Отчёты об ошибках — в своём объекте (worker/reports.js)
+// заводил, invites — приглашения в игру от друзей. Экземпляр 'online' помнит отметки «в сети» только в памяти.
+// Отчёты об ошибках — в своём объекте (worker/reports.js)
 export class Account {
   constructor(ctx, env) {
     this.ctx = ctx
@@ -311,6 +332,10 @@ export class Account {
     this.ips = new Map()
     this.sends = [] // когда человек писал в чаты за последнюю минуту
     this.syncs = [] // когда он сверял доски за последнюю минуту
+    this.pulses = [] // когда мод отмечался «в сети» за последнюю минуту
+    this.calls = [] // когда он звал друзей в игру за последнюю минуту
+    this.seen = new Map() // экземпляр 'online': номер → { at, friends } — когда отмечался и кого числит в друзьях
+    this.pruned = 0
     // На 'ping' страницы чата отвечает сама платформа: объект ради этого не просыпается
     if (typeof WebSocketRequestResponsePair === 'function') ctx.setWebSocketAutoResponse?.(new WebSocketRequestResponsePair('ping', 'pong'))
   }
@@ -337,6 +362,9 @@ export class Account {
       // От досок: доска поменялась, доски у него больше нет
       if (path === '/boardnote') return await this.boardnote(await request.json())
       if (path === '/boardgone') return await this.boardgone(await request.json())
+      // Отметка «в сети» (в экземпляре 'online') и приглашение в игру от друга
+      if (path === '/online') return this.online(await request.json())
+      if (path === '/invited') return await this.invited(await request.json())
       // С билетом чата — только чаты и список друзей, с кодом ссылки — только обменять его на билет
       const who = await this.session(request.headers.get('Authorization'))
       if (!who || (who.ticket && !TICKET_PATHS.has(path)) || (who.link && path !== '/chatticket')) return Response.json({ error: 'auth' }, { status: 401 })
@@ -369,6 +397,9 @@ export class Account {
       if (path === '/boardnew') return await this.makeBoard(await request.text())
       if (path === '/boardmembers') return await this.boardMembers(await request.text())
       if (path === '/boarddelete') return await this.deleteBoard(await request.text())
+      if (path === '/pulse') return await this.pulse(await request.text())
+      if (path === '/invite') return await this.invite(await request.text())
+      if (path === '/answer') return await this.answer(await request.text())
       return Response.json({ error: 'not found' }, { status: 404 })
     } catch (error) {
       if (error instanceof LimitError) return Response.json({ error: 'limit' }, { status: 429 })
@@ -1218,6 +1249,96 @@ export class Account {
     }
     if (!answer.ok) throw new Error(`desk: ${answer.status}`)
     await this.loseBoard(board)
+    return Response.json({ ok: true })
+  }
+
+  // --- В сети и приглашения в игру -------------------------------------------------------------------------------
+  // Экземпляр 'online': отметка человека id с его друзьями. Отметки живут только в памяти: объект уснул — они пропали и
+  // за полминуты соберутся снова. Друг в сети, если отмечался за последние ONLINE_MS и сам числит id в друзьях: дружба
+  // взаимная, и тот, кто удалил человека, его больше не видит. hidden — сам не показывается, но других видит
+  online({ id, hidden, friends }) {
+    if (typeof id !== 'string' || !ACCOUNT_ID.test(id) || !Array.isArray(friends) || friends.length > MAX_FRIENDS || !friends.every((other) => typeof other === 'string')) return refuse('bad request', 400)
+    const now = Date.now()
+    if (now - this.pruned >= ONLINE_MS) {
+      for (const [other, mark] of this.seen) if (now - mark.at >= ONLINE_MS) this.seen.delete(other)
+      this.pruned = now
+    }
+    if (hidden === true) this.seen.delete(id)
+    else this.seen.set(id, { at: now, friends: new Set(friends) })
+    const online = friends.filter((other) => {
+      const mark = this.seen.get(other)
+      return mark && now - mark.at < ONLINE_MS && mark.friends.has(id)
+    })
+    return Response.json({ online })
+  }
+
+  // Приглашения человеку — invites: { от кого: { handle, game, room?, at } }; старше INVITE_MS — забываются
+  async invites(now) {
+    const all = (await this.ctx.storage.get('invites')) ?? {}
+    const live = Object.fromEntries(Object.entries(all).filter(([, invite]) => now - invite.at < INVITE_MS))
+    if (Object.keys(live).length < Object.keys(all).length) await this.ctx.storage.put('invites', live)
+    return live
+  }
+
+  // Отметка мода: человек в сети (или прячется). Ответ — кто из друзей в сети, кто из них зовёт в игру, сколько
+  // непрочитанных сообщений и заявок в друзья. Без друзей экземпляр 'online' не спрашиваем: показываться некому
+  async pulse(text) {
+    const now = Date.now()
+    this.pulses = this.pulses.filter((at) => now - at < MINUTE)
+    if (this.pulses.length >= PULSES_PER_MINUTE) return refuse('often', 429)
+    this.pulses.push(now)
+    const circle = await this.circle()
+    const friends = Object.keys(circle.friends)
+    let online = []
+    if (friends.length) {
+      const space = this.env.ACCOUNT
+      const body = JSON.stringify({ id: await this.myId(), hidden: parsed(text).hidden === true, friends })
+      const answer = await space.get(space.idFromName('online')).fetch(new Request('https://account/online', { method: 'POST', body }))
+      if (!answer.ok) throw new Error(`online: ${answer.status}`)
+      online = (await answer.json()).online ?? []
+    }
+    const invites = Object.entries(await this.invites(now))
+      .filter(([from]) => circle.friends[from])
+      .sort((a, b) => b[1].at - a[1].at)
+      .map(([from, invite]) => ({ from, ...invite }))
+    const requests = Object.keys(circle.incoming).filter((other) => !circle.friends[other]).length
+    return Response.json({ online, invites, unread: unreadOf(await this.chats()), requests })
+  }
+
+  // Позвать друга в сетевую игру: game — игра каталога, room — код комнаты настольной игры (у Doom лобби общее, кода
+  // нет). Нужен свой ник: по нему друг видит, кто зовёт
+  async invite(text) {
+    const { to, game, room } = parsed(text)
+    if (typeof to !== 'string' || !ACCOUNT_ID.test(to) || !gameInvite(game, room)) return refuse('bad request', 400)
+    const handle = await this.ctx.storage.get('handle')
+    if (!handle) return refuse('nohandle', 409)
+    if (!(await this.circle()).friends[to]) return refuse('friend', 403)
+    const now = Date.now()
+    this.calls = this.calls.filter((at) => now - at < MINUTE)
+    if (this.calls.length >= INVITES_PER_MINUTE) return refuse('often', 429)
+    this.calls.push(now)
+    const answer = await this.person(to, '/invited', { id: await this.myId(), handle, game, ...(room ? { room } : {}) })
+    if (answer.status === 403 || answer.status === 404) return refuse('friend', 403)
+    if (!answer.ok) throw new Error(`friend: ${answer.status}`)
+    return Response.json({ ok: true })
+  }
+
+  // Приглашение от друга id: от каждого друга — последнее. Не друг или аккаунта уже нет — отказ, ничего не записываем
+  async invited({ id, handle, game, room }) {
+    if (!(await this.myId())) return refuse('nobody', 404)
+    if (typeof id !== 'string' || !(await this.circle()).friends[id]) return refuse('friend', 403)
+    if (typeof handle !== 'string' || !HANDLE.test(handle) || !gameInvite(game, room)) return refuse('bad request', 400)
+    const now = Date.now()
+    await this.ctx.storage.put('invites', { ...(await this.invites(now)), [id]: { handle, game, ...(room ? { room } : {}), at: now } })
+    return Response.json({ ok: true })
+  }
+
+  // Ответ на приглашение — принял или «не сейчас»: оно уходит
+  async answer(text) {
+    const { from } = parsed(text)
+    if (typeof from !== 'string' || !ACCOUNT_ID.test(from)) return refuse('bad request', 400)
+    const invites = await this.invites(Date.now())
+    if (invites[from]) await this.ctx.storage.put('invites', without(invites, from))
     return Response.json({ ok: true })
   }
 
