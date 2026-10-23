@@ -26,6 +26,13 @@ const status = document.getElementById('status')
 const bar = document.querySelector('#bar > div')
 const mb = (bytes) => Math.round(bytes / 1048576)
 
+// Движок (SDL) пишет в заголовок страницы своё «ioquake3» — при старте и на каждом vid_restart. Возвращаем
+// имя из <title>, как только его сменили, чтобы вкладка и окно Arcade звались OpenArena
+const TITLE = document.title
+new MutationObserver(() => {
+  if (document.title !== TITLE) document.title = TITLE
+}).observe(document.querySelector('title'), { childList: true, characterData: true, subtree: true })
+
 function failed(text) {
   loading.hidden = false
   loading.className = 'failed'
