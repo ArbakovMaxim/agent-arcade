@@ -5,11 +5,13 @@
 import { discover, verify } from './discover.js'
 import { twitch } from './twitch.js'
 import { account, chatSocket, ticketName } from './account.js'
+import { report } from './reports.js'
 
 export { Discover } from './discover.js'
 export { Twitch } from './twitch.js'
 export { Account } from './account.js'
 export { Chat } from './chat.js'
+export { Reports } from './reports.js'
 
 export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт
@@ -82,6 +84,8 @@ export default {
     if (url.pathname === '/api/twitch') return twitch(request, env, url)
     // Аккаунт: вход через GitHub по коду и настройки мода, общие для всех компьютеров человека
     if (url.pathname.startsWith('/api/auth/') || url.pathname === '/api/me' || url.pathname.startsWith('/api/me/')) return account(request, env, url)
+    // Отчёт об ошибке без входа; со входом — /api/me/report, список — только админам (worker/reports.js)
+    if (url.pathname === '/api/report') return report(request, env)
     // Кто сейчас ждёт в сети — для мода и окна: { doom: игроков в лобби, games: { номер игры: открытых комнат } }
     if (url.pathname === '/api/lobbies') return env.PRESENCE.get(env.PRESENCE.idFromName('all')).fetch('https://presence/get')
     // Сетевая игра EmulatorJS: список комнат игры и сокет — один Durable Object на игру

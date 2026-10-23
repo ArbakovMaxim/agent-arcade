@@ -715,6 +715,7 @@ try {
 {
   const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS } = await import('../worker/account.js')
   const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, dmId, cleanText, groupName } = await import('../worker/chat.js')
+  const { Reports, cleanReport, admins, MAX_REPORT, PER_SENDER_DAILY, DAILY, KEEP: REPORTS_KEEP } = await import('../worker/reports.js')
   const KEY = 'a'.repeat(43)
   assert.equal(sessionId(`Bearer 42.${KEY}`), '42')
   assert.equal(sessionId(`Bearer 42.${KEY}x`), null)
@@ -780,7 +781,7 @@ try {
   }
   const realNow = Date.now
   try {
-    // Хранилище на экземпляр: 'auth', gh:<номер> и чаты — chat:<чат>; у экземпляра Account — свои сокеты
+    // Хранилище на экземпляр: 'auth', gh:<номер>, чаты — chat:<чат> и отчёты — reports:all; у Account — свои сокеты
     const objects = new Map()
     const env = { GITHUB_CLIENT_ID: 'gh-client' }
     const instance = (name) => {
@@ -806,7 +807,8 @@ try {
         }
         const sockets = []
         const ctx = { storage, acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed) }
-        objects.set(name, { store, storage, sockets, object: name.startsWith('chat:') ? new Chat(ctx, env) : new Account(ctx, env) })
+        const Kind = name.startsWith('chat:') ? Chat : name.startsWith('reports:') ? Reports : Account
+        objects.set(name, { store, storage, sockets, object: new Kind(ctx, env) })
       }
       return objects.get(name).object
     }
@@ -1325,6 +1327,68 @@ try {
     assert.deepEqual(await say(dm97, 'Эй', t9), { status: 403, body: { error: 'friend' } })
     assert.deepEqual(Object.keys(objects.get(`chat:${allChat}`).store.get('meta').members), ['7', '9', '42'])
 
+    // Отчёты об ошибках (worker/reports.js): текст без управляющих знаков, приметы — только знакомого вида
+    assert.deepEqual(cleanReport({ text: '  Шашки\r\nзависли \u202e ', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' }), {
+      report: { text: 'Шашки\nзависли', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' },
+    })
+    assert.deepEqual(cleanReport({ text: 'x', version: '1.2', surface: 'web', lang: 'rus', os: 'bsd', from: { id: '1' } }), { report: { text: 'x' } }, 'подпись — не из тела')
+    assert.deepEqual([{ text: ' ' }, {}, null, { text: 5 }, { text: 'x'.repeat(MAX_REPORT + 1) }].map(cleanReport), [
+      { error: 'empty' }, { error: 'empty' }, { error: 'empty' }, { error: 'empty' }, { error: 'long' },
+    ])
+    assert.deepEqual([...admins({ ADMINS: '42, 7 x 9a,,' })], ['42', '7'])
+    assert.equal(admins({}).size, 0)
+    // Отчёты выключены — 503; без входа — только POST
+    assert.deepEqual(await go('POST', '/api/report', { body: { text: 'x' } }), { status: 503, body: { error: 'off' } })
+    assert.deepEqual(await go('POST', '/api/me/report', { body: { text: 'x' }, token: t9 }), { status: 503, body: { error: 'off' } })
+    env.REPORTS = { idFromName: (name) => `reports:${name}`, get: instance }
+    const reportsStore = () => objects.get('reports:all').store
+    const anon = (text, ip, extra = {}) => go('POST', '/api/report', { body: { text, ...extra }, ip })
+    assert.deepEqual(await go('GET', '/api/report'), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await anon('   ', '10.5.0.1'), { status: 400, body: { error: 'empty' } })
+    assert.deepEqual(await go('POST', '/api/report', { body: 'x'.repeat(9000) }), { status: 413, body: { error: 'too big' } })
+    // Без входа — без подписи, даже если её прислали; адрес не хранится
+    assert.deepEqual(await anon('Doom не грузится', '10.5.0.1', { version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows', from: { id: '9', handle: 'fake' } }), { status: 200, body: { ok: true, id: 1 } })
+    const r1 = reportsStore().get('r:0000000001')
+    assert.deepEqual({ ...r1, at: 0 }, { id: 1, at: 0, text: 'Doom не грузится', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })
+    assert.ok(!saved().includes('10.5.0.1'))
+    // Со входом — подписан номером и ником; с билетом чата — нельзя
+    assert.deepEqual(await go('POST', '/api/me/report', { body: { text: 'Чат не открывается', surface: 'terminal' }, token: t42 }), { status: 200, body: { ok: true, id: 2 } })
+    assert.deepEqual(reportsStore().get('r:0000000002').from, p42)
+    assert.deepEqual(await go('POST', '/api/me/report', { body: { text: '' }, token: t9 }), { status: 400, body: { error: 'empty' } })
+    const ticket9 = (await go('POST', '/api/me/chats/ticket', { token: t9 })).body.ticket
+    assert.equal((await go('POST', '/api/me/report', { body: { text: 'x' }, auth: `Chat ${ticket9}` })).status, 401)
+    // Список и закрытие — только админам; кто не админ, не видит и роли
+    assert.deepEqual(await go('GET', '/api/me/reports', { token: t9 }), { status: 403, body: { error: 'admin' } })
+    assert.deepEqual(await go('POST', '/api/me/reports/close', { body: { id: 1 }, token: t9 }), { status: 403, body: { error: 'admin' } })
+    assert.equal((await go('GET', '/api/me', { token: t9 })).body.role, undefined)
+    env.ADMINS = '9'
+    assert.equal((await go('GET', '/api/me', { token: t9 })).body.role, 'admin')
+    assert.equal((await go('GET', '/api/me/reports', { auth: `Chat ${ticket9}` })).status, 401, 'билет чата — не для отчётов')
+    const listed = await go('GET', '/api/me/reports', { token: t9 })
+    assert.deepEqual([listed.status, listed.body.reports.map((r) => r.id), listed.body.open], [200, [2, 1], 2], 'новые сверху')
+    assert.deepEqual(await go('POST', '/api/me/reports/close', { body: { id: 'x' }, token: t9 }), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await go('POST', '/api/me/reports/close', { body: { id: 1 }, token: t9 }), { status: 200, body: { ok: true, open: 1 } })
+    assert.deepEqual(await go('POST', '/api/me/reports/close', { body: { id: 1 }, token: t9 }), { status: 404, body: { error: 'gone' } })
+    assert.equal(reportsStore().has('r:0000000001'), false, 'закрытый удалён')
+    // Лимиты суток: с одного адреса — PER_SENDER_DAILY, всем вместе — DAILY; наутро — заново
+    for (let i = 1; i < PER_SENDER_DAILY; i++) assert.equal((await anon(`ещё ${i}`, '10.5.0.1')).status, 200)
+    assert.deepEqual(await anon('ещё', '10.5.0.1'), { status: 429, body: { error: 'often' } })
+    assert.equal((await anon('другой адрес', '10.5.0.2')).status, 200)
+    for (let i = reportsStore().get('day').total; i < DAILY; i++) assert.equal((await anon('шквал', `10.6.${Math.floor(i / 200)}.${i % 200}`)).status, 200)
+    assert.deepEqual(await anon('ещё', '10.7.0.1'), { status: 503, body: { error: 'full' } })
+    const reportClock = Date.now
+    Date.now = () => reportClock() + 86_400_000
+    assert.equal((await anon('ещё', '10.5.0.1')).status, 200)
+    Date.now = reportClock
+    // Открытых хранится не больше KEEP: новый вытесняет самый старый
+    const spare = instance('reports:keep')
+    const spareStore = objects.get('reports:keep').store
+    spareStore.set('meta', { seq: REPORTS_KEEP, open: Array.from({ length: REPORTS_KEEP }, (_, i) => i + 1) })
+    spareStore.set('r:0000000001', { id: 1, at: 1, text: 'старый' })
+    const added = await spare.fetch(new Request('https://reports/add', { method: 'POST', body: JSON.stringify({ report: { text: 'новый' }, sender: 'ip:10.0.0.1' }) }))
+    assert.deepEqual(await added.json(), { ok: true, id: REPORTS_KEEP + 1 })
+    assert.deepEqual([spareStore.get('meta').open.length, spareStore.get('meta').open[0], spareStore.has('r:0000000001')], [REPORTS_KEEP, 2, false])
+
     // Удалить аккаунт — ничего не остаётся, а ник месяц держится, потом свободен
     assert.deepEqual(await go('DELETE', '/api/me', { token: tokens.at(-1) }), { status: 200, body: { ok: true } })
     assert.equal(account42.store.size, 0)
@@ -1334,6 +1398,8 @@ try {
     assert.deepEqual(objects.get('gh:7').store.get('circle').friends, {}, 'удалённый аккаунт уходит у друзей')
     assert.deepEqual([objects.get(`chat:${dm}`).store.size, listOf(7)[dm]], [0, undefined], 'чата двоих с ним больше нет')
     assert.deepEqual(Object.keys(objects.get(`chat:${allChat}`).store.get('meta').members), ['7', '9'], 'из групп он вышел')
+    assert.deepEqual([reportsStore().get('r:0000000002').text, reportsStore().get('r:0000000002').from], ['Чат не открывается', undefined], 'его отчёт — без подписи')
+    delete env.ADMINS
     assert.deepEqual(await nick('octo_more', other.body.token), { status: 409, body: { error: 'taken' } })
     Date.now = () => realNow() + 2 * 86_400_000 + 2 * HANDLE_HOLD_MS + 2000
     assert.equal((await nick('octo_more', other.body.token)).status, 200)

@@ -19,7 +19,7 @@
   // Twitch — свой Durable Object и секреты TWITCH_CLIENT_ID и TWITCH_CLIENT_SECRET (приложение на dev.twitch.tv);
   // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров.
   // Аккаунты — свой Durable Object Account: вход через GitHub по коду (worker/account.js); чаты друзей — Chat
-  // (worker/chat.js), по экземпляру на чат
+  // (worker/chat.js), по экземпляру на чат; отчёты об ошибках — Reports (worker/reports.js), один на сайт
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
@@ -30,7 +30,8 @@
       { "name": "DISCOVER", "class_name": "Discover" },
       { "name": "TWITCH", "class_name": "Twitch" },
       { "name": "ACCOUNT", "class_name": "Account" },
-      { "name": "CHAT", "class_name": "Chat" }
+      { "name": "CHAT", "class_name": "Chat" },
+      { "name": "REPORTS", "class_name": "Reports" }
     ]
   },
   "migrations": [
@@ -45,14 +46,17 @@
     // Аккаунты: вход через GitHub и настройки мода (worker/account.js)
     { "tag": "v7", "new_sqlite_classes": ["Account"] },
     // Чаты: переписка друзей один на один и в группах (worker/chat.js)
-    { "tag": "v8", "new_sqlite_classes": ["Chat"] }
+    { "tag": "v8", "new_sqlite_classes": ["Chat"] },
+    // Отчёты об ошибках из мода (worker/reports.js)
+    { "tag": "v9", "new_sqlite_classes": ["Reports"] }
   ],
-  // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет; client secret сайту не нужен
-  "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv" },
+  // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет; client secret сайту не нужен.
+  // ADMINS — номера GitHub тех, кто читает отчёты об ошибках (номер профиля публичный, не секрет)
+  "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv", "ADMINS": "92333314" },
   // Предварительные копии веток (wrangler preview): у каждой — свои Durable Objects, отдельно от рабочего сайта.
   // Код обращается к ним через env.ROOMS и т. д., поэтому привязки повторены здесь — иначе в копии ошибка 1101
   "previews": {
-    "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv" },
+    "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv", "ADMINS": "92333314" },
     "durable_objects": {
       "bindings": [
         { "name": "ROOMS", "class_name": "Room" },
@@ -63,7 +67,8 @@
         { "name": "DISCOVER", "class_name": "Discover" },
         { "name": "TWITCH", "class_name": "Twitch" },
         { "name": "ACCOUNT", "class_name": "Account" },
-        { "name": "CHAT", "class_name": "Chat" }
+        { "name": "CHAT", "class_name": "Chat" },
+        { "name": "REPORTS", "class_name": "Reports" }
       ]
     }
   }

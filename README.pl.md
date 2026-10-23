@@ -1,0 +1,206 @@
+<img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Logo Arcade" align="right">
+
+# Arcade — graj, czytaj, słuchaj i oglądaj, gdy twój agent Claude Code pracuje
+
+[English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · **Polski** · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
+
+> **Alfa (0.25).** Arcade działa i jest używany na co dzień, ale to wczesna wersja: coś może się zepsuć, a ustawienia lub katalog mogą zmieniać się między aktualizacjami. Zgłoszenia błędów są bardzo mile widziane — zobacz [Opinie](#opinie).
+
+Arcade to wtyczka do [Claude Code](https://claude.com/claude-code), która wypełnia czekanie, gdy twój agent pracuje. Kiedy agent jest zajęty dłużej niż 10 sekund, nad promptem pojawia się małe *„zagrasz?”*. Zagraj w coś — NES, Sega, PlayStation, Doom, szachy i więcej — przeczytaj książkę, posłuchaj audiobooka lub podcastu albo obejrzyj film na temat, nad którym pracuje agent. Arcade daje znać, gdy tylko agent skończy albo będzie potrzebować twojej zgody — nic cię nie ominie.
+
+Cały katalog jest darmowy: gry mają otwarte licencje, książki i audiobooki należą do domeny publicznej. Możesz też grać online z innymi osobami, które czekają na swoich agentów, i rozmawiać ze znajomymi.
+
+![„zagrasz?” nad promptem Claude Code po 11 sekundach pracy agenta](docs/images/prompt.png)
+
+## Funkcje
+
+- **Pojawia się sam.** Po 10 sekundach pracy agenta Arcade proponuje grę nad promptem; nigdy nie przejmuje fokusu, jeśli o to nie poprosisz.
+- **Wie, co robi agent.** Gdy agent skończy lub poprosi o zgodę, nad grą pojawia się baner — graj dalej, zatrzymaj grę albo wróć prosto do agenta (zachowanie wybierasz w ustawieniach).
+- **Jedno menu, pięć sekcji.** *Graj*, *Czytaj i słuchaj*, *Oglądaj*, *Społeczność* i *Więcej* — zwiń te, których nie potrzebujesz. Na górze: *Kontynuuj* ostatnią grę, *Szukaj* i *Ulubione*.
+- **61 darmowych gier** na NES (Dendy), Sega Mega Drive, Master System, PlayStation oraz karta *Gry* z grami zręcznościowymi, strzelankami, wyścigami, strategiami, przygodówkami i grami planszowymi.
+- **Czytaj i słuchaj.** 136 książek z domeny publicznej, audiobooki z LibriVox, świeże artykuły i odcinki podcastów na temat pracy agenta.
+- **Oglądaj.** Świeże filmy z YouTube na temat pracy agenta oraz Twitch: twoje własne kanały i transmisje na żywo o programowaniu, technologii, nauce i grach retro.
+- **NES i Flappy Arcade bezpośrednio w Claude Code** — w terminalu, w VS Code i w Claude Desktop. Wszystko inne otwiera się w oknie przeglądarki; w Claude Desktop domyślnie we wbudowanej przeglądarce Claude (strzelanki i tak otwierają się w oknie przeglądarki: wbudowana przeglądarka nie potrafi przechwycić myszy).
+- **Gra online.** Gry konsolowe we dwoje przez sieć, deathmatch i kooperacja w Doomie, szachy, go, warcaby i reversi z ludźmi lub z komputerem.
+- **„Kto czeka online”.** Arcade pokazuje w Claude Code, gdy ktoś czeka na partnera do gry — z przyciskiem *Dołącz*.
+- **Znajomi i czaty.** Opcjonalne logowanie przez GitHub utrzymuje te same ustawienia na wszystkich twoich komputerach i daje ci @nick; dodawaj znajomych po dokładnym nicku i rozmawiaj we dwoje lub w grupach.
+- **Wyszukiwanie i ulubione.** Jedno wyszukiwanie w grach, książkach, audiobookach i kanałach Twitcha, pogrupowane według sekcji i gatunku; oznacz cokolwiek gwiazdką ☆, aby trzymać to w *★ Ulubione*.
+- **Własne gry.** Dodaj ROM-y, które posiadasz; zostają na twoim komputerze.
+- **13 języków interfejsu:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — według języka systemu lub przeglądarki, domyślnie angielski.
+
+## Instalacja
+
+Wymaga **Claude Code 2.1.275 lub nowszego**.
+
+W terminalu dwa polecenia: dodaj marketplace Arcade (to repozytorium), a potem zainstaluj z niego wtyczkę:
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+Albo w sesji Claude Code:
+
+```
+/plugin marketplace add ArbakovMaxim/agent-arcade
+/plugin install arcade@agent-arcade
+```
+
+Wtyczka instaluje się dla wszystkich sesji i aplikacji. Rozszerzenie VS Code nie ma polecenia `/plugin` — zainstaluj ją z terminala, a rozszerzenie podchwyci ją w nowej rozmowie.
+
+**Aktualizacja:**
+
+```
+/plugin marketplace update agent-arcade
+/plugin update arcade@agent-arcade
+```
+
+**Odinstalowanie:** `/plugin uninstall arcade@agent-arcade`
+
+## Jak używać
+
+- **`/arcade`** otwiera menu w dowolnej chwili.
+- Gdy agent pracuje dłużej niż 10 sekund, nad promptem pojawia się *„zagrasz?”*: **`1`** — graj tutaj, w panelu; **`2`** — w oknie przeglądarki (tam, gdzie to możliwe); **`3`** — nie teraz.
+- Strzałki lub Tab do wyboru, Enter do otwarcia; mysz też działa. Sterowanie jest opisane pod każdą grą.
+- Gdy agent skończy lub czeka na zgodę, nad grą pojawia się baner: **Wróć do agenta** albo **Graj dalej**.
+
+### Menu
+
+| Sekcja | Co zawiera |
+|---|---|
+| *(na górze)* | **▶ Kontynuuj** ostatnią grę, **🔍 Szukaj**, **★ Ulubione** |
+| **Graj** | NES, Sega, Master System, PlayStation, Gry; *Dołącz*, gdy ktoś czeka online; **Moje gry** |
+| **Czytaj i słuchaj** | Książki, Audiobooki, Artykuły, Podcasty |
+| **Oglądaj** | YouTube, Twitch |
+| **Społeczność** | Znajomi, Czaty, **Zaloguj się przez GitHub** (albo **Konto** po zalogowaniu) |
+| **Więcej** | Okno Arcade, Ustawienia, 🌐 język, 🐞 Zgłoś błąd, ☕ Wesprzyj projekt |
+
+Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuje `▸` i liczbę kafelków w środku, a *Społeczność* także nowe wiadomości 💬 i zaproszenia do znajomych 👥. Arcade pamięta, które sekcje są zwinięte. Po zalogowaniu nagłówek menu pokazuje twój @nick z tymi samymi licznikami.
+
+**Wyszukiwanie** rusza od dwóch liter i znajduje tytuł, autora lub gatunek, bez względu na wielkość liter i znaki diakrytyczne. Wyniki są pogrupowane według sekcji i gatunku, na przykład *Książki · Kryminał* albo *Gry · Strzelanki*. Gwiazdka ☆ przy grze, książce lub audiobooku dodaje je do **★ Ulubione** (do 100), uporządkowanych według sekcji i gatunku, najnowsze na początku.
+
+### Gdzie co się otwiera
+
+| | NES (Dendy), Flappy Arcade | Sega, Master System, PlayStation, pozostałe Gry; książki, audiobooki, artykuły, podcasty, filmy |
+|---|---|---|
+| **Terminal** | w panelu (grafika pikselowa, gdzie terminal ją obsługuje, w przeciwnym razie bloki tekstu) | okno przeglądarki |
+| **VS Code** | w panelu | okno przeglądarki |
+| **Claude Desktop** | w panelu | wbudowana przeglądarka Claude lub okno przeglądarki (wybór w ustawieniach); strzelanki — zawsze okno przeglądarki |
+
+Okno przeglądarki to osobne okno Arcade (w domyślnej przeglądarce lub tej wybranej w ustawieniach), a nie karta między twoimi zwykłymi. Czaty działają bezpośrednio w panelu — w terminalu i w Desktop; *Otwórz jako stronę* otwiera je tak samo na stronie.
+
+## Katalog
+
+| Karta | Co zawiera |
+|---|---|
+| **NES (Dendy)** | 28 gier homebrew — platformówki, łamigłówki, strzelanki, wyścigi: Thwaite, Nova the Squirrel, Super Uwol, Lala the Magical i inne |
+| **Sega** | 11 gier na Mega Drive: Miniplanets, Tank Battle, Battle 4Tris, Pong i inne |
+| **Master System** | 4 gry: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
+| **PlayStation** | Hello Pong |
+| **Gry → Gry zręcznościowe** | Flappy Arcade — własna gra Arcade na jeden przycisk: działa bezpośrednio w panelu i w oknie Arcade; trasa dnia jest dla wszystkich ta sama, a twój rekord się zapisuje |
+| **Gry → Strzelanki** | Freedoom Phase 1 i 2 (wolne zamienniki Dooma), deathmatch FreeDM, Blasphemer (wolny zamiennik Heretica), deathmatch BlasphDM |
+| **Gry → Wyścigi** | HexGL — futurystyczne wyścigi antygrawitacyjne |
+| **Gry → Strategie** | OpenTTD — potentat transportowy (GPL-2.0); Micropolis — otwarty kod klasycznej gry o budowie miasta z 1989 roku, twoje miasto zapisuje się w przeglądarce (micropolisJS, GPL-3.0 z dodatkowymi warunkami i Micropolis Public Name License) |
+| **Gry → Przygodówki** | Cztery darmowe klasyczne przygodówki z lat 90. w ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress i Nippon Safes, Inc. — dane gier freeware, które wolno rozpowszechniać za zgodą; zapis w dowolnej chwili klawiszem F5 |
+| **Gry → Gry planszowe** | Szachy — z ludźmi lub komputerem (Stockfish, poziomy 1–10), online z zegarem; go na planszach 9×9, 13×13 i 19×19; warcaby rosyjskie, reversi; *Poddaj się* wszędzie |
+| **Książki** | 136 klasyków z domeny publicznej na półkach językowych, według gatunku: 98 po angielsku (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tołstoj i Dostojewski w przekładzie…) i 38 po ukraińsku (Franko, Łesia Ukrainka, Kociubynski, Kotlarewski, Kulisz…). Zakładka ustawia się sama: otwórz książkę ponownie, a wrócisz do miejsca, w którym była przerwa. Twoje własne pliki EPUB, FB2 i TXT otwierają się w oknie Arcade |
+| **Audiobooki** | Nagrania z domeny publicznej z LibriVox na półkach językowych, według gatunku: Oscar Wilde i O. Henry po angielsku, Gogol po ukraińsku. Odtwarzacz w oknie Arcade pamięta miejsce przerwania; twoje pliki MP3, M4A, M4B, OGG i Opus też się tam otwierają i zostają w twojej przeglądarce |
+| **Artykuły** | Świeże artykuły ze 106 wybranych anglojęzycznych blogów i serwisów — Simon Willison, InfoQ, The Cloudflare Blog, Ars Technica, Krebs on Security i inne |
+| **Podcasty** | Świeże odcinki 65 anglojęzycznych podcastów — Software Engineering Daily, Security Now, Talk Python To Me, Darknet Diaries i inne; każdy odcinek pamięta miejsce przerwania |
+| **YouTube** | Świeże filmy ze 153 wybranych kanałów w 24 dziedzinach, od AI, weba i DevOps po naukę, kosmos i retro-komputery |
+| **Twitch** | *Moje kanały* — dowolny kanał Twitcha po nazwie lub linku, najpierw te nadające na żywo; *Teraz na żywo* i *Cały katalog* — 26 wybranych kanałów anglojęzycznych, bez kanałów 18+; rejestracja niepotrzebna |
+
+Karta każdej gry prowadzi do jej licencji i kodu źródłowego.
+
+**Tematy.** Artykuły, Podcasty i YouTube zaczynają się od tematów: Haiku proponuje trzy związane z tym, nad czym pracuje agent, plus *Nowości i prezentacje*. W *Własny temat* możesz wpisać, co chcesz obejrzeć, przeczytać lub posłuchać, w dowolnym języku; pięć ostatnich tematów zostaje jako kafelki w *Moje tematy*.
+
+## Gra online
+
+- **Konsole.** Gry dla dwóch osób na NES, Sega, Master System i PlayStation mają przycisk **Online**: utwórz pokój lub dołącz do cudzego. Sterowanie jest synchronizowane klatka po klatce przez serwer Arcade.
+- **Doom.** **FreeDM** i **BlasphDM** to poczekalnie deathmatchu z 5-minutowymi rundami dla maksymalnie czterech graczy; **Freedoom** i **Blasphemer** oferują kooperację przez **Online**. Nowe osoby czekają na następną rundę — silnik nie pozwala dołączyć do trwającego meczu.
+- **Gry planszowe.** *Znajdź przeciwnika*, *Zaproś znajomego* linkiem albo *Z komputerem*. Partia zapisuje się na serwerze: wykonaj ruch, wróć do agenta, otwórz link później — plansza będzie taka, jaką zostawiono. Po zalogowaniu z @nickiem przeciwnik widzi go obok twojego koloru.
+- **Kto czeka.** Raz na minutę Arcade sprawdza, czy ktoś czeka na partnera do gry, i pokazuje to w Claude Code — na przykład *„zagrasz? Czekają online: FreeDM (1)”* — z przyciskiem **Dołącz** w menu.
+
+## Konto, znajomi i czaty
+
+Logowanie jest opcjonalne — bez niego wszystko inne działa jak dotąd.
+
+- **Zaloguj się przez GitHub** (w *Społeczność*): Arcade pokazuje kod, który wpisujesz na stronie GitHuba w swojej zwykłej przeglądarce. Arcade poznaje tylko nazwę i zdjęcie twojego profilu GitHub — bez e-maila, bez dostępu do repozytoriów.
+- **Synchronizacja.** Język, klawisze, powiadomienia, rozmiar panelu, co robić z grą, gdy agent da znać, twoje tematy, kanały Twitcha, ulubione, zwinięte sekcje i rekord we Flappy Arcade stają się takie same na wszystkich twoich komputerach. Własne gry, przeglądarka i tryb grafiki pozostają osobne dla każdego komputera.
+- **@nick.** Weź swoją nazwę z GitHuba jednym kliknięciem albo wymyśl własną: od 4 do 32 znaków — litery łacińskie, cyfry i `_`. Możesz ją zmieniać do 5 razy dziennie.
+- **Znajomi.** Dodaj znajomą osobę po dokładnym @nicku: zaproszenie zostaje przyjęte po drugiej stronie i pojawiacie się nawzajem na swoich listach. Podczas wpisywania nie ma podpowiedzi, więc nikt nie przejrzy, kto korzysta z Arcade. Odrzucanie i usuwanie odbywa się po cichu.
+- **Czaty.** We dwoje ze znajomą osobą, grupy znajomych albo grupa ze wszystkimi znajomymi jednym kliknięciem. Pisz bezpośrednio w panelu Arcade albo otwórz stronę czatów w serwisie. Wiadomości są przechowywane na stronie Arcade i nie są szyfrowane — nie wpisuj w nich haseł ani kluczy.
+- **Wyloguj się** zatrzymuje synchronizację na tym komputerze; **Usuń konto** (naciśnij dwa razy) sprawia, że strona zapomina twoje konto i ustawienia.
+
+## Własne gry
+
+- **`/arcade-add <plik>`** dodaje ROM na NES, Mega Drive lub Master System (do 4 MB). Wtyczka trzyma kopię w `~/.claude/arcade` i nigdzie jej nie wysyła.
+- **Płyty PlayStation i WAD-y Dooma** (na przykład własny `doom.wad`) — w oknie Arcade: **Otwórz własny plik**. Zostają tylko w tej przeglądarce.
+
+Dodawaj tylko pliki, do których masz prawa.
+
+## Ustawienia
+
+Otwórz **Ustawienia** w sekcji *Więcej* menu `/arcade`:
+
+- **Język** — jeden z 13 (także bezpośrednio w menu: 🌐).
+- **Otwieranie gier** — tutaj w panelu, w oknie przeglądarki lub w konkretnej przeglądarce; w Claude Desktop — we wbudowanej przeglądarce Claude lub w oknie przeglądarki.
+- **Grafika** (terminal) — piksele w terminalach, które wyświetlają obrazy (kitty, Ghostty, Rio), wszędzie indziej bloki tekstu.
+- **Rozmiar panelu** — zwykły lub na całą szerokość.
+- **Gdy agent skończy** — baner i dalsza gra, pauza z banerem albo od razu powrót do agenta.
+- **Gdy agent poprosi o zgodę** — te same trzy opcje.
+- **Powiadomienia podczas gry w oknie.**
+- **Test klawiszy i zmiana przypisań** (terminal).
+
+## Prywatność
+
+- Bez reklam, bez analityki, bez śledzenia. Gry, które przyszły z kodem analitycznym, zostały z niego oczyszczone (zobacz `NOTICE` każdej gry).
+- Twoje ROM-y, WAD-y, książki i pliki audio nigdy nie opuszczają twojego komputera ani przeglądarki.
+- Gra online idzie przez serwer Arcade na Cloudflare: wiadomości są przekazywane między graczami w pokoju i nie są przechowywane — z wyjątkiem ruchów w grach planszowych, które zostają, żeby można było wrócić; partia nieruszana przez miesiąc jest usuwana.
+- Tematy proponuje Haiku w twojej własnej sesji Claude Code; strona Arcade nigdy nie widzi twojej rozmowy — tylko krótkie angielskie zapytanie wyszukiwania, gdy używasz *Własny temat*. Adres artykułu stoi po `#`, więc nigdy nie trafia na serwer Arcade.
+- Po zalogowaniu strona przechowuje twoje zsynchronizowane ustawienia, ulubione, @nick, znajomych i czaty. Klucz sesji jest wysyłany tylko do strony Arcade.
+- Zgłoszenie błędu zawiera twój tekst, wersję Arcade, miejsce, w którym jest otwarty, język interfejsu i system operacyjny — nic więcej; bez logowania idzie bez podpisu, a strona nie przechowuje żadnego adresu.
+- Niektóre gry łączą się z internetem tylko na twoje życzenie — na przykład opcjonalna ankieta OpenTTD i jego przycisk *Online Content*.
+
+## Platformy i status
+
+Arcade jest w wersji **alfa** i w aktywnym rozwoju — zobacz [dziennik zmian](CHANGELOG.md).
+
+- Sprawdzony w praktyce na Windows, macOS i Linux.
+- Działa w terminalu, w VS Code i w Claude Desktop.
+
+## Licencje
+
+- **Gry:** każda gra ma własną wolną licencję (MIT, GPL, BSD, Apache, Creative Commons i inne) — tekst licencji i kod źródłowy leżą obok gry, a link do nich jest na jej karcie.
+- **Książki i audiobooki:** domena publiczna — książki angielskie z Project Gutenberg, ukraińskie z Wikiźródeł, nagrania z LibriVox; każda książka ma `LICENSE.txt` ze swoim źródłem.
+- **Emulatory i silniki:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) z rdzeniami, PrBoom (GPL-2.0), doom-wasm od Cloudflare i Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 z dodatkowymi warunkami), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — przeciwnik w szachach. Rdzeń Genesis Plus GX używany dla Sega i Master System jest przeznaczony tylko do użytku niekomercyjnego.
+- **Własny kod Arcade** (wtyczka i strona) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Możesz go swobodnie używać, badać i zmieniać. Jeśli rozpowszechniasz zmienioną wersję — albo uruchamiasz ją jako usługę online dla innych osób — musisz opublikować cały swój kod źródłowy na tej samej licencji i zachować informacje o prawach autorskich. Komponenty zewnętrzne zachowują własne licencje.
+
+## Wesprzyj projekt
+
+Arcade jest darmowy. Jeśli umila ci czekanie, możesz postawić projektowi kawę — całkowicie dobrowolnie: **[ko-fi.com/agentarcade](https://ko-fi.com/agentarcade)**. Ten sam link jest na dole menu `/arcade` (*☕ Wesprzyj projekt*) i w oknie Arcade. Nic w Arcade od tego nie zależy i nigdy nie przerywa to gry.
+
+## Opinie
+
+Coś nie działa? Najszybciej zgłosisz błąd bezpośrednio w Arcade: **Więcej → 🐞 Zgłoś błąd**. Opisz, co się zepsuło, a zgłoszenie trafi prosto do autora Arcade razem z wersją, środowiskiem, językiem i systemem operacyjnym.
+
+Możesz też otworzyć [issue](https://github.com/ArbakovMaxim/agent-arcade/issues) — z błędami i z pomysłami. Podaj system operacyjny, środowisko Claude Code (terminal, VS Code lub Desktop) i grę.
+
+Pull requesty są mile widziane. Wysyłając taki, zgadzasz się, że twój wkład będzie objęty licencją AGPL-3.0 i że autor może też oferować Arcade na innych warunkach (na przykład na licencji komercyjnej).
+
+## Dla programistów
+
+```
+mod/     wtyczka Claude Code (hooki, interfejs panelu, testy)
+site/    strona na Cloudflare Workers: katalog, okno Arcade, pokoje sieciowe, konta, znajomi, czaty, zgłoszenia błędów
+tools/   narzędzia do budowania: książki, audiobooki, tłumaczenia, heretic-wasm
+.github/ GitHub Actions, które budują doom-wasm, heretic-wasm, OpenTTD i ScummVM dla przeglądarki
+```
+
+- Uruchomienie wtyczki z repozytorium: `claude --plugin-dir ./mod`
+- Testy wtyczki: `claude plugin validate ./mod`, potem `claude plugin test` w `mod/`
+- Testy strony: `npm test` w `site/`; build: `node build.mjs`; wdrożenie odbywa się automatycznie z `main` przez Cloudflare Workers Builds.
+- Książki: `node tools/books/build.mjs` pobiera i czyści książki z katalogu (lista — `tools/books/books.json`).
+- Tłumaczenia: `node tools/i18n/collect.mjs`, potem `node tools/i18n/check.mjs` — zobacz [tools/i18n/README.md](tools/i18n/README.md).
+
+Szczegółowa dokumentacja (po rosyjsku): [mod/README.md](mod/README.md) — wtyczka, [site/README.md](site/README.md) — strona, dodawanie gier i gra sieciowa.
