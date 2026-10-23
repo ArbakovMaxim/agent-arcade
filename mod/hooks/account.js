@@ -3,7 +3,8 @@
 // github.com/login/device, мод спрашивает сайт, вошёл ли он (/api/auth/poll), и получает ключ сессии Arcade — токена
 // GitHub мод не видит. Настройки на сайте — { ключ: { v, at } }: у каждого ключа побеждает более позднее изменение,
 // у рекорда Flappy Arcade — больший счёт. Ещё у аккаунта бывает свой @ник — подпись в сетевых играх. Здесь нет вызовов
-// Claude Code — сеть и хранилище в hooks/register.js.
+// Claude Code — сеть и хранилище в hooks/register.js. С ником можно звать друзей: заявка по точному нику, друг
+// принимает её у себя.
 import { siteUrl } from './catalog.js'
 import { jsonFrom } from './youtube.js'
 
@@ -18,9 +19,10 @@ const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle' }
+const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove' }
 
-// Адрес сайта для шага входа, настроек или ника: start, poll, logout, me, settings, handle
+// Адрес сайта для шага входа, настроек, ника или друзей: start, poll, logout, me, settings, handle, friends, accept,
+// unfriend
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }
@@ -96,14 +98,18 @@ function handleFrom(data) {
   return { handle, ticket: handle && m?.[1] === handle ? data.ticket : '' }
 }
 
-// Ответ /api/me → { user, settings, handle, ticket, error }
+// Сколько друзей или заявок: целое от 0
+const count = (n) => (Number.isInteger(n) && n > 0 ? Math.min(n, 9999) : 0)
+
+// Ответ /api/me → { user, settings, handle, ticket, friends, requests, error }: friends — сколько друзей, requests —
+// сколько заявок ждут ответа человека
 export function parseMe(response) {
   const data = jsonFrom(response?.text)
   const error = trouble(response, data)
-  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', error: e })
+  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, error: e })
   if (error) return none(error)
   const user = parseUser(data.user)
-  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), error: '' } : none('down')
+  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), friends: count(data.friends), requests: count(data.requests), error: '' } : none('down')
 }
 
 // Что человек ввёл как ник → ник строчными, без @ и пробелов по краям
@@ -129,6 +135,34 @@ export function parseHandle(response) {
   if (error) return none(error)
   const named = handleFrom(data)
   return named.handle ? { ...named, error: '' } : none('down')
+}
+
+// Человек из списка друзей: { id, handle } — номер аккаунта и ник; не сходится — null
+function personFrom(p) {
+  return p && typeof p === 'object' && /^\d{1,20}$/.test(String(p.id ?? '')) && HANDLE.test(p.handle ?? '') ? { id: String(p.id), handle: p.handle } : null
+}
+
+// Ответ про друзей (список, заявка, принять, удалить) → { status, friends, incoming, outgoing, error }. Списки — из
+// { id, handle }: друзья, заявки человеку и его заявки. status заявки — 'sent' (отправлена) или 'friends' (уже друзья:
+// тот звал сам). error, кроме общих: 'invalid' — ник не того вида, 'self' — свой ник, 'nobody' — ник ничей, 'gone' —
+// заявки уже нет, 'nohandle' — у человека нет ника, 'full' — друзей и заявок слишком много, 'busy' — у того слишком
+// много заявок, 'often' — заявок сегодня слишком много. Сайт без друзей отвечает 404 — это 'down'
+export function parseFriends(response) {
+  const data = jsonFrom(response?.text)
+  const none = (e) => ({ status: '', friends: [], incoming: [], outgoing: [], error: e })
+  const said = data?.error
+  if (response?.status === 400) return none(said === 'self' ? 'self' : 'invalid')
+  if (response?.status === 404) return none(said === 'nobody' || said === 'gone' ? said : 'down')
+  if (response?.status === 409) return none(['nohandle', 'full', 'busy'].includes(said) ? said : 'down')
+  if (response?.status === 429) return none(said === 'often' ? 'often' : 'limit')
+  const error = trouble(response, data)
+  if (error) return none(error)
+  const list = (raw) => (Array.isArray(raw) ? raw.slice(0, 200).map(personFrom).filter(Boolean) : null)
+  const friends = list(data.friends)
+  const incoming = list(data.incoming)
+  const outgoing = list(data.outgoing)
+  if (!friends || !incoming || !outgoing) return none('down')
+  return { status: data.status === 'sent' || data.status === 'friends' ? data.status : '', friends, incoming, outgoing, error: '' }
 }
 
 // Ответ PUT /api/me/settings → { settings, error }: settings — всё, что теперь на сайте

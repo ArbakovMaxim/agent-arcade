@@ -10,7 +10,7 @@ import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, re
 import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
 import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
-import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
+import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
 
@@ -171,8 +171,14 @@ let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loadi
 // синхронизация (again — за время неё настройку поменяли ещё раз) и когда она последний раз удалась; confirmDelete —
 // «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен. handle — @ник,
 // ticket — его подпись для сетевых игр (оба с сайта, только в памяти), naming — сайт проверяет новый ник, handleNote —
-// почему ник не взялся, claims — сколько раз ник сменили: ответ синхронизации, спрошенной до смены, ник не трогает
-let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0 }
+// почему ник не взялся, claims — сколько раз ник сменили: ответ синхронизации, спрошенной до смены, ник не трогает;
+// friends и requests — сколько друзей и заявок человеку (для плитки «Друзья»)
+let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0 }
+// Друзья: list — { friends, incoming, outgoing } с сайта или null, пока не спрашивали; loading — спрашиваем список,
+// busy — какое действие ждёт ответа сайта, note — заметка под полем «Добавить друга» (bad — что-то не вышло);
+// request — номер последнего вопроса: ответ старого вопроса не нужен
+const NO_FRIENDS = { list: null, loading: false, busy: '', note: '', bad: false }
+let fr = { ...NO_FRIENDS, request: 0 }
 let stamps = {} // когда человек менял синхронизируемые настройки: ключ → время; в $.store — syncAt
 // Какие из SYNC_KEYS сохранены на этом компьютере: чего человек здесь не менял, то берём с сайта, а не отправляем туда
 const savedKeys = new Set()
@@ -201,7 +207,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -215,6 +221,8 @@ function iconSvg(kind) {
     folder: `<path d="M7 14h12l4 4h18v19H7z" fill="${c}"/>`,
     gear: `<circle cx="24" cy="24" r="11" fill="none" stroke="${c}" stroke-width="7" stroke-dasharray="5 3.6"/><circle cx="24" cy="24" r="5" fill="${c}"/>`,
     person: `<circle cx="24" cy="17" r="8" fill="${c}"/><path d="M9 40a15 13 0 0 1 30 0z" fill="${c}"/>`,
+    // Друзья: двое, второй — позади
+    people: `<circle cx="31" cy="16" r="6" fill="${c}" opacity=".6"/><path d="M21 36a10 10 0 0 1 20 0z" fill="${c}" opacity=".6"/><circle cx="19" cy="19" r="7" fill="${c}"/><path d="M7 41a12 12 0 0 1 24 0z" fill="${c}"/>`,
     globe: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><ellipse cx="24" cy="24" rx="6" ry="15" fill="none" stroke="${c}" stroke-width="2.5"/><path d="M9 24h30" stroke="${c}" stroke-width="2.5"/>`,
     cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
     window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
@@ -230,7 +238,7 @@ function iconSvg(kind) {
     compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -1390,6 +1398,8 @@ async function syncAccount($) {
       acct.handle = me.handle
       acct.ticket = me.ticket
     }
+    acct.friends = me.friends
+    acct.requests = me.requests
     const now = await $.clock.now()
     if (acct.session !== session) return
     const renamed = me.user.id === session.user.id && JSON.stringify(me.user) !== JSON.stringify(session.user)
@@ -1446,7 +1456,10 @@ async function forgetSession($, note) {
   acct.ticket = ''
   acct.naming = false
   acct.handleNote = ''
+  acct.friends = 0
+  acct.requests = 0
   acct.request++
+  fr = { ...NO_FRIENDS, request: fr.request + 1 }
   syncTimer?.cancel()
   syncTimer = null
   $.ui.invalidate('ui.render')
@@ -1550,6 +1563,68 @@ async function claimHandle($, text) {
     acct.ticket = answer.ticket
   }
   $.ui.invalidate('ui.render')
+}
+
+// --- Друзья: взаимные заявки по точному @нику ----------------------------------------------------------------------
+
+// Почему с друзьями не вышло
+function friendsNote(error, handle) {
+  if (error === 'invalid') return handleNote('invalid', handle)
+  if (error === 'self') return 'Это твой ник.'
+  if (error === 'nobody') return `@${handle} не найден — проверь ник.`
+  if (error === 'gone') return 'Этой заявки уже нет.'
+  if (error === 'nohandle') return 'Сначала возьми свой @ник.'
+  if (error === 'full') return 'Друзей и твоих заявок уже слишком много — удали кого-нибудь.'
+  if (error === 'busy') return `У @${handle} слишком много заявок — попробуй позже.`
+  if (error === 'often') return 'Заявок сегодня слишком много — попробуй завтра.'
+  return accountNote(error)
+}
+
+// Вопрос к сайту про друзей: список (без body) или действие — заявка, принять, отклонить, отменить, удалить. Пока
+// действие ждёт ответа, другие не начинаются. done — заметка, если действие прошло; у заявки она — по ответу сайта
+async function friendsCall($, name, body, handle = '', done = '') {
+  const session = acct.session
+  if (!session || fr.busy) return
+  const request = ++fr.request
+  if (body) fr.busy = name
+  else fr.loading = true
+  $.ui.invalidate('ui.render')
+  const answer = parseFriends(await accountFetch($, name, body ? { method: 'POST', body, token: session.token } : { token: session.token }))
+  if (acct.session !== session || request !== fr.request) return
+  fr.busy = ''
+  fr.loading = false
+  if (answer.error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  if (answer.error) {
+    fr.note = friendsNote(answer.error, handle)
+    fr.bad = true
+  } else {
+    fr.list = { friends: answer.friends, incoming: answer.incoming, outgoing: answer.outgoing }
+    acct.friends = answer.friends.length
+    acct.requests = answer.incoming.length
+    // Список без действия: прежняя заметка об успехе остаётся, об ошибке — уходит
+    if (body) fr.note = answer.status === 'sent' ? `Заявка отправлена: @${handle} увидит её у себя в «Друзьях».` : answer.status === 'friends' ? `Теперь вы с @${handle} друзья.` : done
+    else if (fr.bad) fr.note = ''
+    fr.bad = false
+    // Удалили последнего друга — выбирать больше некого
+    if (!answer.friends.length && menu === 'friends:remove') {
+      menuFrom = menu
+      menu = 'friends'
+    }
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// «Добавить друга»: заявка по точному @нику. Ник не того вида или свой — сразу здесь, заявку на это не тратим
+async function addFriend($, text) {
+  const handle = normalHandle(text)
+  if (!handle || fr.busy) return
+  const problem = !HANDLE.test(handle) ? 'invalid' : handle === acct.handle ? 'self' : ''
+  if (problem) {
+    fr.note = friendsNote(problem, handle)
+    fr.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  await friendsCall($, 'friends', { handle }, handle)
 }
 
 // «Выйти»: забыть вход здесь и сказать сайту, что ключ сессии больше не нужен; что ответит сайт, неважно
@@ -1844,6 +1919,7 @@ function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
   if (menu === 'account') return 'Arcade · аккаунт'
+  if (menu === 'friends' || menu.startsWith('friends:')) return 'Arcade · друзья'
   if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
   if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
   if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
@@ -2755,6 +2831,114 @@ export function register(on) {
             ...hint,
           ]
         }
+      } else if (menu === 'friends' || menu === 'friends:remove') {
+        // Друзья: взаимные заявки по точному @нику. Без входа и без ника — что сделать сначала
+        const login = Button({
+          key: 'arcade-friends-login',
+          label: acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
+          autoFocus: true,
+          onPress: () => {
+            acct.confirmDelete = false
+            open('account')()
+            startLogin($)
+          },
+        })
+        const note = fr.note ? [fr.bad ? Text({ color: 'warning', children: [fr.note] }) : dim(fr.note)] : []
+        const person = (p) => keep(Text({ children: [`@${p.handle}`] }))
+        const row = (children) => Box({ flexDirection: 'row', columnGap: 2, children })
+        if (!acct.session) {
+          items = [
+            back,
+            gap,
+            dim('Друзья в Arcade — по @нику: отправь заявку, друг примет её у себя, и вы появитесь в списках друг у друга.'),
+            Text({ children: ['Чтобы список друзей был доступен, войди через GitHub.'] }),
+            dim('Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.'),
+            // Вход только что пропал (сайт его не принял) — почему
+            ...(acct.note ? [gap, Text({ color: 'warning', children: [acct.note] })] : []),
+            gap,
+            login,
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (!acct.handle && !acct.syncedAt) {
+          // Сайт ещё не сказал, есть ли у человека ник
+          items = [
+            back,
+            gap,
+            ...(acct.syncing ? [dim('Спрашиваю сайт Arcade…')] : acct.note ? [Text({ color: 'warning', children: [acct.note] })] : []),
+            gap,
+            Button({ key: 'arcade-friends-sync', label: 'Обновить', autoFocus: true, onPress: () => syncAccount($) }),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (!acct.handle) {
+          items = [
+            back,
+            gap,
+            Text({ children: ['Друзья находят друг друга по @нику — сначала возьми свой.'] }),
+            dim('Ник видят друзья и соперники в сетевых партиях. Сменить его можно когда угодно — друзья останутся.'),
+            gap,
+            Button({ key: 'arcade-friends-handle', label: 'Взять @ник', autoFocus: true, onPress: open('account') }),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (menu === 'friends:remove') {
+          items = [
+            Button({ key: 'arcade-back', label: '← Назад', onPress: open('friends') }),
+            gap,
+            dim('Кого удалить из друзей? Уведомления не будет; у друга ты тоже пропадёшь из списка.'),
+            gap,
+            ...(fr.list?.friends ?? []).map((p, k) =>
+              keep(Button({ key: `arcade-fr-remove-${p.id}`, label: `@${p.handle}`, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `@${p.handle} больше не в друзьях.`) })),
+            ),
+            ...(note.length ? [gap, ...note] : []),
+            ...hint,
+          ]
+        } else {
+          const list = fr.list
+          const friends = list?.friends ?? []
+          const incoming = list?.incoming ?? []
+          const outgoing = list?.outgoing ?? []
+          const fromRemove = menuFrom === 'friends:remove'
+          items = [
+            back,
+            gap,
+            Text({ children: [`Твой ник: @${acct.handle}`] }),
+            dim('Друзья добавляют тебя по нему, а ты их — по их @нику.'),
+            gap,
+            Input({ key: 'arcade-friends-add', label: 'Добавить друга', placeholder: '@ник друга, точно как есть', onSubmit: (value) => addFriend($, value) }),
+            ...(fr.busy === 'friends' ? [dim('Отправляю заявку…')] : note.length ? note : [dim('Подсказок по буквам нет: заявка дойдёт, только если ник написан точно.')]),
+            ...(incoming.length
+              ? [
+                  section('Заявки тебе'),
+                  ...incoming.map((p, k) =>
+                    row([
+                      person(p),
+                      Button({ key: `arcade-fr-accept-${p.id}`, label: 'Принять', ...(k === 0 && !fromRemove ? { autoFocus: true } : {}), onPress: () => friendsCall($, 'accept', { id: p.id }, p.handle, `Теперь вы с @${p.handle} друзья.`) }),
+                      Button({ key: `arcade-fr-decline-${p.id}`, label: 'Отклонить', onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `Заявка от @${p.handle} отклонена.`) }),
+                    ]),
+                  ),
+                ]
+              : []),
+            section('Друзья'),
+            ...(friends.length
+              ? [Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 3, children: friends.map(person) })]
+              : [dim(list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.')]),
+            ...(friends.length ? [gap, Button({ key: 'arcade-fr-remove', label: 'Удалить друга', ...(fromRemove ? { autoFocus: true } : {}), onPress: open('friends:remove') })] : []),
+            ...(outgoing.length
+              ? [
+                  section('Твои заявки'),
+                  ...outgoing.map((p) =>
+                    row([person(p), dim('ждёт ответа'), Button({ key: `arcade-fr-cancel-${p.id}`, label: 'Отменить', onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `Заявка для @${p.handle} отменена.`) })]),
+                  ),
+                ]
+              : []),
+            gap,
+            Button({ key: 'arcade-fr-refresh', label: fr.loading ? 'Обновляю…' : 'Обновить', onPress: () => friendsCall($, 'friends') }),
+            ...noticeLines,
+            ...hint,
+          ]
+        }
       } else if (menu === 'settings') {
         const field = FIELD
         items = [
@@ -3503,6 +3687,34 @@ export function register(on) {
             },
           }),
           acct.session ? keep(dim(`  ${acct.handle ? `@${acct.handle} · ` : ''}GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах и свой @ник'),
+          // Друзья — плитка видна всем; без входа и без ника экран скажет, что сделать сначала
+          Button({
+            key: 'arcade-menu-friends',
+            label: 'Друзья',
+            ...(menuFrom === 'friends' || menuFrom === 'friends:remove' ? { autoFocus: true } : {}),
+            onPress: () => {
+              fr.note = ''
+              fr.bad = false
+              open('friends')()
+              if (!acct.session) return
+              if (!acct.syncedAt) syncAccount($)
+              friendsCall($, 'friends')
+            },
+          }),
+          // Ника нет, а сайт ещё не спрашивали — может, он есть: пока без «возьми ник»
+          dim(
+            !acct.session
+              ? '  по @нику: заявки и список друзей; нужен вход через GitHub'
+              : !acct.handle
+                ? acct.syncedAt
+                  ? '  сначала возьми свой @ник'
+                  : '  по @нику: заявки и список друзей'
+                : acct.requests
+                  ? `  заявок тебе: ${acct.requests} · друзей: ${acct.friends}`
+                  : acct.friends
+                    ? `  друзей: ${acct.friends}`
+                    : '  позови друзей по их @нику',
+          ),
           // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
           Button({
             key: 'arcade-lang-main',

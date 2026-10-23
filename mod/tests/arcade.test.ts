@@ -13,7 +13,7 @@ import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed
 import { bundledFeeds, durationSeconds, durationText, hostOf, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from '../hooks/rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from '../hooks/search.js'
 import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from '../hooks/twitch.js'
-import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
+import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -3662,8 +3662,8 @@ test('account.js: ответы сайта про вход и настройки,
   // Настройки сайта: только общие ключи с отметкой времени
   const settings = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 }, junk: { v: 1, at: 1 }, notify: { v: false }, keys: 'нет' }
   const clean = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 } }
-  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', error: '' })
-  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', error: 'auth' })
+  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', friends: 0, requests: 0, error: '' })
+  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, error: 'auth' })
   expect(parseMe(reply(200, { user: { login: 'octocat' } })).error).toBe('down')
   expect(parseSettings(reply(200, { settings }))).toEqual({ settings: clean, error: '' })
   expect(parseSettings(reply(413, { error: 'too big' })).error).toBe('big')
@@ -4023,5 +4023,240 @@ test('аккаунт: ник с сайта — в меню, свой из пол
   expect(saved.has('account')).toBe(false)
   expect(await ui.find({ type: 'Text', text: 'Вход на этом компьютере больше не действует — войди через GitHub заново.' })).toBeDefined()
   expect(sent(requests, 'api/me/handle', 'PUT').length).toBe(2)
+  await ui.unmount()
+})
+
+// --- Друзья: взаимные заявки по точному @нику ---
+
+test('account.js: друзья — адреса, счётчики в /api/me, ответы сайта', () => {
+  const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  expect([accountUrl('friends'), accountUrl('accept'), accountUrl('unfriend')]).toEqual([`${SITE}/api/me/friends`, `${SITE}/api/me/friends/accept`, `${SITE}/api/me/friends/remove`])
+  // /api/me: сколько друзей и заявок — целое от 0, не больше 9999; нет — 0
+  expect(parseMe(reply(200, { user: OCTO, friends: 3, requests: 2 }))).toMatchObject({ friends: 3, requests: 2, error: '' })
+  expect(parseMe(reply(200, { user: OCTO, friends: -1, requests: 'x' }))).toMatchObject({ friends: 0, requests: 0 })
+  expect(parseMe(reply(200, { user: OCTO, friends: 2.5, requests: 1e9 }))).toMatchObject({ friends: 0, requests: 9999 })
+  // Списки: только { id, handle } с номером и ником как надо; status — только sent или friends
+  const pal = { id: '7', handle: 'octo_pal' }
+  const lists = { friends: [pal, { id: 'x', handle: 'octo_bad' }, { id: '8', handle: 'Bad Name' }, null], incoming: [{ id: 12, handle: 'asker_one' }], outgoing: [] }
+  expect(parseFriends(reply(200, lists))).toEqual({ status: '', friends: [pal], incoming: [{ id: '12', handle: 'asker_one' }], outgoing: [], error: '' })
+  expect(parseFriends(reply(200, { ...lists, status: 'sent' })).status).toBe('sent')
+  expect(parseFriends(reply(200, { ...lists, status: 'friends' })).status).toBe('friends')
+  expect(parseFriends(reply(200, { ...lists, status: 'weird' })).status).toBe('')
+  expect(parseFriends(reply(200, { friends: Array.from({ length: 300 }, () => pal), incoming: [], outgoing: [] })).friends.length).toBe(200)
+  expect(parseFriends(reply(200, { friends: [], incoming: [] }))).toEqual({ status: '', friends: [], incoming: [], outgoing: [], error: 'down' })
+  // Ошибки: свой ник, не того вида, ничей, заявки нет, своего ника нет, полно, у того занято, часто
+  expect(parseFriends(reply(400, { error: 'self' })).error).toBe('self')
+  expect(parseFriends(reply(400, { error: 'invalid' })).error).toBe('invalid')
+  expect(parseFriends(reply(400, { error: 'bad request' })).error).toBe('invalid')
+  expect(parseFriends(reply(404, { error: 'nobody' })).error).toBe('nobody')
+  expect(parseFriends(reply(404, { error: 'gone' })).error).toBe('gone')
+  expect(parseFriends(reply(404, 'not found')).error).toBe('down') // сайт без друзей
+  expect(['nohandle', 'full', 'busy', 'other'].map((e) => parseFriends(reply(409, { error: e })).error)).toEqual(['nohandle', 'full', 'busy', 'down'])
+  expect(parseFriends(reply(429, { error: 'often' })).error).toBe('often')
+  expect(parseFriends(reply(429, { error: 'limit' })).error).toBe('limit')
+  expect(parseFriends(reply(401, { error: 'auth' })).error).toBe('auth')
+  expect(parseFriends(null).error).toBe('down')
+})
+
+test('друзья без входа: плитка видна, экран зовёт войти через GitHub, сайт не спрашиваем', HEAVY, async ($, on) => {
+  const { api } = accountSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-menu-friends' })).toMatchObject({ props: { label: 'Друзья' } })
+  expect(await ui.find({ type: 'Text', text: '  по @нику: заявки и список друзей; нужен вход через GitHub' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-friends' })
+  await clock.settle()
+  expect(requests).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Чтобы список друзей был доступен, войди через GitHub.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-friends-add' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-friends-login' })).toMatchObject({ props: { label: 'Войти через GitHub' } })
+  // Кнопка входа — тот же вход, что в «Аккаунте»: код для страницы GitHub
+  await ui.press({ key: 'arcade-friends-login' })
+  await clock.settle()
+  expect(sent(requests, 'api/auth/start', 'POST').length).toBe(1)
+  expect(await ui.find({ type: 'Text', text: 'Введи этот код на странице GitHub:' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('друзья без своего ника: плитка и экран просят взять @ник, кнопка ведёт в «Аккаунт»', HEAVY, async ($, on) => {
+  const { api } = accountSite()
+  const { clock } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: '  сначала возьми свой @ник' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-friends' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Друзья находят друг друга по @нику — сначала возьми свой.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-friends-add' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-friends-handle' })).toMatchObject({ props: { label: 'Взять @ник' } })
+  await ui.press({ key: 'arcade-friends-handle' })
+  expect(await ui.find({ key: 'arcade-account-take' })).toMatchObject({ props: { label: 'Взять @octocat' } })
+  await ui.unmount()
+})
+
+// Сайт с друзьями octocat: people — ники по номеру аккаунта; circle — номера друзей, заявок ему и его заявок. down —
+// сайт без друзей (старый), gone — вход больше не действует
+function friendsSite() {
+  const people: Record<string, string> = { 7: 'octo_pal', 12: 'asker_one', 15: 'asker_two', 18: 'asker_three', 21: 'new_pal', 30: 'late_one' }
+  const circle: Record<string, string[]> = { friends: ['7'], incoming: ['12', '15', '18'], outgoing: [] }
+  const state = { down: false, gone: false }
+  const view = (status = '') => ({ json: { ...(status ? { status } : {}), ...Object.fromEntries(Object.entries(circle).map(([k, ids]) => [k, ids.map((id) => ({ id, handle: people[id] }))])) } })
+  const drop = (id: string) => {
+    for (const k of Object.keys(circle)) circle[k] = circle[k].filter((x) => x !== id)
+  }
+  const guard = (fn: (request: any) => any) => (request: any) => (state.gone ? { status: 401, json: { error: 'auth' } } : state.down ? undefined : fn(request))
+  const { api } = accountSite({}, {
+    'GET api/me': () => ({ json: { user: OCTO, settings: {}, handle: 'octocat', ticket: ticketOf('octocat'), ...(circle.friends.length ? { friends: circle.friends.length } : {}), ...(circle.incoming.length ? { requests: circle.incoming.length } : {}) } }),
+    'GET api/me/friends': guard(() => view()),
+    'POST api/me/friends': guard((request) => {
+      const handle = request.body.handle
+      if (handle === 'busy_one') return { status: 409, json: { error: 'busy' } }
+      const id = Object.keys(people).find((k) => people[k] === handle)
+      if (!id) return { status: 404, json: { error: 'nobody' } }
+      if (circle.friends.includes(id)) return view('friends')
+      // Тот сам звал — сразу друзья
+      if (circle.incoming.includes(id)) {
+        drop(id)
+        circle.friends.push(id)
+        return view('friends')
+      }
+      if (!circle.outgoing.includes(id)) circle.outgoing.push(id)
+      return view('sent')
+    }),
+    'POST api/me/friends/accept': guard((request) => {
+      if (!circle.incoming.includes(request.body.id)) return { status: 404, json: { error: 'gone' } }
+      drop(request.body.id)
+      circle.friends.push(request.body.id)
+      return view()
+    }),
+    'POST api/me/friends/remove': guard((request) => {
+      drop(request.body.id)
+      return view()
+    }),
+  })
+  return { api, circle, state }
+}
+
+test('друзья: заявка по точному нику, принять, отклонить, отменить, удалить; плитка считает', HEAVY, async ($, on) => {
+  const { api, circle, state } = friendsSite()
+  const { clock, requests, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  const add = async (handle: string) => {
+    await ui.input({ key: 'arcade-friends-add', text: handle, kind: 'submit' })
+    await clock.settle()
+  }
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  // Плитка: заявки и друзья — из /api/me
+  expect(await text('  заявок тебе: 3 · друзей: 1')).toBeDefined()
+  await press('arcade-menu-friends')
+  expect(sent(requests, 'api/me/friends', 'GET').map((r) => r.headers.Authorization)).toEqual([`Bearer ${TOKEN}`])
+  expect(await text('Твой ник: @octocat')).toBeDefined()
+  expect(await text('Заявки тебе')).toBeDefined()
+  expect(await text('@asker_one')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fr-accept-12' })).toMatchObject({ props: { label: 'Принять' } })
+  expect(await ui.find({ key: 'arcade-fr-decline-15' })).toMatchObject({ props: { label: 'Отклонить' } })
+  expect(await text('@octo_pal')).toBeDefined()
+  expect(await text('Твои заявки')).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-friends-add' })).toMatchObject({ props: { label: 'Добавить друга', placeholder: '@ник друга, точно как есть' } })
+  expect(await text('Подсказок по буквам нет: заявка дойдёт, только если ник написан точно.')).toBeDefined()
+  // Ник не того вида и свой — сразу здесь, сайт не спрашиваем
+  await add('ab')
+  expect(await text('Ник — от 4 до 32 знаков: латинские буквы, цифры и _, первый — буква.')).toBeDefined()
+  await add(' @OctoCat ')
+  expect(await text('Это твой ник.')).toBeDefined()
+  expect(sent(requests, 'api/me/friends', 'POST')).toEqual([])
+  // Ничей ник и у того слишком много заявок
+  await add('nobody_here')
+  expect(await text('@nobody_here не найден — проверь ник.')).toBeDefined()
+  await add('busy_one')
+  expect(await text('У @busy_one слишком много заявок — попробуй позже.')).toBeDefined()
+  // Заявка: ник — строчными и без @; в «Твоих заявках» ждёт ответа, её можно отменить
+  await add(' @New_Pal ')
+  expect(sent(requests, 'api/me/friends', 'POST').at(-1)).toMatchObject({ body: { handle: 'new_pal' }, headers: { Authorization: `Bearer ${TOKEN}` } })
+  expect(await text('Заявка отправлена: @new_pal увидит её у себя в «Друзьях».')).toBeDefined()
+  expect(await text('Твои заявки')).toBeDefined()
+  expect(await text('ждёт ответа')).toBeDefined()
+  await press('arcade-fr-cancel-21')
+  expect(sent(requests, 'api/me/friends/remove', 'POST').at(-1).body).toEqual({ id: '21' })
+  expect(await text('Заявка для @new_pal отменена.')).toBeDefined()
+  expect(await text('Твои заявки')).toBeUndefined()
+  // Принять, отклонить; позвать того, кто звал сам, — сразу друзья
+  await press('arcade-fr-accept-12')
+  expect(sent(requests, 'api/me/friends/accept', 'POST').at(-1).body).toEqual({ id: '12' })
+  expect(await text('Теперь вы с @asker_one друзья.')).toBeDefined()
+  await press('arcade-fr-decline-15')
+  expect(await text('Заявка от @asker_two отклонена.')).toBeDefined()
+  await add('asker_three')
+  expect(await text('Теперь вы с @asker_three друзья.')).toBeDefined()
+  expect(await text('Заявки тебе')).toBeUndefined()
+  expect(circle).toEqual({ friends: ['7', '12', '18'], incoming: [], outgoing: [] })
+  // Плитка считает по последнему ответу
+  await press('arcade-back')
+  expect(await text('  друзей: 3')).toBeDefined()
+  // Новая заявка видна после «Обновить»; прежняя заметка при входе на экран уходит
+  circle.incoming.push('30')
+  await press('arcade-menu-friends')
+  expect(await text('Теперь вы с @asker_three друзья.')).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-fr-accept-30' })).toBeDefined()
+  circle.incoming = []
+  await press('arcade-fr-refresh')
+  expect(await ui.find({ key: 'arcade-fr-accept-30' })).toBeUndefined()
+  // Сайт без друзей: список остаётся прежний, заметка — что сайт не ответил; ответил — заметка уходит
+  state.down = true
+  await press('arcade-fr-refresh')
+  expect(await text('Сайт Arcade не ответил. Попробуй чуть позже.')).toBeDefined()
+  expect(await text('@octo_pal')).toBeDefined()
+  state.down = false
+  await press('arcade-fr-refresh')
+  expect(await text('Сайт Arcade не ответил. Попробуй чуть позже.')).toBeUndefined()
+  // Удалить: выбрать кого; удалили последнего — обратно на экран друзей
+  await press('arcade-fr-remove')
+  expect(await text('Кого удалить из друзей? Уведомления не будет; у друга ты тоже пропадёшь из списка.')).toBeDefined()
+  await press('arcade-fr-remove-7')
+  expect(await text('@octo_pal больше не в друзьях.')).toBeDefined()
+  await press('arcade-fr-remove-12')
+  await press('arcade-fr-remove-18')
+  expect(await text('@asker_three больше не в друзьях.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-friends-add' })).toBeDefined()
+  expect(await text('Друзей пока нет — добавь кого-нибудь по @нику.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fr-remove' })).toBeUndefined()
+  await press('arcade-back')
+  expect(await text('  позови друзей по их @нику')).toBeDefined()
+  // Вход больше не действует — забываем его; экран друзей говорит почему
+  state.gone = true
+  await press('arcade-menu-friends')
+  expect(saved.has('account')).toBe(false)
+  expect(await text('Вход на этом компьютере больше не действует — войди через GitHub заново.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-friends-login' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('друзья по-английски: экран, заметки и плитка без русских букв', HEAVY, async ($, on) => {
+  const { api } = friendsSite()
+  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  expect(await ui.find({ key: 'arcade-menu-friends' })).toMatchObject({ props: { label: 'Friends' } })
+  expect(await ui.find({ type: 'Text', text: '  requests for you: 3 · friends: 1' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-friends' })
+  await clock.settle()
+  await ui.input({ key: 'arcade-friends-add', text: 'new_pal', kind: 'submit' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Request sent: @new_pal will see it in their “Friends”.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-friends-add' })).toMatchObject({ props: { label: 'Add a friend', placeholder: "your friend's @handle, exactly" } })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-fr-remove' })
+  expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })
