@@ -1,0 +1,4 @@
+ioquake3 для браузера — © id Software и авторы ioquake3, GPL-2.0 (COPYING.txt).
+Исходники: https://github.com/ioquake/ioq3, коммит 87a99d18206e878a20289f05ac3c16005dcae5c3 (архив ioq3-src.tar.gz рядом).
+Собрано в GitHub Actions без изменений кода, способом из README ioquake3: Emscripten 3.1.58, emcmake cmake.
+Параметры: -DBUILD_GAME_QVMS=OFF -DUSE_VOIP=OFF -DUSE_MUMBLE=OFF, ссылка с -lidbfs.js -sALLOW_MEMORY_GROWTH=1. SDL2 — порт Emscripten (zlib).
