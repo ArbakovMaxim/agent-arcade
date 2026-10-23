@@ -13,6 +13,7 @@ import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed
 import { bundledFeeds, durationSeconds, durationText, hostOf, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from '../hooks/rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from '../hooks/search.js'
 import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from '../hooks/twitch.js'
+import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from '../hooks/chats.js'
 import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
@@ -3662,8 +3663,8 @@ test('account.js: ответы сайта про вход и настройки,
   // Настройки сайта: только общие ключи с отметкой времени
   const settings = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 }, junk: { v: 1, at: 1 }, notify: { v: false }, keys: 'нет' }
   const clean = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 } }
-  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', friends: 0, requests: 0, error: '' })
-  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, error: 'auth' })
+  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, error: '' })
+  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, error: 'auth' })
   expect(parseMe(reply(200, { user: { login: 'octocat' } })).error).toBe('down')
   expect(parseSettings(reply(200, { settings }))).toEqual({ settings: clean, error: '' })
   expect(parseSettings(reply(413, { error: 'too big' })).error).toBe('big')
@@ -4257,6 +4258,493 @@ test('друзья по-английски: экран, заметки и пли
   expect(await ui.find({ key: 'arcade-friends-add' })).toMatchObject({ props: { label: 'Add a friend', placeholder: "your friend's @handle, exactly" } })
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-fr-remove' })
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+// --- Чаты: с друзьями один на один и в группах ---
+
+const LINK_CODE = `583231.1790000000.0123456789ab.${'A'.repeat(22)}`
+const DM = 'd7-583231'
+const CLUB = 'g0000000000000001'
+
+test('chats.js: ответы сайта про чаты, чистка текста, служебные сообщения, время', () => {
+  const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  expect([accountUrl('chats'), accountUrl('messages'), accountUrl('send'), accountUrl('opendm'), accountUrl('group'), accountUrl('members'), accountUrl('chatticket'), accountUrl('unread')]).toEqual(
+    ['chats', 'chats/messages', 'chats/send', 'chats/open', 'chats/group', 'chats/members', 'chats/ticket', 'chats/unread'].map((p) => `${SITE}/api/me/${p}`),
+  )
+  expect([MAX_TEXT, MAX_MEMBERS, MAX_NAME]).toEqual([2000, 50, 40])
+  // Номер чата: двоих — d<номер>-<номер>, группы — g и 16 знаков
+  expect([DM, CLUB, 'd1-2'].every((id) => CHAT_ID.test(id))).toBe(true)
+  expect(['g000000000000001', 'x1-2', 'd1', 'g000000000000000/', `${DM}\n`].some((id) => CHAT_ID.test(id))).toBe(false)
+  // Чужой текст: без управляющих знаков (и C1), невидимых меток и разворота направления; \r\n — \n, табуляция — пробел
+  expect(cleanText('a\r\nb\tc\u0007\u001b[31m\u009b\u200e\u202e\u2066d\u0000')).toBe('a\nb c[31md')
+  expect(cleanText(5)).toBe('')
+  expect(oneLine('  chess\n\n club\t ')).toBe('chess club')
+  // Список: чаты как надо; у чата двоих друг — из номера чата; название группы — одной строкой; ники — только как надо
+  const me = { id: '583231' }
+  const dm = { id: DM, kind: 'dm', with: '7', unread: 2, at: 5, last: { f: '7', t: 'hi\u001b[2J\nthere' } }
+  const club = { id: CLUB, kind: 'group', name: '  chess\nclub  ', unread: 0, at: 4, last: { f: '583231', k: 'create', n: 'chess club' } }
+  const broken = [{ id: 'd8-9', kind: 'dm', with: '7' }, { id: 'g1', kind: 'group' }, { id: DM, kind: 'group' }, { id: DM, kind: 'dm', with: 'x' }, null, 'g0000000000000002']
+  const names = { 7: 'octo_pal', 583231: 'octocat', x: 'bad_id', 9: 'Bad Name', 10: 5 }
+  expect(parseChats(reply(200, { me, chats: [dm, club, ...broken], names, unread: 2 }))).toEqual({
+    me: '583231',
+    chats: [
+      { id: DM, kind: 'dm', with: '7', unread: 2, at: 5, last: { f: '7', t: 'hi[2J there' } },
+      { id: CLUB, kind: 'group', name: 'chess club', unread: 0, at: 4, last: { f: '583231', k: 'create', n: 'chess club' } },
+    ],
+    names: { 7: 'octo_pal', 583231: 'octocat' },
+    unread: 2,
+    error: '',
+  })
+  expect(parseChats(reply(200, { me, chats: [{ ...dm, last: { f: '7', t: 'x'.repeat(500) } }] })).chats[0].last.t.length).toBe(200)
+  expect(parseChats(reply(200, { chats: [] })).error).toBe('down')
+  expect(parseChats(reply(200, { me, chats: 'no' })).error).toBe('down')
+  expect(parseChats(reply(401, { error: 'auth' }))).toEqual({ me: '', chats: [], names: {}, unread: 0, error: 'auth' })
+  expect(parseChats(reply(503, { error: 'off' })).error).toBe('off')
+  expect(parseChats(reply(404, 'not found')).error).toBe('down') // сайт без чатов
+  expect(parseChats(null).error).toBe('down')
+  // Переписка: по порядку номеров, кривые и непонятные служебные — мимо; участники — без повторов
+  const about = { id: CLUB, kind: 'group', name: 'chess club', owner: '583231', members: ['583231', '7', '7', 'x', 21] }
+  const messages = [
+    { s: 3, at: 30, f: '7', t: 'b' },
+    { s: 1, at: 10, f: '583231', k: 'create', n: 'chess club' },
+    { s: 2, at: 20, f: '583231', k: 'add', o: '7' },
+    { s: -1, at: 1, f: '7', t: 'x' },
+    { s: 4, at: 40, f: '7', k: 'dance' },
+    { s: 5, at: 'x', f: '7', t: 'y' },
+    { s: 6, at: 60, f: 'x', t: 'z' },
+  ]
+  expect(parseMessages(reply(200, { me, chat: about, messages, first: 1, names, unread: 1 }))).toEqual({
+    me: '583231',
+    chat: { id: CLUB, kind: 'group', name: 'chess club', owner: '583231', members: ['583231', '7', '21'] },
+    messages: [
+      { s: 1, at: 10, f: '583231', k: 'create', n: 'chess club' },
+      { s: 2, at: 20, f: '583231', k: 'add', o: '7' },
+      { s: 3, at: 30, f: '7', t: 'b' },
+    ],
+    first: 1,
+    names: { 7: 'octo_pal', 583231: 'octocat' },
+    unread: 1,
+    error: '',
+  })
+  expect(parseMessages(reply(200, { me, chat: { id: DM, kind: 'dm', with: '7' }, messages: [{ s: 1, at: 1, f: '7', t: 'й'.repeat(2500) }] }))).toMatchObject({
+    chat: { id: DM, kind: 'dm', with: '7', owner: '', members: [] },
+    first: 0,
+  })
+  expect(parseMessages(reply(200, { me, chat: { id: DM, kind: 'dm', with: '7' }, messages: [{ s: 1, at: 1, f: '7', t: 'й'.repeat(2500) }] })).messages[0].t.length).toBe(2000)
+  expect(parseMessages(reply(200, { me, chat: { id: 'nope' }, messages: [] })).error).toBe('down')
+  // Ошибки чатов: что не так с вопросом, не друг, не хозяин, чата нет, полно, нет ника, часто
+  const failures = [
+    [400, 'empty', 'empty'], [400, 'long', 'long'], [400, 'name', 'name'], [400, 'bad request', 'invalid'],
+    [403, 'friend', 'friend'], [403, 'owner', 'owner'], [403, 'other', 'friend'],
+    [404, 'gone', 'gone'], [404, 'other', 'down'],
+    [409, 'full', 'full'], [409, 'nohandle', 'nohandle'], [409, 'other', 'down'],
+    [429, 'often', 'often'], [429, 'limit', 'limit'],
+    [401, 'auth', 'auth'], [503, 'off', 'off'], [500, 'boom', 'down'],
+  ]
+  expect(failures.map(([status, error]) => chatFailure(reply(status as number, { error }), { error }))).toEqual(failures.map(([, , want]) => want))
+  expect(chatFailure(null, null)).toBe('down')
+  expect(chatFailure(reply(200, { ok: true }), { ok: true })).toBe('')
+  expect(parseMessages(reply(404, { error: 'gone' })).error).toBe('gone')
+  // Отправка, чат целиком, вышел из группы, непрочитанные, код ссылки на страницу
+  expect(parseSent(reply(200, { msg: { s: 9, at: 1, f: '583231', t: 'hi' } }))).toEqual({ msg: { s: 9, at: 1, f: '583231', t: 'hi' }, error: '' })
+  expect(parseSent(reply(200, { msg: { s: 9 } }))).toEqual({ msg: null, error: 'down' })
+  expect(parseSent(reply(403, { error: 'friend' }))).toEqual({ msg: null, error: 'friend' })
+  expect(parseChat(reply(200, { chat: about }))).toMatchObject({ chat: { id: CLUB, owner: '583231' }, left: false, error: '' })
+  expect(parseChat(reply(200, { ok: true }))).toEqual({ chat: null, left: true, error: '' })
+  expect(parseChat(reply(200, { chat: { id: 'bad' } }))).toEqual({ chat: null, left: false, error: 'down' })
+  expect(parseChat(reply(403, { error: 'owner' })).error).toBe('owner')
+  expect(parseUnread(reply(200, { unread: 3 }))).toEqual({ unread: 3, error: '' })
+  expect(parseUnread(reply(200, { unread: -2 }))).toEqual({ unread: 0, error: '' })
+  expect(parseUnread(reply(401, { error: 'auth' }))).toEqual({ unread: 0, error: 'auth' })
+  expect(parseLink(reply(200, { link: LINK_CODE }))).toEqual({ link: LINK_CODE, error: '' })
+  expect(parseLink(reply(200, { link: `${LINK_CODE}#x` }))).toEqual({ link: '', error: 'down' })
+  expect(parseLink(reply(200, { link: TOKEN }))).toEqual({ link: '', error: 'down' })
+  expect(parseLink(reply(429, { error: 'often' })).error).toBe('often')
+  // Служебные: шаблон переводится целиком, ники и название группы — нет
+  expect(describe({ f: '1', k: 'create', n: 'club' })).toEqual({ text: '{0} создал(а) группу «{1}»', values: ['1', 'club'] })
+  expect(describe({ f: '1', k: 'add', o: '2' })).toEqual({ text: '{0} добавил(а) {1}', values: ['1', '2'] })
+  expect(describe({ f: '1', k: 'remove', o: '2' })).toEqual({ text: '{0} убрал(а) {1}', values: ['1', '2'] })
+  expect(describe({ f: '1', k: 'leave' })).toEqual({ text: '{0} вышел(а) из группы', values: ['1'] })
+  expect(describe({ f: '1', k: 'name', n: 'club' })).toEqual({ text: '{0} назвал(а) группу «{1}»', values: ['1', 'club'] })
+  expect(fill(tr('{0} создал(а) группу «{1}»', 'en'), ['@octocat', 'Все друзья'])).toBe('@octocat created the group “Все друзья”')
+  expect(fill(tr('{0} убрал(а) {1}', 'de'), ['@a', '@b'])).toBe('@a hat @b entfernt')
+  expect(fill('{0} and {2}', ['x'])).toBe('x and {2}')
+  // Время по часам компьютера: сегодня — ЧЧ:ММ, в этом году — с датой, раньше — только дата
+  const now = new Date(2026, 9, 23, 18, 30).getTime()
+  expect(when(new Date(2026, 9, 23, 9, 5).getTime(), now)).toBe('09:05')
+  expect(when(new Date(2026, 2, 1, 14, 0).getTime(), now)).toBe('01.03 14:00')
+  expect(when(new Date(2026, 9, 22, 23, 59).getTime(), now)).toBe('22.10 23:59')
+  expect(when(new Date(2025, 11, 31, 23, 59).getTime(), now)).toBe('31.12.2025')
+  expect(when(NaN, now)).toBe('')
+})
+
+// Сайт с чатами octocat (583231): друзья octo_pal (7) и new_pal (21); чат с octo_pal (два непрочитанных) и группа
+// «club», которой управляет octo_pal. Вопросы с ?chat=… сайт разбирает по пути без них. state.unfriended — octo_pal
+// больше не друг: писать ему нельзя; state.gone — вход больше не действует
+function chatsSite() {
+  const ME = OCTO.id
+  const names: Record<string, string> = { [ME]: 'octocat', 7: 'octo_pal', 21: 'new_pal' }
+  const friends = ['7', '21']
+  const T = Date.UTC(2026, 9, 23, 12)
+  const chats: any[] = [
+    {
+      id: DM,
+      kind: 'dm',
+      with: '7',
+      members: [ME, '7'],
+      messages: [
+        { s: 1, at: T, f: ME, t: 'ready?' },
+        { s: 2, at: T + 60_000, f: '7', t: 'almost' },
+        { s: 3, at: T + 120_000, f: '7', t: 'hi! a game tonight?' },
+      ],
+      unread: 2,
+    },
+    { id: CLUB, kind: 'group', name: 'club', owner: '7', members: ['7', ME], messages: [{ s: 1, at: T - 60_000, f: '7', k: 'create', n: 'club' }], unread: 0 },
+  ]
+  let groups = 1
+  const state = { gone: false, unfriended: false }
+  const mine = () => chats.filter((c) => c.members.includes(ME))
+  const find = (id: string) => mine().find((c) => c.id === id)
+  const total = () => mine().reduce((n, c) => n + c.unread, 0)
+  const about = (c: any) => ({ id: c.id, kind: c.kind, ...(c.kind === 'dm' ? { with: c.with } : { name: c.name, owner: c.owner }), members: c.members })
+  const at = (c: any) => c.messages.at(-1)?.at ?? 0
+  const post = (c: any, m: any) => {
+    const msg = { s: (c.messages.at(-1)?.s ?? 0) + 1, at: T + 3_600_000, ...m }
+    c.messages.push(msg)
+    return msg
+  }
+  const gone = { status: 404, json: { error: 'gone' } }
+  const guard = (fn: (request: any) => any) => (request: any) => (state.gone ? { status: 401, json: { error: 'auth' } } : fn(request))
+  const routes: Record<string, (request: any) => any> = {
+    'GET api/me': () => ({ json: { user: OCTO, settings: {}, handle: 'octocat', ticket: ticketOf('octocat'), friends: friends.length, unread: total() } }),
+    'GET api/me/friends': guard(() => ({ json: { friends: friends.map((id) => ({ id, handle: names[id] })), incoming: [], outgoing: [] } })),
+    'GET api/me/chats': guard(() => ({
+      json: {
+        me: { id: ME },
+        chats: mine()
+          .sort((a, b) => at(b) - at(a))
+          .map((c) => ({ ...about(c), unread: c.unread, at: at(c), ...(c.messages.length ? { last: c.messages.at(-1) } : {}) })),
+        names,
+        unread: total(),
+      },
+    })),
+    // Открыл переписку — прочитал её
+    'GET api/me/chats/messages': guard(({ query }) => {
+      const c = find(query.chat)
+      if (!c) return gone
+      c.unread = 0
+      const after = query.after ? Number(query.after) : 0
+      const before = query.before ? Number(query.before) : Infinity
+      return { json: { me: { id: ME }, chat: about(c), messages: c.messages.filter((m: any) => m.s > after && m.s < before), first: 1, names, unread: total() } }
+    }),
+    'POST api/me/chats/send': guard(({ body }) => {
+      const c = find(body.chat)
+      if (!c) return gone
+      if (state.unfriended && c.kind === 'dm') return { status: 403, json: { error: 'friend' } }
+      return { json: { msg: post(c, { f: ME, t: body.text }) } }
+    }),
+    'POST api/me/chats/open': guard(({ body }) => {
+      if (!friends.includes(body.with)) return { status: 403, json: { error: 'friend' } }
+      const id = `d${[body.with, ME].sort((a, b) => Number(a) - Number(b)).join('-')}`
+      let c = chats.find((x) => x.id === id)
+      if (!c) chats.push((c = { id, kind: 'dm', with: body.with, members: [ME, body.with], messages: [], unread: 0 }))
+      return { json: { chat: about(c) } }
+    }),
+    'POST api/me/chats/group': guard(({ body }) => {
+      const c = { id: `g${String(++groups).padStart(16, '0')}`, kind: 'group', name: body.name, owner: ME, members: [ME, ...(body.all ? friends : body.members)], messages: [], unread: 0 }
+      post(c, { f: ME, k: 'create', n: body.name })
+      chats.push(c)
+      return { json: { chat: about(c) } }
+    }),
+    'POST api/me/chats/members': guard(({ body }) => {
+      const c = find(body.chat)
+      if (!c || c.kind !== 'group') return gone
+      if (body.leave) {
+        c.members = c.members.filter((id: string) => id !== ME)
+        post(c, { f: ME, k: 'leave' })
+        return { json: { ok: true } }
+      }
+      if (c.owner !== ME) return { status: 403, json: { error: 'owner' } }
+      for (const id of body.add ?? []) {
+        c.members.push(id)
+        post(c, { f: ME, k: 'add', o: id })
+      }
+      for (const id of body.remove ?? []) {
+        c.members = c.members.filter((x: string) => x !== id)
+        post(c, { f: ME, k: 'remove', o: id })
+      }
+      if (body.name) {
+        c.name = body.name
+        post(c, { f: ME, k: 'name', n: body.name })
+      }
+      return { json: { chat: about(c) } }
+    }),
+    'POST api/me/chats/ticket': guard(({ body }) => (body?.link === true ? { json: { link: LINK_CODE } } : { status: 400, json: { error: 'invalid' } })),
+    'GET api/me/chats/unread': guard(() => ({ json: { unread: total() } })),
+  }
+  const { api: account } = accountSite()
+  const api = (path: string, request: any) => {
+    const [bare, query = ''] = path.split('?')
+    const route = routes[`${request.method} ${bare}`]
+    return route ? route({ ...request, query: Object.fromEntries(new URLSearchParams(query)) }) : account(bare, request)
+  }
+  return { api, chats, state, post }
+}
+
+test('чаты без входа: плитка видна, экран зовёт войти через GitHub, сайт не спрашиваем', HEAVY, async ($, on) => {
+  const { api } = accountSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-menu-chats' })).toMatchObject({ props: { label: 'Чаты' } })
+  expect(await ui.find({ type: 'Text', text: '  с друзьями: один на один и группы; нужен вход через GitHub' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-chats' })
+  await clock.settle()
+  expect(requests).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Чтобы писать друзьям, войди через GitHub.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chat-new' })).toBeUndefined()
+  await ui.press({ key: 'arcade-chats-login' })
+  await clock.settle()
+  expect(sent(requests, 'api/auth/start', 'POST').length).toBe(1)
+  expect(await ui.find({ type: 'Text', text: 'Введи этот код на странице GitHub:' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('чаты без своего ника: экран просит взять @ник, список чатов не спрашиваем', HEAVY, async ($, on) => {
+  const { api } = accountSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-chats' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Писать друзьям можно, когда у тебя есть @ник — сначала возьми свой.' })).toBeDefined()
+  expect(requests.filter((r) => r.path.startsWith('api/me/chats'))).toEqual([])
+  await ui.press({ key: 'arcade-chats-handle' })
+  expect(await ui.find({ key: 'arcade-account-take' })).toMatchObject({ props: { label: 'Взять @octocat' } })
+  await ui.unmount()
+})
+
+test('чаты: список, переписка, отправка, новые сообщения по таймеру, чат с другом, страница по коду ссылки', HEAVY, async ($, on) => {
+  const { api, chats, state, post } = chatsSite()
+  const { clock, requests, saved, launches } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string | RegExp) => ui.find({ type: 'Text', text: t })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  // Поле «Сообщение» на экране одно; его номер меняется после каждой отправки
+  const write = async (value: string) => {
+    const field = await ui.find({ type: 'Input' })
+    await ui.input({ key: field!.key!, text: value, kind: 'submit' })
+    await clock.settle()
+  }
+  const messages = () => requests.filter((r) => r.path.startsWith('api/me/chats/messages?'))
+  // Плитка: сколько непрочитанных — из /api/me
+  expect(await text('  непрочитанных: 2')).toBeDefined()
+  await press('arcade-menu-chats')
+  expect(sent(requests, 'api/me/chats', 'GET').map((r) => r.headers.Authorization)).toEqual([`Bearer ${TOKEN}`])
+  // Список: новые сверху, у чата — непрочитанные и последнее сообщение; служебное — словами
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal (2)' } })
+  expect(await ui.find({ key: `arcade-chat-open-${CLUB}` })).toMatchObject({ props: { label: 'club' } })
+  expect(await text(/ · hi! a game tonight\?$/)).toBeDefined()
+  expect(await text(/ · @octo_pal создал\(а\) группу «club»$/)).toBeDefined()
+  expect(await text('Переписка хранится на сайте Arcade и не шифруется — не пиши туда пароли и ключи.')).toBeDefined()
+  // Переписка: сайт отмечает прочитанным; своё — от своего ника
+  await press(`arcade-chat-open-${DM}`)
+  expect(messages().at(-1).path).toBe(`api/me/chats/messages?chat=${DM}`)
+  expect(await text('hi! a game tonight?')).toBeDefined()
+  expect(await text('ready?')).toBeDefined()
+  expect(await text('@octocat')).toBeDefined()
+  expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Сообщение', submitLabel: 'Отправить' } })
+  // Отправить: без пробелов по краям; поле — новое
+  const before = (await ui.find({ type: 'Input' }))!.key
+  await write('  sure, chess at 8  ')
+  expect(sent(requests, 'api/me/chats/send', 'POST').at(-1)).toMatchObject({ body: { chat: DM, text: 'sure, chess at 8' }, headers: { Authorization: `Bearer ${TOKEN}` } })
+  expect(await text('sure, chess at 8')).toBeDefined()
+  expect((await ui.find({ type: 'Input' }))!.key).not.toBe(before)
+  // Пустое не уходит, длинное — заметка здесь же
+  await write('   ')
+  await write('x'.repeat(2001))
+  expect(sent(requests, 'api/me/chats/send', 'POST').length).toBe(1)
+  expect(await text('Сообщение длиннее 2000 знаков.')).toBeDefined()
+  // Новое от друга — по таймеру, только после последнего показанного
+  post(chats[0], { f: '7', t: 'see you there' })
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(messages().at(-1).path).toBe(`api/me/chats/messages?chat=${DM}&after=4`)
+  expect(await text('see you there')).toBeDefined()
+  // Больше не друг — писать нельзя
+  state.unfriended = true
+  await write('still there?')
+  expect(await text('Писать можно только друзьям.')).toBeDefined()
+  state.unfriended = false
+  // Назад к списку: непрочитанных больше нет
+  await press('arcade-chats-back')
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal' } })
+  await press('arcade-back')
+  expect(await text('  с друзьями: один на один и группы')).toBeDefined()
+  // Новый чат с другом: сайт заводит его, переписка пустая
+  await press('arcade-menu-chats')
+  await press('arcade-chat-new')
+  expect(sent(requests, 'api/me/friends', 'GET').length).toBe(1)
+  expect(await ui.find({ key: 'arcade-chat-dm-7' })).toMatchObject({ props: { label: '@octo_pal' } })
+  await press('arcade-chat-dm-21')
+  expect(sent(requests, 'api/me/chats/open', 'POST').at(-1).body).toEqual({ with: '21' })
+  expect(await text('@new_pal')).toBeDefined()
+  expect(await text('Здесь пока пусто — напиши первым.')).toBeDefined()
+  // «Открыть на странице»: сайт выдаёт код ссылки, ключ сессии в адрес не идёт; открытый чат — тоже в адресе
+  await press('arcade-chats-page')
+  expect(sent(requests, 'api/me/chats/ticket', 'POST').at(-1).body).toEqual({ link: true })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/chat#k=${LINK_CODE}&c=d21-583231`)
+  expect(launches.at(-1).env.ARCADE_URL).not.toContain(TOKEN)
+  expect(await text(/^Чаты открыты в /)).toBeDefined()
+  // Вход больше не действует — забываем его; экран чатов зовёт войти
+  state.gone = true
+  await press('arcade-chats-back')
+  expect(saved.has('account')).toBe(false)
+  expect(await text('Вход на этом компьютере больше не действует — войди через GitHub заново.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chats-login' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('чаты: группа из отмеченных друзей, участники, название, выйти, группа со всеми друзьями', HEAVY, async ($, on) => {
+  const { api, chats } = chatsSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string | RegExp) => ui.find({ type: 'Text', text: t })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const field = async () => (await ui.find({ type: 'Input' }))!.key!
+  const members = () => sent(requests, 'api/me/chats/members', 'POST').map((r) => r.body)
+  await press('arcade-menu-chats')
+  await press('arcade-chat-new')
+  // Сначала — отметить друзей и назвать группу; без этого сайт не спрашиваем
+  await press('arcade-chat-create')
+  expect(await text('Отметь хотя бы одного друга.')).toBeDefined()
+  await press('arcade-chat-pick-7')
+  expect(await ui.find({ key: 'arcade-chat-pick-7' })).toMatchObject({ props: { label: '☑ @octo_pal' } })
+  expect(await ui.find({ key: 'arcade-chat-pick-21' })).toMatchObject({ props: { label: '☐ @new_pal' } })
+  await press('arcade-chat-create')
+  expect(await text('Назови группу.')).toBeDefined()
+  expect(sent(requests, 'api/me/chats/group', 'POST')).toEqual([])
+  await ui.input({ key: await field(), text: '  chess\nclub  ', kind: 'change' })
+  await press('arcade-chat-create')
+  expect(sent(requests, 'api/me/chats/group', 'POST').at(-1).body).toEqual({ name: 'chess club', members: ['7'] })
+  const group = chats.at(-1).id
+  expect(await text('chess club')).toBeDefined()
+  expect(await text('участники: 2')).toBeDefined()
+  expect(await text('@octocat создал(а) группу «chess club»')).toBeDefined()
+  // Участники: хозяин добавляет друзей, убирает людей и переименовывает
+  await press('arcade-chat-members')
+  expect(await text('Участники')).toBeDefined()
+  expect(await text('управляет группой')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chat-remove-7' })).toMatchObject({ props: { label: 'Убрать' } })
+  expect(await ui.find({ key: 'arcade-chat-remove-583231' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-chat-add-21' })).toMatchObject({ props: { label: '+ @new_pal' } })
+  await press('arcade-chat-add-21')
+  expect(members().at(-1)).toEqual({ chat: group, add: ['21'] })
+  expect(await text('Участник добавлен.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chat-add-21' })).toBeUndefined()
+  await press('arcade-chat-remove-7')
+  expect(members().at(-1)).toEqual({ chat: group, remove: ['7'] })
+  expect(await text('Участник убран.')).toBeDefined()
+  expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Переименовать', placeholder: 'chess club' } })
+  await ui.input({ key: await field(), text: 'chess club', kind: 'submit' })
+  await clock.settle()
+  expect(members().length).toBe(2) // то же название — сайт не спрашиваем
+  await ui.input({ key: await field(), text: 'club 2', kind: 'submit' })
+  await clock.settle()
+  expect(members().at(-1)).toEqual({ chat: group, name: 'club 2' })
+  expect(await text('Название группы изменено.')).toBeDefined()
+  // В переписке — что было, словами
+  await press('arcade-back')
+  expect(await text('club 2')).toBeDefined()
+  expect(await text('@octocat добавил(а) @new_pal')).toBeDefined()
+  expect(await text('@octocat убрал(а) @octo_pal')).toBeDefined()
+  expect(await text('@octocat назвал(а) группу «club 2»')).toBeDefined()
+  // Чужая группа: управлять нельзя, выйти — со второго нажатия
+  await press('arcade-chats-back')
+  await press(`arcade-chat-open-${CLUB}`)
+  await press('arcade-chat-members')
+  expect(await ui.find({ type: 'Input' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-chat-remove-7' })).toBeUndefined()
+  await press('arcade-chat-leave')
+  expect(await ui.find({ key: 'arcade-chat-leave' })).toMatchObject({ props: { label: 'Точно выйти? Нажми ещё раз' } })
+  expect(members().length).toBe(3)
+  await press('arcade-chat-leave')
+  expect(members().at(-1)).toEqual({ chat: CLUB, leave: true })
+  expect(await text('Ты больше не в этой группе.')).toBeDefined()
+  expect(await ui.find({ key: `arcade-chat-open-${CLUB}` })).toBeUndefined()
+  // Группа со всеми друзьями: название — «Все друзья», если своего не вписали
+  await press('arcade-chat-new')
+  await press('arcade-chat-all')
+  expect(sent(requests, 'api/me/chats/group', 'POST').at(-1).body).toEqual({ name: 'Все друзья', all: true })
+  expect(await text('Все друзья')).toBeDefined()
+  expect(await text('участники: 3')).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: чаты открываются на странице во встроенном браузере Claude, панель Arcade уступает место', HEAVY, async ($, on) => {
+  const { api } = chatsSite()
+  const { clock, browserCalls, closed, launches } = stubs(on, { api, browser: 'ok', stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-chats' })
+  await clock.settle()
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal (2)' } })
+  await ui.press({ key: 'arcade-chats-page' })
+  await clock.settle()
+  expect(browserCalls.length).toBe(1)
+  expect(browserCalls[0]).toMatchObject({ server: 'Claude_Browser', tool: 'preview_start', args: { url: `${SITE}/chat#k=${LINK_CODE}` } })
+  expect(closed).toEqual(['arcade'])
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Text', text: 'Чаты открыты во встроенном браузере Claude.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('чаты по-английски: экраны, служебные сообщения и плитка без русских букв', HEAVY, async ($, on) => {
+  const { api } = chatsSite()
+  const { clock, requests, launches } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  expect(await ui.find({ key: 'arcade-menu-chats' })).toMatchObject({ props: { label: 'Chats' } })
+  expect(await ui.find({ type: 'Text', text: '  unread: 2' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-menu-chats')
+  expect(await ui.find({ type: 'Text', text: / · @octo_pal created the group “club”$/ })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await press(`arcade-chat-open-${DM}`)
+  expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Message', submitLabel: 'Send' } })
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-chats-page')
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/chat?lang=en#k=${LINK_CODE}&c=${DM}`)
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-chats-back')
+  await press('arcade-chat-new')
+  expect(await cyrillic()).toEqual([])
+  await press('arcade-chat-all')
+  expect(sent(requests, 'api/me/chats/group', 'POST').at(-1).body).toEqual({ name: 'All friends', all: true })
+  expect(await ui.find({ type: 'Text', text: '@octocat created the group “All friends”' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'members: 3' })).toBeDefined()
+  await press('arcade-chat-members')
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })

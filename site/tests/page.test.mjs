@@ -1479,4 +1479,340 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual(catalogShow.verified, [])
 }
 
+// --- Чаты (chat.html): билет из адреса — в хранилище вкладки, список, переписка, отправка, группы, живое соединение --
+{
+  const until = Math.floor(Date.now() / 1000) + 3600
+  const TICKET = `1.${until}.0123456789ab.${'A'.repeat(22)}`
+  const LINK = `1.${until - 3480}.0123456789ab.${'L'.repeat(22)}`
+  const GROUP = 'gabcdefghijklmnop'
+  // Сайт: чаты Алисы (1) — с Бобом (2) и группа Squad с Бобом и Кэрол (3)
+  function site() {
+    const now = Date.now()
+    return {
+      me: { id: '1', handle: 'alice' },
+      names: { 1: 'alice', 2: 'bob', 3: 'carol' },
+      friends: [{ id: '2', handle: 'bob' }, { id: '3', handle: 'carol' }],
+      chats: {
+        'd1-2': { meta: { id: 'd1-2', kind: 'dm', members: ['1', '2'] }, with: '2', unread: 2, messages: [
+          { s: 1, f: '1', t: 'привет', at: now - 3 * 86_400_000 },
+          { s: 2, f: '2', t: 'смотри https://example.com/a?b=1. и javascript:alert(1)', at: now - 60_000 },
+          { s: 3, f: '2', t: 'ну как?', at: now - 30_000 },
+        ] },
+        [GROUP]: { meta: { id: GROUP, kind: 'group', name: 'Squad', owner: '1', members: ['1', '2', '3'] }, unread: 0, messages: [
+          { s: 1, f: '1', k: 'create', n: 'Squad', at: now - 120_000 },
+          { s: 2, f: '3', t: 'всем привет', at: now - 100_000 },
+        ] },
+      },
+      fail: {},
+    }
+  }
+  async function chatPage({ hash = '', search = '', store = new Map(), data = site() }) {
+    const page = { replaced: null, fetched: [], handlers: {}, timers: [], sockets: [], store, data, focused: null, location: { hash, search, pathname: '/chat', host: 'agent-arcade.test', protocol: 'https:' } }
+    const node = (tag) => ({
+      tagName: tag, className: '', children: [], attributes: {}, listeners: {}, title: '', own: '', value: '', disabled: false, scrollTop: 0, scrollHeight: 0, clientHeight: 0,
+      classList: { set: new Set(), toggle(c, on) { if (on) this.set.add(c); else this.set.delete(c) }, contains(c) { return this.set.has(c) } },
+      get textContent() { return this.own + this.children.map((c) => (typeof c === 'string' ? c : c.textContent)).join('') },
+      set textContent(v) { this.own = String(v); this.children = [] },
+      append(...kids) { this.children.push(...kids) },
+      addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
+      setAttribute(k, v) { this.attributes[k] = String(v) },
+      focus() { page.focused = this },
+      fire(t, event = {}) { for (const f of this.listeners[t] ?? []) f({ preventDefault() {}, ...event }) },
+    })
+    const all = (x, test, out = []) => {
+      for (const c of x.children) if (typeof c !== 'string') (test(c) && out.push(c), all(c, test, out))
+      return out
+    }
+    page.all = (cls) => all(page.root, (n) => n.className.split(' ').includes(cls))
+    page.one = (cls) => page.all(cls)[0]
+    page.button = (text) => all(page.root, (n) => n.tagName === 'button' && n.textContent === text)[0]
+    page.root = node('div')
+    class Socket {
+      constructor(url, protocols) {
+        Object.assign(this, { url, protocols, listeners: {}, sent: [], closed: false })
+        page.sockets.push(this)
+      }
+      addEventListener(t, f) { (this.listeners[t] ??= []).push(f) }
+      send(d) { this.sent.push(d) }
+      close() { this.closed = true }
+      fire(t, event = {}) { for (const f of this.listeners[t] ?? []) f(event) }
+    }
+    const reply = (status, body) => ({ ok: status < 400, status, json: async () => body })
+    const summary = (c) => ({ ...c.meta, last: c.messages.at(-1)?.s ?? 0, ...(c.with ? { with: c.with } : {}) })
+    const total = () => Object.values(data.chats).reduce((n, c) => n + c.unread, 0)
+    const ctx = {
+      location: page.location, URLSearchParams, console, Intl, WebSocket: Socket,
+      history: { replaceState: (s, t, url) => { page.replaced = url } },
+      navigator: { language: 'ru-RU' },
+      localStorage: { getItem: () => null, setItem() {} },
+      sessionStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
+      document: { title: '', hidden: false, documentElement: {}, createElement: node, getElementById: () => page.root, addEventListener: (t, f) => (page.handlers[`document:${t}`] ??= []).push(f) },
+      addEventListener: (t, f) => (page.handlers[t] ??= []).push(f),
+      setTimeout: (f, ms) => page.timers.push({ f, ms }),
+      fetch: async (url, init = {}) => {
+        const u = new URL(url, 'https://agent-arcade.test')
+        const route = u.pathname.replace('/api/me/', '')
+        const body = init.body ? JSON.parse(init.body) : undefined
+        page.fetched.push({ method: init.method, route, query: u.search, auth: init.headers.Authorization, body })
+        // Код ссылки — один раз на билет
+        if (route === 'chats/ticket' && init.headers.Authorization === `Link ${LINK}` && !data.traded) {
+          data.traded = true
+          return reply(200, { ticket: TICKET, until })
+        }
+        if (init.headers.Authorization !== `Chat ${TICKET}`) return reply(401, { error: 'auth' })
+        if (data.fail[route]) return reply(400, { error: data.fail[route] })
+        const chat = data.chats[u.searchParams.get('chat') ?? body?.chat]
+        if (route === 'chats') {
+          const list = Object.values(data.chats).map((c) => ({ id: c.meta.id, kind: c.meta.kind, ...(c.with ? { with: c.with } : { name: c.meta.name }), unread: c.unread, at: c.messages.at(-1)?.at ?? 0, ...(c.messages.length ? { last: c.messages.at(-1) } : {}) }))
+          return reply(200, { me: data.me, chats: list.sort((a, b) => b.at - a.at), names: data.names, unread: total() })
+        }
+        if (route === 'chats/messages') {
+          if (!chat) return reply(404, { error: 'gone' })
+          const after = Number(u.searchParams.get('after') ?? -1)
+          const before = Number(u.searchParams.get('before') ?? Infinity)
+          if (!u.searchParams.has('before')) chat.unread = 0
+          return reply(200, { me: data.me, chat: summary(chat), messages: chat.messages.filter((m) => m.s > after && m.s < before), first: 1, names: data.names, unread: total() })
+        }
+        if (route === 'chats/send') {
+          const msg = { s: (chat.messages.at(-1)?.s ?? 0) + 1, f: '1', t: body.text, at: Date.now() }
+          chat.messages.push(msg)
+          return reply(200, { msg })
+        }
+        if (route === 'friends') return reply(200, { friends: data.friends, incoming: [], outgoing: [] })
+        if (route === 'chats/open') {
+          const id = `d1-${body.with}`
+          data.chats[id] ??= { meta: { id, kind: 'dm', members: ['1', body.with] }, with: body.with, unread: 0, messages: [] }
+          return reply(200, { chat: { id, kind: 'dm', with: body.with } })
+        }
+        if (route === 'chats/group') {
+          const id = 'gzyxwvutsrqponmlk'
+          const members = ['1', ...(body.all ? data.friends.map((f) => f.id) : body.members)]
+          data.chats[id] = { meta: { id, kind: 'group', name: body.name, owner: '1', members }, unread: 0, messages: [{ s: 1, f: '1', k: 'create', n: body.name, at: Date.now() }] }
+          return reply(200, { chat: summary(data.chats[id]) })
+        }
+        if (route === 'chats/members') {
+          if (body.leave) {
+            delete data.chats[body.chat]
+            return reply(200, {})
+          }
+          if (body.name) chat.meta.name = body.name
+          for (const id of body.remove ?? []) chat.meta.members = chat.meta.members.filter((m) => m !== id)
+          for (const id of body.add ?? []) chat.meta.members.push(id)
+          chat.messages.push({ s: chat.messages.at(-1).s + 1, f: '1', k: body.name ? 'name' : body.add ? 'add' : 'remove', ...(body.name ? { n: body.name } : { o: (body.add ?? body.remove)[0] }), at: Date.now() })
+          return reply(200, { chat: summary(chat) })
+        }
+        return reply(404, { error: 'not found' })
+      },
+    }
+    ctx.window = ctx
+    vm.createContext(ctx)
+    for (const file of ['i18n.js', 'chat.js']) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
+    page.ctx = ctx
+    page.wait = () => new Promise((r) => setTimeout(r, 5))
+    // Таймеры страницы идут по команде теста
+    page.flush = async () => {
+      const due = page.timers.splice(0)
+      for (const t of due) t.f()
+      await page.wait()
+    }
+    page.go = async (next) => {
+      page.location.hash = next
+      for (const f of page.handlers.hashchange) f({})
+      await page.wait()
+    }
+    page.items = () => page.all('item')
+    page.messages = () => page.all('msg')
+    page.notice = () => page.one('notice').textContent
+    page.input = () => page.root.children[0] && all(page.root, (n) => n.tagName === 'textarea')[0]
+    page.send = async (text) => {
+      page.input().value = text
+      page.input().fire('keydown', { key: 'Enter', shiftKey: false })
+      await page.wait()
+    }
+    await page.wait()
+    return page
+  }
+
+  // Без билета — подсказка открыть чаты из Arcade; к сайту не ходим
+  const bare = await chatPage({})
+  assert.match(bare.root.textContent, /Чаты открываются из Arcade: \/arcade → Чаты/)
+  assert.equal(bare.fetched.length, 0)
+  assert.equal(bare.sockets.length, 0)
+  assert.equal(bare.replaced, '/chat')
+  // Билет истёк — тоже
+  const old = await chatPage({ hash: `#t=1.${Math.floor(Date.now() / 1000) - 60}.0123456789ab.${'A'.repeat(22)}` })
+  assert.match(old.root.textContent, /открываются из Arcade/)
+  assert.equal(old.fetched.length, 0)
+
+  // Билет и чат из адреса: билет — в хранилище вкладки и из адреса уходит, в адресе остаётся чат
+  const page = await chatPage({ hash: `#t=${TICKET}&c=d1-2` })
+  assert.equal(page.store.get('arcade:chat'), TICKET)
+  assert.equal(page.replaced, '/chat#c=d1-2')
+  assert.ok(page.fetched.every((f) => f.auth === `Chat ${TICKET}`), 'билет едет заголовком, не в адресе')
+  assert.ok(page.fetched.every((f) => !f.query.includes(TICKET)))
+  // Живое соединение: подпротоколы — имя и билет
+  assert.equal(page.sockets.length, 1)
+  assert.equal(page.sockets[0].url, 'wss://agent-arcade.test/net/chat')
+  assert.deepEqual([...page.sockets[0].protocols], ['arcade-chat', TICKET])
+  // Список: свежие сверху, превью с автором в группе; открытый чат прочитан
+  assert.equal(page.one('me').textContent, '@alice')
+  assert.deepEqual(page.items().map((i) => i.children[0].textContent), ['@bob', 'Squad'])
+  assert.equal(page.items()[0].children[2].textContent, 'ну как?')
+  assert.equal(page.items()[1].children[2].textContent, '@carol: всем привет')
+  assert.ok(page.items()[0].classList.contains('active'))
+  assert.equal(page.items()[0].children[3].textContent, '', 'прочитанный чат — без счётчика')
+  assert.equal(page.ctx.document.title, 'Чаты · Arcade')
+  // Переписка: дни, свои справа, ссылки — только http(s)
+  assert.equal(page.one('head').children[1].textContent, '@bob')
+  assert.deepEqual(page.all('day').map((d) => d.textContent).slice(1), ['Сегодня'])
+  assert.equal(page.messages().length, 3)
+  assert.ok(page.messages()[0].className.includes('mine') && !page.messages()[1].className.includes('mine'))
+  assert.equal(page.all('who').length, 0, 'в чате на двоих автора не подписываем')
+  const text = page.all('text')[1]
+  assert.equal(text.children[1].tagName, 'a')
+  assert.equal(text.children[1].href, 'https://example.com/a?b=1')
+  assert.equal(text.children[1].rel, 'noopener noreferrer')
+  assert.equal(text.children[2], '. и javascript:alert(1)')
+  assert.equal(page.all('more').length, 0, 'вся история уже здесь')
+
+  // Отправка: Enter, текст — на сайт, сообщение — в переписке, поле пустое
+  await page.send('  салют  ')
+  const sent = page.fetched.at(-1)
+  assert.deepEqual([sent.method, sent.route, sent.body], ['POST', 'chats/send', { chat: 'd1-2', text: 'салют' }])
+  assert.equal(page.messages().at(-1).children[0].textContent, 'салют')
+  assert.ok(page.messages().at(-1).className.includes('mine'))
+  assert.equal(page.input().value, '')
+  // Сайт отказал — текст остаётся, объяснение — по-человечески
+  page.data.fail['chats/send'] = 'often'
+  await page.send('ещё')
+  assert.equal(page.input().value, 'ещё')
+  assert.equal(page.notice(), 'Слишком часто — подожди минуту.')
+  delete page.data.fail['chats/send']
+
+  // Кадр соединения: в открытом чате новое — страница забирает его после последнего показанного
+  page.sockets[0].fire('open')
+  await page.wait()
+  assert.ok(page.one('dot').classList.contains('on'))
+  page.data.chats['d1-2'].messages.push({ s: 5, f: '2', t: 'вижу', at: Date.now() })
+  page.sockets[0].fire('message', { data: JSON.stringify({ type: 'note', chat: 'd1-2', msg: { f: '2' } }) })
+  await page.wait()
+  assert.equal(page.fetched.filter((f) => f.route === 'chats/messages').at(-1).query, '?chat=d1-2&after=4')
+  assert.equal(page.messages().at(-1).children[0].textContent, 'вижу')
+  // В другом чате новое — обновляется только список
+  page.data.chats[GROUP].messages.push({ s: 3, f: '2', t: 'го', at: Date.now() + 1000 })
+  page.data.chats[GROUP].unread = 1
+  page.sockets[0].fire('message', { data: JSON.stringify({ type: 'note', chat: GROUP }) })
+  await page.flush()
+  assert.equal(page.items()[0].children[0].textContent, 'Squad')
+  assert.equal(page.items()[0].children[3].textContent, '1')
+  assert.equal(page.ctx.document.title, '(1) Чаты · Arcade')
+  page.sockets[0].fire('message', { data: 'pong' })
+  page.sockets[0].fire('message', { data: '{"type":"note","chat":"../x"}' })
+
+  // Группа: автор подписан, служебные сообщения — словами, заголовок со счётом участников
+  page.items()[0].fire('click')
+  await page.wait()
+  assert.equal(page.replaced, `/chat#c=${GROUP}`)
+  assert.equal(page.all('note')[0].textContent, '@alice создал(а) группу «Squad»')
+  assert.deepEqual(page.all('who').map((w) => w.textContent), ['@carol', '@bob'])
+  assert.equal(page.one('sub').textContent, 'участники: 3')
+  // Участники: хозяйка группы переименовывает, убирает и добавляет; выйти — двумя нажатиями
+  page.button('Участники').fire('click')
+  await page.wait()
+  assert.ok(page.all('mark').length === 1 && page.all('mark')[0].textContent === 'управляет группой')
+  assert.equal(page.all('person').map((p) => p.textContent).join(' '), '@alice @bob @carol')
+  page.button('Убрать').fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.at(-2).body, { chat: GROUP, remove: ['2'] })
+  assert.equal(page.all('person').map((p) => p.textContent).join(' '), '@alice @carol @bob', 'Боба можно позвать снова')
+  page.button('Добавить').fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.find((f) => f.route === 'chats/members' && f.body.add).body, { chat: GROUP, add: ['2'] })
+  page.button('Закрыть').fire('click')
+  assert.deepEqual(page.all('note').slice(-2).map((n) => n.textContent), ['@alice убрал(а) @bob', '@alice добавил(а) @bob'])
+  page.button('Участники').fire('click')
+  await page.wait()
+  page.button('Выйти из группы').fire('click')
+  assert.ok(page.button('Точно выйти? Нажми ещё раз'), 'первое нажатие только спрашивает')
+  assert.ok(!page.fetched.some((f) => f.body?.leave))
+  page.button('Точно выйти? Нажми ещё раз').fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.at(-1).body, { chat: GROUP, leave: true })
+  assert.equal(page.replaced, '/chat')
+  assert.deepEqual(page.items().map((i) => i.children[0].textContent), ['@bob'])
+
+  // Новый чат: друзья с сайта; «Написать» открывает чат на двоих, группа — из отмеченных или со всеми
+  page.button('Новый чат').fire('click')
+  await page.wait()
+  assert.equal(page.all('person').map((p) => p.textContent).join(' '), '@bob @carol')
+  page.button('Создать группу').fire('click')
+  assert.equal(page.notice(), 'Отметь хотя бы одного друга.')
+  page.all('row')[1].children[2].fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.find((f) => f.route === 'chats/open').body, { with: '3' })
+  assert.equal(page.replaced, '/chat#c=d1-3')
+  assert.match(page.root.textContent, /Здесь пока пусто/)
+  page.button('Новый чат').fire('click')
+  await page.wait()
+  page.button('Группа со всеми друзьями').fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.find((f) => f.route === 'chats/group').body, { name: 'Все друзья', all: true })
+  assert.equal(page.replaced, '/chat#c=gzyxwvutsrqponmlk')
+  assert.equal(page.one('sub').textContent, 'участники: 3')
+
+  // Чата больше нет (выгнали из группы) — переписка остаётся, писать некуда
+  page.sockets[0].fire('message', { data: JSON.stringify({ type: 'gone', chat: 'gzyxwvutsrqponmlk' }) })
+  assert.match(page.one('feed').textContent, /Этого чата больше нет/)
+  assert.equal(page.input(), undefined)
+
+  // Соединение оборвалось — пробуем снова через секунду; уступили его другой вкладке — не переподключаемся
+  page.timers.length = 0
+  page.sockets[0].fire('close', { code: 1006 })
+  assert.ok(!page.one('dot').classList.contains('on'))
+  assert.deepEqual(page.timers.map((t) => t.ms), [1000])
+  await page.flush()
+  assert.equal(page.sockets.length, 2)
+  page.sockets[1].fire('close', { code: 4000 })
+  assert.equal(page.timers.length, 0)
+
+  // Код ссылки из адреса: сразу уходит из адреса, меняется на билет — дальше как с билетом
+  const linked = await chatPage({ hash: `#k=${LINK}&c=d1-2` })
+  assert.deepEqual([linked.fetched[0].route, linked.fetched[0].method, linked.fetched[0].auth], ['chats/ticket', 'POST', `Link ${LINK}`])
+  assert.equal(linked.store.get('arcade:chat'), TICKET)
+  assert.equal(linked.replaced, '/chat#c=d1-2')
+  assert.equal(linked.items().length, 2)
+  assert.ok(linked.fetched.slice(1).every((f) => f.auth === `Chat ${TICKET}`))
+  // Код уже использован, а билета во вкладке нет — просим открыть снова; есть — живём с ним
+  const reused = await chatPage({ hash: `#k=${LINK}`, data: Object.assign(site(), { traded: true }) })
+  assert.match(reused.root.textContent, /Вход на этой странице устарел/)
+  assert.equal(reused.replaced, '/chat')
+  const kept = await chatPage({ hash: `#k=${LINK}`, store: new Map(linked.store), data: Object.assign(site(), { traded: true }) })
+  assert.equal(kept.items().length, 2)
+  // Истёкший код сайту не шлём
+  const stale = await chatPage({ hash: `#k=1.${Math.floor(Date.now() / 1000) - 1}.0123456789ab.${'L'.repeat(22)}` })
+  assert.equal(stale.fetched.length, 0)
+  assert.match(stale.root.textContent, /устарел/)
+
+  // Перезагрузка вкладки: билет — из хранилища вкладки
+  const again = await chatPage({ hash: '', store: page.store })
+  assert.equal(again.items().length, 2)
+  assert.equal(again.replaced, '/chat')
+  // Билет перестал действовать — страница его забывает и просит открыть чаты снова
+  const lost = await chatPage({ hash: `#t=1.${until}.0123456789ab.${'B'.repeat(22)}` })
+  assert.match(lost.root.textContent, /Вход на этой странице устарел/)
+  assert.equal(lost.store.size, 0)
+  // Соединение сказало «билет не годен» — то же
+  again.sockets[0].fire('close', { code: 4001 })
+  assert.match(again.root.textContent, /устарел/)
+  assert.equal(again.store.size, 0)
+
+  // По-английски
+  const en = await chatPage({ hash: `#t=${TICKET}&c=${GROUP}`, search: '?lang=en' })
+  assert.equal(en.one('sub').textContent, 'members: 3')
+  assert.equal(en.all('note')[0].textContent, '@alice created the group “Squad”')
+  assert.equal(en.button('New chat').textContent, 'New chat')
+  assert.equal(en.ctx.document.title, '(2) Chats · Arcade', 'чат с Бобом не прочитан')
+  assert.match((await chatPage({ search: '?lang=en' })).root.textContent, /^Chats open from Arcade/)
+}
+
 console.log('окно: все проверки прошли')

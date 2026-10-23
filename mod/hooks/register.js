@@ -11,6 +11,7 @@ import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, 
 import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
+import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
 
@@ -172,13 +173,25 @@ let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loadi
 // «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен. handle — @ник,
 // ticket — его подпись для сетевых игр (оба с сайта, только в памяти), naming — сайт проверяет новый ник, handleNote —
 // почему ник не взялся, claims — сколько раз ник сменили: ответ синхронизации, спрошенной до смены, ник не трогает;
-// friends и requests — сколько друзей и заявок человеку (для плитки «Друзья»)
-let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0 }
+// friends и requests — сколько друзей и заявок человеку (для плитки «Друзья»), unread — непрочитанных в чатах
+let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0, unread: 0 }
 // Друзья: list — { friends, incoming, outgoing } с сайта или null, пока не спрашивали; loading — спрашиваем список,
 // busy — какое действие ждёт ответа сайта, note — заметка под полем «Добавить друга» (bad — что-то не вышло);
 // request — номер последнего вопроса: ответ старого вопроса не нужен
 const NO_FRIENDS = { list: null, loading: false, busy: '', note: '', bad: false }
 let fr = { ...NO_FRIENDS, request: 0 }
+// Чаты: list — чаты с сайта (новые сверху) или null, пока не спрашивали; names — ники по номерам аккаунтов; me — свой
+// номер; loading — спрашиваем список. Открытый чат: talk — его id, about — он сам с сайта (участники, хозяин группы),
+// messages — переписка по порядку номеров, first — с какого номера она видна человеку, shown — сколько последних
+// сообщений показать, opening — загружаем открытый чат, older — грузим более ранние, polling — спрашиваем новые.
+// busy — какое действие ждёт ответа сайта,
+// note — заметка (bad — что-то не вышло), picked — кого отметили для новой группы, groupName — что вписано в название,
+// field — номер поля «Сообщение» (после отправки — новое, пустое), confirmLeave — «Выйти из группы» нажали один раз.
+// request — номер последнего вопроса: ответ старого не нужен
+const CHAT_SHOWN = 30 // сколько последних сообщений чата показывать сразу; «Раньше» — ещё столько же
+const NO_CHATS = { list: null, names: {}, me: '', loading: false, talk: '', about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: false, older: false, polling: false, busy: '', note: '', bad: false, groupName: '', field: 0, confirmLeave: false }
+let ch = { ...NO_CHATS, picked: new Set(), request: 0 }
+let chatLink = '' // код ссылки на страницу чатов: его страница один раз обменяет на свой билет
 let stamps = {} // когда человек менял синхронизируемые настройки: ключ → время; в $.store — syncAt
 // Какие из SYNC_KEYS сохранены на этом компьютере: чего человек здесь не менял, то берём с сайта, а не отправляем туда
 const savedKeys = new Set()
@@ -207,7 +220,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -223,6 +236,8 @@ function iconSvg(kind) {
     person: `<circle cx="24" cy="17" r="8" fill="${c}"/><path d="M9 40a15 13 0 0 1 30 0z" fill="${c}"/>`,
     // Друзья: двое, второй — позади
     people: `<circle cx="31" cy="16" r="6" fill="${c}" opacity=".6"/><path d="M21 36a10 10 0 0 1 20 0z" fill="${c}" opacity=".6"/><circle cx="19" cy="19" r="7" fill="${c}"/><path d="M7 41a12 12 0 0 1 24 0z" fill="${c}"/>`,
+    // Чаты: облачко с тремя точками
+    bubble: `<path d="M9 12h30a4 4 0 0 1 4 4v15a4 4 0 0 1-4 4H22l-8 7v-7H9a4 4 0 0 1-4-4V16a4 4 0 0 1 4-4z" fill="${c}"/><circle cx="16" cy="23.5" r="2.5" fill="#fff"/><circle cx="24" cy="23.5" r="2.5" fill="#fff"/><circle cx="32" cy="23.5" r="2.5" fill="#fff"/>`,
     globe: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><ellipse cx="24" cy="24" rx="6" ry="15" fill="none" stroke="${c}" stroke-width="2.5"/><path d="M9 24h30" stroke="${c}" stroke-width="2.5"/>`,
     cup: `<path d="M10 18h22v10a9 9 0 0 1-9 9h-4a9 9 0 0 1-9-9z" fill="${c}"/><path d="M32 21h4a4 4 0 0 1 0 8h-4" stroke="${c}" stroke-width="3" fill="none"/><path d="M16 9c0 3 3 3 3 6M23 9c0 3 3 3 3 6" stroke="#ddd" stroke-width="2" fill="none"/>`,
     window: `<rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="${c}" stroke-width="3"/><rect x="7" y="10" width="34" height="7" rx="3" fill="${c}"/><path d="M20 25l8 4-8 4z" fill="${c}"/>`,
@@ -238,7 +253,7 @@ function iconSvg(kind) {
     compass: `<circle cx="24" cy="24" r="15" fill="none" stroke="${c}" stroke-width="3"/><path d="M24 11l5 13-5 13-5-13z" fill="${c}"/><circle cx="24" cy="24" r="2.5" fill="#fff"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -749,6 +764,8 @@ function windowTarget() {
 // Команда, которая открывает окно с игрой (или с библиотекой, если id нет) на сайте Arcade.
 // На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
 function windowUrl(id) {
+  // chat — страница чатов на сайте: код ссылки после #, страница обменяет его на свой билет и уберёт из адреса
+  if (id === 'chat') return `${SITE}/chat${lang === 'ru' ? '' : `?lang=${lang}`}#k=${chatLink}${ch.talk && (menu === 'chats:talk' || menu === 'chats:members') ? `&c=${ch.talk}` : ''}`
   // video:<номер> — страница просмотра с подборкой YouTube; язык она берёт сама
   if (typeof id === 'string' && id.startsWith('video:')) return watchUrl(yt.videos, Number(id.slice(6)) || 0, lang)
   // article:<номер> — переход к статье через страницу /read, episode:<номер> — выпуск подкаста на странице /listen
@@ -794,6 +811,7 @@ function launchNotice(result, id) {
   if (result?.exitCode === 0) {
     const target = platform === 'windows' ? windowTarget() : { kind: 'default' }
     const where = target.kind === 'browser' ? target.browser.name : 'браузере по умолчанию'
+    if (id === 'chat') return `Чаты открыты в ${where}.`
     if (typeof id === 'string' && id.startsWith('video:')) return `Видео открыто в ${where}.`
     if (typeof id === 'string' && id.startsWith('article:')) return `Статья открыта в ${where}.`
     if (typeof id === 'string' && id.startsWith('episode:')) return `Выпуск открыт в ${where}.`
@@ -990,7 +1008,7 @@ function desktopNotice($, outcome, opened, url) {
   // инструмент агента или сжатие, сколько бы они ни шли
   // Что открывается: видео (и трансляция), статья или выпуск (о них — «ссылка») или игра
   const page = (path) => String(url).startsWith(`${SITE}/${path}`)
-  const kind = page('watch') || page('live') ? 'video' : page('read') || page('listen') ? 'link' : 'game'
+  const kind = page('watch') || page('live') ? 'video' : page('read') || page('listen') || page('chat') ? 'link' : 'game'
   const pick = (video, link, game) => ({ video, link, game })[kind]
   if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
   else if (outcome === 'waiting')
@@ -1316,12 +1334,14 @@ function handleNote(error, handle) {
   return accountNote(error)
 }
 
-// Вопрос к сайту про вход или настройки. Ключ сессии — только в заголовке и только своему сайту
-function accountFetch($, name, { method = 'GET', body, token } = {}) {
+// Вопрос к сайту про вход, настройки, друзей и чаты; query — параметры адреса. Ключ сессии — только в заголовке и
+// только своему сайту
+function accountFetch($, name, { method = 'GET', body, token, query } = {}) {
   const headers = { Accept: 'application/json' }
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  return fetchWithin($, accountUrl(name), ACCOUNT_FETCH_MS, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
+  const url = query ? `${accountUrl(name)}?${new URLSearchParams(query)}` : accountUrl(name)
+  return fetchWithin($, url, ACCOUNT_FETCH_MS, { method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
 }
 
 // Настройка из $.store или с сайта → в мод. Не подходит — false, остаётся прежняя
@@ -1400,6 +1420,7 @@ async function syncAccount($) {
     }
     acct.friends = me.friends
     acct.requests = me.requests
+    acct.unread = me.unread
     const now = await $.clock.now()
     if (acct.session !== session) return
     const renamed = me.user.id === session.user.id && JSON.stringify(me.user) !== JSON.stringify(session.user)
@@ -1458,8 +1479,11 @@ async function forgetSession($, note) {
   acct.handleNote = ''
   acct.friends = 0
   acct.requests = 0
+  acct.unread = 0
   acct.request++
   fr = { ...NO_FRIENDS, request: fr.request + 1 }
+  ch = { ...NO_CHATS, picked: new Set(), request: ch.request + 1 }
+  chatLink = ''
   syncTimer?.cancel()
   syncTimer = null
   $.ui.invalidate('ui.render')
@@ -1625,6 +1649,361 @@ async function addFriend($, text) {
     return $.ui.invalidate('ui.render')
   }
   await friendsCall($, 'friends', { handle }, handle)
+}
+
+// --- Чаты: с друзьями один на один и в группах ---------------------------------------------------------------------
+const CHAT_POLL_MS = 4_000 // открытый чат: новые сообщения
+const CHATS_POLL_MS = 15_000 // список чатов: новые чаты и непрочитанные
+const UNREAD_POLL_MS = 60_000 // в остальной библиотеке — сколько непрочитанных, для плитки «Чаты»
+const CHAT_KEPT = 1000 // сколько сообщений открытого чата держим в памяти
+
+// Почему с чатами не вышло; group — создавали группу: у групп свой предел на сутки
+function chatNote(error, group = false) {
+  if (error === 'often' || error === 'limit') return group ? 'Групп сегодня создано слишком много — попробуй завтра.' : 'Слишком часто — подожди минуту.'
+  if (error === 'friend') return 'Писать можно только друзьям.'
+  if (error === 'gone') return 'Этого чата больше нет.'
+  if (error === 'long') return 'Сообщение длиннее 2000 знаков.'
+  if (error === 'name') return 'Назови группу.'
+  if (error === 'empty') return 'Отметь хотя бы одного друга.'
+  if (error === 'nohandle') return 'Сначала возьми свой @ник.'
+  if (error === 'full') return 'В группе может быть не больше 50 человек.'
+  if (error === 'owner') return 'Это может только тот, кто управляет группой.'
+  if (error === 'off') return 'Чаты на сайте сейчас выключены.'
+  return accountNote(error)
+}
+
+// Кто это в чате: @ник; ника нет — аккаунт удалён
+function chatPerson(id) {
+  if (ch.names[id]) return `@${ch.names[id]}`
+  if (id && id === ch.me && acct.handle) return `@${acct.handle}`
+  return tr('удалённый аккаунт', lang)
+}
+
+// Название чата: с другом — его @ник, группы — её название
+const chatTitle = (chat) => (chat.kind === 'dm' ? chatPerson(chat.with) : chat.name || tr('Группа', lang))
+
+// Служебное сообщение словами на языке интерфейса: шаблон переводится, ники и название группы — нет
+function serviceText(m) {
+  const d = describe(m)
+  const named = m.k === 'create' || m.k === 'name'
+  return fill(tr(d.text, lang), d.values.map((v, k) => (k === 1 && named ? v : chatPerson(v))))
+}
+
+// Переписка вместе с новыми сообщениями: без повторов, по порядку номеров
+function mergeMessages(old, fresh) {
+  const all = new Map(old.map((m) => [m.s, m]))
+  for (const m of fresh) all.set(m.s, m)
+  return [...all.values()].sort((a, b) => a.s - b.s)
+}
+
+// Название группы из поля: одной строкой, не длиннее MAX_NAME
+const groupTitle = (text) => [...oneLine(text)].slice(0, MAX_NAME).join('')
+
+// Вопрос к сайту про чаты, ответ разбирает parse; с body — POST. Сайт не принял ключ сессии — забываем вход. Вход
+// пропал или сменился, пока ждали, — null: ответ уже не нужен
+async function chatFetch($, name, parse, { body, query } = {}) {
+  const session = acct.session
+  if (!session) return null
+  const answer = parse(await accountFetch($, name, { method: body === undefined ? 'GET' : 'POST', body, query, token: session.token }))
+  if (acct.session !== session) return null
+  if (answer.error !== 'auth') return answer
+  await forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  return null
+}
+
+// Список чатов; quiet — по таймеру: заметку не трогаем и перерисовываем, только если что-то поменялось
+async function loadChats($, quiet = false) {
+  if (!acct.session || ch.loading) return
+  ch.loading = true
+  if (!quiet) $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'chats', parseChats)
+  if (!answer) return
+  ch.loading = false
+  if (answer.error) {
+    if (quiet) return
+    ch.note = chatNote(answer.error)
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  const before = JSON.stringify([ch.list, ch.names, acct.unread])
+  ch.list = answer.chats
+  ch.names = { ...ch.names, ...answer.names }
+  ch.me = answer.me
+  acct.unread = answer.unread
+  if (!quiet || JSON.stringify([ch.list, ch.names, acct.unread]) !== before) $.ui.invalidate('ui.render')
+}
+
+// Открыть чат: последние сообщения с сайта; сайт заодно отмечает их прочитанными
+async function openChat($, id) {
+  if (!acct.session) return
+  const request = ++ch.request
+  if (menu !== 'chats:talk') {
+    menuFrom = menu
+    menu = 'chats:talk'
+  }
+  libraryNotice = ''
+  // Поле «Сообщение» — новое: недописанное в другом чате сюда не переходит
+  Object.assign(ch, { talk: id, about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: true, older: false, note: '', bad: false, confirmLeave: false, field: ch.field + 1 })
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'messages', parseMessages, { query: { chat: id } })
+  if (!answer || request !== ch.request) return
+  ch.opening = false
+  if (answer.error) {
+    ch.note = chatNote(answer.error)
+    ch.bad = true
+  } else {
+    ch.me = answer.me
+    ch.about = answer.chat
+    ch.messages = answer.messages
+    ch.first = answer.first
+    ch.names = { ...ch.names, ...answer.names }
+    acct.unread = answer.unread
+    const entry = ch.list?.find((c) => c.id === id)
+    if (entry) entry.unread = 0
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Новые сообщения открытого чата — по таймеру, пока он на экране. Ошибки молча: спросим ещё раз; только если чата
+// больше нет — заметка, и спрашивать перестаём
+async function pollChat($) {
+  const id = ch.talk
+  if (!acct.session || ch.polling || ch.opening || ch.about?.id !== id) return
+  ch.polling = true
+  const after = String(ch.messages.at(-1)?.s ?? 0)
+  const answer = await chatFetch($, 'messages', parseMessages, { query: { chat: id, after } })
+  if (!answer) return
+  ch.polling = false
+  if (ch.talk !== id || ch.about?.id !== id) return
+  if (answer.error) {
+    if (answer.error !== 'gone') return
+    ch.about = null
+    ch.note = chatNote('gone')
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  const before = JSON.stringify([ch.about, ch.messages.length, ch.messages.at(-1)?.s, acct.unread])
+  ch.messages = mergeMessages(ch.messages, answer.messages).slice(-CHAT_KEPT)
+  ch.about = answer.chat
+  ch.names = { ...ch.names, ...answer.names }
+  acct.unread = answer.unread
+  if (JSON.stringify([ch.about, ch.messages.length, ch.messages.at(-1)?.s, acct.unread]) !== before) $.ui.invalidate('ui.render')
+}
+
+// Есть ли сообщения раньше показанных: уже загруженные или ещё на сайте
+const olderShown = () => ch.messages.length > ch.shown || (ch.messages.length > 0 && ch.messages.length < CHAT_KEPT && ch.messages[0].s > ch.first)
+
+// «Раньше»: показать ещё CHAT_SHOWN сообщений; загруженные кончились — спросить у сайта более ранние
+async function olderMessages($) {
+  const id = ch.talk
+  if (ch.messages.length > ch.shown) {
+    ch.shown += CHAT_SHOWN
+    return $.ui.invalidate('ui.render')
+  }
+  if (!acct.session || ch.older || !olderShown()) return
+  ch.older = true
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'messages', parseMessages, { query: { chat: id, before: String(ch.messages[0].s) } })
+  if (!answer) return
+  ch.older = false
+  if (ch.talk !== id) return
+  if (answer.error) {
+    ch.note = chatNote(answer.error)
+    ch.bad = true
+  } else {
+    ch.messages = mergeMessages(answer.messages, ch.messages)
+    ch.names = { ...ch.names, ...answer.names }
+    ch.shown += CHAT_SHOWN
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Отправить сообщение из поля «Сообщение». Ушло — поле новое, пустое, и фокус снова в нём; нет — текст остаётся в поле
+async function sendMessage($, value) {
+  const id = ch.talk
+  const text = cleanText(value).trim()
+  if (!text || !acct.session || ch.busy || ch.about?.id !== id) return
+  if (text.length > MAX_TEXT) {
+    ch.note = chatNote('long')
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  ch.busy = 'send'
+  ch.note = ''
+  ch.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'send', parseSent, { body: { chat: id, text } })
+  if (!answer) return
+  ch.busy = ''
+  if (ch.talk !== id) return $.ui.invalidate('ui.render')
+  if (answer.error) {
+    ch.note = chatNote(answer.error)
+    ch.bad = true
+    if (answer.error === 'gone') ch.about = null
+  } else {
+    ch.messages = mergeMessages(ch.messages, [answer.msg]).slice(-CHAT_KEPT)
+    ch.field++
+    const key = `arcade-chat-input-${ch.field}`
+    $.clock.after(50, async () => {
+      try {
+        await $.ui.focus({ requestId: PANE, key })
+      } catch {
+        // панель уже закрыли или поле не на экране
+      }
+    })
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// «Написать» другу: чат двоих у пары один, сайт отдаёт его или заводит новый
+async function openDm($, friend) {
+  if (!acct.session || ch.busy) return
+  ch.busy = 'open'
+  ch.note = ''
+  ch.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'opendm', parseChat, { body: { with: friend } })
+  if (!answer) return
+  ch.busy = ''
+  if (answer.error || !answer.chat) {
+    ch.note = chatNote(answer.error || 'down')
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  await openChat($, answer.chat.id)
+}
+
+// «Создать группу» из отмеченных друзей; all — «Группа со всеми друзьями» (без своего названия — «Все друзья»)
+async function createGroup($, all = false) {
+  if (!acct.session || ch.busy) return
+  const friends = fr.list?.friends ?? []
+  const members = [...ch.picked].filter((id) => friends.some((p) => p.id === id))
+  const name = groupTitle(ch.groupName) || (all ? tr('Все друзья', lang) : '')
+  const problem = all ? (friends.length ? '' : 'nobody') : !members.length ? 'empty' : !name ? 'name' : ''
+  if (problem) {
+    ch.note = problem === 'nobody' ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : chatNote(problem)
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  ch.busy = 'group'
+  ch.note = ''
+  ch.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'group', parseChat, { body: all ? { name, all: true } : { name, members } })
+  if (!answer) return
+  ch.busy = ''
+  if (answer.error || !answer.chat) {
+    ch.note = chatNote(answer.error || 'down', true)
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  ch.picked = new Set()
+  ch.groupName = ''
+  ch.field++
+  await openChat($, answer.chat.id)
+}
+
+// Участники и название группы: добавить, убрать, переименовать — может хозяин; выйти — любой. done — заметка, если вышло
+async function changeMembers($, body, done = '') {
+  const id = ch.talk
+  if (!acct.session || ch.busy || ch.about?.id !== id) return
+  ch.busy = 'members'
+  ch.note = ''
+  ch.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'members', parseChat, { body: { chat: id, ...body } })
+  if (!answer) return
+  ch.busy = ''
+  if (ch.talk !== id) return $.ui.invalidate('ui.render')
+  if (answer.error || (!answer.left && !answer.chat)) {
+    ch.note = chatNote(answer.error || 'down')
+    ch.bad = true
+    if (answer.error === 'gone') ch.about = null
+  } else if (answer.left) {
+    // Вышел — чата у человека больше нет: назад к списку
+    Object.assign(ch, { talk: '', about: null, messages: [], confirmLeave: false, note: 'Ты больше не в этой группе.', bad: false })
+    menuFrom = menu
+    menu = 'chats'
+    loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+  } else {
+    ch.about = answer.chat
+    ch.note = done
+    ch.field++
+    // Служебное сообщение о перемене — в переписку сразу
+    pollChat($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// «Переименовать»: то же название — сайт не спрашиваем
+async function renameGroup($, value) {
+  const name = groupTitle(value)
+  if (!name) {
+    ch.note = chatNote('name')
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  if (name !== ch.about?.name) await changeMembers($, { name }, 'Название группы изменено.')
+}
+
+// «Выйти из группы»: первое нажатие спрашивает «точно?», второе — выходит
+async function leaveGroup($) {
+  if (!ch.confirmLeave) {
+    ch.confirmLeave = true
+    ch.note = ''
+    return $.ui.invalidate('ui.render')
+  }
+  ch.confirmLeave = false
+  await changeMembers($, { leave: true })
+}
+
+// Сколько непрочитанных — для плитки «Чаты», пока сами чаты не открыты
+async function checkUnread($) {
+  if (!acct.handle) return
+  const answer = await chatFetch($, 'unread', parseUnread)
+  if (!answer || answer.error || answer.unread === acct.unread) return
+  acct.unread = answer.unread
+  $.ui.invalidate('ui.render')
+}
+
+// «Открыть на странице»: страница чатов на сайте — во встроенном браузере Claude или в окне браузера. Ключ сессии
+// туда не идёт: сайт выдаёт код ссылки на 10 минут и на один раз, страница обменяет его на свой билет
+async function openChatPage($, surface) {
+  const page = `${SITE}/chat`
+  const builtin = builtinBrowser(surface)
+  // Страницу чатов Claude уже открывает по просьбе Arcade или она ждёт конца шага: второй раз ход не прерываем
+  const waiting = [asking, pendingOpen].find((url) => String(url ?? '').startsWith(page))
+  if (builtin && waiting) return desktopNotice($, asking === waiting ? 'asking' : compacting ? 'compacting' : 'waiting', '', waiting)
+  if (!acct.session || ch.busy) return
+  ch.busy = 'page'
+  ch.note = ''
+  ch.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'chatticket', parseLink, { body: { link: true } })
+  if (!answer) return
+  ch.busy = ''
+  if (answer.error) {
+    ch.note = chatNote(answer.error)
+    ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  chatLink = answer.link
+  if (builtin) return desktopWindow($, 'chat', 'Чаты открыты во встроенном браузере Claude.')
+  if (!platform) {
+    libraryNotice = 'Окно браузера пока не открыть — попробуй через пару секунд.'
+    return $.ui.invalidate('ui.render')
+  }
+  libraryNotice = 'Открываю окно…'
+  $.ui.invalidate('ui.render')
+  const command = windowCommand('chat')
+  try {
+    const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+    windowNotice($, launchNotice(result, 'chat'))
+    if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+  } catch (err) {
+    libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+  }
+  $.ui.invalidate('ui.render')
 }
 
 // «Выйти»: забыть вход здесь и сказать сайту, что ключ сессии больше не нужен; что ответит сайт, неважно
@@ -1920,6 +2299,7 @@ function libraryTitle() {
   if (menu === 'lang') return 'Arcade · язык'
   if (menu === 'account') return 'Arcade · аккаунт'
   if (menu === 'friends' || menu.startsWith('friends:')) return 'Arcade · друзья'
+  if (menu === 'chats' || menu.startsWith('chats:')) return 'Arcade · чаты'
   if (menu === 'youtube' || menu.startsWith('youtube:')) return 'Arcade · YouTube'
   if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
   if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
@@ -2034,6 +2414,19 @@ export function register(on) {
       // Настройки с других компьютеров — вскоре после старта и раз в полчаса; без входа syncAccount ничего не делает
       $.clock.after(3_000, () => syncAccount($))
       $.clock.every(SYNC_EVERY_MS, () => syncAccount($))
+      // Чаты — пока панель открыта на библиотеке и человек вошёл: открытый чат спрашиваем часто, список — реже, в
+      // остальной библиотеке — только сколько непрочитанных, для плитки «Чаты»
+      const chatsOn = () => paneOpen && acct.session && view === 'library'
+      const chatError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
+      $.clock.every(CHAT_POLL_MS, () => {
+        if (chatsOn() && menu === 'chats:talk') pollChat($).catch(chatError)
+      })
+      $.clock.every(CHATS_POLL_MS, () => {
+        if (chatsOn() && menu === 'chats') loadChats($, true).catch(chatError)
+      })
+      $.clock.every(UNREAD_POLL_MS, () => {
+        if (chatsOn() && !menu.startsWith('chats')) checkUnread($).catch(chatError)
+      })
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -2658,6 +3051,9 @@ export function register(on) {
           .replace(/^ar-.+$/, 'articles')
           .replace(/^pc-.+$/, 'podcasts')
           .replace(/^tw-.+$/, 'twitch')
+          // Чат с другом — иконкой человека, группа — людей
+          .replace(/^chat-open-d.+$/, 'account')
+          .replace(/^chat-open-g.+$/, 'friends')
         const alts = { youtube: 'YouTube', articles: 'Статьи', podcasts: 'Подкасты', twitch: 'Twitch' }
         return Svg({ source: iconSvg(kind), alt: alts[kind] ?? (label || kind), width: 36, height: 36 })
       }
@@ -2935,6 +3331,298 @@ export function register(on) {
               : []),
             gap,
             Button({ key: 'arcade-fr-refresh', label: fr.loading ? 'Обновляю…' : 'Обновить', onPress: () => friendsCall($, 'friends') }),
+            ...noticeLines,
+            ...hint,
+          ]
+        }
+      } else if (menu === 'chats' || menu.startsWith('chats:')) {
+        // Чаты с друзьями: список, новый чат (с другом или группа), переписка и участники группы. Чужой текст —
+        // сообщения, ники, названия групп — не переводится (keep). Без входа и без ника — что сделать сначала
+        const login = Button({
+          key: 'arcade-chats-login',
+          label: acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
+          autoFocus: true,
+          onPress: () => {
+            acct.confirmDelete = false
+            open('account')()
+            startLogin($)
+          },
+        })
+        const note = ch.note ? [ch.bad ? Text({ color: 'warning', children: [ch.note] }) : dim(ch.note)] : []
+        const row = (children) => Box({ flexDirection: 'row', columnGap: 2, children })
+        const wrapRow = (children) => Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, children })
+        // Название чата или группы: в Desktop — заголовком
+        const heading = (text) => keep(desktop ? Text({ size: 'heading', weight: 'semibold', children: [text] }) : Text({ bold: true, children: [text] }))
+        const toList = Button({
+          key: 'arcade-chats-back',
+          label: '← Чаты',
+          onPress: () => {
+            ch.note = ''
+            ch.bad = false
+            ch.confirmLeave = false
+            open('chats')()
+            loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+          },
+        })
+        const pageButton = Button({ key: 'arcade-chats-page', label: ch.busy === 'page' ? 'Открываю…' : 'Открыть на странице', onPress: () => openChatPage($, e.surface) })
+        const friends = fr.list?.friends ?? []
+        if (!acct.session) {
+          items = [
+            back,
+            gap,
+            dim('Чаты в Arcade — с друзьями: переписка один на один, группы и общий чат со всеми друзьями.'),
+            Text({ children: ['Чтобы писать друзьям, войди через GitHub.'] }),
+            dim('Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.'),
+            // Вход только что пропал (сайт его не принял) — почему
+            ...(acct.note ? [gap, Text({ color: 'warning', children: [acct.note] })] : []),
+            gap,
+            login,
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (!acct.handle && !acct.syncedAt) {
+          // Сайт ещё не сказал, есть ли у человека ник
+          items = [
+            back,
+            gap,
+            ...(acct.syncing ? [dim('Спрашиваю сайт Arcade…')] : acct.note ? [Text({ color: 'warning', children: [acct.note] })] : []),
+            gap,
+            Button({
+              key: 'arcade-chats-sync',
+              label: 'Обновить',
+              autoFocus: true,
+              onPress: async () => {
+                await syncAccount($)
+                if (acct.handle && !ch.list) await loadChats($)
+              },
+            }),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (!acct.handle) {
+          items = [
+            back,
+            gap,
+            Text({ children: ['Писать друзьям можно, когда у тебя есть @ник — сначала возьми свой.'] }),
+            dim('Ник видят друзья и соперники в сетевых партиях. Сменить его можно когда угодно — друзья останутся.'),
+            gap,
+            Button({ key: 'arcade-chats-handle', label: 'Взять @ник', autoFocus: true, onPress: open('account') }),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (menu === 'chats:new') {
+          // Новый чат: с другом — сразу, группа — отметить друзей и назвать
+          items = [
+            toList,
+            section('Написать'),
+            ...(friends.length
+              ? [wrapRow(friends.map((p, k) => keep(Button({ key: `arcade-chat-dm-${p.id}`, label: `@${p.handle}`, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => openDm($, p.id) }))))]
+              : [
+                  dim(fr.list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.'),
+                  gap,
+                  Button({
+                    key: 'arcade-chats-friends',
+                    label: 'Друзья',
+                    autoFocus: true,
+                    onPress: () => {
+                      fr.note = ''
+                      fr.bad = false
+                      open('friends')()
+                      friendsCall($, 'friends')
+                    },
+                  }),
+                ]),
+            ...(friends.length
+              ? [
+                  section('Группа'),
+                  dim('Группа: отметь друзей, назови её и нажми «Создать группу».'),
+                  wrapRow(
+                    friends.map((p) =>
+                      keep(
+                        Button({
+                          key: `arcade-chat-pick-${p.id}`,
+                          label: `${ch.picked.has(p.id) ? '☑' : '☐'} @${p.handle}`,
+                          onPress: () => {
+                            if (ch.picked.has(p.id)) ch.picked.delete(p.id)
+                            else ch.picked.add(p.id)
+                            ch.note = ''
+                            ch.bad = false
+                            $.ui.invalidate('ui.render')
+                          },
+                        }),
+                      ),
+                    ),
+                  ),
+                  gap,
+                  // Что вписано, помним сами: «Создать группу» — кнопка, а не Enter в поле
+                  Input({
+                    key: `arcade-chat-name-${ch.field}`,
+                    label: 'Название группы',
+                    placeholder: 'например: шахматный клуб',
+                    onInput: (value) => {
+                      ch.groupName = value
+                    },
+                    onSubmit: (value) => {
+                      ch.groupName = value
+                      return createGroup($)
+                    },
+                  }),
+                  row([
+                    Button({ key: 'arcade-chat-create', label: ch.busy === 'group' ? 'Создаю…' : 'Создать группу', onPress: () => createGroup($) }),
+                    Button({ key: 'arcade-chat-all', label: 'Группа со всеми друзьями', onPress: () => createGroup($, true) }),
+                  ]),
+                ]
+              : []),
+            ...(ch.busy === 'open' ? [gap, dim('Открываю чат…')] : note.length ? [gap, ...note] : []),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (menu === 'chats:talk') {
+          // Переписка: последние ch.shown сообщений, «Раньше» — ещё; новые приходят по таймеру
+          const about = ch.about
+          const listed = ch.list?.find((c) => c.id === ch.talk)
+          const title = about ? chatTitle(about) : listed ? chatTitle(listed) : ''
+          const line = (m) => {
+            const time = keep(dim(when(m.at, now)))
+            if (m.k) return row([time, Box({ flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(Text({ dimColor: true, wrap: 'wrap', children: [serviceText(m)] }))] })])
+            return Box({
+              flexDirection: 'row',
+              columnGap: 1,
+              children: [
+                time,
+                keep(Text({ bold: true, ...(m.f === ch.me ? { color: 'suggestion' } : {}), children: [chatPerson(m.f)] })),
+                Box({ flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(Text({ wrap: 'wrap', children: [m.t] }))] }),
+              ],
+            })
+          }
+          items = [
+            toList,
+            gap,
+            ...(title ? [heading(title)] : []),
+            ...(about?.kind === 'group'
+              ? [
+                  row([
+                    dim(`участники: ${about.members.length}`),
+                    Button({
+                      key: 'arcade-chat-members',
+                      label: 'Участники',
+                      onPress: () => {
+                        ch.note = ''
+                        ch.bad = false
+                        ch.confirmLeave = false
+                        open('chats:members')()
+                        // Хозяину — список друзей: кого добавить
+                        if (about.owner === ch.me) friendsCall($, 'friends')
+                      },
+                    }),
+                  ]),
+                ]
+              : []),
+            gap,
+            ...(olderShown() ? [Button({ key: 'arcade-chat-older', label: ch.older ? 'Загружаю…' : 'Раньше', onPress: () => olderMessages($) })] : []),
+            ...(ch.opening ? [dim('Загружаю переписку…')] : about && !ch.messages.length ? [dim('Здесь пока пусто — напиши первым.')] : ch.messages.slice(-ch.shown).map(line)),
+            ...(about ? [gap, Input({ key: `arcade-chat-input-${ch.field}`, label: 'Сообщение', autoFocus: true, submitLabel: tr('Отправить', lang), onSubmit: (value) => sendMessage($, value) })] : []),
+            ...(ch.busy === 'send' ? [dim('Отправляю…')] : note),
+            gap,
+            pageButton,
+            ...noticeLines,
+            ...hint,
+          ]
+        } else if (menu === 'chats:members') {
+          // Участники группы: хозяин переименовывает, добавляет друзей и убирает людей; выйти может любой
+          const about = ch.about
+          const owner = Boolean(about) && about.owner === ch.me
+          const members = about?.members ?? []
+          const others = friends.filter((p) => !members.includes(p.id))
+          items = [
+            Button({
+              key: 'arcade-back',
+              label: '← Назад',
+              autoFocus: true,
+              onPress: () => {
+                ch.note = ''
+                ch.bad = false
+                ch.confirmLeave = false
+                open('chats:talk')()
+              },
+            }),
+            gap,
+            ...(about ? [heading(chatTitle(about))] : []),
+            // Подсказка в поле — нынешнее название группы, его не переводим
+            ...(owner
+              ? [gap, keep(Input({ key: `arcade-chat-rename-${ch.field}`, label: tr('Переименовать', lang), placeholder: about.name || tr('Название группы', lang), onSubmit: (value) => renameGroup($, value) }))]
+              : []),
+            section('Участники'),
+            ...members.map((id) =>
+              row([
+                keep(Text({ children: [chatPerson(id)] })),
+                ...(id === about.owner ? [dim('управляет группой')] : []),
+                ...(owner && id !== ch.me ? [Button({ key: `arcade-chat-remove-${id}`, label: 'Убрать', onPress: () => changeMembers($, { remove: [id] }, 'Участник убран.') })] : []),
+              ]),
+            ),
+            ...(owner && others.length
+              ? [
+                  section('Добавить друзей'),
+                  wrapRow(others.map((p) => keep(Button({ key: `arcade-chat-add-${p.id}`, label: `+ @${p.handle}`, onPress: () => changeMembers($, { add: [p.id] }, 'Участник добавлен.') })))),
+                ]
+              : []),
+            ...(about ? [gap, Button({ key: 'arcade-chat-leave', label: ch.confirmLeave ? 'Точно выйти? Нажми ещё раз' : 'Выйти из группы', onPress: () => leaveGroup($) })] : []),
+            ...(ch.busy === 'members' ? [dim('Сохраняю…')] : note),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else {
+          // Список чатов: новые сверху, у каждого — последнее сообщение и непрочитанные
+          const list = ch.list ?? []
+          const fromTalk = menuFrom === 'chats:talk' || menuFrom === 'chats:members'
+          const focusId = fromTalk ? ch.talk : menuFrom === 'chats:new' ? '' : list[0]?.id
+          const preview = (c) => {
+            const last = c.last
+            if (!last) return tr('Здесь пока пусто — напиши первым.', lang)
+            // Своё — «ты:», в группе — ник; в чате двоих чужое и так от друга. Служебное уже говорит, кто
+            const who = last.t === undefined ? '' : last.f === ch.me ? tr('ты', lang) : c.kind === 'group' ? chatPerson(last.f) : ''
+            const said = last.t === undefined ? serviceText(last) : who ? `${who}: ${last.t}` : last.t
+            return clip(`${c.at ? `${when(c.at, now)} · ` : ''}${said}`, 120)
+          }
+          const chatTiles = list.flatMap((c) => [
+            keep(
+              Button({
+                key: `arcade-chat-open-${c.id}`,
+                label: `${chatTitle(c)}${c.unread ? ` (${c.unread})` : ''}`,
+                ...(c.id === focusId ? { autoFocus: true } : {}),
+                onPress: () => openChat($, c.id),
+              }),
+            ),
+            keep(dim(`  ${preview(c)}`)),
+          ])
+          items = [
+            back,
+            gap,
+            row([
+              Button({
+                key: 'arcade-chat-new',
+                label: 'Новый чат',
+                ...(menuFrom === 'chats:new' || (ch.list && !list.length) ? { autoFocus: true } : {}),
+                onPress: () => {
+                  ch.picked = new Set()
+                  ch.groupName = ''
+                  ch.field++
+                  ch.note = ''
+                  ch.bad = false
+                  open('chats:new')()
+                  friendsCall($, 'friends')
+                },
+              }),
+              pageButton,
+            ]),
+            ...(note.length ? [gap, ...note] : []),
+            section('Чаты'),
+            ...(list.length
+              ? [desktop ? tiles(chatTiles, 44) : Box({ flexDirection: 'column', children: chatTiles })]
+              : [dim(ch.list ? 'Чатов пока нет. Нажми «Новый чат» и выбери друга.' : ch.loading ? 'Загружаю чаты…' : 'Список чатов не загрузился.')]),
+            ...(!ch.list && !ch.loading ? [gap, Button({ key: 'arcade-chats-refresh', label: 'Обновить', onPress: () => loadChats($) })] : []),
+            gap,
+            dim('Переписка хранится на сайте Arcade и не шифруется — не пиши туда пароли и ключи.'),
             ...noticeLines,
             ...hint,
           ]
@@ -3714,6 +4402,29 @@ export function register(on) {
                   : acct.friends
                     ? `  друзей: ${acct.friends}`
                     : '  позови друзей по их @нику',
+          ),
+          // Чаты — плитка видна всем, как «Друзья»; непрочитанные — с сайта при синхронизации и по таймеру
+          Button({
+            key: 'arcade-menu-chats',
+            label: 'Чаты',
+            ...(String(menuFrom ?? '').startsWith('chats') ? { autoFocus: true } : {}),
+            onPress: async () => {
+              ch.note = ''
+              ch.bad = false
+              open('chats')()
+              if (!acct.session) return
+              if (!acct.syncedAt) await syncAccount($)
+              if (acct.handle) await loadChats($)
+            },
+          }),
+          dim(
+            !acct.session
+              ? '  с друзьями: один на один и группы; нужен вход через GitHub'
+              : !acct.handle && acct.syncedAt
+                ? '  сначала возьми свой @ник'
+                : acct.unread
+                  ? `  непрочитанных: ${acct.unread}`
+                  : '  с друзьями: один на один и группы',
           ),
           // Язык — прямо в главном меню: название языка на нём самом, чтобы найти его, не понимая текущего
           Button({
