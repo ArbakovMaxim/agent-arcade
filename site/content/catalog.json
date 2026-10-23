@@ -1276,6 +1276,69 @@
       }
     },
     {
+      "id": "warzone2100",
+      "console": "web",
+      "kind": "web",
+      "page": "games/warzone2100/index.html",
+      "inject": [
+        "arcade-pause.js"
+      ],
+      "isolated": true,
+      "offline": true,
+      "download": {
+        "url": "https://github.com/Warzone2100/warzone2100/releases/download/4.7.0/warzone2100_web_wasm32_archive.zip",
+        "size": 100414952,
+        "sha256": "f729df690038511e0dee662554475a9a9a7c8a9488a268d647b93e7953820ee3",
+        "skip": [
+          "*.gz",
+          "service-worker.js",
+          "workbox-*.js"
+        ],
+        "edit": {
+          "index.html": [
+            {
+              "why": "счётчик Cloudflare Web Analytics",
+              "find": "<!-- Cloudflare Web Analytics -->[\\s\\S]*?<!-- End Cloudflare Web Analytics -->",
+              "replace": ""
+            },
+            {
+              "why": "service worker — игра кешировала бы себя на весь сайт Arcade",
+              "find": "navigator\\.serviceWorker\\.register\\(\"service-worker\\.js\"\\)",
+              "replace": "Promise.reject(new Error('Arcade: без service worker'))"
+            },
+            {
+              "why": "оформление Bootstrap — с нашего сайта, а не с cdnjs (тот же файл, integrity прежний)",
+              "find": "https://cdnjs\\.cloudflare\\.com/ajax/libs/bootstrap/5\\.3\\.2/css/bootstrap\\.min\\.css",
+              "replace": "/vendor/bootstrap/bootstrap.min.css"
+            },
+            {
+              "why": "скрипт Bootstrap — с нашего сайта, а не с cdnjs (тот же файл, integrity прежний)",
+              "find": "https://cdnjs\\.cloudflare\\.com/ajax/libs/bootstrap/5\\.3\\.2/js/bootstrap\\.bundle\\.min\\.js",
+              "replace": "/vendor/bootstrap/bootstrap.bundle.min.js"
+            }
+          ]
+        }
+      },
+      "shelf": "strategy",
+      "title": "Warzone 2100",
+      "genre": "стратегия",
+      "about": "Стратегия в реальном времени после ядерной катастрофы: строй базу, изучай сотни технологий и собирай свои машины из корпуса, шасси и оружия. Кампания и бой с компьютером; первая загрузка — около 65 МБ, сохранения остаются в браузере.",
+      "about_en": "Real-time strategy after a nuclear catastrophe: build a base, research hundreds of technologies and design your own units from body, propulsion and weapon. Campaign and skirmish against the computer; the first load is about 65 MB, saves stay in your browser.",
+      "keys": "мышь — выбирать и отдавать приказы · стрелки — камера · колёсико — масштаб",
+      "license": {
+        "name": "GPL-2.0-or-later",
+        "author": "авторы Warzone 2100 (Warzone 2100 Project)",
+        "source": "https://github.com/Warzone2100/warzone2100/tree/4.7.0",
+        "commit": "4.7.0",
+        "files": [
+          "games/warzone2100/LICENSE.txt",
+          "games/warzone2100/COPYING.README",
+          "games/warzone2100/COPYING.NONGPL",
+          "games/warzone2100/BUILD.txt"
+        ]
+      }
+    },
+    {
       "id": "scummvm",
       "console": "web",
       "kind": "web",

@@ -57,6 +57,7 @@ npx serve dist       # посмотреть его в браузере на http
 
 - Сайт и скрипты — код проекта.
 - **JSNES** 2.1.0, Apache-2.0: `third_party/jsnes/LICENSE.txt`.
+- **Bootstrap** 5.3.2 (с Popper), MIT — оформление страницы Warzone 2100: `vendor/bootstrap/LICENSE.txt`, на сайте — `licenses/bootstrap/`.
 - **Thwaite** © Damian Yerrick, GPL-3.0-or-later; **Concentration Room** © Damian Yerrick, GPL-3.0-or-later; **robotfindskitten** © Damian Yerrick и Leonard Richardson, zlib. Лицензии и исходники — в `content/games/<id>/`, на сайте — в `licenses/<id>/`.
 
 ## Сетевая игра
@@ -94,6 +95,8 @@ npx serve dist       # посмотреть его в браузере на http
 Игры, написанные сразу для браузера (`kind: "web"` в каталоге): папка игры целиком лежит в `content/games/<id>/`, сборка кладёт её в `web-games/<id>/`, окно открывает страницу игры во встроенной рамке под своей полосой. Первая — HexGL (MIT): что изменено при подключении, написано в `content/games/hexgl/NOTICE.txt`.
 
 **OpenTTD 15.3** собирается в GitHub Actions официальным способом (`.github/workflows/openttd-wasm.yml`), графика — OpenGFX 8.0. Свои скрипты Arcade попадают в страницу игры при сборке сайта (поле `inject` в каталоге): `arcade-opengfx.js` кладёт OpenGFX с нашего сайта в `/baseset` до старта, поэтому игра не качает графику с openttd.org. Сохранения — в браузере игрока (IndexedDB), как у OpenTTD.
+
+**Warzone 2100 4.7.0** — официальная браузерная сборка из релиза игры на GitHub, её в репозитории нет: сборка сайта скачивает архив (поле `download` в каталоге), сверяет размер и SHA-256, кладёт его в кеш `.cache/` и распаковывает в `web-games/warzone2100/`. Правки страницы (`edit`) убирают счётчик Cloudflare Web Analytics и service worker, который кешировал бы игру на весь сайт; ролики кампании не выкладываются — игра их пропускает. Файлы больше 25 МиБ сборка сжимает gzip и режет на части, `arcade-parts.js` склеивает их в странице. Потокам игры нужен `SharedArrayBuffer`, поэтому у игры `isolated`: папка получает COOP и COEP в `_headers`, а окно с ней (`/?game=warzone2100`) — в `worker/index.js`. У игры и `offline`: `Content-Security-Policy: connect-src 'self'` не даёт ей самой спрашивать обновления у wz2100.net. Bootstrap 5.3.2 для оформления страница берёт не с cdnjs, а из `vendor/bootstrap/` (MIT) — те же файлы, `integrity` прежний. Пауза — `arcade-pause.js`: главный цикл и звук спрятаны в модуле Emscripten, поэтому страница сама даёт окну `arcadePause()`. Сохранения — в браузере игрока (IndexedDB).
 
 ## Вкладки и полки
 

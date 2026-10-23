@@ -60,6 +60,8 @@
   // поэтому останавливаем их изнутри рамки — страница наша, адрес тот же: у HexGL цикл кадров и таймер гонки, у сборок
   // Emscripten (OpenTTD) главный цикл; звук — их AudioContext. Возвращает «продолжить» или null, если нечего останавливать
   function freeze(w) {
+    // Страница игры сама умеет останавливаться (Warzone 2100 — content/games/warzone2100/arcade-pause.js)
+    if (typeof w.arcadePause === 'function') return w.arcadePause()
     const hex = w.hexGL
     if (hex && hex.gameplay) {
       const audio = w.bkcore && w.bkcore.Audio._ctx

@@ -102,7 +102,7 @@ claude plugin install arcade@agent-arcade
 | **게임 → 아케이드** | Flappy Arcade — Arcade가 직접 만든 원버튼 게임. 패널과 Arcade 창에서 바로 플레이할 수 있고, 그날의 코스는 모두에게 같으며, 내 최고 기록이 저장됩니다 |
 | **게임 → 슈팅** | Freedoom Phase 1과 2(Doom의 무료 대체판), FreeDM 데스매치, Blasphemer(Heretic의 무료 대체판), BlasphDM 데스매치 |
 | **게임 → 레이싱** | HexGL — 미래형 반중력 레이싱 |
-| **게임 → 전략** | OpenTTD — 운송 회사 경영(GPL-2.0). Micropolis — 1989년 고전 도시 건설 게임의 오픈 소스 코드로, 도시는 브라우저에 저장됩니다(micropolisJS, 추가 조항이 붙은 GPL-3.0과 Micropolis Public Name License) |
+| **게임 → 전략** | OpenTTD — 운송 회사 경영(GPL-2.0). Micropolis — 1989년 고전 도시 건설 게임의 오픈 소스 코드로, 도시는 브라우저에 저장됩니다(micropolisJS, 추가 조항이 붙은 GPL-3.0과 Micropolis Public Name License). Warzone 2100 — 캠페인과 컴퓨터 상대 전투가 있는 실시간 전략 게임으로, 유닛을 직접 설계하고 저장은 브라우저에 남습니다(GPL-2.0-or-later) |
 | **게임 → 어드벤처** | ScummVM(GPL-3.0-or-later)으로 즐기는 90년대 무료 고전 어드벤처 4편: Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress, Nippon Safes, Inc. — 재배포가 허용된 프리웨어 게임 데이터. 언제든 F5로 저장 |
 | **게임 → 보드게임** | 체스 — 사람이나 컴퓨터(Stockfish, 레벨 1–10)와 대국, 온라인 대국은 시계 포함. 9×9, 13×13, 19×19 바둑. 러시아식 체커, 리버시. 모든 게임에 *기권* |
 | **책** | 퍼블릭 도메인 고전 136권을 언어별 서가에 장르별로 정리: 영어 98권(오스틴, 디킨스, 트웨인, 코넌 도일, 웰스, 셸리, 번역본으로 톨스토이와 도스토옙스키…), 우크라이나어 38권(프랑코, 레샤 우크라인카, 코추빈스키, 코틀랴렙스키, 쿨리시…). 책갈피는 자동으로 꽂혀서, 책을 다시 열면 멈춘 곳부터 이어집니다. 내 EPUB, FB2, TXT는 Arcade 창에서 열 수 있습니다 |

@@ -1,7 +1,7 @@
 // Тест кода Worker'а без Cloudflare: маршруты и комната (Durable Object) на подставных объектах
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch, Account, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE } from '../worker/index.js'
+import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch, Account, Limiter, MAX_PEERS, MAX_PER_IP, MAX_MESSAGE, ISOLATED_GAMES } from '../worker/index.js'
 
 // --- Маршруты ----------------------------------------------------------------------------------------------------
 {
@@ -25,6 +25,30 @@ import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch,
   await go('/net/doom/round-1', { Upgrade: 'websocket' })
   await go('/?tab=sega')
   assert.deepEqual(calls, [['room', 'id:lobby'], ['doom', 'doom:round-1'], ['assets', '/']])
+}
+
+// --- Изоляция плеера (Warzone 2100) --------------------------------------------------------------------------------
+{
+  const env = { ASSETS: { fetch: async () => new Response('плеер', { headers: { 'Content-Type': 'text/html' } }) } }
+  const go = (path) => worker.fetch(new Request(`https://arcade.test${path}`), env)
+  const wz = await go('/?game=warzone2100')
+  assert.equal(wz.headers.get('Cross-Origin-Opener-Policy'), 'same-origin')
+  assert.equal(wz.headers.get('Cross-Origin-Embedder-Policy'), 'require-corp')
+  assert.equal(wz.headers.get('Content-Type'), 'text/html', 'остальные заголовки статики — как были')
+  assert.equal(await wz.text(), 'плеер')
+  // Плеер с другой игрой и без игры — без изоляции: под COEP не загрузились бы внешние картинки и рамки
+  for (const path of ['/?game=openttd', '/', '/?tab=web']) {
+    const page = await go(path)
+    assert.equal(page.headers.get('Cross-Origin-Embedder-Policy'), null, path)
+    assert.equal(page.headers.get('Cross-Origin-Opener-Policy'), null, path)
+  }
+  // Список в коде — ровно игры с isolated: true в каталоге
+  const catalog = JSON.parse(fs.readFileSync(new URL('../content/catalog.json', import.meta.url), 'utf8'))
+  const games = Array.isArray(catalog) ? catalog : catalog.games
+  assert.deepEqual([...ISOLATED_GAMES].sort(), games.filter((g) => g.isolated).map((g) => g.id).sort())
+  // Корень должен доходить до кода: иначе Cloudflare отдал бы плеер сам, без заголовков изоляции
+  const wrangler = fs.readFileSync(new URL('../wrangler.jsonc', import.meta.url), 'utf8')
+  assert.match(wrangler.match(/"run_worker_first":\s*\[([^\]]*)\]/)[1], /"\/"/)
 }
 
 // --- Комната -----------------------------------------------------------------------------------------------------

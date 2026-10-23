@@ -5,7 +5,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { build, checkChannels, checkFeeds, checkTwitch } from '../build.mjs'
+import { build, download, checkChannels, checkFeeds, checkTwitch } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 // Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск
@@ -20,7 +20,8 @@ process.on('exit', () => {
 })
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
-// Настоящий каталог
+// Настоящий каталог. Игры, которые сборка скачивает (Warzone 2100), — сначала в кеш site/.cache
+await download({ root: ROOT })
 const out = temp('dist')
 const catalog = build({ root: ROOT, out, now: new Date('2026-10-17T12:00:00Z') })
 assert.equal(catalog.version, 1)
@@ -324,6 +325,44 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'hexgl').page = 'game
   for (const f of ['openttd.wasm', 'openttd.data', 'baseset/opengfx-8.0.tar', 'openttd-15.3-src.tar.gz']) assert.ok(fs.existsSync(path.join(dir, 'web-games/openttd', f)), f)
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = ['nope.js'] }), /нет скрипта nope\.js/)
+// Warzone 2100: сборка скачана при сборке (download), большой файл данных — кусками, без счётчика и service worker,
+// страница игры и плеер изолированы (COOP + COEP) — иначе нет SharedArrayBuffer для потоков
+{
+  const dir = temp('warzone')
+  const built = build({ root: ROOT, out: dir })
+  const g = built.games.warzone2100
+  assert.deepEqual([g.kind, g.page, g.shelf], ['web', 'web-games/warzone2100/', 'strategy'])
+  assert.equal(g.download, undefined, 'откуда скачана сборка — не дело окна')
+  const wz = path.join(dir, 'web-games/warzone2100')
+  const page = fs.readFileSync(path.join(wz, 'index.html'), 'utf8')
+  const order = ['arcade-parts.js', 'arcade-pause.js', 'warzone2100.js'].map((f) => page.indexOf(`src="${f}"`))
+  assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), `скрипты Arcade — раньше игры: ${order}`)
+  assert.ok(!/cloudflareinsights|beacon\.min\.js/.test(page), 'без счётчика')
+  assert.ok(!page.includes('navigator.serviceWorker.register("service-worker.js")'), 'service worker не регистрируется')
+  // Bootstrap — с нашего сайта: те же файлы, что на cdnjs, поэтому integrity страницы сходится с ними
+  assert.ok(!page.includes('cdnjs'), 'без cdnjs')
+  for (const f of ['bootstrap.min.css', 'bootstrap.bundle.min.js']) {
+    const sri = page.match(new RegExp(`"/vendor/bootstrap/${f.replace(/\./g, '\\.')}" integrity="(sha512-[^"]+)"`))
+    assert.ok(sri, `${f} — с /vendor/bootstrap/ и с integrity`)
+    assert.equal(`sha512-${createHash('sha512').update(fs.readFileSync(path.join(dir, 'vendor/bootstrap', f))).digest('base64')}`, sri[1], `${f} сходится с integrity`)
+  }
+  assert.ok(fs.existsSync(path.join(dir, 'licenses/bootstrap/LICENSE.txt')))
+  for (const f of ['warzone2100.wasm', 'warzone2100.js', 'arcade-pause.js']) assert.ok(fs.existsSync(path.join(wz, f)), f)
+  for (const f of ['service-worker.js', 'warzone2100.data', 'index.html.gz']) assert.ok(!fs.existsSync(path.join(wz, f)), `${f} не выложен`)
+  // Куски: каждый в лимите Cloudflare, все из манифеста на месте
+  const parts = JSON.parse(fs.readFileSync(path.join(wz, 'arcade-parts.js'), 'utf8').match(/^window\.ARCADE_PARTS = (.*)$/m)[1])
+  assert.deepEqual(Object.keys(parts), ['warzone2100.data'])
+  assert.equal(parts['warzone2100.data'].size, 64424618)
+  for (const p of parts['warzone2100.data'].parts) assert.ok(fs.statSync(path.join(wz, p)).size <= 25 * 1024 * 1024, p)
+  for (const f of fs.readdirSync(wz, { recursive: true })) assert.ok(fs.statSync(path.join(wz, f)).size <= 25 * 1024 * 1024, `${f} больше 25 МиБ`)
+  for (const f of ['LICENSE.txt', 'COPYING.README', 'COPYING.NONGPL', 'BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses/warzone2100', f)), f)
+  // Изоляция для потоков и offline: сама игра в сеть не ходит (иначе спрашивает обновления у wz2100.net)
+  const isolation = fs.readFileSync(path.join(dir, '_headers'), 'utf8')
+  assert.match(isolation, /\/web-games\/warzone2100\/\*\n  Cross-Origin-Embedder-Policy: require-corp\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Resource-Policy: same-origin\n  Content-Security-Policy: connect-src 'self'\n/)
+  assert.equal(isolation.match(/Content-Security-Policy/g).length, 1, 'остальным играм — без ограничений')
+}
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'warzone2100').download.edit['index.html'][0].find = 'нет такого' }), /правка «счётчик Cloudflare Web Analytics» нашла мест: 0/)
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'warzone2100').offline = 'yes' }), /offline — только true/)
 // Группа «Игры» и полки: у игр группы — полка; /games — вкладка группы
 {
   const dir = temp('groups')
