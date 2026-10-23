@@ -10,7 +10,7 @@ import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, re
 import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
 import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
-import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
+import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
 import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
 import { FIND_LIMIT, MIN_QUERY, find, restoreFavorites, toggleIn } from './find.js'
 import { COL_NAMES, MAX_APP, MAX_BODY, MAX_URL, NOTES_TOOL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, columnCards, columnOf, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from './notes.js'
@@ -147,6 +147,7 @@ let browserChoice = 'default' // каким браузером: 'default' или
 let desktopOpener = 'builtin' // в Desktop: 'builtin' — встроенный браузер приложения, 'window' — окно браузера, как в терминале
 let keepMenu = false // в Desktop: встроенный браузер открылся — false: панель Arcade закрываем, true: оставляем, браузер встаёт под ней
 let backOnDone = false // в Desktop: агент закончил, пока смотришь во встроенном браузере — true: вкладку Arcade закрываем
+let hideOnline = false // не показывать друзьям, что человек в сети: сам он друзей в сети всё равно видит
 // Вкладка встроенного браузера, где Arcade открыл видео, трансляцию, TikTok, статью или выпуск: { tabId, turn } или null;
 // turn — ход Claude, который открыл её по просьбе Arcade: его конец вкладку не закрывает
 let watchTab = null
@@ -214,6 +215,14 @@ let acct = { session: null, flow: null, starting: false, note: '', syncing: fals
 // request — номер последнего вопроса: ответ старого вопроса не нужен
 const NO_FRIENDS = { list: null, loading: false, busy: '', note: '', bad: false }
 let fr = { ...NO_FRIENDS, request: 0 }
+// «В сети» и приглашения в игру (с отметки мода на сайте): online — номера друзей в сети, invites — кто зовёт
+// { from, handle, game, room?, at } (только игры, которые мод знает), at — когда отмечались, pulsing — отметка ждёт
+// ответа сайта, told — о каких приглашениях уже сказали тостом (from:at). Звать: to — кого ({ id, handle }), busy —
+// игра, приглашение в которую ждёт ответа сайта, note — заметка на экране друзей (bad — не вышло)
+// soon — отметиться при первой возможности (открыли «Друзей», сменили «показывать, что в сети»), gone — на какие
+// приглашения уже ответили (from:at): отметка, ушедшая до ответа, их не вернёт
+const noOnline = () => ({ online: new Set(), invites: [], at: 0, pulsing: false, soon: false, told: new Set(), gone: new Set(), to: null, busy: '', note: '', bad: false })
+let ol = noOnline()
 // Чаты: list — чаты с сайта (новые сверху) или null, пока не спрашивали; names — ники по номерам аккаунтов; me — свой
 // номер; loading — спрашиваем список. Открытый чат: talk — его id, about — он сам с сайта (участники, хозяин группы),
 // messages — переписка по порядку номеров, first — с какого номера она видна человеку, shown — сколько последних
@@ -836,7 +845,11 @@ function windowUrl(id) {
   else if (typeof id === 'string' && id.startsWith('net:')) url = `${pageUrl(id.slice(4))}&net=1`
   // Кооператив Freedoom — лобби кооператива этой игры
   else if (typeof id === 'string' && id.startsWith('coop:')) url = `${pageUrl(id.slice(5))}&net=coop`
-  else {
+  // room:<игра>:<код> — комната настольной игры, куда позвали друга или куда позвал друг
+  else if (typeof id === 'string' && id.startsWith('room:')) {
+    const [, game, code] = id.split(':')
+    url = `${pageUrl(game)}&room=${code}`
+  } else {
     const m = mine.find((x) => x.id === id)
     url = m ? minePageUrl(m) : pageUrl(id)
   }
@@ -849,9 +862,45 @@ function windowUrl(id) {
 // Сетевая настольная игра: подпись @ника — после #, страница покажет ник соперникам и уберёт его из адреса. Вышли —
 // пустая подпись: страница забудет прежнюю. Только в окна, которые мод открывает сам: в просьбу к Claude подпись не идёт
 function withName(url, id) {
-  if (gameById(id)?.kind !== 'board') return url
+  if (gameById(netGame(id))?.kind !== 'board') return url
   if (acct.ticket) return `${url}#me=${acct.ticket}`
   return acct.session ? url : `${url}#me=`
+}
+
+// Сетевая игра для окна: Денди — net:<id>, кооператив Doom — coop:<id>, настольная с комнатой — room:<id>:<код>,
+// дефматч Doom — сама игра (лобби общее)
+function netWhere(id, room = '') {
+  const g = gameById(id)
+  if (g?.kind === 'board' && room) return `room:${id}:${room}`
+  if (g?.console === 'nes') return `net:${id}`
+  if (g?.console === 'doom' && g.net !== 'doom' && g.net !== 'heretic-dm') return `coop:${id}`
+  return id
+}
+
+// Игра из адреса окна: net:<id>, coop:<id> или room:<id>:<код> → id
+function netGame(where) {
+  if (typeof where !== 'string') return where
+  if (where.startsWith('net:') || where.startsWith('coop:') || where.startsWith('room:')) return where.split(':')[1]
+  return where
+}
+
+// Открыть сетевую игру: во встроенном браузере Desktop (шутеры — окном) или окном браузера
+async function openNet($, surface, where) {
+  const id = netGame(where)
+  const title = gameById(id)?.title ?? id
+  lastGame = id
+  if (builtinBrowser(surface, mouseGame(id))) return desktopWindow($, where, `${title} открыт во встроенном браузере Claude.`)
+  libraryNotice = 'Открываю окно…'
+  $.ui.invalidate('ui.render')
+  const command = windowCommand(where)
+  try {
+    const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+    windowNotice($, launchNotice(result, id))
+    if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+  } catch (err) {
+    libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+  }
+  $.ui.invalidate('ui.render')
 }
 
 function windowCommand(id) {
@@ -1453,11 +1502,12 @@ function applySetting(key, value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false
     const fine = (list) => Array.isArray(list) && list.length <= 64 && list.every((k) => typeof k === 'string' && k.length <= 30)
     keymap = restoreKeymap(Object.fromEntries(Object.entries(value).filter(([, list]) => fine(list))))
-  } else if (key === 'notify' || key === 'wide' || key === 'keepMenu' || key === 'backOnDone') {
+  } else if (key === 'notify' || key === 'wide' || key === 'keepMenu' || key === 'backOnDone' || key === 'hideOnline') {
     if (typeof value !== 'boolean') return false
     if (key === 'notify') osNotify = value
     else if (key === 'wide') wide = value
     else if (key === 'keepMenu') keepMenu = value
+    else if (key === 'hideOnline') hideOnline = value
     else backOnDone = value
   } else if (key === 'onDone' || key === 'onPermission') {
     if (!SIGNAL_MODES.includes(value)) return false
@@ -1486,7 +1536,7 @@ function applySetting(key, value) {
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, backOnDone, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites }[key]
+  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, backOnDone, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites, hideOnline }[key]
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
@@ -1613,6 +1663,7 @@ async function forgetSession($, note) {
   acct.role = ''
   acct.request++
   fr = { ...NO_FRIENDS, request: fr.request + 1 }
+  ol = noOnline()
   ch = { ...NO_CHATS, picked: new Set(), request: ch.request + 1 }
   rp = { ...rp, ...NO_REPORTS, request: rp.request + 1 }
   dk = { ...NO_DESKS, picked: new Set(), syncing: new Set(), again: new Set() }
@@ -1890,7 +1941,6 @@ async function closeReport($, id) {
 // --- Чаты: с друзьями один на один и в группах ---------------------------------------------------------------------
 const CHAT_POLL_MS = 4_000 // открытый чат: новые сообщения
 const CHATS_POLL_MS = 15_000 // список чатов: новые чаты и непрочитанные
-const UNREAD_POLL_MS = 60_000 // в остальной библиотеке — сколько непрочитанных, для плитки «Чаты»
 const CHAT_KEPT = 1000 // сколько сообщений открытого чата держим в памяти
 
 // Почему с чатами не вышло; group — создавали группу: у групп свой предел на сутки
@@ -2193,13 +2243,111 @@ async function leaveGroup($) {
   await changeMembers($, { leave: true })
 }
 
-// Сколько непрочитанных — для плитки «Чаты», пока сами чаты не открыты
+// Сколько непрочитанных — для плитки «Чаты», если сайт ещё не знает отметки «в сети»
 async function checkUnread($) {
   if (!acct.handle) return
   const answer = await chatFetch($, 'unread', parseUnread)
   if (!answer || answer.error || answer.unread === acct.unread) return
   acct.unread = answer.unread
   $.ui.invalidate('ui.render')
+}
+
+// --- В сети и приглашения в игру ---------------------------------------------------------------------------------
+const PULSE_MS = 30_000 // пока меню открыто: отметка «в сети», кто из друзей в сети и кто зовёт сыграть
+const PULSE_SOON_MS = 5_000 // отметка «при первой возможности» — не чаще этого
+const INVITE_MINUTES = 10 // сколько живёт приглашение на сайте
+
+// Сетевые игры, в которые можно позвать друга: настольные (своя комната на двоих) и Doom (лобби игры на сайте)
+function inviteGames() {
+  return games().filter((g) => g.kind === 'board' || g.console === 'doom')
+}
+
+// Отметка «в сети», пока меню открыто: заодно кто из друзей в сети, кто зовёт сыграть, непрочитанные и заявки в
+// друзья. Сайт без отметки — только непрочитанные, как раньше
+async function pulse($) {
+  if (!acct.handle || ol.pulsing) return
+  const now = await $.clock.now()
+  // Ещё не отмечались (at — 0) — сразу
+  if (ol.at && now - ol.at < (ol.soon ? PULSE_SOON_MS : PULSE_MS)) return
+  const state = ol
+  state.pulsing = true
+  state.soon = false
+  state.at = now
+  let answer = null
+  try {
+    answer = await chatFetch($, 'pulse', parsePulse, { body: hideOnline ? { hidden: true } : {} })
+  } finally {
+    state.pulsing = false
+  }
+  if (!answer || state !== ol) return
+  if (answer.error) return answer.error === 'down' ? checkUnread($) : undefined
+  const before = JSON.stringify([[...ol.online], ol.invites, acct.unread, acct.requests])
+  const requests = acct.requests
+  ol.online = new Set(answer.online)
+  ol.invites = answer.invites.filter((i) => gameById(i.game) && !ol.gone.has(`${i.from}:${i.at}`))
+  acct.unread = answer.unread
+  acct.requests = answer.requests
+  // Новое приглашение — ещё и тостом, один раз
+  for (const i of ol.invites) {
+    const key = `${i.from}:${i.at}`
+    if (ol.told.has(key)) continue
+    ol.told.add(key)
+    await $.ui.toast(tr(`@${i.handle} зовёт сыграть: ${gameById(i.game).title}`, lang))
+  }
+  // Пришла или ушла заявка в друзья, пока открыт экран друзей, — список тоже освежаем
+  if (menu === 'friends' && acct.requests !== requests) friendsCall($, 'friends')
+  if (JSON.stringify([[...ol.online], ol.invites, acct.unread, acct.requests]) !== before) $.ui.invalidate('ui.render')
+}
+
+// Отметиться при первой возможности: таймер меню проверяет это каждые PULSE_SOON_MS
+function pulseSoon($) {
+  ol.soon = true
+  pulse($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+}
+
+// Почему друга не позвали
+function inviteNote(error, handle) {
+  if (error === 'friend') return `@${handle} больше не в друзьях.`
+  if (error === 'nohandle') return 'Сначала возьми свой @ник.'
+  if (error === 'often' || error === 'limit') return 'Слишком часто — подожди минуту.'
+  return accountNote(error)
+}
+
+// Позвать друга сыграть и открыть игру у себя: настольную — в новой комнате на двоих, Doom — в лобби игры
+async function inviteFriend($, surface, friend, id) {
+  const g = gameById(id)
+  if (!acct.session || ol.busy || !g) return
+  const room = g.kind === 'board' ? crypto.randomUUID().replace(/-/g, '').slice(0, 12) : ''
+  const state = ol
+  state.busy = id
+  state.note = ''
+  state.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'invite', parseInvite, { body: { to: friend.id, game: id, ...(room ? { room } : {}) } })
+  if (state !== ol) return
+  ol.busy = ''
+  if (!answer || answer.error) {
+    if (answer) {
+      ol.note = inviteNote(answer.error, friend.handle)
+      ol.bad = true
+    }
+    return $.ui.invalidate('ui.render')
+  }
+  ol.note = `Приглашение для @${friend.handle} отправлено: ${g.title}. Оно действует ${INVITE_MINUTES} минут.`
+  ol.to = null
+  menuFrom = menu
+  menu = 'friends'
+  await openNet($, surface, netWhere(id, room))
+}
+
+// Ответ на приглашение: «Принять» — открыть игру друга (настольную — в его комнате), «Не сейчас» — просто убрать.
+// Сайт забывает приглашение в обоих случаях
+async function answerInvite($, surface, invite, accept) {
+  ol.gone.add(`${invite.from}:${invite.at}`)
+  ol.invites = ol.invites.filter((i) => i !== invite)
+  $.ui.invalidate('ui.render')
+  chatFetch($, 'answer', parseInvite, { body: { from: invite.from } }).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+  if (accept) await openNet($, surface, netWhere(invite.game, invite.room))
 }
 
 // «Открыть на странице»: страница чатов на сайте — во встроенном браузере Claude или в окне браузера. Ключ сессии
@@ -3225,8 +3373,8 @@ export function register(on) {
       // Настройки с других компьютеров — вскоре после старта и раз в полчаса; без входа syncAccount ничего не делает
       $.clock.after(3_000, () => syncAccount($))
       $.clock.every(SYNC_EVERY_MS, () => syncAccount($))
-      // Чаты — пока панель открыта на библиотеке и человек вошёл: открытый чат спрашиваем часто, список — реже, в
-      // остальной библиотеке — только сколько непрочитанных, для плитки «Чаты»
+      // Чаты — пока панель открыта на библиотеке и человек вошёл: открытый чат спрашиваем часто, список — реже;
+      // сколько непрочитанных для плитки «Чаты» приносит отметка «в сети»
       const chatsOn = () => paneOpen && acct.session && view === 'library'
       const chatError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
       $.clock.every(CHAT_POLL_MS, () => {
@@ -3235,8 +3383,9 @@ export function register(on) {
       $.clock.every(CHATS_POLL_MS, () => {
         if (chatsOn() && menu === 'chats') loadChats($, true).catch(chatError)
       })
-      $.clock.every(UNREAD_POLL_MS, () => {
-        if (chatsOn() && !menu.startsWith('chats')) checkUnread($).catch(chatError)
+      // «В сети» — пока панель открыта на библиотеке: отметка раз в PULSE_MS, а когда просили — сразу
+      $.clock.every(PULSE_SOON_MS, () => {
+        if (chatsOn()) pulse($).catch(chatError)
       })
       // Доска проектов: открытую общую доску сверяем с сайтом, список общих досок на её экране — обновляем; свои правки,
       // не ушедшие в прошлый раз, — на сайт вскоре после старта
@@ -3850,6 +3999,8 @@ export function register(on) {
       const gap = Text({ children: [' '] })
       // Разделы и плитки главного меню: кнопка с подписью — в рамке; плитки рядами, в узкой панели — колонкой
       const desktop = e.surface === 'desktop'
+      // Окно Arcade, сетевые игры и приглашения в них — где есть окно браузера или встроенный браузер Desktop
+      const windowed = windowMode() || desktop
       // В Desktop заголовок раздела — крупно, с отступом сверху от раздела выше и снизу от своих плиток
       const section = (title) => (desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [Text({ size: 'heading', weight: 'semibold', children: [title] })] }) : Text({ bold: true, dimColor: true, children: [title] }))
       // Своя тема в темах YouTube, статей и подкастов: поле ввода с подсказкой или заметкой, «Мои темы» плитками и
@@ -4007,6 +4158,20 @@ export function register(on) {
         return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 1, children: out })
       }
       const noticeLines = libraryNotice ? [gap, Text({ color: 'warning', children: [libraryNotice] })] : []
+      // Друг зовёт сыграть: «Принять» открывает игру, «Не сейчас» убирает приглашение. Без окна браузера — подсказка
+      const inviteRows = (invite, focus) => [
+        Text({ bold: true, children: [`@${invite.handle} зовёт сыграть: ${gameById(invite.game)?.title ?? invite.game}`] }),
+        Box({
+          flexDirection: 'row',
+          columnGap: 2,
+          children: [
+            ...(windowed
+              ? [Button({ key: `arcade-inv-accept-${invite.from}`, label: 'Принять', ...(focus ? { autoFocus: true } : {}), onPress: () => answerInvite($, e.surface, invite, true) })]
+              : [dim('Сетевые игры открываются в окне браузера — выбери его в настройках.')]),
+            Button({ key: `arcade-inv-later-${invite.from}`, label: 'Не сейчас', onPress: () => answerInvite($, e.surface, invite, false) }),
+          ],
+        }),
+      ]
       const hint = [gap, dim('↑ ↓ или Tab — выбрать, Enter — открыть. Можно кликнуть мышью.')]
       // Звёздочка избранного у игры или книги: ☆ — отметить, ★ — уже в избранном, нажать — снять
       const favButton = (g) => {
@@ -4199,7 +4364,22 @@ export function register(on) {
                 ...hint,
               ]
             : [back, gap, Text({ color: 'warning', children: [reportNote('admin')] }), ...noticeLines, ...hint]
-      } else if (menu === 'friends' || menu === 'friends:remove') {
+      } else if (menu === 'friends:invite' && ol.to && acct.handle) {
+        // Во что позвать друга: настольные — в новую комнату на двоих, Doom — в лобби игры. Игра откроется и у тебя
+        const to = ol.to
+        const kindNote = (g) => (g.kind === 'board' ? '  своя комната на двоих' : g.net === 'doom' || g.net === 'heretic-dm' ? '  общее лобби deathmatch' : '  кооператив: лобби игры')
+        items = [
+          Button({ key: 'arcade-back', label: '← Назад', onPress: open('friends') }),
+          gap,
+          Text({ children: [`Во что позвать @${to.handle}?`] }),
+          dim(`Друг увидит приглашение в Arcade, когда меню открыто, — оно действует ${INVITE_MINUTES} минут. Игра откроется и у тебя.`),
+          gap,
+          tiles(inviteGames().flatMap((g, k) => [Button({ key: `arcade-inv-game-${g.id}`, label: g.title, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => inviteFriend($, e.surface, to, g.id) }), dim(kindNote(g))])),
+          ...(ol.busy ? [gap, dim('Зову…')] : ol.note ? [gap, ol.bad ? Text({ color: 'warning', children: [ol.note] }) : dim(ol.note)] : []),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu === 'friends' || menu === 'friends:remove' || menu === 'friends:invite') {
         // Друзья: взаимные заявки по точному @нику. Без входа и без ника — что сделать сначала
         const login = Button({
           key: 'arcade-friends-login',
@@ -4268,6 +4448,29 @@ export function register(on) {
           const incoming = list?.incoming ?? []
           const outgoing = list?.outgoing ?? []
           const fromRemove = menuFrom === 'friends:remove'
+          // Друзья — по одному в строке, кто в сети — сверху; «Позвать» — где есть окно браузера для сетевых игр
+          const shown = [...friends].sort((a, b) => Number(ol.online.has(b.id)) - Number(ol.online.has(a.id)))
+          const friendRow = (p) =>
+            row([
+              person(p),
+              ...(ol.online.has(p.id) ? [Text({ color: 'success', children: ['в сети'] })] : []),
+              ...(windowed
+                ? [
+                    Button({
+                      key: `arcade-fr-invite-${p.id}`,
+                      label: 'Позвать',
+                      ...(menuFrom === 'friends:invite' && ol.to?.id === p.id ? { autoFocus: true } : {}),
+                      onPress: () => {
+                        ol.to = p
+                        ol.note = ''
+                        ol.bad = false
+                        open('friends:invite')()
+                      },
+                    }),
+                  ]
+                : []),
+            ])
+          const olNote = ol.note ? [ol.bad ? Text({ color: 'warning', children: [ol.note] }) : dim(ol.note)] : []
           items = [
             back,
             gap,
@@ -4276,6 +4479,7 @@ export function register(on) {
             gap,
             Input({ key: 'arcade-friends-add', label: 'Добавить друга', placeholder: '@ник друга, точно как есть', onSubmit: (value) => addFriend($, value) }),
             ...(fr.busy === 'friends' ? [dim('Отправляю заявку…')] : note.length ? note : [dim('Подсказок по буквам нет: заявка дойдёт, только если ник написан точно.')]),
+            ...(ol.invites.length ? [section('Зовут сыграть'), ...ol.invites.flatMap((invite, k) => inviteRows(invite, k === 0 && !fromRemove))] : []),
             ...(incoming.length
               ? [
                   section('Заявки тебе'),
@@ -4290,8 +4494,9 @@ export function register(on) {
               : []),
             section('Друзья'),
             ...(friends.length
-              ? [Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 3, children: friends.map(person) })]
+              ? shown.map(friendRow)
               : [dim(list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.')]),
+            ...(olNote.length ? [gap, ...olNote] : []),
             ...(friends.length ? [gap, Button({ key: 'arcade-fr-remove', label: 'Удалить друга', ...(fromRemove ? { autoFocus: true } : {}), onPress: open('friends:remove') })] : []),
             ...(outgoing.length
               ? [
@@ -4302,6 +4507,17 @@ export function register(on) {
                 ]
               : []),
             gap,
+            // Прятаться можно: тогда друзья не видят тебя в сети, а ты их видишь
+            Button({
+              key: 'arcade-fr-hide',
+              label: `Показывать друзьям, что я в сети: ${hideOnline ? 'нет' : 'да'}`,
+              onPress: async () => {
+                hideOnline = !hideOnline
+                $.ui.invalidate('ui.render')
+                await saveSetting($, 'hideOnline', hideOnline)
+                pulseSoon($)
+              },
+            }),
             Button({ key: 'arcade-fr-refresh', label: fr.loading ? 'Обновляю…' : 'Обновить', onPress: () => friendsCall($, 'friends') }),
             ...noticeLines,
             ...hint,
@@ -6065,6 +6281,8 @@ export function register(on) {
           if (!acct.session) return
           if (!acct.syncedAt) syncAccount($)
           friendsCall($, 'friends')
+          // кто из друзей в сети — сразу, не дожидаясь отметки по таймеру
+          pulseSoon($)
         }
         // Непрочитанные — с сайта при синхронизации и по таймеру
         const toChats = async () => {
@@ -6099,8 +6317,6 @@ export function register(on) {
           )
           return [desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [head] }) : head, ...(shut ? [] : [tiles(list)])]
         }
-        // Окно Arcade и «Присоединиться» — где есть окно браузера или встроенный браузер Desktop
-        const windowed = windowMode() || e.surface === 'desktop'
         const windowTiles = windowed
           ? [
               Button({
@@ -6131,29 +6347,19 @@ export function register(on) {
                 Button({
                   key: 'arcade-net-join',
                   label: `Присоединиться: ${netWaiting[0].title}`,
-                  onPress: async () => {
-                    const target = netWaiting[0]
-                    lastGame = target.id
-                    const where = target.console === 'nes' ? `net:${target.id}` : target.coop ? `coop:${target.id}` : target.id
-                    if (builtinBrowser(e.surface, mouseGame(target.id))) return desktopWindow($, where, `${target.title} открыт во встроенном браузере Claude.`)
-                    libraryNotice = 'Открываю окно…'
-                    $.ui.invalidate('ui.render')
-                    const command = windowCommand(where)
-                    try {
-                      const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
-                      windowNotice($, launchNotice(result, target.id))
-                      if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
-                    } catch (err) {
-                      libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
-                    }
-                    $.ui.invalidate('ui.render')
-                  },
+                  onPress: () => openNet($, e.surface, netWhere(netWaiting[0].id)),
                 }),
                 dim(`  в сети ждут: ${waitingText()}`),
               ]
             : []
         const favCount = favoriteGames().length
+        // Друг зовёт сыграть — первым делом; остальные приглашения — в «Друзьях»
+        const inviteBanner =
+          acct.session && ol.invites.length
+            ? [...inviteRows(ol.invites[0], false), ...(ol.invites.length > 1 ? [dim(`ещё приглашений: ${ol.invites.length - 1} — в «Друзьях»`)] : []), gap]
+            : []
         items = [
+          ...inviteBanner,
           // Сверху, без заголовка: продолжить последнее, найти, избранное
           tiles([
             ...(resume
@@ -6217,7 +6423,7 @@ export function register(on) {
               Button({
                 key: 'arcade-menu-friends',
                 label: 'Друзья',
-                ...(menuFrom === 'friends' || menuFrom === 'friends:remove' ? { autoFocus: true } : {}),
+                ...(String(menuFrom ?? '').startsWith('friends') ? { autoFocus: true } : {}),
                 onPress: toFriends,
               }),
               // Ника нет, а сайт ещё не спрашивали — может, он есть: пока без «возьми ник»
@@ -6230,9 +6436,11 @@ export function register(on) {
                       : '  по @нику: заявки и список друзей'
                     : acct.requests
                       ? `  заявок тебе: ${acct.requests} · друзей: ${acct.friends}`
-                      : acct.friends
-                        ? `  друзей: ${acct.friends}`
-                        : '  позови друзей по их @нику',
+                      : acct.friends && ol.online.size
+                        ? `  друзей: ${acct.friends} · в сети: ${ol.online.size}`
+                        : acct.friends
+                          ? `  друзей: ${acct.friends}`
+                          : '  позови друзей по их @нику',
               ),
               // Чаты — плитка видна всем, как «Друзья»
               Button({
@@ -6259,7 +6467,7 @@ export function register(on) {
               }),
               acct.session ? keep(dim(`  ${acct.handle ? `@${acct.handle} · ` : ''}GitHub: @${acct.session.user.login}`)) : dim('  по желанию: одни настройки на всех компьютерах и свой @ник'),
             ],
-            `${acct.unread ? ` · 💬 ${acct.unread}` : ''}${acct.requests ? ` · 👥 ${acct.requests}` : ''}`,
+            `${acct.unread ? ` · 💬 ${acct.unread}` : ''}${acct.requests ? ` · 👥 ${acct.requests}` : ''}${ol.online.size ? ` · 🟢 ${ol.online.size}` : ''}`,
           ),
           // Работа: блокнот и доска проектов, которые ведут и человек, и Claude
           ...foldable('work', 'Работа', [

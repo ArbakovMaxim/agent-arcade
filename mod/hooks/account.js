@@ -10,8 +10,9 @@ import { jsonFrom } from './youtube.js'
 
 // Что из $.store общее для всех компьютеров. Свои игры, каталог, последняя игра, браузер и графика — у каждого компьютера
 // свои: файлы игр, браузеры и терминал на другом компьютере другие. keepMenu — оставлять ли меню Arcade, когда
-// открылся встроенный браузер Desktop, collapsed — свёрнутые разделы главного меню, favorites — избранное
-export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites']
+// открылся встроенный браузер Desktop, collapsed — свёрнутые разделы главного меню, favorites — избранное, hideOnline —
+// не показывать друзьям, что человек в сети
+export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites', 'hideOnline']
 const TOKEN = /^(\d{1,20})\.[A-Za-z0-9_-]{43}$/
 const DEVICE = /^[A-Za-z0-9_-]{8,100}$/
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/
@@ -20,12 +21,12 @@ const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete' }
+const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer' }
 
 // Адрес сайта для шага входа, настроек, ника, друзей, чатов или отчётов об ошибках: start, poll, logout, me, settings,
 // handle, friends, accept, unfriend, chats, messages, unread, send, opendm, group, members, chatticket, report (без
 // входа), myReport (со входом), reports, closeReport (только админу), общих досок: boards, boardsync, boardnew,
-// boardmembers, boarddelete
+// boardmembers, boarddelete, «в сети» и приглашений в игру: pulse, invite, answer
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }
@@ -167,6 +168,42 @@ export function parseFriends(response) {
   const outgoing = list(data.outgoing)
   if (!friends || !incoming || !outgoing) return none('down')
   return { status: data.status === 'sent' || data.status === 'friends' ? data.status : '', friends, incoming, outgoing, error: '' }
+}
+
+// Игра и комната приглашения: id игры каталога и код комнаты настольной игры (у Doom кода нет)
+const GAME_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
+export const ROOM = /^[a-z0-9]{6,16}$/
+
+// Ответ POST /api/me/pulse → { online, invites, unread, requests, error }: online — номера друзей в сети, invites —
+// приглашения в игру { from, handle, game, room?, at } (новые сверху), unread и requests — сколько непрочитанных
+// сообщений и заявок в друзья. Сайт без «в сети» отвечает 404 — это 'down'
+export function parsePulse(response) {
+  const data = jsonFrom(response?.text)
+  const none = (e) => ({ online: [], invites: [], unread: 0, requests: 0, error: e })
+  const error = trouble(response, data)
+  if (error) return none(error)
+  if (!Array.isArray(data.online) || !Array.isArray(data.invites)) return none('down')
+  const online = data.online.slice(0, 200).map(String).filter((id) => /^\d{1,20}$/.test(id))
+  const invites = data.invites
+    .slice(0, 50)
+    .map((i) => {
+      const person = personFrom({ id: i?.from, handle: i?.handle })
+      if (!person || typeof i.game !== 'string' || !GAME_ID.test(i.game) || !Number.isFinite(i.at)) return null
+      if (i.room !== undefined && (typeof i.room !== 'string' || !ROOM.test(i.room))) return null
+      return { from: person.id, handle: person.handle, game: i.game, ...(i.room ? { room: i.room } : {}), at: i.at }
+    })
+    .filter(Boolean)
+  return { online, invites, unread: count(data.unread), requests: count(data.requests), error: '' }
+}
+
+// Ответ POST /api/me/invite и /api/me/invites/answer → { error }: '' — друг позван (приглашение убрано); кроме общих,
+// 'friend' — он больше не друг, 'nohandle' — у человека нет ника, 'often' — зовёт слишком часто
+export function parseInvite(response) {
+  const data = jsonFrom(response?.text)
+  if (response?.status === 403) return { error: 'friend' }
+  if (response?.status === 409) return { error: data?.error === 'nohandle' ? 'nohandle' : 'down' }
+  if (response?.status === 429) return { error: 'often' }
+  return { error: trouble(response, data) }
 }
 
 // Ответ PUT /api/me/settings → { settings, error }: settings — всё, что теперь на сайте

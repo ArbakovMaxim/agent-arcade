@@ -23,7 +23,7 @@ Everything in the catalog is free: the games are openly licensed, the books and 
 - **NES and Flappy Arcade right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
 - **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, Go, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
-- **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle and chat one-on-one or in groups.
+- **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle, see who is online, invite them to a game, and chat one-on-one or in groups.
 - **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too; send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page. Boards with columns and cards — share one with friends, and everyone works on the same board.
 - **Search and favorites.** One search across games, books, audiobooks and Twitch channels, grouped by section and genre; mark anything with ☆ to keep it in *★ Favorites*.
 - **Your own games.** Add ROMs you own; they stay on your machine.
@@ -131,6 +131,7 @@ Signing in is optional — without it everything else works as before.
 - **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
 - **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
 - **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
+- **Online and game invitations.** While the Arcade menu is open, your friends see you as *online*, and you see them; to stay unseen, turn off *Show friends that I am online* on the *Friends* screen. *Invite* next to a friend offers the online games: a board game opens a private room for two, a Doom game its lobby. The game opens for you at once; your friend gets a notification and *Accept* at the top of the menu, and the invitation is valid for 10 minutes. You can invite where online games open in a browser — the built-in one in Desktop or a browser window.
 - **Chats.** One-on-one with a friend, groups of friends, or a group with all your friends in one press. Write right in the Arcade panel or open the chats page on the site. Messages are stored on Arcade's site and are not encrypted — don't write passwords or keys there.
 - **Sign out** stops syncing on this computer; **Delete account** (press twice) makes the site forget you and your settings.
 
@@ -173,7 +174,7 @@ Open **Settings** in the *More* section of the `/arcade` menu:
 - Your own ROMs, WADs, books and audiobook files never leave your machine or browser.
 - Online play goes through Arcade's server on Cloudflare: messages are relayed between players in a room and not stored — except moves of board games, which are kept so you can come back; a game untouched for a month is deleted.
 - Topics are suggested by Haiku in your own Claude Code session; Arcade's site never sees your conversation — only a short English search query when you use *Your own topic*. An article's address goes after `#`, so it never reaches Arcade's server.
-- Signed in, the site keeps your synced settings, favorites, @handle, friends, chats and shared boards. The session key goes only to Arcade's site.
+- Signed in, the site keeps your synced settings, favorites, @handle, friends, chats and shared boards, and game invitations for 10 minutes. Who is online it holds only in memory, for a minute and a half. The session key goes only to Arcade's site.
 - The notebook stays on your computer. Shared boards are stored on Arcade's site and are not encrypted, like chats. Pages go to Notion or another app only when you ask, through your own Claude connectors.
 - A bug report carries your text, the Arcade version, where it is open, the interface language and the OS — nothing else; without signing in it goes unsigned, and the site keeps no address.
 - Some games can reach the internet only when you ask them to — for example OpenTTD's optional survey and its *Online Content* button.

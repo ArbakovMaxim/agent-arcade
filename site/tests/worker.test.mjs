@@ -713,7 +713,7 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE } = await import('../worker/account.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE } = await import('../worker/account.js')
   const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, dmId, cleanText, groupName } = await import('../worker/chat.js')
   const { Reports, cleanReport, admins, MAX_REPORT, PER_SENDER_DAILY, DAILY, KEEP: REPORTS_KEEP } = await import('../worker/reports.js')
   const { Desk, DEFAULT_COLS, MAX_CARDS, MAX_TOTAL, MAX_TITLE, MAX_OPS, KEEP_GONE, MAX_MEMBERS: DESK_MEMBERS, cleanTitle, cleanCols } = await import('../worker/desk.js')
@@ -1050,6 +1050,68 @@ try {
     for (let i = circleOf(9).asked.length; i < REQUESTS_DAILY; i++) assert.equal((await ask(`no_one_${i}`, t9)).status, 404)
     assert.deepEqual(await ask('octo_cat', t9), { status: 429, body: { error: 'often' } })
     assert.deepEqual((await friendsOf(t7)).body.incoming, [])
+
+    // В сети: мод отмечается, пока открыто меню; 42 и 7 — друзья, 9 — нет
+    const pulse = (token, body = {}) => go('POST', '/api/me/pulse', { body, token })
+    const invite = (body, token) => go('POST', '/api/me/invite', { body, token })
+    const answerInvite = (from, token) => go('POST', '/api/me/invites/answer', { body: { from }, token })
+    const brief7 = async () => (await pulse(t7)).body.invites.map(({ at, ...rest }) => rest)
+    assert.deepEqual(await go('GET', '/api/me/pulse', { token: t42 }), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await go('POST', '/api/me/pulse'), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('POST', '/api/me/online', { body: { id: '42', friends: [] }, token: t42 }), { status: 404, body: { error: 'not found' } }, 'отметки снаружи не видны')
+    // 42 отметился первым — 7 ещё не в сети; отметился 7 — оба видят друг друга
+    assert.deepEqual(await pulse(t42), { status: 200, body: { online: [], invites: [], unread: 0, requests: 0 } })
+    assert.deepEqual((await pulse(t7)).body.online, ['42'])
+    assert.deepEqual((await pulse(t42)).body.online, ['7'])
+    assert.equal(objects.get('online').store.size, 0, 'отметки — только в памяти')
+    // Дружба взаимная: у 9 в круге 42, но у 42 его нет — никто никого не видит
+    const circle9 = circleOf(9)
+    objects.get('gh:9').store.set('circle', { ...circle9, friends: { 42: Date.now() } })
+    assert.deepEqual((await pulse(t9)).body.online, [])
+    assert.deepEqual((await pulse(t42)).body.online, ['7'])
+    // Прячется — друзья его не видят, а он их видит
+    assert.deepEqual((await pulse(t7, { hidden: true })).body.online, ['42'])
+    assert.deepEqual((await pulse(t42)).body.online, [])
+    assert.deepEqual((await pulse(t7)).body.online, ['42'])
+    // Не отмечался ONLINE_MS — не в сети; старые отметки убираются
+    const presenceClock = Date.now
+    Date.now = () => presenceClock() + ONLINE_MS
+    assert.deepEqual((await pulse(t42)).body.online, [])
+    assert.ok(!objects.get('online').object.seen.has('7'))
+
+    // Позвать в игру: код комнаты — у настольных игр; у друга — от каждого друга последнее приглашение
+    assert.deepEqual(await invite({ to: '7', game: 'chess', room: 'abc123def' }, t42), { status: 200, body: { ok: true } })
+    assert.deepEqual(await brief7(), [{ from: '42', handle: 'octo_more', game: 'chess', room: 'abc123def' }])
+    assert.equal((await invite({ to: '7', game: 'freedm' }, t42)).status, 200)
+    assert.deepEqual(await brief7(), [{ from: '42', handle: 'octo_more', game: 'freedm' }])
+    for (const body of [{ to: 7, game: 'chess' }, { to: '7' }, { to: '7', game: 'Chess!' }, { to: '7', game: 'chess', room: 'AB' }, { to: '7', game: 'chess', room: 1234567 }]) {
+      assert.deepEqual(await invite(body, t42), { status: 400, body: { error: 'bad request' } }, JSON.stringify(body))
+    }
+    assert.deepEqual(await invite({ to: '9', game: 'freedm' }, t42), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(await invite({ to: '42', game: 'freedm' }, t9), { status: 403, body: { error: 'friend' } }, 'у 42 он не в друзьях')
+    assert.equal(objects.get('gh:42').store.get('invites'), undefined)
+    objects.get('gh:9').store.set('circle', circle9)
+    const handle7 = objects.get('gh:7').store.get('handle')
+    objects.get('gh:7').store.delete('handle')
+    assert.deepEqual(await invite({ to: '42', game: 'freedm' }, t7), { status: 409, body: { error: 'nohandle' } })
+    objects.get('gh:7').store.set('handle', handle7)
+    // Принял или «не сейчас» — приглашение уходит
+    assert.deepEqual(await answerInvite('42', t7), { status: 200, body: { ok: true } })
+    assert.deepEqual(await brief7(), [])
+    assert.deepEqual(await answerInvite(42, t7), { status: 400, body: { error: 'bad request' } })
+    // Приглашение живёт INVITE_MS
+    assert.equal((await invite({ to: '7', game: 'go', room: 'room42go' }, t42)).status, 200)
+    Date.now = () => presenceClock() + ONLINE_MS + INVITE_MS
+    assert.deepEqual(await brief7(), [])
+    assert.deepEqual(objects.get('gh:7').store.get('invites'), {})
+    // Не больше PULSES_PER_MINUTE отметок и INVITES_PER_MINUTE приглашений в минуту
+    for (let i = 0; i < PULSES_PER_MINUTE; i++) assert.equal((await pulse(t9)).status, 200)
+    assert.deepEqual(await pulse(t9), { status: 429, body: { error: 'often' } })
+    for (let i = 0; i < INVITES_PER_MINUTE; i++) assert.equal((await invite({ to: '7', game: 'reversi', room: `room${1000 + i}` }, t42)).status, 200)
+    assert.deepEqual(await invite({ to: '7', game: 'reversi', room: 'roomlast' }, t42), { status: 429, body: { error: 'often' } })
+    assert.deepEqual(await brief7(), [{ from: '42', handle: 'octo_more', game: 'reversi', room: 'room1009' }])
+    await answerInvite('42', t7)
+    Date.now = presenceClock
 
     // Чаты (worker/chat.js): без привязки CHAT — выключены
     assert.deepEqual(await go('GET', '/api/me/chats', { token: t7 }), { status: 503, body: { error: 'off' } })
