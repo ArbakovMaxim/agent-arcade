@@ -713,7 +713,8 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName } = await import('../worker/account.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS } = await import('../worker/account.js')
+  const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, dmId, cleanText, groupName } = await import('../worker/chat.js')
   const KEY = 'a'.repeat(43)
   assert.equal(sessionId(`Bearer 42.${KEY}`), '42')
   assert.equal(sessionId(`Bearer 42.${KEY}x`), null)
@@ -779,7 +780,7 @@ try {
   }
   const realNow = Date.now
   try {
-    // Хранилище на экземпляр: 'auth' и gh:<номер>
+    // Хранилище на экземпляр: 'auth', gh:<номер> и чаты — chat:<чат>; у экземпляра Account — свои сокеты
     const objects = new Map()
     const env = { GITHUB_CLIENT_ID: 'gh-client' }
     const instance = (name) => {
@@ -803,13 +804,15 @@ try {
             storage.alarm = null
           },
         }
-        objects.set(name, { store, storage, object: new Account({ storage }, env) })
+        const sockets = []
+        const ctx = { storage, acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed) }
+        objects.set(name, { store, storage, sockets, object: name.startsWith('chat:') ? new Chat(ctx, env) : new Account(ctx, env) })
       }
       return objects.get(name).object
     }
     env.ACCOUNT = { idFromName: (name) => name, get: instance }
-    const go = async (method, path, { body, token, ip = '10.0.0.1', withEnv = env } = {}) => {
-      const headers = { 'CF-Connecting-IP': ip, ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+    const go = async (method, path, { body, token, auth, ip = '10.0.0.1', withEnv = env } = {}) => {
+      const headers = { 'CF-Connecting-IP': ip, ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(auth ? { Authorization: auth } : {}) }
       const init = { method, headers, ...(body === undefined ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }) }
       const response = await worker.fetch(new Request(`https://arcade.test${path}`, init), withEnv)
       return { status: response.status, body: await response.json() }
@@ -1043,6 +1046,285 @@ try {
     assert.deepEqual(await ask('octo_cat', t9), { status: 429, body: { error: 'often' } })
     assert.deepEqual((await friendsOf(t7)).body.incoming, [])
 
+    // Чаты (worker/chat.js): без привязки CHAT — выключены
+    assert.deepEqual(await go('GET', '/api/me/chats', { token: t7 }), { status: 503, body: { error: 'off' } })
+    env.CHAT = { idFromName: (name) => `chat:${name}`, get: instance }
+    const chatsOf = (token) => go('GET', '/api/me/chats', { token })
+    const say = (chat, text, token) => go('POST', '/api/me/chats/send', { body: { chat, text }, token })
+    const read = (chat, token, query = '') => go('GET', `/api/me/chats/messages?chat=${chat}${query}`, { token })
+    const openWith = (id, token) => go('POST', '/api/me/chats/open', { body: { with: id }, token })
+    const group = (body, token) => go('POST', '/api/me/chats/group', { body, token })
+    const change = (body, token) => go('POST', '/api/me/chats/members', { body, token })
+    const listOf = (id) => objects.get(`gh:${id}`).store.get('chats') ?? {}
+    const brief = (chats) => chats.map(({ at, ...rest }) => rest)
+    const rlo = String.fromCharCode(0x202e) // переворачивает направление текста
+    assert.deepEqual([dmId('42', '7'), dmId('7', '42'), dmId('100', '99')], ['d7-42', 'd7-42', 'd99-100'])
+    assert.deepEqual([cleanText(`  a\r\nb\rc\u0007${rlo} `), cleanText('\t'), cleanText(42)], ['a\nb\nc', '', ''])
+    assert.deepEqual([groupName('  Клуб   по\nинтересам '), groupName('я'.repeat(MAX_NAME + 5)), groupName(null)], ['Клуб по интересам', 'я'.repeat(MAX_NAME), ''])
+
+    // Чат двоих — только с другом; открыть ещё раз — тот же чат
+    const dm = 'd7-42'
+    assert.deepEqual(await openWith('12345', t42), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(await openWith('42', t42), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(await openWith(7, t42), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await openWith('7', t42), { status: 200, body: { chat: { id: dm, kind: 'dm', with: '7' } } })
+    assert.deepEqual(await openWith('7', t42), { status: 200, body: { chat: { id: dm, kind: 'dm', with: '7' } } })
+    assert.deepEqual(brief((await chatsOf(t42)).body.chats), [{ id: dm, kind: 'dm', with: '7', unread: 0 }])
+    assert.deepEqual(listOf(7), {}, 'у друга чат появится с первым сообщением')
+
+    // Сообщение — без пробелов по краям и знаков, переворачивающих текст; у друга оно непрочитанное, своё — прочитано
+    const hello = await say(dm, `  Привет!\r\nКак дела? ${rlo} `, t42)
+    assert.equal(hello.status, 200)
+    assert.deepEqual({ ...hello.body.msg, at: 0 }, { s: 1, f: '42', t: 'Привет!\nКак дела?', at: 0 })
+    const list7 = (await chatsOf(t7)).body
+    assert.deepEqual(list7.me, p7)
+    assert.deepEqual(brief(list7.chats), [{ id: dm, kind: 'dm', with: '42', unread: 1, last: { f: '42', t: 'Привет! Как дела?' } }])
+    assert.deepEqual([list7.names, list7.unread], [{ 42: 'octo_more' }, 1])
+    assert.equal((await go('GET', '/api/me', { token: t7 })).body.unread, 1)
+    assert.deepEqual(await go('GET', '/api/me/chats/unread', { token: t7 }), { status: 200, body: { unread: 1 } })
+    assert.equal((await chatsOf(t42)).body.unread, 0)
+    // Прочитать: переписка, участники и ники; без before чат становится прочитанным
+    const seen7 = (await read(dm, t7)).body
+    assert.deepEqual({ ...seen7, messages: seen7.messages.map((m) => [m.s, m.f, m.t]) }, {
+      me: p7, chat: { id: dm, kind: 'dm', members: ['7', '42'], last: 1, with: '42' }, messages: [[1, '42', 'Привет!\nКак дела?']], first: 1, names: { 7: 'octo_cat', 42: 'octo_more' }, unread: 0,
+    })
+    assert.equal((await go('GET', '/api/me', { token: t7 })).body.unread, undefined)
+    // Ответ; новые — после after
+    assert.equal((await say(dm, 'Отлично', t7)).body.msg.s, 2)
+    assert.deepEqual((await read(dm, t42, '&after=1')).body.messages.map((m) => [m.s, m.f, m.t]), [[2, '7', 'Отлично']])
+    assert.equal(listOf(42)[dm].read, 2)
+    // Пустое, длинное, не того вида, не друг, чужой чат
+    assert.deepEqual(await say(dm, ` \n${rlo} `, t42), { status: 400, body: { error: 'empty' } })
+    assert.deepEqual(await say(dm, 42, t42), { status: 400, body: { error: 'empty' } })
+    assert.deepEqual(await say(dm, 'x'.repeat(MAX_TEXT + 1), t42), { status: 400, body: { error: 'long' } })
+    assert.deepEqual(await say('nope', 'привет', t42), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await go('POST', '/api/me/chats/send', { body: '{', token: t42 }), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await go('GET', '/api/me/chats/send', { token: t42 }), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await say('d1-2', 'привет', t42), { status: 404, body: { error: 'gone' } })
+    assert.deepEqual(await say('d42-12345', 'привет', t42), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(await say(dm, 'и я', t9), { status: 404, body: { error: 'gone' } }, 'в чужой чат двоих не написать')
+    assert.deepEqual(await read(dm, t9), { status: 404, body: { error: 'gone' } }, 'и не прочитать')
+    assert.deepEqual(await read('nope', t42), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await read(dm, t42, '&after=-1'), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await read(dm, t42, '&before=x'), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await read(`g${'x'.repeat(16)}`, t42), { status: 404, body: { error: 'gone' } })
+    const dmChat = objects.get(`chat:${dm}`)
+    assert.equal(dmChat.store.get('meta').last, 2, 'отказы ничего не записали')
+    const taken = await dmChat.object.fetch(new Request('https://chat/open', { method: 'POST', body: JSON.stringify({ chat: dm, by: '9', kind: 'dm', members: ['7', '9'] }) }))
+    assert.deepEqual([taken.status, await taken.json()], [409, { error: 'taken' }])
+
+    // Не больше SENDS_PER_MINUTE сообщений в минуту
+    account42.object.sends = Array(SENDS_PER_MINUTE).fill(Date.now())
+    assert.deepEqual(await say(dm, 'ещё', t42), { status: 429, body: { error: 'often' } })
+    account42.object.sends = Array(SENDS_PER_MINUTE).fill(Date.now() - 60_000)
+    assert.equal((await say(dm, 'ещё', t42)).body.msg.s, 3)
+
+    // В чате хранятся последние KEEP сообщений, старые уходят пачками по 100; читать — по PAGE, раньше — с before
+    const dmMeta = await dmChat.storage.get('meta')
+    while (dmMeta.last <= KEEP + 100) await dmChat.object.append(dmMeta, { f: '7', t: `№${dmMeta.last + 1}` })
+    assert.equal(dmChat.store.size, KEEP + 1)
+    assert.deepEqual([dmMeta.first, dmMeta.last], [102, KEEP + 101])
+    const page = (await read(dm, t42)).body
+    assert.deepEqual([page.messages.length, page.messages[0].s, page.messages.at(-1).s, page.first], [PAGE, KEEP + 102 - PAGE, KEEP + 101, 102])
+    assert.deepEqual((await read(dm, t42, '&before=112')).body.messages.map((m) => m.s), Array.from({ length: 10 }, (_, i) => 102 + i))
+
+    // Чатов в списке больше MAX_CHATS — забывается самый тихий
+    const quiet = (i) => `g${String(i).padStart(16, '0')}`
+    objects.get('gh:7').store.set('chats', { ...listOf(7), ...Object.fromEntries(Array.from({ length: MAX_CHATS }, (_, i) => [quiet(i), { kind: 'group', name: 'Тихая', last: 1, read: 1, at: i + 1 }])) })
+    assert.equal((await say(dm, 'Тихо тут', t42)).status, 200)
+    assert.equal(Object.keys(listOf(7)).length, MAX_CHATS)
+    assert.ok(listOf(7)[dm] && !listOf(7)[quiet(0)] && listOf(7)[quiet(1)])
+    objects.get('gh:7').store.set('chats', { [dm]: listOf(7)[dm] })
+
+    // Группы — из своих друзей, нужен свой ник. Теперь 9 дружит с 7 и 42
+    const pair = (a, b, when) => {
+      for (const [x, y] of [[a, b], [b, a]]) objects.get(`gh:${x}`).store.set('circle', { ...circleOf(x), friends: { ...circleOf(x).friends, [y]: when } })
+    }
+    objects.get('gh:9').store.set('circle', { ...circleOf(9), friends: {} })
+    pair('9', '7', Date.now() - 2000)
+    pair('9', '42', Date.now() - 1000)
+    assert.deepEqual(await group({ name: ` \n${rlo}`, members: ['7'] }, t42), { status: 400, body: { error: 'name' } })
+    assert.deepEqual(await group({ name: 'Клуб', members: ['7', '12345'] }, t42), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(await group({ name: 'Клуб', members: [] }, t42), { status: 400, body: { error: 'empty' } })
+    assert.deepEqual(await group({ name: 'Клуб', members: ['42'] }, t42), { status: 400, body: { error: 'empty' } })
+    assert.deepEqual(await group({ name: 'Клуб', members: [7] }, t42), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await group({ name: 'Клуб' }, t42), { status: 400, body: { error: 'bad request' } })
+    account42.store.delete('handle')
+    assert.deepEqual(await group({ name: 'Клуб', members: ['7'] }, t42), { status: 409, body: { error: 'nohandle' } })
+    account42.store.set('handle', 'octo_more')
+    assert.equal(account42.store.get('made'), undefined, 'отказы не считаются')
+    // Создал: первое сообщение — «создал», у остальных оно непрочитанное
+    const created = await group({ name: '  Клуб   по\nинтересам ', members: ['7', '9', '7'] }, t42)
+    const club = created.body.chat?.id
+    assert.match(club, /^g[A-Za-z0-9_-]{16}$/)
+    assert.deepEqual(created, { status: 200, body: { chat: { id: club, kind: 'group', name: 'Клуб по интересам', owner: '42', members: ['7', '9', '42'], last: 1 } } })
+    assert.deepEqual(brief((await chatsOf(t9)).body.chats), [{ id: club, kind: 'group', name: 'Клуб по интересам', unread: 1, last: { f: '42', k: 'create', n: 'Клуб по интересам' } }])
+    assert.equal(listOf(42)[club].read, 1)
+    assert.equal((await say(club, 'Всем привет', t9)).body.msg.s, 2)
+    assert.equal(listOf(7)[club].last, 2)
+    // Менять группу может только хозяин; новое название — у всех в списке
+    assert.deepEqual(await change({ chat: club, name: 'Наш' }, t9), { status: 403, body: { error: 'owner' } })
+    assert.deepEqual(await change({ chat: club, name: ' ' }, t42), { status: 400, body: { error: 'name' } })
+    assert.deepEqual(await change({ chat: club, add: [9] }, t42), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await change({ chat: dm, leave: true }, t42), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await change({ chat: club, add: ['12345'] }, t42), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual((await change({ chat: club, name: 'Клуб' }, t42)).body.chat, { id: club, kind: 'group', name: 'Клуб', owner: '42', members: ['7', '9', '42'], last: 3 })
+    assert.equal(listOf(7)[club].name, 'Клуб')
+    // Убрал — у того чата больше нет; вернул — он видит переписку с этого места. Себя хозяин не убирает
+    assert.deepEqual((await change({ chat: club, remove: ['9', '42'] }, t42)).body.chat.members, ['7', '42'])
+    assert.equal(listOf(9)[club], undefined)
+    assert.deepEqual(await read(club, t9), { status: 404, body: { error: 'gone' } })
+    assert.deepEqual(await say(club, 'А я?', t9), { status: 404, body: { error: 'gone' } })
+    assert.deepEqual((await change({ chat: club, add: ['9'] }, t42)).body.chat.members, ['7', '9', '42'])
+    const back9 = (await read(club, t9)).body
+    assert.deepEqual([back9.first, back9.messages.map((m) => [m.s, m.f, m.k, m.o])], [5, [[5, '42', 'add', '9']]])
+    // В группе не больше MAX_MEMBERS человек
+    const clubChat = objects.get(`chat:${club}`)
+    const crowd = Array.from({ length: MAX_MEMBERS - 3 }, (_, i) => String(2000 + i))
+    for (const id of crowd) clubChat.store.get('meta').members[id] = 1
+    const circle42 = circleOf(42)
+    account42.store.set('circle', { ...circle42, friends: { ...circle42.friends, 11: Date.now() } })
+    assert.deepEqual(await change({ chat: club, add: ['11'] }, t42), { status: 409, body: { error: 'full' } })
+    account42.store.set('circle', circle42)
+    for (const id of crowd) delete clubChat.store.get('meta').members[id]
+    // Вышел хозяин — группа у того, кто в ней дольше; вышли все — группы нет
+    assert.deepEqual(await change({ chat: club, leave: true }, t42), { status: 200, body: { ok: true } })
+    assert.equal(listOf(42)[club], undefined)
+    assert.deepEqual(await say(club, 'Я тут?', t42), { status: 404, body: { error: 'gone' } })
+    const left = (await read(club, t7)).body
+    assert.deepEqual([left.chat.owner, left.chat.members, left.messages.at(-1).f, left.messages.at(-1).k], ['7', ['7', '9'], '42', 'leave'])
+    assert.deepEqual(await change({ chat: club, leave: true }, t7), { status: 200, body: { ok: true } })
+    assert.equal(clubChat.store.get('meta').owner, '9')
+    assert.deepEqual(await change({ chat: club, leave: true }, t9), { status: 200, body: { ok: true } })
+    assert.equal(clubChat.store.size, 0)
+    assert.deepEqual([listOf(7)[club], listOf(9)[club]], [undefined, undefined])
+    assert.deepEqual(await change({ chat: club, leave: true }, t9), { status: 404, body: { error: 'gone' } })
+    // Общий чат со всеми друзьями — all: true; групп в сутки не больше GROUPS_DAILY
+    const everyone = (await group({ name: 'Все друзья', all: true }, t9)).body.chat
+    const allChat = everyone.id
+    assert.deepEqual(everyone, { id: allChat, kind: 'group', name: 'Все друзья', owner: '9', members: ['7', '9', '42'], last: 1 })
+    objects.get('gh:9').store.set('made', Array(GROUPS_DAILY).fill(Date.now()))
+    assert.deepEqual(await group({ name: 'Ещё', all: true }, t9), { status: 429, body: { error: 'often' } })
+
+    // Билет страницы чата: на CHAT_TICKET_MS, из живой сессии, с ним — только чаты и список друзей
+    const { ticket, until } = (await go('POST', '/api/me/chats/ticket', { token: t7 })).body
+    assert.match(ticket, /^7\.\d{10}\.[0-9a-f]{12}\.[A-Za-z0-9_-]{22}$/)
+    assert.ok(Math.abs(until * 1000 - (Date.now() + CHAT_TICKET_MS)) < 60_000)
+    const [, , tPrefix, tSig] = ticket.split('.')
+    const byTicket = { auth: `Chat ${ticket}` }
+    for (const path of ['/api/me/chats', '/api/me/chats/unread', '/api/me/friends', `/api/me/chats/messages?chat=${dm}`]) assert.equal((await go('GET', path, byTicket)).status, 200, path)
+    assert.equal((await go('POST', '/api/me/chats/send', { ...byTicket, body: { chat: dm, text: 'Со страницы' } })).status, 200)
+    for (const [method, path] of [['GET', '/api/me'], ['PUT', '/api/me/settings'], ['PUT', '/api/me/handle'], ['POST', '/api/me/friends'], ['POST', '/api/me/chats/ticket'], ['POST', '/api/auth/logout'], ['DELETE', '/api/me']]) {
+      assert.deepEqual(await go(method, path, byTicket), { status: 401, body: { error: 'auth' } }, path)
+    }
+    // Подпись испорчена, чужой номер, другой срок или сессия — нет
+    for (const bad of [`7.${until}.${tPrefix}.${tSig[0] === 'A' ? 'B' : 'A'}${tSig.slice(1)}`, `42.${until}.${tPrefix}.${tSig}`, `7.${until + 1}.${tPrefix}.${tSig}`, `7.${until}.${'0'.repeat(12)}.${tSig}`]) {
+      assert.deepEqual(await go('GET', '/api/me/chats', { auth: `Chat ${bad}` }), { status: 401, body: { error: 'auth' } }, bad)
+    }
+    // Код ссылки: ключ сессии и { link: true } — на CHAT_LINK_MS; один раз меняется на билет, больше с ним ничего нельзя
+    const linkOf = async () => (await go('POST', '/api/me/chats/ticket', { token: t7, body: { link: true } })).body
+    const linked = await linkOf()
+    assert.match(linked.link, /^7\.\d{10}\.[0-9a-f]{12}\.[A-Za-z0-9_-]{22}$/)
+    assert.equal(linked.ticket, undefined)
+    // Два кода подряд — разные, хоть и в одну секунду: каждый годится один раз
+    assert.notEqual((await linkOf()).link, (await linkOf()).link)
+    assert.ok(Math.abs(linked.until * 1000 - (Date.now() + CHAT_LINK_MS)) < 5_000)
+    // Код — не билет, билет — не код
+    assert.equal((await go('GET', '/api/me/chats', { auth: `Chat ${linked.link}` })).status, 401)
+    assert.equal((await go('POST', '/api/me/chats/ticket', { auth: `Link ${ticket}` })).status, 401)
+    // Обмен: новый билет, годный для чатов; второй раз тот же код не годен; нового кода по коду не дают
+    const traded = await go('POST', '/api/me/chats/ticket', { auth: `Link ${linked.link}` })
+    assert.equal(traded.status, 200)
+    assert.ok(Math.abs(traded.body.until * 1000 - (Date.now() + CHAT_TICKET_MS)) < 60_000)
+    assert.equal((await go('GET', '/api/me/chats', { auth: `Chat ${traded.body.ticket}` })).status, 200)
+    assert.deepEqual(await go('POST', '/api/me/chats/ticket', { auth: `Link ${linked.link}` }), { status: 401, body: { error: 'auth' } })
+    const again = (await go('POST', '/api/me/chats/ticket', { auth: `Link ${(await linkOf()).link}`, body: { link: true } })).body
+    assert.deepEqual([typeof again.ticket, again.link], ['string', undefined])
+    // С кодом — только обмен; истёк — не годен; использованные коды забываются, когда истекут
+    for (const [method, path] of [['GET', '/api/me/chats'], ['GET', '/api/me/friends'], ['POST', '/api/me/chats/send'], ['GET', '/api/me']]) {
+      assert.equal((await go(method, path, { auth: `Link ${(await linkOf()).link}`, body: method === 'POST' ? { chat: dm, text: 'Нет' } : undefined })).status, 401, path)
+    }
+    const late = await linkOf()
+    const linkClock = Date.now
+    Date.now = () => late.until * 1000
+    assert.equal((await go('POST', '/api/me/chats/ticket', { auth: `Link ${late.link}` })).status, 401)
+    Date.now = () => late.until * 1000 + 1
+    assert.equal((await go('POST', '/api/me/chats/ticket', { auth: `Link ${(await linkOf()).link}` })).status, 200)
+    assert.equal(objects.get('gh:7').store.get('links').length, 1)
+    Date.now = linkClock
+    assert.deepEqual(await go('POST', '/api/me/chats/ticket', { token: t7, body: 'не json' }), { status: 400, body: { error: 'invalid' } })
+    // Без LINK_SECRET билетов нет; истёк — тоже нет
+    delete env.LINK_SECRET
+    assert.deepEqual(await go('POST', '/api/me/chats/ticket', { token: t7 }), { status: 503, body: { error: 'off' } })
+    assert.equal((await go('GET', '/api/me/chats', byTicket)).status, 401)
+    env.LINK_SECRET = 'тестовый-секрет'
+    const clock = Date.now
+    Date.now = () => until * 1000
+    assert.equal((await go('GET', '/api/me/chats', byTicket)).status, 401)
+    Date.now = clock
+    // Второй компьютер 7 — свой билет
+    gh.user = { id: 7, login: 'other' }
+    const t7b = (await enter('10.0.0.17')).body.token
+    gh.user = { id: 9, login: 'third' }
+    const ticketB = (await go('POST', '/api/me/chats/ticket', { token: t7b })).body.ticket
+    assert.notEqual(ticketB.split('.')[2], tPrefix)
+
+    // Живое соединение: WebSocket /net/chat, билет — подпротоколом. Node не создаёт ответ 101 — подменяем
+    globalThis.Response = class extends RealResponse {
+      constructor(body, init = {}) {
+        if (init.status !== 101) super(body, init)
+        else {
+          super(null, { ...init, status: 200 })
+          Object.defineProperty(this, 'status', { value: 101 })
+          this.webSocket = init.webSocket
+        }
+      }
+    }
+    try {
+      const connect = (protocols, headers = { Upgrade: 'websocket' }) =>
+        worker.fetch(new Request('https://arcade.test/net/chat', { headers: { ...headers, ...(protocols ? { 'Sec-WebSocket-Protocol': protocols } : {}) } }), env)
+      const box7 = objects.get('gh:7')
+      assert.equal((await connect(`arcade-chat, ${ticket}`, {})).status, 426)
+      assert.deepEqual([(await connect(ticket)).status, (await connect('arcade-chat')).status], [401, 401])
+      assert.equal((await connect(`arcade-chat, ${ticket}`, { Upgrade: 'websocket', Origin: 'https://evil.test' })).status, 403)
+      const live = await connect(`arcade-chat, ${ticket}`, { Upgrade: 'websocket', Origin: 'https://arcade.test' })
+      assert.deepEqual([live.status, live.headers.get('Sec-WebSocket-Protocol'), live.webSocket instanceof FakeSocket], [101, 'arcade-chat', true])
+      const first7 = box7.sockets.at(-1)
+      assert.deepEqual(first7.attachment, { prefix: tPrefix, until: until * 1000 })
+      // Новое сообщение — кадр сразу; на ping — pong
+      assert.equal((await say(dm, 'Ты тут?', t42)).status, 200)
+      const note = JSON.parse(first7.sent.at(-1))
+      assert.deepEqual([note.type, note.chat, note.msg.f, note.msg.t], ['note', dm, '42', 'Ты тут?'])
+      await box7.object.webSocketMessage(first7, 'ping')
+      assert.equal(first7.sent.at(-1), 'pong')
+      const bearer = await box7.object.fetch(new Request('https://account/socket', { headers: { Upgrade: 'websocket', Authorization: `Bearer ${t7}` } }))
+      assert.equal(bearer.status, 426, 'сокет — только по билету')
+      // Открытых страниц не больше пяти: шестая закрывает самую старую. Вышел на компьютере — его страницы закрыты
+      for (let i = 0; i < 4; i++) assert.equal((await connect(`arcade-chat, ${ticketB}`)).status, 101)
+      assert.equal((await connect(`arcade-chat, ${ticket}`)).status, 101)
+      assert.ok(first7.closed)
+      assert.equal(box7.object.ctx.getWebSockets().length, 5)
+      assert.equal((await go('POST', '/api/auth/logout', { token: t7b })).status, 200)
+      const open7 = box7.object.ctx.getWebSockets()
+      assert.deepEqual(open7.map((ws) => ws.attachment.prefix), [tPrefix])
+      assert.equal((await go('GET', '/api/me/chats', { auth: `Chat ${ticketB}` })).status, 401)
+      // Билет истёк — со следующим сообщением соединение закрывается
+      open7[0].attachment.until = Date.now() - 1
+      assert.equal((await say(dm, 'Ау', t42)).status, 200)
+      assert.deepEqual([open7[0].closed, open7[0].sent], [true, []])
+    } finally {
+      globalThis.Response = RealResponse
+    }
+
+    // Больше не друзья — чата двоих нет у обоих; общая группа остаётся
+    const dm97 = dmId('9', '7')
+    assert.equal((await say(dm97, 'Пока!', t9)).body.msg.s, 1)
+    assert.equal(listOf(7)[dm97].last, 1)
+    assert.deepEqual((await unfriend('7', t9)).body.friends, [p42])
+    assert.deepEqual([objects.get(`chat:${dm97}`).store.size, listOf(7)[dm97], listOf(9)[dm97]], [0, undefined, undefined])
+    assert.deepEqual(await say(dm97, 'Эй', t9), { status: 403, body: { error: 'friend' } })
+    assert.deepEqual(Object.keys(objects.get(`chat:${allChat}`).store.get('meta').members), ['7', '9', '42'])
+
     // Удалить аккаунт — ничего не остаётся, а ник месяц держится, потом свободен
     assert.deepEqual(await go('DELETE', '/api/me', { token: tokens.at(-1) }), { status: 200, body: { ok: true } })
     assert.equal(account42.store.size, 0)
@@ -1050,6 +1332,8 @@ try {
     assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).status, 401)
     assert.equal(registry.get('owner:42'), undefined)
     assert.deepEqual(objects.get('gh:7').store.get('circle').friends, {}, 'удалённый аккаунт уходит у друзей')
+    assert.deepEqual([objects.get(`chat:${dm}`).store.size, listOf(7)[dm]], [0, undefined], 'чата двоих с ним больше нет')
+    assert.deepEqual(Object.keys(objects.get(`chat:${allChat}`).store.get('meta').members), ['7', '9'], 'из групп он вышел')
     assert.deepEqual(await nick('octo_more', other.body.token), { status: 409, body: { error: 'taken' } })
     Date.now = () => realNow() + 2 * 86_400_000 + 2 * HANDLE_HOLD_MS + 2000
     assert.equal((await nick('octo_more', other.body.token)).status, 200)

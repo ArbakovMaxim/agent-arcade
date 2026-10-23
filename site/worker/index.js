@@ -4,11 +4,12 @@
 // сетевая игра EmulatorJS (Sega, Master System, PlayStation) и сетевой Doom.
 import { discover, verify } from './discover.js'
 import { twitch } from './twitch.js'
-import { account, ticketName } from './account.js'
+import { account, chatSocket, ticketName } from './account.js'
 
 export { Discover } from './discover.js'
 export { Twitch } from './twitch.js'
 export { Account } from './account.js'
+export { Chat } from './chat.js'
 
 export const MAX_PEERS = 8 // игроков в комнате
 export const MAX_MESSAGE = 1024 * 1024 // 1 МБ — больше одно сообщение WebSocket в Workers не передаёт
@@ -89,6 +90,8 @@ export default {
       if (!/^\d{1,10}$/.test(game)) return Response.json({})
       return env.EJS.get(env.EJS.idFromName(game)).fetch('https://ejs/list')
     }
+    // Живое соединение страницы чата: новые сообщения сразу, без опроса
+    if (url.pathname === '/net/chat') return chatSocket(request, env)
     // Партия настольной игры — своя комната с сохранением на сервере
     const board = url.pathname.match(/^\/net\/board\/([a-z0-9]{6,16})$/)
     if (board) {

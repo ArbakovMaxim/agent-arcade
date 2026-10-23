@@ -5,8 +5,9 @@
 // Приложение GitHub — OAuth App с включённым Device Flow; его client ID не секрет и лежит в vars (GITHUB_CLIENT_ID),
 // client secret сайту не нужен. Почты и доступа к репозиториям Arcade не просит: scope пустой.
 // Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
-// аккаунт человека и его друзья.
+// аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js).
 import { sign, signed } from './discover.js'
+import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName } from './chat.js'
 
 const MINUTE = 60_000
 const DAY = 24 * 60 * MINUTE
@@ -38,6 +39,22 @@ export const MAX_FRIENDS = 100
 export const MAX_INCOMING = 50
 export const REQUESTS_DAILY = 20
 export const DECLINE_HOLD_MS = 30 * DAY
+// Чаты: сообщений в минуту, новых групп в сутки, чатов в списке человека (больше — забываются самые тихие). Билет
+// чата — подпись для страницы чата на сайте: с ней можно только читать и писать в чатах, ключ сессии браузеру не нужен.
+// Вид — <номер>.<до, секунды>.<начало хеша сессии>.<HMAC> на LINK_SECRET; вышел на том компьютере — билет не годен.
+// Код ссылки — того же вида, но живёт CHAT_LINK_MS и годится один раз: только чтобы страница обменяла его на билет.
+// Его мод кладёт в адрес страницы — адрес может попасть в просьбу к Claude, а месячный билет туда класть нельзя
+export const SENDS_PER_MINUTE = 30
+export const GROUPS_DAILY = 10
+export const MAX_CHATS = 200
+export const CHAT_TICKET_MS = 30 * DAY
+export const CHAT_LINK_MS = 10 * MINUTE // пока Claude дожидается конца шага или сжатия, а человек — нажимает Enter
+export const CHAT_PROTOCOL = 'arcade-chat' // подпротокол WebSocket страницы чата; второй — сам билет
+const PREVIEW = 80 // знаков последнего сообщения в списке чатов
+const MAX_SOCKETS = 5 // открытых страниц чата у человека
+const CHAT_TICKET = /^(\d{1,20})\.(\d{10})\.([0-9a-f]{12})\.([A-Za-z0-9_-]{22})$/
+const TICKET_PATHS = new Set(['/friends', '/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/socket'])
+const CHAT_PATHS = new Set(['/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/chatticket', '/socket'])
 const ACCOUNT_ID = /^\d{1,20}$/
 // Ники, которыми легко выдать себя за Arcade, Claude или GitHub: сами слова и ники, где они — часть через _
 const RESERVED = new Set(['administrator', 'anonymous', 'everyone', 'guest', 'help', 'helpdesk', 'info', 'moderator', 'mods', 'noreply', 'null', 'owner', 'root', 'security', 'staff', 'system', 'team', 'undefined', 'abuse', 'contact', 'postmaster', 'webmaster', 'robot', 'service', 'settings', 'account'])
@@ -59,13 +76,22 @@ const ROUTES = {
   'POST /api/me/friends': ['user', '/befriend'],
   'POST /api/me/friends/accept': ['user', '/accept'],
   'POST /api/me/friends/remove': ['user', '/unfriend'],
+  'GET /api/me/chats': ['user', '/chats'],
+  'GET /api/me/chats/messages': ['user', '/messages'],
+  'GET /api/me/chats/unread': ['user', '/unread'],
+  'POST /api/me/chats/send': ['user', '/send'],
+  'POST /api/me/chats/open': ['user', '/opendm'],
+  'POST /api/me/chats/group': ['user', '/group'],
+  'POST /api/me/chats/members': ['user', '/members'],
+  'POST /api/me/chats/ticket': ['user', '/chatticket'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
-// Номер GitHub из ключа сессии в заголовке Authorization: Bearer <ключ>; ключ не того вида — null
+// Номер GitHub из заголовка Authorization: Bearer <ключ сессии>, Chat <билет чата> или Link <код ссылки>; не того
+// вида — null
 export function sessionId(header) {
-  const m = /^Bearer (\S+)$/.exec(header ?? '')
-  return m ? (TOKEN.exec(m[1])?.[1] ?? null) : null
+  const m = /^(Bearer|Chat|Link) (\S+)$/.exec(header ?? '')
+  return m ? ((m[1] === 'Bearer' ? TOKEN : CHAT_TICKET).exec(m[2])?.[1] ?? null) : null
 }
 
 // Тело запроса — не больше MAX_BODY; больше — null
@@ -92,6 +118,18 @@ async function readBody(request) {
 // 404 — такого ника нет ({ error: 'nobody' }) или заявки уже нет ({ error: 'gone' }), 409 — сначала возьми свой ник
 // ({ error: 'nohandle' }), друзей и заявок уже много ({ error: 'full' }) или у него слишком много заявок
 // ({ error: 'busy' }), 429 — заявок за сутки много ({ error: 'often' })
+// Чаты (worker/chat.js): GET /api/me/chats → { me, chats, names, unread } — чаты, новые сверху, { id, kind: 'dm' |
+// 'group', with? (друг) | name? (группа), unread, at, last? (последнее сообщение коротко) }, и ники по номерам;
+// GET /api/me/chats/messages?chat=&after=&before= → { me, chat, messages, first, names, unread } — без before чат
+// становится прочитанным; GET /api/me/chats/unread → { unread }; POST /api/me/chats/send { chat, text } → { msg };
+// POST /api/me/chats/open { with } → { chat } — чат с другом; POST /api/me/chats/group { name, members | all: true }
+// → { chat } — группа из друзей или со всеми друзьями; POST /api/me/chats/members { chat, add?, remove?, name? } →
+// { chat } или { chat, leave: true } → { ok } — выйти; POST /api/me/chats/ticket → { ticket, until } — билет для
+// страницы чата: с заголовком Authorization: Chat <билет> можно только чаты и список друзей; с телом { link: true } —
+// { link, until }: код ссылки, который страница один раз обменяет на билет тем же адресом с Authorization: Link <код>. 400 — пустое ('empty')
+// или длинное ('long') сообщение, пустое название ('name'), 403 — не друг ('friend') или не хозяин группы ('owner'),
+// 404 — чата нет или тебя в нём нет ('gone'), 409 — в группе много людей ('full') или нет своего ника ('nohandle'),
+// 429 — слишком часто ('often'), 503 — чаты выключены ('off')
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
@@ -105,12 +143,27 @@ export async function account(request, env, url) {
   }
   const body = request.method === 'POST' || request.method === 'PUT' ? await readBody(request) : ''
   if (body === null) return Response.json({ error: 'too big' }, { status: 413 })
-  const forward = new Request(`https://account${path}`, {
+  const forward = new Request(`https://account${path}${url.search}`, {
     method: request.method === 'GET' ? 'GET' : 'POST',
     ...(body ? { body } : {}),
     headers: { 'X-IP': request.headers.get('CF-Connecting-IP') || '', Authorization: request.headers.get('Authorization') || '' },
   })
   return env.ACCOUNT.get(env.ACCOUNT.idFromName(name)).fetch(forward)
+}
+
+// Живое соединение страницы чата: WebSocket на /net/chat. Своих заголовков браузер WebSocket не даёт, поэтому билет
+// чата едет подпротоколом: ['arcade-chat', <билет>]. Приходят кадры { type: 'note', chat, msg } — в чате новое
+// сообщение — и { type: 'gone', chat } — чата больше нет; на 'ping' — 'pong'
+export async function chatSocket(request, env) {
+  if (request.headers.get('Upgrade') !== 'websocket') return new Response('Нужно подключение WebSocket', { status: 426 })
+  if (!env.ACCOUNT || !env.CHAT) return Response.json({ error: 'off' }, { status: 503 })
+  const offered = (request.headers.get('Sec-WebSocket-Protocol') ?? '').split(',').map((p) => p.trim())
+  const ticket = offered.find((p) => CHAT_TICKET.test(p))
+  if (!offered.includes(CHAT_PROTOCOL) || !ticket) return Response.json({ error: 'auth' }, { status: 401 })
+  const forward = new Request('https://account/socket', {
+    headers: { Upgrade: 'websocket', Authorization: `Chat ${ticket}`, 'X-IP': request.headers.get('CF-Connecting-IP') || '' },
+  })
+  return env.ACCOUNT.get(env.ACCOUNT.idFromName(`gh:${CHAT_TICKET.exec(ticket)[1]}`)).fetch(forward)
 }
 
 // --- Настройки ------------------------------------------------------------------------------------------------
@@ -163,6 +216,24 @@ const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length
 const today = (now) => new Date(now).toISOString().slice(0, 10)
 const refuse = (error, status) => Response.json({ error }, { status })
 const without = (map, id) => Object.fromEntries(Object.entries(map).filter(([key]) => key !== id))
+const chatPayload = (id, until, prefix) => `chat|${id}|${until}|${prefix}`
+const linkPayload = (id, until, prefix) => `link|${id}|${until}|${prefix}`
+const unreadOf = (chats) => Object.values(chats).reduce((sum, c) => sum + Math.max(0, c.last - c.read), 0)
+
+// Последнее сообщение для списка чатов: начало текста одной строкой или служебное целиком
+function preview(msg) {
+  if (typeof msg.t === 'string') return { f: msg.f, t: [...msg.t.replace(/\s+/g, ' ')].slice(0, PREVIEW).join('') }
+  return { f: msg.f, k: msg.k, ...(msg.o ? { o: msg.o } : {}), ...(msg.n ? { n: msg.n } : {}) }
+}
+
+// Чатов в списке больше MAX_CHATS — забываются самые тихие, кроме keep. Забытая группа вернётся со следующим
+// сообщением в ней
+function trimmed(chats, keep) {
+  const ids = Object.keys(chats)
+  if (ids.length <= MAX_CHATS) return chats
+  const quiet = new Set(ids.filter((id) => id !== keep).sort((a, b) => chats[a].at - chats[b].at).slice(0, ids.length - MAX_CHATS))
+  return Object.fromEntries(Object.entries(chats).filter(([id]) => !quiet.has(id)))
+}
 
 // Тело запроса из мода: JSON-объект; не он — {}
 function parsed(text) {
@@ -196,16 +267,21 @@ function randomKey() {
 // Экземпляр 'auth': коды GitHub, выдача ключей сессии и реестр ников — handle:<ник> → { id, until? } (чей ник и, если
 // его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle, changes } (ник
 // человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
-// ключей сессии), settings, handle, seen — когда человек последний раз заходил, и circle — его друзей и заявки
+// ключей сессии), settings, handle, seen — когда человек последний раз заходил, circle — его друзей и заявки, chats —
+// его чаты и made — когда он создавал группы за последние сутки
 export class Account {
   constructor(ctx, env) {
     this.ctx = ctx
     this.env = env
     this.ips = new Map()
+    this.sends = [] // когда человек писал в чаты за последнюю минуту
+    // На 'ping' страницы чата отвечает сама платформа: объект ради этого не просыпается
+    if (typeof WebSocketRequestResponsePair === 'function') ctx.setWebSocketAutoResponse?.(new WebSocketRequestResponsePair('ping', 'pong'))
   }
 
   async fetch(request) {
-    const path = new URL(request.url).pathname
+    const url = new URL(request.url)
+    const path = url.pathname
     const ip = request.headers.get('X-IP') || ''
     try {
       if (path === '/start') return await this.start(ip)
@@ -219,17 +295,31 @@ export class Account {
       if (path === '/incoming') return await this.incoming(await request.json())
       if (path === '/accepted') return await this.accepted(await request.json())
       if (path === '/drop') return await this.drop(await request.json())
-      const hash = await this.session(request.headers.get('Authorization'))
-      if (!hash) return Response.json({ error: 'auth' }, { status: 401 })
+      // От чатов: в чате новое сообщение, чата больше нет
+      if (path === '/chatnote') return await this.chatnote(await request.json())
+      if (path === '/chatgone') return await this.chatgone(await request.json())
+      // С билетом чата — только чаты и список друзей, с кодом ссылки — только обменять его на билет
+      const who = await this.session(request.headers.get('Authorization'))
+      if (!who || (who.ticket && !TICKET_PATHS.has(path)) || (who.link && path !== '/chatticket')) return Response.json({ error: 'auth' }, { status: 401 })
       if (path === '/me') return await this.me()
       if (path === '/settings') return await this.saveSettings(await request.text())
       if (path === '/handle') return await this.setHandle(await request.text())
-      if (path === '/logout') return await this.logout(hash)
+      if (path === '/logout') return await this.logout(who.hash)
       if (path === '/delete') return await this.remove()
       if (path === '/friends') return await this.list()
       if (path === '/befriend') return await this.befriend(await request.text())
       if (path === '/accept') return await this.accept(await request.text())
       if (path === '/unfriend') return await this.unfriend(await request.text())
+      if (CHAT_PATHS.has(path) && !this.env.CHAT) return refuse('off', 503)
+      if (path === '/chats') return await this.chatList()
+      if (path === '/messages') return await this.messages(url.searchParams)
+      if (path === '/unread') return Response.json({ unread: unreadOf(await this.chats()) })
+      if (path === '/send') return await this.send(await request.text())
+      if (path === '/opendm') return await this.openDm(await request.text())
+      if (path === '/group') return await this.makeGroup(await request.text())
+      if (path === '/members') return await this.changeMembers(await request.text())
+      if (path === '/chatticket') return await this.issueTicket(who, await request.text())
+      if (path === '/socket') return this.socket(request, who)
       return Response.json({ error: 'not found' }, { status: 404 })
     } catch (error) {
       if (error instanceof LimitError) return Response.json({ error: 'limit' }, { status: 429 })
@@ -324,19 +414,52 @@ export class Account {
     return Response.json({ token })
   }
 
-  // Ключ сессии подходит — его хеш; заодно раз в сутки отмечаем, что человек заходил
+  // Кто спрашивает: ключ сессии подходит — { hash } (его хеш), билет чата — { hash, ticket } (хеш сессии, из которой
+  // его выдали, и до какого времени он годен), код ссылки — { hash, link: true }; не подходит — null. Заодно раз в
+  // сутки отмечаем, что человек заходил
   async session(header) {
-    const m = /^Bearer (\S+)$/.exec(header ?? '')
-    if (!m || !TOKEN.test(m[1])) return null
-    const hash = await sha256(m[1])
+    const m = /^(Bearer|Chat|Link) (\S+)$/.exec(header ?? '')
+    if (!m) return null
     const sessions = (await this.ctx.storage.get('sessions')) ?? []
-    if (!sessions.some((s) => s.hash === hash)) return null
+    let who = null
+    if (m[1] === 'Chat') who = await this.ticketSession(m[2], sessions)
+    else if (m[1] === 'Link') who = await this.linkSession(m[2], sessions)
+    else if (TOKEN.test(m[2])) {
+      const hash = await sha256(m[2])
+      if (sessions.some((s) => s.hash === hash)) who = { hash }
+    }
+    if (!who) return null
     const now = Date.now()
     if (now - ((await this.ctx.storage.get('seen')) ?? 0) >= DAY) {
       await this.ctx.storage.put('seen', now)
       await this.ctx.storage.setAlarm(now + IDLE_MS)
     }
-    return hash
+    return who
+  }
+
+  // Билет чата: подпись верна, не истёк, выдан этому человеку, и сессия, из которой его выдали, ещё жива
+  async ticketSession(ticket, sessions, payload = chatPayload) {
+    const m = CHAT_TICKET.exec(ticket)
+    const secret = this.env.LINK_SECRET
+    if (!m || !secret || Number(m[2]) * 1000 <= Date.now() || m[1] !== (await this.myId())) return null
+    if (!(await signed(secret, payload(m[1], m[2], m[3]), m[4]))) return null
+    const session = sessions.find((s) => s.hash.startsWith(m[3]))
+    return session ? { hash: session.hash, ticket: Number(m[2]) * 1000 } : null
+  }
+
+  // Код ссылки — как билет, но со своей подписью и один раз: использованные помним, пока они не истекли
+  async linkSession(code, sessions) {
+    const who = await this.ticketSession(code, sessions, linkPayload)
+    if (!who) return null
+    const now = Date.now()
+    const used = ((await this.ctx.storage.get('links')) ?? []).filter((l) => l.until > now)
+    if (used.some((l) => l.code === code)) return null
+    await this.ctx.storage.put('links', [...used, { code, until: who.ticket }])
+    return { hash: who.hash, link: true }
+  }
+
+  async myId() {
+    return ((await this.ctx.storage.get('user')) ?? {}).id
   }
 
   async me() {
@@ -345,12 +468,14 @@ export class Account {
     const circle = await this.circle()
     const friends = Object.keys(circle.friends).length
     const requests = Object.keys(circle.incoming).filter((other) => !circle.friends[other]).length
+    const unread = unreadOf(await this.chats())
     return Response.json({
       user: { id, login, ...(avatar ? { avatar } : {}) },
       settings: (await this.ctx.storage.get('settings')) ?? {},
       ...(await this.named(handle)),
       ...(friends ? { friends } : {}),
       ...(requests ? { requests } : {}),
+      ...(unread ? { unread } : {}),
     })
   }
 
@@ -541,7 +666,8 @@ export class Account {
     if (typeof id !== 'string' || !ACCOUNT_ID.test(id)) return refuse('bad request', 400)
     const { id: me } = (await this.ctx.storage.get('user')) ?? {}
     let circle = await this.circle()
-    if (circle.friends[id] || circle.outgoing[id]) {
+    const friend = Boolean(circle.friends[id])
+    if (friend || circle.outgoing[id]) {
       const answer = await this.person(id, '/drop', { id: me })
       if (!answer.ok && answer.status !== 404) throw new Error(`friend: ${answer.status}`)
     }
@@ -549,6 +675,8 @@ export class Account {
     circle = await this.circle()
     const declined = circle.incoming[id] && !circle.friends[id] ? { ...circle.declined, [id]: now } : circle.declined
     await this.saveCircle({ ...circle, friends: without(circle.friends, id), incoming: without(circle.incoming, id), outgoing: without(circle.outgoing, id), declined }, now)
+    // Больше не друзья — чата двоих больше нет у обоих; общие группы остаются
+    if (friend && this.env.CHAT) await this.chat(dmId(me, id), '/close', {}).catch(() => null)
     return this.list()
   }
 
@@ -602,16 +730,18 @@ export class Account {
     return Response.json({ settings: merged })
   }
 
-  // Выйти на этом компьютере: забыть его ключ сессии
+  // Выйти на этом компьютере: забыть его ключ сессии; билеты чата из этой сессии больше не годны
   async logout(hash) {
     const sessions = (await this.ctx.storage.get('sessions')) ?? []
     await this.ctx.storage.put('sessions', sessions.filter((s) => s.hash !== hash))
+    this.closeSockets(hash.slice(0, 12))
     return Response.json({ ok: true })
   }
 
   // Удалить аккаунт: всё, что о человеке знает сайт
   async remove() {
     await this.forget()
+    this.closeSockets()
     await this.ctx.storage.deleteAlarm()
     await this.ctx.storage.deleteAll()
     return Response.json({ ok: true })
@@ -626,12 +756,18 @@ export class Account {
     } else await this.ctx.storage.setAlarm(seen + IDLE_MS)
   }
 
-  // Перед удалением аккаунта — убрать его у друзей и у тех, с кем были заявки, и отпустить ник в реестре. Кто не
-  // ответил, уберёт его сам: у номера в реестре больше нет ника
+  // Перед удалением аккаунта — закрыть его чаты двоих и выйти из групп, убрать его у друзей и у тех, с кем были
+  // заявки, и отпустить ник в реестре. Кто не ответил, уберёт его сам: у номера в реестре больше нет ника
   async forget() {
     const { id } = (await this.ctx.storage.get('user')) ?? {}
     if (!id) return
     const circle = await this.circle()
+    if (this.env.CHAT) {
+      const chats = Object.keys(await this.chats())
+      const dms = new Set([...Object.keys(circle.friends).map((other) => dmId(id, other)), ...chats.filter((chat) => chat.startsWith('d'))])
+      const groups = chats.filter((chat) => chat.startsWith('g'))
+      await Promise.allSettled([...[...dms].map((chat) => this.chat(chat, '/close', {})), ...groups.map((chat) => this.chat(chat, '/members', { leave: true }))])
+    }
     const others = new Set([...Object.keys(circle.friends), ...Object.keys(circle.incoming), ...Object.keys(circle.outgoing)])
     await Promise.allSettled([...others].map((other) => this.person(other, '/drop', { id })))
     if (await this.ctx.storage.get('handle')) {
@@ -639,4 +775,305 @@ export class Account {
       if (!answer.ok) throw new Error(`registry: ${answer.status}`)
     }
   }
+
+  // --- Чаты -----------------------------------------------------------------------------------------------------
+  // Список чатов человека — chats: { чат: { kind, with? (с кем чат двоих), name? (название группы), last (номер
+  // последнего сообщения), read (до какого прочитано), at (когда было последнее), p? (оно само, коротко) } }. Сами
+  // переписки — в объектах Chat; они сообщают сюда о каждом новом сообщении, отсюда — открытым страницам чата
+  async chats() {
+    return (await this.ctx.storage.get('chats')) ?? {}
+  }
+
+  // Вопрос к чату от имени этого человека
+  async chat(id, path, body) {
+    const space = this.env.CHAT
+    const by = await this.myId()
+    return space.get(space.idFromName(id)).fetch(new Request(`https://chat${path}`, { method: 'POST', body: JSON.stringify({ ...body, chat: id, by }) }))
+  }
+
+  // Ники по номерам — из реестра, пачками; у удалённого аккаунта ника нет
+  async handles(list) {
+    const ids = [...new Set(list.filter((id) => typeof id === 'string' && ACCOUNT_ID.test(id)))]
+    const names = {}
+    for (let i = 0; i < ids.length; i += MAX_FRIENDS + MAX_INCOMING) {
+      const answer = await this.registry('/names', { ids: ids.slice(i, i + MAX_FRIENDS + MAX_INCOMING) })
+      if (!answer.ok) throw new Error(`registry: ${answer.status}`)
+      Object.assign(names, (await answer.json()).names ?? {})
+    }
+    return names
+  }
+
+  // Кто я: номер и ник — странице чата и окну, чтобы отличать свои сообщения
+  async whoami() {
+    const handle = await this.ctx.storage.get('handle')
+    return { id: await this.myId(), ...(handle ? { handle } : {}) }
+  }
+
+  // Чат сообщает о новом сообщении. Чата ещё нет в списке — появляется, непрочитанное — с этого сообщения; своё
+  // сообщение сразу прочитано. Аккаунта уже нет — 404, и ничего не записываем
+  async chatnote({ chat, kind, with: other, name, msg }) {
+    const me = await this.myId()
+    if (!me) return refuse('nobody', 404)
+    if (typeof chat !== 'string' || !CHAT_ID.test(chat) || !['dm', 'group'].includes(kind) || !Number.isSafeInteger(msg?.s)) return refuse('bad request', 400)
+    const chats = await this.chats()
+    const entry = { ...(chats[chat] ?? { last: 0, read: msg.s - 1, at: 0 }), kind, ...(typeof other === 'string' ? { with: other } : {}), ...(typeof name === 'string' ? { name } : {}) }
+    if (msg.s >= entry.last) Object.assign(entry, { last: msg.s, at: msg.at, p: preview(msg) })
+    if (msg.f === me) entry.read = Math.max(entry.read, msg.s)
+    await this.ctx.storage.put('chats', trimmed({ ...chats, [chat]: entry }, chat))
+    await this.push({ type: 'note', chat, msg })
+    return Response.json({ ok: true })
+  }
+
+  // Чата больше нет: друзья расстались, его убрали из группы, он вышел или удалил аккаунт
+  async chatgone({ chat }) {
+    if (typeof chat !== 'string' || !CHAT_ID.test(chat)) return refuse('bad request', 400)
+    await this.lose(chat)
+    await this.push({ type: 'gone', chat })
+    return Response.json({ ok: true })
+  }
+
+  // Убрать чат из списка
+  async lose(chat) {
+    const chats = await this.chats()
+    if (chats[chat]) await this.ctx.storage.put('chats', without(chats, chat))
+  }
+
+  // Чаты, новые сверху, с никами собеседников и авторов последних сообщений
+  async chatList() {
+    const chats = await this.chats()
+    const list = Object.entries(chats)
+      .sort((a, b) => b[1].at - a[1].at)
+      .map(([id, c]) => ({ id, kind: c.kind, ...(c.with ? { with: c.with } : {}), ...(c.name ? { name: c.name } : {}), unread: Math.max(0, c.last - c.read), at: c.at, ...(c.p ? { last: c.p } : {}) }))
+    const names = await this.handles(list.flatMap((c) => [c.with, c.last?.f, c.last?.o]))
+    return Response.json({ me: await this.whoami(), chats: list, names, unread: unreadOf(chats) })
+  }
+
+  // Переписка: последние сообщения, раньше before или новые после after. Без before чат становится прочитанным, а
+  // если его не было в списке (друг открыл чат, но ещё не писал) — появляется
+  async messages(params) {
+    const chat = params.get('chat') ?? ''
+    const [after, before] = ['after', 'before'].map((key) => (params.has(key) ? Number(params.get(key)) : undefined))
+    if (!CHAT_ID.test(chat) || ![after, before].every((n) => n === undefined || (Number.isSafeInteger(n) && n >= 0))) return refuse('bad request', 400)
+    const answer = await this.chat(chat, '/history', { after, before })
+    if (answer.status === 403 || answer.status === 404) {
+      await this.lose(chat)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`chat: ${answer.status}`)
+    const { chat: about, messages, first } = await answer.json()
+    const me = await this.whoami()
+    const other = about.kind === 'dm' ? about.members.find((id) => id !== me.id) : undefined
+    let chats = await this.chats()
+    const entry = chats[chat]
+    if (before === undefined && (!entry || entry.read < about.last || (about.name && entry.name !== about.name))) {
+      const last = messages.at(-1)
+      const fresh = entry ?? { kind: about.kind, ...(other ? { with: other } : {}), at: last?.at ?? Date.now(), ...(last ? { p: preview(last) } : {}) }
+      chats = trimmed({ ...chats, [chat]: { ...fresh, ...(about.name ? { name: about.name } : {}), last: Math.max(fresh.last ?? 0, about.last), read: about.last } }, chat)
+      await this.ctx.storage.put('chats', chats)
+    }
+    const names = await this.handles([...about.members, ...messages.flatMap((m) => [m.f, m.o])])
+    return Response.json({ me, chat: { ...about, ...(other ? { with: other } : {}) }, messages, first, names, unread: unreadOf(chats) })
+  }
+
+  // Написать в чат. В чат двоих — только другу; чата ещё нет — открывается
+  async send(text) {
+    const { chat, text: raw } = parsed(text)
+    if (typeof chat !== 'string' || !CHAT_ID.test(chat)) return refuse('bad request', 400)
+    const message = cleanText(raw)
+    if (!message) return refuse('empty', 400)
+    if (message.length > MAX_TEXT) return refuse('long', 400)
+    const now = Date.now()
+    this.sends = this.sends.filter((at) => now - at < MINUTE)
+    if (this.sends.length >= SENDS_PER_MINUTE) return refuse('often', 429)
+    this.sends.push(now)
+    const me = await this.myId()
+    let other = null
+    if (chat.startsWith('d')) {
+      other = chat.slice(1).split('-').find((id) => id !== me) ?? null
+      if (!other || dmId(me, other) !== chat) return refuse('gone', 404)
+      if (!(await this.circle()).friends[other]) return refuse('friend', 403)
+    }
+    let answer = await this.chat(chat, '/post', { text: message })
+    if (answer.status === 404 && other) {
+      const opened = await this.chat(chat, '/open', { kind: 'dm', members: [me, other] })
+      if (opened.ok) answer = await this.chat(chat, '/post', { text: message })
+    }
+    if (answer.status === 403 || answer.status === 404) {
+      await this.lose(chat)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`chat: ${answer.status}`)
+    return Response.json({ msg: (await answer.json()).msg })
+  }
+
+  // Открыть чат с другом: тот же, что был, или новый
+  async openDm(text) {
+    const { with: other } = parsed(text)
+    if (typeof other !== 'string' || !ACCOUNT_ID.test(other)) return refuse('bad request', 400)
+    const me = await this.myId()
+    if (other === me || !(await this.circle()).friends[other]) return refuse('friend', 403)
+    const chat = dmId(me, other)
+    const answer = await this.chat(chat, '/open', { kind: 'dm', members: [me, other] })
+    if (!answer.ok) throw new Error(`chat: ${answer.status}`)
+    const { chat: about } = await answer.json()
+    const chats = await this.chats()
+    if (!chats[chat]) await this.ctx.storage.put('chats', trimmed({ ...chats, [chat]: { kind: 'dm', with: other, last: about.last, read: about.last, at: Date.now() } }, chat))
+    return Response.json({ chat: { id: chat, kind: 'dm', with: other } })
+  }
+
+  // Новая группа из друзей или со всеми друзьями сразу (all — первые MAX_MEMBERS - 1 по времени дружбы). Хозяин — кто
+  // создал; нужен свой ник: по нему участники видят, кто их позвал
+  async makeGroup(text) {
+    const body = parsed(text)
+    const name = groupName(body.name)
+    if (!name) return refuse('name', 400)
+    if (!(await this.ctx.storage.get('handle'))) return refuse('nohandle', 409)
+    const me = await this.myId()
+    const circle = await this.circle()
+    let people
+    if (body.all === true) {
+      people = Object.entries(circle.friends)
+        .sort((a, b) => a[1] - b[1])
+        .map(([id]) => id)
+        .slice(0, MAX_MEMBERS - 1)
+    } else {
+      if (!Array.isArray(body.members) || !body.members.every((id) => typeof id === 'string' && ACCOUNT_ID.test(id))) return refuse('bad request', 400)
+      people = [...new Set(body.members)].filter((id) => id !== me)
+      if (people.some((id) => !circle.friends[id])) return refuse('friend', 403)
+      if (people.length > MAX_MEMBERS - 1) return refuse('full', 409)
+    }
+    if (!people.length) return refuse('empty', 400)
+    const now = Date.now()
+    const made = ((await this.ctx.storage.get('made')) ?? []).filter((at) => now - at < DAY)
+    if (made.length >= GROUPS_DAILY) return refuse('often', 429)
+    await this.ctx.storage.put('made', [...made, now])
+    const chat = `g${randomKey().slice(0, 16)}`
+    const answer = await this.chat(chat, '/open', { kind: 'group', members: [me, ...people], name })
+    if (!answer.ok) throw new Error(`chat: ${answer.status}`)
+    return Response.json({ chat: (await answer.json()).chat })
+  }
+
+  // Группа: хозяин добавляет друзей, убирает участников и переименовывает её; выйти может любой
+  async changeMembers(text) {
+    const body = parsed(text)
+    const chat = body.chat
+    if (typeof chat !== 'string' || !CHAT_ID.test(chat) || !chat.startsWith('g')) return refuse('bad request', 400)
+    let change = { leave: true }
+    if (body.leave !== true) {
+      const list = (value) => (value === undefined ? [] : Array.isArray(value) && value.every((id) => typeof id === 'string' && ACCOUNT_ID.test(id)) ? value : null)
+      const [add, remove] = [list(body.add), list(body.remove)]
+      if (!add || !remove) return refuse('bad request', 400)
+      if (add.length) {
+        const circle = await this.circle()
+        if (add.some((id) => !circle.friends[id])) return refuse('friend', 403)
+      }
+      const name = body.name === undefined ? '' : groupName(body.name)
+      if (body.name !== undefined && !name) return refuse('name', 400)
+      change = { add, remove, ...(name ? { name } : {}) }
+    }
+    const answer = await this.chat(chat, '/members', change)
+    const data = await answer.json().catch(() => ({}))
+    if (data.error === 'owner' || data.error === 'full') return refuse(data.error, answer.status)
+    if (answer.status === 403 || answer.status === 404) {
+      await this.lose(chat)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`chat: ${answer.status}`)
+    if (change.leave) {
+      await this.lose(chat)
+      return Response.json({ ok: true })
+    }
+    return Response.json({ chat: data.chat })
+  }
+
+  // Билет для страницы чата: мод открывает её, не отдавая браузеру ключ сессии. С ключом сессии и { link: true } —
+  // код ссылки; по коду ссылки — всегда билет, новый код им не взять
+  async issueTicket(who, text) {
+    const secret = this.env.LINK_SECRET
+    if (!secret) return refuse('off', 503)
+    let link = false
+    try {
+      link = !who.link && JSON.parse(text || '{}')?.link === true
+    } catch {
+      return refuse('invalid', 400)
+    }
+    const id = await this.myId()
+    let until = Math.floor((Date.now() + (link ? CHAT_LINK_MS : CHAT_TICKET_MS)) / 1000)
+    // Два кода за одну секунду вышли бы одинаковыми, а код годится один раз — каждый следующий живёт хоть на секунду дольше
+    if (link) {
+      until = Math.max(until, ((await this.ctx.storage.get('linkUntil')) ?? 0) + 1)
+      await this.ctx.storage.put('linkUntil', until)
+    }
+    const prefix = who.hash.slice(0, 12)
+    const code = `${id}.${until}.${prefix}.${await sign(secret, (link ? linkPayload : chatPayload)(id, until, prefix))}`
+    return Response.json(link ? { link: code, until } : { ticket: code, until })
+  }
+
+  // Живое соединение страницы чата — только по билету. Открытых больше MAX_SOCKETS — самые старые закрываются
+  socket(request, who) {
+    if (!who.ticket || request.headers.get('Upgrade') !== 'websocket') return Response.json({ error: 'upgrade' }, { status: 426 })
+    const open = this.ctx.getWebSockets()
+    for (const ws of open.slice(0, Math.max(0, open.length - MAX_SOCKETS + 1))) {
+      try {
+        ws.close(4000, 'replaced')
+      } catch {
+        // уже закрыт
+      }
+    }
+    const [client, server] = Object.values(new WebSocketPair())
+    this.ctx.acceptWebSocket(server)
+    server.serializeAttachment({ prefix: who.hash.slice(0, 12), until: who.ticket })
+    return new Response(null, { status: 101, webSocket: client, headers: { 'Sec-WebSocket-Protocol': CHAT_PROTOCOL } })
+  }
+
+  // Кадр всем открытым страницам чата. Билет истёк или на том компьютере вышли — соединение закрывается (4001):
+  // странице нужен новый билет
+  async push(frame) {
+    const sockets = this.ctx.getWebSockets?.() ?? []
+    if (!sockets.length) return
+    const now = Date.now()
+    const sessions = (await this.ctx.storage.get('sessions')) ?? []
+    const text = JSON.stringify(frame)
+    for (const ws of sockets) {
+      const { prefix, until } = ws.deserializeAttachment() ?? {}
+      try {
+        if (until > now && sessions.some((s) => s.hash.startsWith(prefix))) ws.send(text)
+        else ws.close(4001, 'auth')
+      } catch {
+        // уже закрыт
+      }
+    }
+  }
+
+  // Закрыть живые соединения страниц чата: из одной сессии (prefix — начало её хеша) или все
+  closeSockets(prefix) {
+    for (const ws of this.ctx.getWebSockets?.() ?? []) {
+      if (prefix && ws.deserializeAttachment()?.prefix !== prefix) continue
+      try {
+        ws.close(4001, 'auth')
+      } catch {
+        // уже закрыт
+      }
+    }
+  }
+
+  // Страница пишет в сокет только 'ping' (обычно на него отвечает сама платформа)
+  async webSocketMessage(ws, message) {
+    if (message !== 'ping') return
+    try {
+      ws.send('pong')
+    } catch {
+      // уже закрыт
+    }
+  }
+
+  async webSocketClose(ws, code, reason) {
+    try {
+      ws.close(code, reason)
+    } catch {
+      // уже закрыт
+    }
+  }
+
+  async webSocketError() {}
 }

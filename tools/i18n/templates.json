@@ -112,7 +112,10 @@
   "You and @{0} are friends now.",
   "Request from @{0} declined.",
   "Request to @{0} cancelled.",
-  "@{0} is no longer your friend."
+  "@{0} is no longer your friend.",
+  "unread: {0}",
+  "members: {0}",
+  "Chats are open in {0}."
  ],
  "site": [
   "Played in total: {0}",

@@ -18,7 +18,8 @@
   // без них /api/discover отвечает 503, а мод берёт темы только из каталога.
   // Twitch — свой Durable Object и секреты TWITCH_CLIENT_ID и TWITCH_CLIENT_SECRET (приложение на dev.twitch.tv);
   // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров.
-  // Аккаунты — свой Durable Object Account: вход через GitHub по коду (worker/account.js)
+  // Аккаунты — свой Durable Object Account: вход через GitHub по коду (worker/account.js); чаты друзей — Chat
+  // (worker/chat.js), по экземпляру на чат
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "Room" },
@@ -28,7 +29,8 @@
       { "name": "BOARD", "class_name": "BoardRoom" },
       { "name": "DISCOVER", "class_name": "Discover" },
       { "name": "TWITCH", "class_name": "Twitch" },
-      { "name": "ACCOUNT", "class_name": "Account" }
+      { "name": "ACCOUNT", "class_name": "Account" },
+      { "name": "CHAT", "class_name": "Chat" }
     ]
   },
   "migrations": [
@@ -41,7 +43,9 @@
     // Кеш эфиров Twitch (worker/twitch.js)
     { "tag": "v6", "new_sqlite_classes": ["Twitch"] },
     // Аккаунты: вход через GitHub и настройки мода (worker/account.js)
-    { "tag": "v7", "new_sqlite_classes": ["Account"] }
+    { "tag": "v7", "new_sqlite_classes": ["Account"] },
+    // Чаты: переписка друзей один на один и в группах (worker/chat.js)
+    { "tag": "v8", "new_sqlite_classes": ["Chat"] }
   ],
   // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет; client secret сайту не нужен
   "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv" },
@@ -58,7 +62,8 @@
         { "name": "BOARD", "class_name": "BoardRoom" },
         { "name": "DISCOVER", "class_name": "Discover" },
         { "name": "TWITCH", "class_name": "Twitch" },
-        { "name": "ACCOUNT", "class_name": "Account" }
+        { "name": "ACCOUNT", "class_name": "Account" },
+        { "name": "CHAT", "class_name": "Chat" }
       ]
     }
   }

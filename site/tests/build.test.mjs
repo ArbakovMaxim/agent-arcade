@@ -160,7 +160,7 @@ assert.equal(fs.readFileSync(path.join(out, '.assetsignore'), 'utf8'), '_headers
   const twitch = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'twitch.json'), 'utf8'))
   const channels = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'channels.json'), 'utf8'))
   const directions = new Set(channels.directions.map((d) => d.id))
-  for (const page of ['live.html', 'live.js']) assert.ok(fs.existsSync(path.join(out, page)), `страница ${page}`)
+  for (const page of ['live.html', 'live.js', 'chat.html', 'chat.js']) assert.ok(fs.existsSync(path.join(out, page)), `страница ${page}`)
   const bad = (change) => {
     const data = structuredClone(twitch)
     change(data)

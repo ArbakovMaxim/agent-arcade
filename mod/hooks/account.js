@@ -19,10 +19,10 @@ const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove' }
+const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket' }
 
-// Адрес сайта для шага входа, настроек, ника или друзей: start, poll, logout, me, settings, handle, friends, accept,
-// unfriend
+// Адрес сайта для шага входа, настроек, ника, друзей или чатов: start, poll, logout, me, settings, handle, friends,
+// accept, unfriend, chats, messages, unread, send, opendm, group, members, chatticket
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }
@@ -30,7 +30,7 @@ export function accountUrl(name) {
 // Что не так с ответом сайта: '' — всё хорошо, 'auth' — ключ сессии больше не подходит, 'limit' — лимит адреса на
 // сегодня, 'off' — вход на сайте не настроен, 'app' — GitHub не принял приложение сайта, 'big' — настройки не
 // поместились, 'down' — сайт или GitHub не ответили
-function trouble(response, data) {
+export function trouble(response, data) {
   if (!response) return 'down'
   if (response.status === 401) return 'auth'
   if (response.status === 429) return 'limit'
@@ -98,18 +98,18 @@ function handleFrom(data) {
   return { handle, ticket: handle && m?.[1] === handle ? data.ticket : '' }
 }
 
-// Сколько друзей или заявок: целое от 0
-const count = (n) => (Number.isInteger(n) && n > 0 ? Math.min(n, 9999) : 0)
+// Сколько друзей, заявок или непрочитанных: целое от 0
+export const count = (n) => (Number.isInteger(n) && n > 0 ? Math.min(n, 9999) : 0)
 
-// Ответ /api/me → { user, settings, handle, ticket, friends, requests, error }: friends — сколько друзей, requests —
-// сколько заявок ждут ответа человека
+// Ответ /api/me → { user, settings, handle, ticket, friends, requests, unread, error }: friends — сколько друзей,
+// requests — сколько заявок ждут ответа человека, unread — сколько непрочитанных сообщений во всех чатах
 export function parseMe(response) {
   const data = jsonFrom(response?.text)
   const error = trouble(response, data)
-  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, error: e })
+  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, error: e })
   if (error) return none(error)
   const user = parseUser(data.user)
-  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), friends: count(data.friends), requests: count(data.requests), error: '' } : none('down')
+  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), friends: count(data.friends), requests: count(data.requests), unread: count(data.unread), error: '' } : none('down')
 }
 
 // Что человек ввёл как ник → ник строчными, без @ и пробелов по краям
@@ -138,7 +138,7 @@ export function parseHandle(response) {
 }
 
 // Человек из списка друзей: { id, handle } — номер аккаунта и ник; не сходится — null
-function personFrom(p) {
+export function personFrom(p) {
   return p && typeof p === 'object' && /^\d{1,20}$/.test(String(p.id ?? '')) && HANDLE.test(p.handle ?? '') ? { id: String(p.id), handle: p.handle } : null
 }
 
