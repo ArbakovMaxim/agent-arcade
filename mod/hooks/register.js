@@ -13,6 +13,8 @@ import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreM
 import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
 import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
 import { FIND_LIMIT, MIN_QUERY, find, restoreFavorites, toggleIn } from './find.js'
+import { COL_NAMES, MAX_APP, MAX_BODY, MAX_URL, NOTES_TOOL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, columnCards, columnOf, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from './notes.js'
+import { MAX_MEMBERS, adoptBoard, applySync, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from './desks.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from './reports.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
@@ -113,7 +115,7 @@ let lastGame = 'thwaite'
 let played = false // во что-то уже играли (или читали, слушали) — тогда первой плиткой главного меню идёт «Продолжить»
 // Разделы главного меню, которые можно свернуть, и какие свёрнуты; избранное — id игр, книг и аудиокниг по порядку
 // добавления. И то и другое общее для всех компьютеров (SYNC_KEYS)
-const SECTIONS = ['play', 'read', 'watch', 'talk', 'more']
+const SECTIONS = ['play', 'read', 'watch', 'talk', 'work', 'more']
 const FAV_LIMIT = 100
 let collapsed = []
 let favorites = []
@@ -144,6 +146,12 @@ let opener = null // где открывать игры: 'window' или 'pane';
 let browserChoice = 'default' // каким браузером: 'default' или id найденного
 let desktopOpener = 'builtin' // в Desktop: 'builtin' — встроенный браузер приложения, 'window' — окно браузера, как в терминале
 let keepMenu = false // в Desktop: встроенный браузер открылся — false: панель Arcade закрываем, true: оставляем, браузер встаёт под ней
+let backOnDone = false // в Desktop: агент закончил, пока смотришь во встроенном браузере — true: вкладку Arcade закрываем
+// Вкладка встроенного браузера, где Arcade открыл видео, трансляцию, TikTok, статью или выпуск: { tabId, turn } или null;
+// turn — ход Claude, который открыл её по просьбе Arcade: его конец вкладку не закрывает
+let watchTab = null
+// Просьба Arcade, которую Claude сейчас выполняет, велит потом вернуться к работе: конец этого хода — конец работы агента
+let askResumes = false
 let libraryNotice = '' // что случилось при последнем запуске окна
 let opening = false // игру во встроенном браузере Desktop по просьбе Arcade открывает Claude
 let agentTurn = null // ход агента (главного цикла), который идёт сейчас: его id для $.turn.abort
@@ -172,6 +180,19 @@ const rssCache = new Map() // «articles:id ленты» → { at, items }: ле
 // Свои темы человека: последние, из $.store. Заметка под полем «Своя тема» — у раздела, где тему ввели; номер последнего
 // разбора — ответ модели на старый ввод не нужен
 let myTopics = []
+// Блокнот (hooks/notes.js): страницы из $.store. note — заметка под полями (bad — о беде), confirm — какую страницу
+// удалить по второму нажатию, draft — набранное в поле «Текст» и ещё не сохранённое ({ id, text }), field — номер полей:
+// поля рисуются заново с новым текстом, когда страница поменялась не из них; focus — какое поле страницы в фокусе
+let notes = []
+const nb = { note: '', bad: false, confirm: null, draft: null, field: 0, focus: '' }
+const NOTES_TOOL_NAME = `mcp__arcade__${NOTES_TOOL.name}`
+const NOTE_LINES = 400 // строк страницы на экране; дальше — в поле «Текст»
+// Доска проектов: основы общих досок (desks.js), список общих досок с сайта и состояние экрана. trouble — беда сверки
+// одной доски { share, text }; picked — отмеченные друзья; syncing и again — какие доски сверяются и каким нужна ещё сверка
+let desks = {}
+const NO_DESKS = { list: null, me: '', names: {}, loading: false, busy: '', note: '', bad: false, trouble: null, pick: '', confirm: '', focus: '', field: 0 }
+let dk = { ...NO_DESKS, picked: new Set(), syncing: new Set(), again: new Set() }
+let pushTimer = null
 let ownNote = { kind: '', text: '' }
 let ownRequest = 0
 const searchCache = new Map() // «youtube:запрос» → { at, found }: поиск сайта по своей теме — не чаще SEARCH_TTL_MS
@@ -240,7 +261,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f' }
 function iconSvg(kind) {
   // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
   kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
@@ -266,6 +287,8 @@ function iconSvg(kind) {
     mic: `<rect x="18" y="7" width="12" height="21" rx="6" fill="${c}"/><path d="M12 22a12 12 0 0 0 24 0" stroke="${c}" stroke-width="3" fill="none"/><path d="M24 34v7M17 41h14" stroke="${c}" stroke-width="3"/>`,
     // Трансляции: экран с антенной и точкой эфира
     tv: `<rect x="7" y="14" width="34" height="23" rx="5" fill="${c}"/><path d="M18 6l6 8 6-8" stroke="${c}" stroke-width="3" fill="none"/><circle cx="16" cy="25.5" r="3.5" fill="#fff"/><path d="M24 23h11M24 28h8" stroke="#fff" stroke-width="2.5"/>`,
+    // TikTok — нота
+    note: `<circle cx="19" cy="32" r="8" fill="${c}"/><rect x="24" y="8" width="5" height="25" fill="${c}"/><path d="M29 8c1 5 5 8 10 8v6c-4 0-7-1.5-10-4z" fill="${c}"/>`,
     // Жанры игр: прицел, клетчатый флаг, ладья, компас, кубик
     target: `<circle cx="24" cy="24" r="13" fill="none" stroke="${c}" stroke-width="4"/><circle cx="24" cy="24" r="4" fill="${c}"/><path d="M24 5v10M24 33v10M5 24h10M33 24h10" stroke="${c}" stroke-width="3"/>`,
     flag: `<rect x="10" y="8" width="3" height="33" rx="1.5" fill="#ddd"/><rect x="13" y="9" width="26" height="18" fill="${c}"/><path d="M13 9h6.5v6H13zM26 9h6.5v6H26zM19.5 15H26v6h-6.5zM32.5 15H39v6h-6.5zM13 21h6.5v6H13zM26 21h6.5v6H26z" fill="#fff"/>`,
@@ -274,9 +297,13 @@ function iconSvg(kind) {
     // Поиск — лупа, избранное — звезда
     lens: `<circle cx="21" cy="21" r="11" fill="none" stroke="${c}" stroke-width="5"/><path d="M29 29l10 10" stroke="${c}" stroke-width="6" stroke-linecap="round"/>`,
     star: `<polygon points="${star(24, 25, 17)}" fill="${c}"/>`,
+    // Блокнот: обложка со строками и пружина слева
+    notebook: `<rect x="12" y="7" width="27" height="34" rx="3" fill="${c}"/><path d="M19 16h14M19 22h14M19 28h9" stroke="#fff" stroke-width="2.5"/><path d="M9 12h6M9 19h6M9 26h6M9 33h6" stroke="#ddd" stroke-width="2.5" stroke-linecap="round"/>`,
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
+    // Доска проектов: три колонки с карточками
+    kanban: `<rect x="8" y="9" width="9" height="30" rx="2" fill="${c}"/><rect x="19.5" y="9" width="9" height="22" rx="2" fill="${c}"/><rect x="31" y="9" width="9" height="14" rx="2" fill="${c}"/><path d="M10.5 15h4M10.5 21h4M10.5 27h4M22 15h4M22 21h4M33.5 15h4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -784,9 +811,15 @@ function windowTarget() {
   return browser ? { kind: 'browser', browser } : { kind: 'default' }
 }
 
+// TikTok смотрят на его сайте: вход — человека, страницы TikTok Arcade не трогает
+const TIKTOK = 'https://www.tiktok.com'
+
 // Команда, которая открывает окно с игрой (или с библиотекой, если id нет) на сайте Arcade.
 // На Windows — выбранным браузером, отдельным окном справа; на macOS и Linux — браузером по умолчанию.
 function windowUrl(id) {
+  // tiktok — лента «Для тебя», tiktok:<запрос> — поиск TikTok; язык TikTok берёт свой
+  if (id === 'tiktok') return `${TIKTOK}/foryou`
+  if (typeof id === 'string' && id.startsWith('tiktok:')) return `${TIKTOK}/search?q=${encodeURIComponent(id.slice(7))}`
   // chat — страница чатов на сайте: код ссылки после #, страница обменяет его на свой билет и уберёт из адреса
   if (id === 'chat') return `${SITE}/chat${lang === 'ru' ? '' : `?lang=${lang}`}#k=${chatLink}${ch.talk && (menu === 'chats:talk' || menu === 'chats:members') ? `&c=${ch.talk}` : ''}`
   // video:<номер> — страница просмотра с подборкой YouTube; язык она берёт сама
@@ -862,12 +895,18 @@ const BROWSER = 'mcp__Claude_Browser__'
 // Боковые панели приложения: скрытую панель браузера показывает он
 const SHOW_PANE = 'mcp__ccd_view__show_pane'
 // Инструменты приложения, которые Arcade зовёт сам
-const DESKTOP_TOOLS = [`${BROWSER}tabs_context`, `${BROWSER}navigate`, `${BROWSER}tabs_select`, `${BROWSER}preview_start`, SHOW_PANE]
+const DESKTOP_TOOLS = [`${BROWSER}tabs_context`, `${BROWSER}navigate`, `${BROWSER}tabs_select`, `${BROWSER}preview_start`, `${BROWSER}tabs_close`, SHOW_PANE]
 
-// Вызов, который Arcade разрешает себе без вопроса: вкладки браузера, адрес только на сайте Arcade, панель браузера
+// Адрес, который открывает Arcade: страницы его сайта и TikTok
+function arcadeUrl(url) {
+  return typeof url === 'string' && (url.startsWith(`${SITE}/`) || url.startsWith(`${TIKTOK}/`))
+}
+
+// Вызов, который Arcade разрешает себе без вопроса: вкладки браузера, адрес только на сайте Arcade или TikTok, панель
+// браузера. Закрывает Arcade только вкладку, которую открыл сам (watchTab)
 export function ownDesktopCall(tool, input) {
-  if (tool === `${BROWSER}tabs_context` || tool === `${BROWSER}tabs_select`) return true
-  if (tool === `${BROWSER}navigate` || tool === `${BROWSER}preview_start`) return typeof input?.url === 'string' && input.url.startsWith(`${SITE}/`)
+  if (tool === `${BROWSER}tabs_context` || tool === `${BROWSER}tabs_select` || tool === `${BROWSER}tabs_close`) return true
+  if (tool === `${BROWSER}navigate` || tool === `${BROWSER}preview_start`) return arcadeUrl(input?.url)
   return tool === SHOW_PANE && input?.pane === 'preview'
 }
 
@@ -894,10 +933,41 @@ async function browserTabs($, consent) {
   }
 }
 
-// Вкладка Arcade, если она уже открыта: активная, иначе последняя
-async function arcadeTab($, consent) {
-  const ours = (await browserTabs($, consent)).filter((t) => t.origin === SITE)
+// Вкладка Arcade (или TikTok — origin), если она уже открыта: активная, иначе последняя
+async function arcadeTab($, consent, origin = SITE) {
+  const ours = (await browserTabs($, consent)).filter((t) => t.origin === origin)
   return ours.find((t) => t.isActive) ?? ours.pop() ?? null
+}
+
+// Что открыто для просмотра — видео, трансляция, TikTok, статья или выпуск: такую вкладку закроет «агент закончил»
+function viewing(url) {
+  return ['watch', 'live', 'read', 'listen'].some((path) => String(url).startsWith(`${SITE}/${path}`)) || String(url).startsWith(`${TIKTOK}/`)
+}
+
+// Запомнить вкладку, где Arcade только что открыл адрес (она — активная). Во вкладку, где было видео, открылась игра
+// или чаты — закрывать её «агент закончил» уже не должен. turn — ход Claude, который её открыл. Настройка выключена —
+// вкладки не спрашиваем: лишний вызов браузера ни к чему
+async function rememberTab($, url, consent, turn = null) {
+  if (!backOnDone || (!viewing(url) && !watchTab)) return
+  const tab = (await browserTabs($, consent)).find((t) => t.isActive)
+  if (!tab) return
+  if (viewing(url)) watchTab = { tabId: tab.tabId, turn }
+  else if (watchTab?.tabId === tab.tabId) watchTab = null
+}
+
+// Агент закончил, а человек смотрит во встроенном браузере: вкладку, которую открыл Arcade, закрываем — перед ним
+// снова разговор с Claude. Последняя вкладка закрывается вместе с панелью браузера. true — закрыли
+async function closeWatchTab($) {
+  const { tabId } = watchTab
+  watchTab = null
+  try {
+    const result = await desktopCall($, `${BROWSER}tabs_close`, { tabId }, 'The agent finished its turn, and the user chose in Arcade settings to close the tab Arcade opened for watching.')
+    if (!result?.isError) return true
+    log(`вкладка не закрылась: ${toolText(result).slice(0, 200)}`)
+  } catch (err) {
+    log(`вкладка не закрылась: ${String(err?.message ?? err).slice(0, 200)}`)
+  }
+  return false
 }
 
 // Адрес — во вкладку Arcade, если она уже открыта: новая вкладка на каждое нажатие упирается в предел вкладок
@@ -934,9 +1004,10 @@ async function openDesktopBrowser($, id) {
   const consent = desktopConsent(url)
   let denied = false
   try {
-    const result = await browse($, withName(url, id), await arcadeTab($, consent), consent)
+    const result = await browse($, withName(url, id), await arcadeTab($, consent, url.startsWith(`${TIKTOK}/`) ? TIKTOK : SITE), consent)
     if (!result?.isError) {
       await showBrowser($, consent)
+      await rememberTab($, url, consent).catch((err) => log(`вкладка не запомнилась: ${String(err?.message ?? err).slice(0, 200)}`))
       return 'opened'
     }
     log(`встроенный браузер ответил ошибкой: ${toolText(result).slice(0, 200)}`)
@@ -1013,6 +1084,7 @@ async function askClaude($, url, submit, then) {
   if (submit) {
     // Отмечаем до отправки: ход с просьбой может и кончиться раньше, чем ответит submit
     asking = url
+    askResumes = Boolean(then)
     const sent = await $.prompt.submit({ text: ask }).catch((err) => ({ drop: String(err?.message ?? err) }))
     if (!sent.drop) return 'sent'
     asking = null
@@ -1031,7 +1103,7 @@ function desktopNotice($, outcome, opened, url) {
   // инструмент агента или сжатие, сколько бы они ни шли
   // Что открывается: видео (и трансляция), статья или выпуск (о них — «ссылка») или игра
   const page = (path) => String(url).startsWith(`${SITE}/${path}`)
-  const kind = page('watch') || page('live') ? 'video' : page('read') || page('listen') || page('chat') ? 'link' : 'game'
+  const kind = page('watch') || page('live') || String(url).startsWith(`${TIKTOK}/`) ? 'video' : page('read') || page('listen') || page('chat') ? 'link' : 'game'
   const pick = (video, link, game) => ({ video, link, game })[kind]
   if (outcome === 'manual') libraryNotice = `Попроси Claude открыть во встроенном браузере: ${url}`
   else if (outcome === 'waiting')
@@ -1101,6 +1173,10 @@ async function openedForArcade($, e) {
   opening = false
   asking = null
   await showBrowser($, desktopConsent(e.url))
+  // Claude открыл вкладку и вернулся к прерванной работе — конец хода закроет её; открыл и только — не закроет
+  const turn = askResumes ? null : agentTurn
+  askResumes = false
+  await rememberTab($, e.url, desktopConsent(e.url), turn).catch((err) => log(`вкладка не запомнилась: ${String(err?.message ?? err).slice(0, 200)}`))
   if (paneOpen && !keepMenu) await $.ui.close({ id: PANE })
 }
 
@@ -1377,11 +1453,12 @@ function applySetting(key, value) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return false
     const fine = (list) => Array.isArray(list) && list.length <= 64 && list.every((k) => typeof k === 'string' && k.length <= 30)
     keymap = restoreKeymap(Object.fromEntries(Object.entries(value).filter(([, list]) => fine(list))))
-  } else if (key === 'notify' || key === 'wide' || key === 'keepMenu') {
+  } else if (key === 'notify' || key === 'wide' || key === 'keepMenu' || key === 'backOnDone') {
     if (typeof value !== 'boolean') return false
     if (key === 'notify') osNotify = value
     else if (key === 'wide') wide = value
-    else keepMenu = value
+    else if (key === 'keepMenu') keepMenu = value
+    else backOnDone = value
   } else if (key === 'onDone' || key === 'onPermission') {
     if (!SIGNAL_MODES.includes(value)) return false
     if (key === 'onDone') onDone = value
@@ -1409,7 +1486,7 @@ function applySetting(key, value) {
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites }[key]
+  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, backOnDone, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites }[key]
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
@@ -1538,6 +1615,9 @@ async function forgetSession($, note) {
   fr = { ...NO_FRIENDS, request: fr.request + 1 }
   ch = { ...NO_CHATS, picked: new Set(), request: ch.request + 1 }
   rp = { ...rp, ...NO_REPORTS, request: rp.request + 1 }
+  dk = { ...NO_DESKS, picked: new Set(), syncing: new Set(), again: new Set() }
+  pushTimer?.cancel()
+  pushTimer = null
   chatLink = ''
   syncTimer?.cancel()
   syncTimer = null
@@ -2206,6 +2286,31 @@ async function openGithub($, url) {
   $.ui.invalidate('ui.render')
 }
 
+// TikTok: лента «Для тебя» или поиск по запросу. В Desktop — встроенный браузер, иначе — браузер по умолчанию: там
+// человек, скорее всего, уже вошёл в TikTok
+async function openTiktok($, surface, query) {
+  const id = query ? `tiktok:${query}` : 'tiktok'
+  if (builtinBrowser(surface)) return desktopWindow($, id, 'TikTok открыт во встроенном браузере Claude.')
+  const url = windowUrl(id)
+  const command = platform ? openUrlCommand(platform, url) : null
+  if (!command) {
+    libraryNotice = `TikTok: ${url}`
+    return $.ui.invalidate('ui.render')
+  }
+  libraryNotice = 'Открываю браузер…'
+  $.ui.invalidate('ui.render')
+  try {
+    const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+    if (result?.exitCode === 0) {
+      windowOpenedAt = await $.clock.now() // смотришь в браузере — «агент закончил» придёт системным уведомлением
+      windowNotice($, 'TikTok открыт в браузере по умолчанию.')
+    } else libraryNotice = `TikTok: ${url}`
+  } catch (err) {
+    libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+  }
+  $.ui.invalidate('ui.render')
+}
+
 // Темы: haiku читает последнюю работу агента; работы ещё нет или модель не ответила — темы по умолчанию
 async function loadTopics($) {
   const request = ++yt.request
@@ -2468,6 +2573,528 @@ function favoritesScope(scope) {
   return null
 }
 
+// --- Блокнот ------------------------------------------------------------------------------------------------------
+const NOTES_FULL = 'Блокнот полон — удали ненужные страницы.'
+const NOTE_TOO_LONG = 'Текст страницы длиннее 20 000 знаков — сократи его.'
+const CONNECTOR_HINT = '  Через коннекторы Claude: ключи и пароли Arcade не нужны. Нет коннектора — Claude подскажет, как подключить.'
+// Голосовой ввод — диктовкой системы: она пишет в любое поле, где курсор, и в поля Arcade тоже
+const VOICE_HINT = {
+  windows: '  Голосом: Win+H — диктовка Windows пишет туда, где курсор.',
+  mac: '  Голосом: дважды Fn — диктовка macOS пишет туда, где курсор.',
+}
+
+async function saveNotes($) {
+  await $.store.set('notes', notes).catch((err) => {
+    nb.note = 'Не получилось сохранить блокнот.'
+    nb.bad = true
+    log(`ошибка мода: ${err?.message ?? err}`)
+  })
+}
+
+// Блокнот поменялся: поля страницы рисуются заново с новым текстом
+async function notesChanged($, list) {
+  notes = list
+  nb.draft = null
+  nb.field++
+  $.ui.invalidate('ui.render')
+  await saveNotes($)
+  pushBoards($)
+}
+
+// Набранное в поле «Текст» — в страницу (в списке list). Не помещается — null
+function withDraft(list, at) {
+  const draft = nb.draft
+  const page = draft && list.find((p) => p.id === draft.id)
+  if (!page || draft.text === page.body) return list
+  if (draft.text.length > MAX_BODY) return null
+  return updatePage(list, page.id, { body: cleanBody(draft.text) }, at)
+}
+
+// Правка с экрана, вместе с набранным в поле «Текст»: change(list, at) → новый список или текст беды
+async function editNotes($, change, saved = '') {
+  const at = await $.clock.now()
+  const base = withDraft(notes, at)
+  const next = base && change(base, at)
+  const problem = !base ? NOTE_TOO_LONG : typeof next === 'string' ? next : fits(next) ? '' : NOTES_FULL
+  nb.note = problem || saved
+  nb.bad = Boolean(problem)
+  if (problem) {
+    $.ui.invalidate('ui.render')
+    return false
+  }
+  if (next !== notes) await notesChanged($, next)
+  else $.ui.invalidate('ui.render')
+  return true
+}
+
+// Новая страница (или подстраница parent) — и сразу открыть её
+async function createPage($, title, parent = null) {
+  let page = null
+  const done = await editNotes($, (list, at) => {
+    const made = addPage(list, { title, parent }, at)
+    if (made.error) return made.error === 'empty' ? 'Впиши название страницы.' : NOTES_FULL
+    page = made.page
+    return made.notes
+  })
+  if (!done || !page) return
+  nb.focus = 'add'
+  menuFrom = menu
+  menu = `note:${page.id}`
+  $.ui.invalidate('ui.render')
+}
+
+// Заметки после передачи Claude: страница блокнота или просьба про другое приложение
+const GIVEN = {
+  page: ['Страница ушла Claude.', 'Claude занят — страница ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось отдать страницу — попробуй ещё раз, когда Claude освободится.'],
+  ask: ['Просьба ушла Claude.', 'Claude занят — просьба ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось передать просьбу — попробуй ещё раз, когда Claude освободится.'],
+  board: ['Доска ушла Claude.', 'Claude занят — доска ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось отдать доску — попробуй ещё раз, когда Claude освободится.'],
+}
+
+// Текст — Claude: сразу, если он свободен, иначе — в поле ввода, к тому, что там уже набрано
+async function giveClaude($, text, what) {
+  const [sentNote, busyNote, failNote] = GIVEN[what]
+  if (status === 'idle' || status === 'done') {
+    const sent = await $.prompt.submit({ text }).catch((err) => ({ drop: String(err?.message ?? err) }))
+    if (!sent.drop) {
+      nb.note = sentNote
+      nb.bad = false
+      $.ui.invalidate('ui.render')
+      return
+    }
+    log(`ошибка мода: ${sent.drop.slice(0, 200)}`)
+  }
+  const { text: draft } = await $.prompt.read().catch(() => ({ text: '' }))
+  const filled = await $.prompt.fill({ text: draft.trim() ? `\n${text}` : text, mode: 'append' }).catch(() => ({}))
+  nb.note = filled.isFilled ? busyNote : failNote
+  nb.bad = !filled.isFilled
+  $.ui.invalidate('ui.render')
+}
+
+// Страницу — Claude
+async function sendNote($, id) {
+  if (!(await editNotes($, (list) => list))) return
+  const page = notes.find((p) => p.id === id)
+  if (!page) return
+  const text = [`${tr('Страница из моего блокнота Arcade', lang)} (id ${page.id}):`, '', `# ${page.title}`, page.body, '', tr('Отмечай сделанные пункты и дописывай итоги на этой странице инструментом mcp__arcade__notes.', lang)].join('\n')
+  await giveClaude($, text, 'page')
+}
+
+// Просьба к Claude про другое приложение: перенести страницу туда (push), обновить её там (update), забрать текст
+// оттуда (pull) или завести страницу блокнота из чужой (import). Сам Arcade ни с чем не говорит: всё делают
+// коннекторы Claude (Notion, Google Docs…), ключи и пароли Arcade не нужны. Нет коннектора — Claude объяснит, как
+// его подключить. Фразы — на языке интерфейса, данные (название, адрес, текст) — как есть
+function connectorPrompt(kind, { page = null, app = '', what = '' }) {
+  const t = (text) => tr(text, lang)
+  const intro = {
+    push: 'Перенеси страницу из моего блокнота Arcade в другое приложение.',
+    update: 'Обнови страницу в другом приложении текстом из моего блокнота Arcade.',
+    pull: 'Забери текст страницы из другого приложения в мой блокнот Arcade.',
+    import: 'Забери страницу из другого приложения в мой блокнот Arcade.',
+  }[kind]
+  const todo = {
+    push: 'Создай там новую страницу с этим названием и текстом инструментами коннектора этого приложения. Потом свяжи её со страницей блокнота: mcp__arcade__notes, action link, с названием приложения и адресом новой страницы.',
+    update: 'Замени текст той страницы на этот инструментами коннектора этого приложения.',
+    pull: 'Прочитай ту страницу инструментами коннектора этого приложения и замени её текстом текст страницы блокнота: mcp__arcade__notes, action replace. Прежний текст останется в Arcade для отмены.',
+    import: 'Найди и прочитай её инструментами коннектора (Notion, Google Docs и других). Потом создай страницу блокнота: mcp__arcade__notes, action create, с её названием и текстом, а в app и url — приложение и адрес той страницы, чтобы они остались связаны.',
+  }[kind]
+  const data = kind === 'import' ? [`${t('Что забрать')}: ${what}`] : [`${t('Приложение')}: ${app}`, ...(kind === 'push' ? [] : [`${t('Адрес')}: ${page.link?.url ?? ''}`]), `${t('Страница блокнота')}: ${page.id}`]
+  const content = kind === 'push' || kind === 'update' ? ['', `# ${page.title}`, page.body] : []
+  return [t(intro), ...data, ...content, '', t(todo), t('Нет инструментов этого приложения — ничего не делай, только объясни, как подключить его коннектор в Claude.')].join('\n')
+}
+
+// Страница из другого приложения — в браузере по умолчанию (там человек вошёл в Notion); только https
+async function openLink($, url) {
+  const command = openUrlCommand(platform, url)
+  let opened = false
+  if (command) {
+    try {
+      opened = (await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS }))?.exitCode === 0
+    } catch {
+      // не открылся — адрес и так написан на экране
+    }
+  }
+  nb.note = opened ? 'Страница открыта в браузере.' : 'Браузер не открылся — адрес страницы написан выше.'
+  nb.bad = !opened
+  $.ui.invalidate('ui.render')
+}
+
+// --- Доска проектов -------------------------------------------------------------------------------------------------
+// Доска — страница блокнота с колонками (board), карточки — её подстраницы с колонкой и местом: хранилище, редактор
+// карточки и инструмент Claude — общие с блокнотом. Общая доска живёт и на сайте Arcade: правки уходят туда вскоре после
+// правки (pushBoards), чужие приходят сверкой открытой доски по таймеру; сверка — в hooks/desks.js
+const BOARD_POLL_MS = 6_000 // сверка открытой общей доски
+const BOARDS_POLL_MS = 30_000 // список общих досок на экране «Доска проектов»
+const PUSH_DELAY_MS = 1_500 // правки копятся столько, прежде чем уйти на сайт
+const BOARD_SYNCS = 5 // сверок подряд, пока у доски остаются правки
+const modError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
+// Название колонки: своё — как вписали, стандартное — на языке интерфейса
+const colName = (c) => c.name || tr(COL_NAMES[c.id] ?? c.id, lang)
+
+// Почему с общей доской не вышло; made — при создании новой
+function boardNote(error, made = false) {
+  if (error === 'name') return 'Впиши название доски.'
+  if (error === 'friend') return 'Звать на доску можно только друзей.'
+  if (error === 'owner') return 'Это может только хозяин доски.'
+  if (error === 'gone') return 'Доски больше нет на сайте или тебя на ней нет — у тебя осталась своя копия.'
+  if (error === 'full') return 'На доске уже 20 человек — больше не позвать.'
+  if (error === 'many') return 'Своих общих досок — не больше 3. Больше — скоро по подписке.'
+  if (error === 'nohandle') return 'Сначала возьми свой @ник.'
+  if (error === 'often' || error === 'limit') return made ? 'Досок сегодня создано слишком много — попробуй завтра.' : 'Слишком часто — подожди минуту.'
+  if (error === 'big') return 'Доска не приняла правки — их слишком много за раз.'
+  if (error === 'off') return 'Общие доски на сайте сейчас выключены.'
+  return accountNote(error)
+}
+
+function saveDesks($) {
+  $.store.set('desks', desks).catch(modError)
+}
+
+// Доска на экране: открытая доска или доска открытой карточки
+function shownBoard() {
+  const id = menu.startsWith('board:') ? menu.slice(6) : menu.startsWith('note:') ? menu.slice(5) : ''
+  const page = id ? notes.find((p) => p.id === id) : null
+  if (!page) return null
+  if (isBoard(page)) return page
+  const parent = page.parent ? notes.find((p) => p.id === page.parent) : null
+  return isBoard(parent) ? parent : null
+}
+
+// Блокнот поменялся сверкой с сайтом: поле открытой карточки рисуется заново, только если её поменял сайт, а человек в
+// ней ничего не набрал; открытую карточку удалили — назад к доске. changed — id карточек, которые поменял сайт
+async function boardChanged($, list, changed = []) {
+  const shown = shownBoard()
+  const before = shown && notes.find((p) => p.id === shown.id)
+  notes = list
+  const open = menu.startsWith('note:') ? menu.slice(5) : ''
+  if (open && !notes.some((p) => p.id === open)) {
+    nb.draft = null
+    menuFrom = null
+    menu = shown && notes.some((p) => p.id === shown.id) ? `board:${shown.id}` : 'notes'
+    dk.note = 'Открытую карточку удалили на общей доске.'
+    dk.bad = true
+    nb.field++
+  } else if (open && changed.includes(open) && nb.draft?.id !== open) nb.field++
+  const after = shown && notes.find((p) => p.id === shown.id)
+  if (before !== after) dk.field++
+  if (dk.pick && !notes.some((p) => p.id === dk.pick)) dk.pick = ''
+  $.ui.invalidate('ui.render')
+  return saveNotes($)
+}
+
+// Сверка общей доски share с сайтом: свои правки — туда, чужие — сюда. Пока одна сверка идёт, вторая ждёт (again);
+// после сверки остались правки — ещё одна, но не больше BOARD_SYNCS подряд. names — спросить ники участников
+async function syncBoard($, share, { names = false } = {}, round = 0) {
+  if (dk.syncing.has(share)) {
+    dk.again.add(share)
+    return
+  }
+  const base = desks[share]
+  if (!base || !acct.session) return
+  dk.syncing.add(share)
+  dk.again.delete(share)
+  let more = false
+  try {
+    const { ops, sent } = planSync(notes, base)
+    const answer = await chatFetch($, 'boardsync', parseBoard, { body: { board: share, since: base.rev, ops, ...(names || base.rev === 0 ? { names: true } : {}) } })
+    if (!answer || desks[share] !== base) return
+    if (answer.error === 'gone') return await loseBoard($, share, boardNote('gone'), true)
+    if (answer.error) {
+      dk.trouble = { share, text: boardNote(answer.error) }
+      if (shownBoard()?.board.share === share) $.ui.invalidate('ui.render')
+      return
+    }
+    const at = await $.clock.now()
+    if (desks[share] !== base) return
+    const done = applySync(notes, base, answer, sent, at)
+    if (!done) {
+      delete desks[share]
+      saveDesks($)
+      return
+    }
+    const before = JSON.stringify([base.owner, base.members, base.names, dk.trouble, dk.note])
+    desks[share] = done.base
+    if (dk.trouble?.share === share) dk.trouble = null
+    if (done.refused.length) {
+      dk.note = 'Доска на сайте полна — часть карточек осталась только у тебя.'
+      dk.bad = true
+    }
+    if (done.missed) {
+      dk.note = 'Блокнот полон — не все карточки доски поместились.'
+      dk.bad = true
+    }
+    const shown = shownBoard()?.board.share === share
+    if (done.notes !== notes) await boardChanged($, done.notes, done.changed)
+    else if (shown && before !== JSON.stringify([done.base.owner, done.base.members, done.base.names, dk.trouble, dk.note])) $.ui.invalidate('ui.render')
+    saveDesks($)
+    more = !done.missed && planSync(notes, done.base).ops.length > 0
+  } finally {
+    dk.syncing.delete(share)
+    if ((more || dk.again.has(share)) && round + 1 < BOARD_SYNCS) syncBoard($, share, {}, round + 1).catch(modError)
+  }
+}
+
+// Общей доски у человека больше нет (удалили, убрали его или вышел сам): в блокноте она остаётся своей
+async function loseBoard($, share, note, bad = false) {
+  delete desks[share]
+  if (dk.list) dk.list = dk.list.filter((b) => b.id !== share)
+  if (dk.trouble?.share === share) dk.trouble = null
+  const at = await $.clock.now()
+  const page = notes.find((p) => isBoard(p) && p.board.share === share)
+  dk.note = note
+  dk.bad = bad
+  dk.confirm = ''
+  saveDesks($)
+  if (page) await boardChanged($, detachBoard(notes, page.id, at))
+  else $.ui.invalidate('ui.render')
+}
+
+// Правки общих досок — на сайт вскоре после правки: несколько подряд уходят одной сверкой
+function pushBoards($) {
+  if (!acct.session || !Object.keys(desks).length) return
+  pushTimer?.cancel()
+  pushTimer = $.clock.after(PUSH_DELAY_MS, () => {
+    pushTimer = null
+    for (const share of Object.keys(desks)) if (desks[share] && planSync(notes, desks[share]).ops.length) syncBoard($, share).catch(modError)
+  })
+}
+
+// Общие доски с сайта: новые — в блокнот, доски, которых на сайте у человека больше нет, — своими. quiet — по
+// таймеру: заметку не трогаем и перерисовываем, только если что-то поменялось
+async function loadBoards($, quiet = false) {
+  if (!acct.session || dk.loading) return
+  dk.loading = true
+  if (!quiet) $.ui.invalidate('ui.render')
+  // Доски, которые были общими до вопроса: общую, которой поделились, пока ждали ответа, не трогаем
+  const known = new Set([...Object.keys(desks), ...notes.filter((p) => isBoard(p) && p.board.share).map((p) => p.board.share)])
+  const answer = await chatFetch($, 'boards', parseBoards)
+  dk.loading = false
+  if (!answer) return
+  if (answer.error) {
+    if (quiet) return
+    dk.note = boardNote(answer.error)
+    dk.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  const before = JSON.stringify([dk.list, dk.names])
+  dk.me = answer.me
+  dk.names = { ...dk.names, ...answer.names }
+  dk.list = answer.boards
+  const at = await $.clock.now()
+  let list = notes
+  let full = false
+  let lost = false
+  for (const b of answer.boards) {
+    if (desks[b.id] || dk.busy === 'share') continue
+    const page = list.find((p) => isBoard(p) && p.board.share === b.id)
+    if (page) {
+      desks[b.id] = freshBase(list, page, b.owner)
+      continue
+    }
+    const made = adoptBoard(list, b, at)
+    if (made.error) {
+      full = true
+      continue
+    }
+    list = made.notes
+    desks[b.id] = made.base
+  }
+  // Список целиком (не обрезан): общих досок, которых в нём нет, у человека на сайте больше нет
+  if (answer.boards.length < 200) {
+    const listed = new Set(answer.boards.map((b) => b.id))
+    for (const share of known) {
+      if (listed.has(share)) continue
+      delete desks[share]
+      const page = list.find((p) => isBoard(p) && p.board.share === share)
+      if (page) list = detachBoard(list, page.id, at)
+      lost = true
+    }
+  }
+  if (full) {
+    dk.note = 'Блокнот полон — не все общие доски поместились.'
+    dk.bad = true
+  } else if (lost) {
+    dk.note = boardNote('gone')
+    dk.bad = false
+  }
+  if (dk.trouble && !desks[dk.trouble.share]) dk.trouble = null
+  if (list !== notes) await boardChanged($, list)
+  else if (!quiet || full || lost || JSON.stringify([dk.list, dk.names]) !== before) $.ui.invalidate('ui.render')
+  saveDesks($)
+  // Доски, которые поменялись на сайте или ждут своих правок, — сверить
+  const stale = answer.boards.filter((b) => desks[b.id] && (desks[b.id].rev === 0 || desks[b.id].rev !== b.rev || planSync(notes, desks[b.id]).ops.length))
+  for (const b of stale.slice(0, BOARD_SYNCS)) syncBoard($, b.id, { names: true }).catch(modError)
+}
+
+// Экран «Доска проектов» открыли: общие доски и друзья (звать на доску) — с сайта
+function boardsOpened($) {
+  dk.note = ''
+  dk.bad = false
+  if (!acct.session) return
+  loadBoards($).catch(modError)
+  if (acct.handle && !fr.list && !fr.loading) friendsCall($, 'friends').catch(modError)
+}
+
+// Поделиться доской pageId с отмеченными друзьями: доска появляется на сайте, карточки уходят туда первой сверкой
+async function shareBoard($, pageId) {
+  const page = notes.find((p) => p.id === pageId)
+  if (!isBoard(page) || page.board.share || dk.busy) return
+  if (!dk.picked.size) {
+    dk.note = 'Отметь хотя бы одного друга.'
+    dk.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  if (dk.picked.size > MAX_MEMBERS - 1) {
+    dk.note = boardNote('full')
+    dk.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  dk.busy = 'share'
+  dk.note = ''
+  dk.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'boardnew', parseBoard, { body: { name: page.title, cols: page.board.cols, members: [...dk.picked] } })
+  dk.busy = ''
+  if (!answer) return $.ui.invalidate('ui.render')
+  if (answer.error) {
+    dk.note = boardNote(answer.error, true)
+    dk.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  const at = await $.clock.now()
+  const top = notes.find((p) => p.id === pageId)
+  if (!isBoard(top) || top.board.share) return $.ui.invalidate('ui.render')
+  const share = answer.board.id
+  const list = updatePage(notes, pageId, { board: { ...top.board, share } }, at)
+  // Карточек на сайте ещё нет: основа без них — первая сверка отдаст их все
+  desks[share] = { ...freshBase(list, top, answer.board.owner), name: answer.board.name, cols: answer.board.cols, rev: answer.board.rev, cards: {}, members: answer.board.members, names: answer.names }
+  dk.me ||= answer.board.owner
+  dk.names = { ...dk.names, ...answer.names }
+  dk.list = [{ id: share, name: answer.board.name, owner: answer.board.owner, rev: answer.board.rev, at }, ...(dk.list ?? [])]
+  dk.picked.clear()
+  dk.note = 'Доска общая — друзья увидят её в своей «Доске проектов».'
+  dk.bad = false
+  saveDesks($)
+  await boardChanged($, list)
+  await syncBoard($, share, { names: true })
+}
+
+// Участники общей доски: позвать (add), убрать (remove) или выйти самому (leave); done — заметка, когда вышло
+async function boardMembers($, share, body, done) {
+  const base = desks[share]
+  if (dk.busy || !base) return
+  dk.busy = body.leave ? 'leave' : body.add ? 'add' : 'remove'
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'boardmembers', parseBoardDone, { body: { board: share, ...body } })
+  dk.busy = ''
+  if (!answer) return $.ui.invalidate('ui.render')
+  if (answer.error === 'gone') return loseBoard($, share, boardNote('gone'), true)
+  if (answer.error) {
+    dk.note = boardNote(answer.error)
+    dk.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  if (answer.left) return loseBoard($, share, 'Ты больше не на этой доске — у тебя осталась своя копия.')
+  if (desks[share] !== base) return $.ui.invalidate('ui.render')
+  Object.assign(base, { owner: answer.board.owner, members: answer.board.members, names: { ...base.names, ...answer.names } })
+  dk.picked.clear()
+  dk.note = done
+  dk.bad = false
+  saveDesks($)
+  $.ui.invalidate('ui.render')
+}
+
+// Хозяин удаляет общую доску с сайта, участник — выходит с неё; оба раза — после второго нажатия
+async function unshareBoard($, share) {
+  const base = desks[share]
+  if (!base || dk.busy) return
+  if (dk.confirm !== `off-${share}`) {
+    dk.confirm = `off-${share}`
+    return $.ui.invalidate('ui.render')
+  }
+  dk.confirm = ''
+  if (base.owner !== (dk.me || ch.me)) return boardMembers($, share, { leave: true }, '')
+  dk.busy = 'delete'
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'boarddelete', parseBoardDone, { body: { board: share } })
+  dk.busy = ''
+  if (!answer) return $.ui.invalidate('ui.render')
+  if (answer.error && answer.error !== 'gone') {
+    dk.note = boardNote(answer.error)
+    dk.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  await loseBoard($, share, 'Доска удалена с сайта — у тебя и у друзей остались свои копии.')
+}
+
+// Правка доски с экрана: как в блокноте (editNotes), заметка — под доской
+async function editBoard($, change, saved = '') {
+  const done = await editNotes($, change, saved)
+  dk.note = nb.note
+  dk.bad = nb.bad
+  nb.note = ''
+  nb.bad = false
+  $.ui.invalidate('ui.render')
+  return done
+}
+
+// Новая доска — и сразу открыть её, курсор — в поле новой карточки первой колонки
+async function createBoard($, title) {
+  let page = null
+  const done = await editBoard($, (list, at) => {
+    const made = addPage(list, { title, board: {} }, at)
+    if (made.error) return made.error === 'empty' ? 'Впиши название доски.' : NOTES_FULL
+    page = made.page
+    return made.notes
+  })
+  if (!done || !page) return
+  dk.focus = `new-${page.board.cols[0].id}`
+  menuFrom = menu
+  menu = `board:${page.id}`
+  $.ui.invalidate('ui.render')
+}
+
+// Новая карточка — вниз колонки col
+async function createCard($, boardId, col, title) {
+  dk.focus = `new-${col}`
+  await editBoard($, (list, at) => {
+    const made = addPage(list, { title, parent: boardId, id: cardId(), col }, at)
+    if (made.error) return made.error === 'empty' ? 'Впиши название карточки.' : made.error === 'parent' ? list : NOTES_FULL
+    return made.notes
+  })
+}
+
+// Участник доски: @ник — из доски, списка досок, чатов или друзей
+function deskPerson(id, base) {
+  const handle = base?.names[id] ?? dk.names[id] ?? ch.names[id] ?? fr.list?.friends.find((p) => p.id === id)?.handle
+  if (handle) return `@${handle}`
+  if (id && id === (dk.me || ch.me) && acct.handle) return `@${acct.handle}`
+  return tr('удалённый аккаунт', lang)
+}
+
+// Доску — Claude: колонки и карточки с id, чтобы он правил и переносил их инструментом блокнота
+async function sendBoard($, id) {
+  if (!(await editBoard($, (list) => list))) return
+  const board = notes.find((p) => p.id === id && isBoard(p))
+  if (!board) return
+  const t = (text) => tr(text, lang)
+  const lines = [`${t('Доска проектов из моего блокнота Arcade')} (id ${board.id}):`, '', `# ${board.title}`]
+  for (const c of board.board.cols) {
+    lines.push('', `## ${colName(c)} (${t('колонка')} ${c.id})`)
+    for (const card of columnCards(notes, board, c.id)) {
+      const { done, total } = checkStats(card.body)
+      lines.push(`- ${card.title} (id ${card.id})${total ? ` ☑ ${done}/${total}` : ''}`)
+    }
+  }
+  lines.push('', t('Добавляй, правь и переноси карточки этой доски инструментом mcp__arcade__notes.'))
+  await giveClaude($, lines.join('\n'), 'board')
+  dk.note = nb.note
+  dk.bad = nb.bad
+  nb.note = ''
+  nb.bad = false
+  $.ui.invalidate('ui.render')
+}
+
+
 function libraryTitle() {
   if (menu === 'settings') return 'Arcade · настройки'
   if (menu === 'lang') return 'Arcade · язык'
@@ -2483,6 +3110,9 @@ function libraryTitle() {
   if (menu === 'articles' || menu.startsWith('articles:')) return 'Arcade · Статьи'
   if (menu === 'podcasts' || menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
   if (menu === 'twitch' || menu.startsWith('twitch:')) return 'Arcade · Twitch'
+  if (menu === 'tiktok') return 'Arcade · TikTok'
+  if (menu === 'boards' || menu.startsWith('board:') || shownBoard()) return 'Arcade · доска проектов'
+  if (menu === 'notes' || menu.startsWith('note:')) return 'Arcade · блокнот'
   if (menu.startsWith('genre:')) return `Arcade · ${shelfView(`shelf:${menu.split(':')[1]}`)?.title ?? ''} · ${genreLabel(menu.split(':').slice(2).join(':'))}`
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
@@ -2555,6 +3185,8 @@ export function register(on) {
       stamps = restoreStamps(await $.store.get('syncAt'))
       acct.session = restoreAccount(await $.store.get('account'))
       mine = restoreMine(await $.store.get('mine'))
+      notes = restoreNotes(await $.store.get('notes'))
+      desks = restoreDesks(await $.store.get('desks'), notes)
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
         sep = home.includes('\\') ? '\\' : '/'
@@ -2606,6 +3238,18 @@ export function register(on) {
       $.clock.every(UNREAD_POLL_MS, () => {
         if (chatsOn() && !menu.startsWith('chats')) checkUnread($).catch(chatError)
       })
+      // Доска проектов: открытую общую доску сверяем с сайтом, список общих досок на её экране — обновляем; свои правки,
+      // не ушедшие в прошлый раз, — на сайт вскоре после старта
+      $.clock.every(BOARD_POLL_MS, () => {
+        if (!chatsOn()) return
+        const share = shownBoard()?.board.share
+        if (share && (!desks[share] || !dk.me)) loadBoards($, true).catch(chatError)
+        else if (share) syncBoard($, share).catch(chatError)
+      })
+      $.clock.every(BOARDS_POLL_MS, () => {
+        if (chatsOn() && menu === 'boards') loadBoards($, true).catch(chatError)
+      })
+      $.clock.after(4_000, () => pushBoards($))
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -2647,6 +3291,8 @@ export function register(on) {
         })
       }
       await $.command.register({ name: 'arcade', description: tr('Открыть Arcade', lang), immediate: true })
+      // Блокнот — и инструмент Claude: читать, создавать страницы, дописывать и отмечать пункты
+      await $.tool.register(NOTES_TOOL).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
       await $.command.register({
         name: 'arcade-add',
         description: tr('Arcade: добавить свою игру — файл ROM Денди или Sega', lang),
@@ -2766,6 +3412,7 @@ export function register(on) {
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId) return next(e) // субагент закончил — агент ещё нет: «агент закончил» не про него
+    const turnId = agentTurn
     agentTurn = null
     toolsRunning = 0
     // Ход оборвал Arcade, чтобы открыть игру: агент сейчас же продолжит по просьбе Arcade
@@ -2793,7 +3440,14 @@ export function register(on) {
         if (onDone === 'close') await $.ui.close({ id: PANE }) // панель закрывается — игра встаёт на паузу, клавиатура у Claude Code
       }
       log('агент закончил ход')
-      if (paneOpen) await $.ui.toast(tr('Агент закончил — Esc, чтобы вернуться', lang))
+      // Смотришь во встроенном браузере — вкладку закрываем, если так выбрано: снова виден разговор. Ход, которым Claude
+      // открыл её по просьбе Arcade, — не тот: его конец вкладку не закрывает. Закрыть не дали (в режиме Auto
+      // классификатор не пускает вызовы мода) — хотя бы сообщаем
+      const watching = Boolean(backOnDone && watchTab && watchTab.turn !== turnId)
+      const back = watching && (await closeWatchTab($))
+      if (back) await $.ui.toast(tr('Агент закончил — вкладку закрыл, перед тобой снова разговор', lang))
+      else if (paneOpen) await $.ui.toast(tr('Агент закончил — Esc, чтобы вернуться', lang))
+      else if (watching) await $.ui.toast(tr('Агент закончил — можно возвращаться', lang))
       // Играешь в окне браузера — Claude Code не видно: системное уведомление, если ход был долгим
       const now = await $.clock.now()
       const command = osNotify && windowOpenedAt && now - windowOpenedAt < NOTIFY_WINDOW_MS && now - turnStartedAt >= NOTIFY_AFTER_MS
@@ -2851,6 +3505,23 @@ export function register(on) {
     return { decision: 'allow', reason: 'Arcade открывает игру во встроенном браузере по нажатию в своей панели' }
   })
 
+  // Инструмент блокнота меняет только блокнот Arcade и ничего не удаляет: разрешаем сам, если Claude Code спросил бы
+  // человека. Правило в настройках (разрешить или запретить) отдаём как есть
+  on('tool.check', { tool: NOTES_TOOL_NAME }, async ($, e, next) => {
+    const decided = await next(e)
+    if (decided?.decision !== 'ask') return decided
+    return { decision: 'allow', reason: 'Блокнот Arcade: инструмент меняет только блокнот мода' }
+  })
+  // Вызов инструмента блокнота: несохранённый текст поля «Текст» сначала уходит в страницу — правка Claude ложится поверх.
+  // Ошибку (нет страницы, не помещается) модель получает ошибкой — отказом с текстом
+  on('tool.call', { tool: NOTES_TOOL_NAME }, async ($, e) => {
+    const at = await $.clock.now()
+    const base = withDraft(notes, at) ?? notes
+    const out = applyNotesTool(base, e, at, cardId)
+    if (out.changed || base !== notes) await notesChanged($, out.notes)
+    return out.isError ? { deny: out.text } : { result: out.text }
+  })
+
   // Инструменты агента (главного цикла; свои вызовы Arcade — нет): игру, которую надо открыть, пока агент работает,
   // открываем, когда закончится текущий — оборванный посреди инструмент может оставить работу недоделанной. Дольше
   // CUT_TOOL_MS не ждём: обрываем (cutPending)
@@ -2871,7 +3542,7 @@ export function register(on) {
   on('tool.call', { tool: [`${BROWSER}preview_start`, `${BROWSER}navigate`] }, async ($, e, next) => {
     const result = await next(e)
     try {
-      if (opening && typeof e.url === 'string' && e.url.startsWith(`${SITE}/`) && !result?.deny && !result?.isError)
+      if (opening && arcadeUrl(e.url) && !result?.deny && !result?.isError)
         await openedForArcade($, e)
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
@@ -3237,6 +3908,11 @@ export function register(on) {
           .replace(/^ar-.+$/, 'articles')
           .replace(/^pc-.+$/, 'podcasts')
           .replace(/^tw-.+$/, 'twitch')
+          .replace(/^tt-.+$/, 'tiktok')
+          // Доска проектов — иконкой доски
+          .replace(/^desk-.+$/, 'boards')
+          // Страница блокнота — иконкой блокнота
+          .replace(/^note-.+$/, 'notes')
           // Чат с другом — иконкой человека, группа — людей
           .replace(/^chat-open-d.+$/, 'account')
           .replace(/^chat-open-g.+$/, 'friends')
@@ -3976,6 +4652,17 @@ export function register(on) {
                   },
                 }),
                 dim('  закрывать — браузер во всю высоту; оставлять — браузер встаёт под меню Arcade'),
+                Button({
+                  key: 'arcade-back-on-done',
+                  label: `Агент закончил, пока смотришь: ${backOnDone ? 'закрыть вкладку' : 'только сообщить'}`,
+                  onPress: async () => {
+                    backOnDone = !backOnDone
+                    watchTab = null
+                    $.ui.invalidate('ui.render')
+                    await saveSetting($, 'backOnDone', backOnDone)
+                  },
+                }),
+                dim('  видео, TikTok, Twitch, статьи и подкасты; закрыть — вкладка закрывается, и перед тобой снова разговор с Claude'),
               ]
             : []),
           ...(e.surface !== 'desktop' && platform
@@ -4200,6 +4887,739 @@ export function register(on) {
           ...(yt.note ? [gap, dim(yt.note)] : []),
           ...(topic && !yt.loading ? [gap, Button({ key: 'arcade-yt-more', label: 'Другая подборка', ...(yt.videos.length ? {} : { autoFocus: true }), onPress: () => loadVideos($, topicId, true) })] : []),
           ...(yt.videos.length && (builtin || platform) ? [gap, dim(`Видео открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)] : []),
+          ...noticeLines,
+          ...hint,
+        ]
+      } else if (menu === 'boards' || menu.startsWith('board:') || (menu.startsWith('note:') && isBoard(notes.find((p) => p.id === menu.slice(5))))) {
+        // Доска проектов: список досок и экран доски — колонки с карточками, перенос выбранной карточки кнопками,
+        // колонки, общий доступ с друзьями. Карточку открывает экран страницы блокнота. Названия досок, колонок и
+        // карточек, ники — человека, без перевода (keep)
+        if (menu.startsWith('note:')) menu = `board:${menu.slice(5)}`
+        const board = menu.startsWith('board:') ? notes.find((p) => p.id === menu.slice(6) && isBoard(p)) : null
+        if (!board && menu !== 'boards') menu = 'boards'
+        const share = board?.board.share ?? ''
+        const base = share ? desks[share] : null
+        if (dk.confirm && dk.confirm !== `delete-${board?.id}` && dk.confirm !== `off-${share}`) dk.confirm = ''
+        const picked = dk.pick ? notes.find((p) => p.id === dk.pick && p.parent === board?.id) : null
+        if (!picked) dk.pick = ''
+        const leave = (target) => () => {
+          dk.note = ''
+          dk.bad = false
+          dk.confirm = ''
+          dk.pick = ''
+          dk.focus = ''
+          dk.picked.clear()
+          nb.note = ''
+          nb.bad = false
+          nb.focus = ''
+          open(target)()
+        }
+        const noteLine = dk.note ? [gap, dk.bad ? Text({ color: 'warning', children: [dk.note] }) : dim(dk.note)] : []
+        const row = (children) => Box({ flexDirection: 'row', columnGap: 2, children })
+        const wrapRow = (children) => Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, children })
+        const strong = (text) => Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [text] } : { bold: true, children: [text] })
+        const column = (list) => (desktop ? tiles(list, 44) : Box({ flexDirection: 'column', children: list }))
+        const friends = fr.list?.friends ?? []
+        const me = dk.me || ch.me
+        const say = (text, bad = true) => {
+          dk.note = text
+          dk.bad = bad
+          $.ui.invalidate('ui.render')
+        }
+        // Друзья галочками: кого позвать на доску
+        const pickFriends = (list) =>
+          wrapRow(
+            list.map((p) =>
+              keep(
+                Button({
+                  key: `arcade-desk-pick-${p.id}`,
+                  label: `${dk.picked.has(p.id) ? '☑' : '☐'} @${p.handle}`,
+                  onPress: () => {
+                    if (dk.picked.has(p.id)) dk.picked.delete(p.id)
+                    else dk.picked.add(p.id)
+                    dk.note = ''
+                    dk.bad = false
+                    $.ui.invalidate('ui.render')
+                  },
+                }),
+              ),
+            ),
+          )
+        if (!board) {
+          const boards = notesOrder(notes).filter(isBoard)
+          const focusId = (boards.find((b) => menuFrom === `board:${b.id}`) ?? boards[0])?.id
+          // Плитка доски: название, под ним — сколько карточек и общая ли она
+          const boardTile = (b) => {
+            const s = b.board.share
+            const owner = s ? (desks[s]?.owner ?? dk.list?.find((x) => x.id === s)?.owner ?? '') : ''
+            const shared = !s ? '' : owner && owner !== me ? `${tr('общая, хозяин', lang)} ${deskPerson(owner, desks[s])}` : tr('общая', lang)
+            const about = [`${tr('карточек', lang)}: ${notes.filter((p) => p.parent === b.id).length}`, shared].filter(Boolean).join(' · ')
+            return [
+              keep(
+                Button({
+                  key: `arcade-desk-${b.id}`,
+                  label: b.title,
+                  ...(b.id === focusId ? { autoFocus: true } : {}),
+                  onPress: () => {
+                    leave(`board:${b.id}`)()
+                    if (s && desks[s]) syncBoard($, s, { names: true }).catch(modError)
+                    else if (s && acct.session) loadBoards($).catch(modError)
+                  },
+                }),
+              ),
+              keep(dim(`  ${about}`)),
+            ]
+          }
+          items = [
+            Button({ key: 'arcade-back', label: '← Назад', onPress: leave('main') }),
+            gap,
+            dim('Доски с колонками: «Сделать», «В работе», «Готово» или свои. Карточка — страница блокнота с текстом и чек-листом.'),
+            gap,
+            Input({
+              key: `arcade-board-new-${nb.field}`,
+              label: 'Новая доска',
+              placeholder: 'название: ремонт, релиз 1.0, переезд…',
+              submitLabel: tr('Создать', lang),
+              ...(boards.length ? {} : { autoFocus: true }),
+              onSubmit: (value) => createBoard($, value),
+            }),
+            ...noteLine,
+            section('Доски'),
+            ...(boards.length ? [column(boards.flatMap(boardTile))] : [dim('Досок пока нет — впиши название новой выше.')]),
+            gap,
+            dim(
+              acct.session
+                ? dk.loading && !dk.list
+                  ? 'Спрашиваю сайт Arcade об общих досках…'
+                  : 'Общие доски друзей появляются здесь сами.'
+                : 'Войди через GitHub — и сможешь вести доску вместе с друзьями.',
+            ),
+            dim('Claude тоже ведёт доски: попроси, например, «разложи задачи релиза по доске в Arcade».'),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else {
+          const id = board.id
+          const field = `${nb.field}-${dk.field}`
+          const isOwner = Boolean(base && me && base.owner === me)
+          // Перенос выбранной карточки: фокус остаётся на нажатой кнопке — можно жать её снова
+          const move = (where) => {
+            dk.focus = `move-${where}`
+            return editBoard($, (list, at) => moveCard(list, dk.pick, where, at))
+          }
+          const focusOn = (name) => (dk.focus === name ? { autoFocus: true } : {})
+          // Карточка: первое нажатие выбирает её, второе — открывает
+          const cardButton = (c) => {
+            const mark = c.id === dk.pick
+            const label = `${mark ? '▸ ' : ''}${c.title}`
+            const props = {
+              key: `arcade-card-${c.id}`,
+              label,
+              ...(dk.focus === `card-${c.id}` || (!dk.focus && menuFrom === `note:${c.id}`) ? { autoFocus: true } : {}),
+              onPress: () => {
+                if (mark) return leave(`note:${c.id}`)()
+                dk.pick = c.id
+                dk.focus = `card-${c.id}`
+                dk.note = ''
+                dk.bad = false
+                $.ui.invalidate('ui.render')
+              },
+            }
+            return keep(desktop ? makeButton({ ...props, children: [Text({ wrap: 'wrap', children: [label] })] }) : Button(props))
+          }
+          const columnBox = (c) => {
+            const cards = columnCards(notes, board, c.id)
+            const children = [
+              keep(strong(`${colName(c)} · ${cards.length}`)),
+              ...cards.flatMap((card) => {
+                const { done, total } = checkStats(card.body)
+                return [cardButton(card), ...(total ? [keep(dim(`  ☑ ${done}/${total}`))] : [])]
+              }),
+              ...(cards.length ? [] : [dim('пусто')]),
+              Input({
+                key: `arcade-card-new-${c.id}-${nb.field}`,
+                label: 'Новая карточка',
+                placeholder: 'что сделать',
+                submitLabel: tr('Добавить', lang),
+                ...focusOn(`new-${c.id}`),
+                onSubmit: (value) => createCard($, id, c.id, value),
+              }),
+            ]
+            return desktop
+              ? Box({ key: `col-${c.id}`, flexDirection: 'column', rowGap: 'xs', borderStyle: 'round', borderColor: 'subtle', padding: 'sm', width: tileWidth(28), children })
+              : Box({ key: `col-${c.id}`, flexDirection: 'column', borderStyle: 'round', borderDimColor: true, paddingX: 1, children })
+          }
+          const cols = board.board.cols.map(columnBox)
+          const shareLine = !share
+            ? []
+            : [keep(dim(isOwner ? tr('Общая доска — ты хозяин.', lang) : base?.owner ? `${tr('Общая доска, хозяин', lang)} ${deskPerson(base.owner, base)}.` : tr('Общая доска.', lang)))]
+          const trouble = share && dk.trouble?.share === share ? [Text({ color: 'warning', children: [dk.trouble.text] })] : []
+          const pickBar = picked
+            ? [
+                keep(dim(`${tr('Выбрана карточка', lang)}: ${picked.title}`)),
+                wrapRow([
+                  Button({ key: 'arcade-board-left', label: '← Влево', ...focusOn('move-left'), onPress: () => move('left') }),
+                  Button({ key: 'arcade-board-up', label: '↑ Выше', ...focusOn('move-up'), onPress: () => move('up') }),
+                  Button({ key: 'arcade-board-down', label: '↓ Ниже', ...focusOn('move-down'), onPress: () => move('down') }),
+                  Button({ key: 'arcade-board-right', label: 'Вправо →', ...focusOn('move-right'), onPress: () => move('right') }),
+                  Button({ key: 'arcade-board-open', label: 'Открыть', onPress: leave(`note:${picked.id}`) }),
+                  Button({
+                    key: 'arcade-board-unpick',
+                    label: 'Снять выбор',
+                    onPress: () => {
+                      dk.focus = `card-${picked.id}`
+                      dk.pick = ''
+                      $.ui.invalidate('ui.render')
+                    },
+                  }),
+                ]),
+              ]
+            : [dim('Нажми на карточку, чтобы выбрать её и переносить стрелками; ещё раз — открыть.')]
+          // Общий доступ: войти, взять @ник, поделиться с друзьями; у общей — участники, позвать ещё, удалить или выйти
+          let shareItems
+          if (!acct.session)
+            shareItems = [
+              dim('Войди через GitHub — и сможешь вести доску вместе с друзьями.'),
+              Button({
+                key: 'arcade-board-login',
+                label: acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
+                onPress: () => {
+                  acct.confirmDelete = false
+                  leave('account')()
+                  startLogin($)
+                },
+              }),
+            ]
+          else if (!share && !acct.handle)
+            shareItems = [dim('Звать друзей на доску можно, когда у тебя есть @ник.'), Button({ key: 'arcade-board-handle', label: 'Взять @ник', onPress: leave('account') })]
+          else if (!share && friends.length)
+            shareItems = [
+              dim('Отметь друзей и нажми «Поделиться» — доска станет общей: карточки, колонки и название у всех одни.'),
+              pickFriends(friends),
+              Button({ key: 'arcade-board-share', label: dk.busy === 'share' ? 'Делюсь…' : 'Поделиться', onPress: () => shareBoard($, id) }),
+            ]
+          else if (!share)
+            shareItems = [
+              dim(fr.list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.'),
+              Button({
+                key: 'arcade-board-friends',
+                label: 'Друзья',
+                onPress: () => {
+                  fr.note = ''
+                  fr.bad = false
+                  leave('friends')()
+                  friendsCall($, 'friends').catch(modError)
+                },
+              }),
+            ]
+          else if (!base || !me) shareItems = [dim('Сверяю доску с сайтом Arcade…')]
+          else {
+            const others = friends.filter((p) => !base.members.includes(p.id))
+            const people = [base.owner, ...base.members.filter((m) => m !== base.owner)].filter(Boolean)
+            shareItems = [
+              ...people.map((m) =>
+                m === base.owner
+                  ? keep(Text({ children: [`${deskPerson(m, base)} · ${tr('хозяин доски', lang)}`] }))
+                  : isOwner
+                    ? row([keep(Text({ children: [deskPerson(m, base)] })), Button({ key: `arcade-desk-drop-${m}`, label: 'Убрать', onPress: () => boardMembers($, share, { remove: [m] }, 'Участник убран.') })])
+                    : keep(Text({ children: [deskPerson(m, base)] })),
+              ),
+              ...(isOwner && others.length && base.members.length < MAX_MEMBERS
+                ? [
+                    gap,
+                    dim('Позвать ещё:'),
+                    pickFriends(others),
+                    Button({
+                      key: 'arcade-board-invite',
+                      label: dk.busy === 'add' ? 'Зову…' : 'Позвать',
+                      onPress: () => (dk.picked.size ? boardMembers($, share, { add: [...dk.picked] }, 'Друзья позваны.') : say('Отметь хотя бы одного друга.')),
+                    }),
+                  ]
+                : []),
+              gap,
+              Button({
+                key: 'arcade-board-off',
+                label:
+                  dk.confirm === `off-${share}`
+                    ? isOwner
+                      ? 'Нажми ещё раз — удалить с сайта'
+                      : 'Нажми ещё раз — выйти с доски'
+                    : isOwner
+                      ? 'Удалить с сайта'
+                      : 'Выйти с доски',
+                onPress: () => unshareBoard($, share),
+              }),
+              dim(isOwner ? '  У тебя и у друзей доска останется — каждому своя копия.' : '  У тебя останется своя копия доски, у друзей — общая.'),
+            ]
+          }
+          // Удалить доску можно, пока она не общая: общую сначала удаляют с сайта или выходят с неё
+          const deleteItems =
+            share && acct.session
+              ? []
+              : [
+                  gap,
+                  Button({
+                    key: 'arcade-board-delete',
+                    label: dk.confirm === `delete-${id}` ? 'Нажми ещё раз — удалить навсегда' : 'Удалить доску',
+                    onPress: async () => {
+                      if (dk.confirm !== `delete-${id}`) {
+                        dk.confirm = `delete-${id}`
+                        return $.ui.invalidate('ui.render')
+                      }
+                      dk.confirm = ''
+                      if (notes.some((p) => p.id === nb.draft?.id && p.parent === id)) nb.draft = null
+                      if (!(await editBoard($, (list) => removePage(list, id), 'Доска удалена.'))) return
+                      if (share) {
+                        delete desks[share]
+                        saveDesks($)
+                      }
+                      dk.pick = ''
+                      dk.focus = ''
+                      menuFrom = null
+                      menu = 'boards'
+                      $.ui.invalidate('ui.render')
+                    },
+                  }),
+                ]
+          items = [
+            Button({
+              key: 'arcade-back',
+              label: '← Доски',
+              onPress: () => {
+                leave('boards')()
+                if (acct.session) loadBoards($, true).catch(modError)
+              },
+            }),
+            keep(section(board.title)),
+            ...shareLine,
+            ...trouble,
+            ...pickBar,
+            desktop ? Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: TILE_GAP, rowGap: 'md', children: cols }) : Box({ flexDirection: 'column', children: cols }),
+            ...noteLine,
+            section('Доска'),
+            Input({
+              key: `arcade-board-title-${field}`,
+              label: 'Название',
+              value: board.title,
+              submitLabel: tr('Сохранить', lang),
+              onSubmit: (value) => {
+                const title = cleanTitle(value)
+                if (!title) return say('Впиши название доски.')
+                return editBoard($, (list, at) => (title === board.title ? list : updatePage(list, id, { title }, at)), 'Сохранено.')
+              },
+            }),
+            gap,
+            Button({ key: 'arcade-board-send', label: 'Отдать Claude', onPress: () => sendBoard($, id) }),
+            dim('  Claude получит доску с карточками и сможет добавлять, править и переносить их.'),
+            section('Колонки'),
+            ...board.board.cols.flatMap((c) => [
+              keep(
+                Input({
+                  key: `arcade-col-name-${c.id}-${field}`,
+                  label: colName(c),
+                  value: colName(c),
+                  submitLabel: tr('Сохранить', lang),
+                  onSubmit: (value) => {
+                    if (cleanTitle(value) === colName(c)) return
+                    return editBoard(
+                      $,
+                      (list, at) => {
+                        const done = renameColumn(list, id, c.id, value, at)
+                        return done.error ? 'Впиши название колонки.' : done.notes
+                      },
+                      'Сохранено.',
+                    )
+                  },
+                }),
+              ),
+              ...(board.board.cols.length > 1
+                ? [
+                    Button({
+                      key: `arcade-col-drop-${c.id}`,
+                      label: 'Убрать колонку',
+                      onPress: () =>
+                        editBoard(
+                          $,
+                          (list, at) => {
+                            const done = removeColumn(list, id, c.id, at)
+                            if (done.error === 'busy') return 'В колонке есть карточки — сначала перенеси их.'
+                            if (done.error === 'last') return 'Последнюю колонку не убрать.'
+                            return done.error ? list : done.notes
+                          },
+                          'Колонка убрана.',
+                        ),
+                    }),
+                  ]
+                : []),
+            ]),
+            Input({
+              key: `arcade-col-new-${field}`,
+              label: 'Новая колонка',
+              placeholder: 'название: проверка, на паузе…',
+              submitLabel: tr('Добавить', lang),
+              ...focusOn('col-new'),
+              onSubmit: (value) => {
+                dk.focus = 'col-new'
+                return editBoard($, (list, at) => {
+                  const done = addColumn(list, id, value, colId(), at)
+                  return done.error === 'many' ? 'Колонок — не больше 8.' : done.error ? 'Впиши название колонки.' : done.notes
+                })
+              },
+            }),
+            section('Общий доступ'),
+            ...shareItems,
+            ...deleteItems,
+            ...noticeLines,
+            ...hint,
+          ]
+        }
+      } else if (menu === 'notes' || menu.startsWith('note:')) {
+        // Блокнот: список страниц с подстраницами и экран страницы — строки текста, отметки чек-листа, поля «Новый пункт»,
+        // «Текст» и «Название», «Отдать Claude», «Удалить». Названия и текст страниц — человека, без перевода (keep)
+        const page = menu.startsWith('note:') ? notes.find((p) => p.id === menu.slice(5)) : null
+        if (!page && menu !== 'notes') menu = 'notes'
+        if (nb.confirm && nb.confirm !== page?.id) nb.confirm = null
+        // Уйти с экрана: набранное в поле «Текст» — сначала в страницу; не поместилось — остаёмся, заметка скажет почему
+        const leave = (target) => async () => {
+          if (!(await editNotes($, (list) => list))) return
+          nb.note = ''
+          nb.bad = false
+          nb.confirm = null
+          nb.focus = ''
+          open(target)()
+        }
+        const noteLine = nb.note ? [gap, nb.bad ? Text({ color: 'warning', children: [nb.note] }) : dim(nb.note)] : []
+        const column = (list) => (desktop ? tiles(list, 44) : Box({ flexDirection: 'column', children: list }))
+        // Плитка страницы: название, под ним — сколько пунктов отмечено и первая строка текста
+        const pageTile = (p, focus, sub = false) => {
+          const { done, total } = checkStats(p.body)
+          const first = noteLines(p.body).find((l) => l.kind !== 'blank')?.text.trim() ?? ''
+          const about = [total ? `☑ ${done}/${total}` : '', p.link ? `↗ ${p.link.app}` : '', clip(first, 90)].filter(Boolean).join(' · ')
+          return [
+            keep(Button({ key: `arcade-note-page-${p.id}`, label: sub ? `↳ ${p.title}` : p.title, ...(focus ? { autoFocus: true } : {}), onPress: leave(`note:${p.id}`) })),
+            about ? keep(dim(`  ${about}`)) : dim('  пустая страница'),
+          ]
+        }
+        if (!page) {
+          // Доски и их карточки — в «Доске проектов»
+          const order = notesOrder(notes).filter((p) => !isBoard(p) && !isBoard(notes.find((b) => b.id === p.parent)))
+          const focusId = (order.find((p) => menuFrom === `note:${p.id}`) ?? order[0])?.id
+          items = [
+            Button({ key: 'arcade-back', label: '← Назад', onPress: leave('main') }),
+            gap,
+            dim('Страницы и подстраницы: заголовки «# », пункты «- », чек-листы «- [ ] ». Хранятся на этом компьютере.'),
+            gap,
+            Input({
+              key: `arcade-note-new-${nb.field}`,
+              label: 'Новая страница',
+              placeholder: 'название: план на неделю, идеи, покупки…',
+              submitLabel: tr('Создать', lang),
+              ...(order.length ? {} : { autoFocus: true }),
+              onSubmit: (value) => createPage($, value),
+            }),
+            ...noteLine,
+            section('Страницы'),
+            ...(order.length ? [column(order.flatMap((p) => pageTile(p, p.id === focusId, Boolean(p.parent))))] : [dim('Страниц пока нет — впиши название новой выше.')]),
+            gap,
+            Button({
+              key: 'arcade-note-boards',
+              label: 'Доска проектов',
+              onPress: async () => {
+                await leave('boards')()
+                boardsOpened($)
+              },
+            }),
+            dim('  доски с колонками и карточками; общие — с друзьями'),
+            gap,
+            Input({
+              key: `arcade-note-import-${nb.field}`,
+              label: 'Забрать из Notion или другого приложения',
+              placeholder: 'ссылка или название страницы',
+              submitLabel: tr('Забрать', lang),
+              onSubmit: (value) => {
+                const what = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_URL)
+                if (what) return giveClaude($, connectorPrompt('import', { what }), 'ask')
+              },
+            }),
+            dim(CONNECTOR_HINT),
+            gap,
+            dim('Claude тоже ведёт блокнот: попроси, например, «запиши план в мой блокнот Arcade».'),
+            ...noticeLines,
+            ...hint,
+          ]
+        } else {
+          const id = page.id
+          const parent = page.parent ? notes.find((p) => p.id === page.parent) : null
+          const children = notes.filter((p) => p.parent === id)
+          const lines = noteLines(page.body)
+          // Правка текста страницы: change(body) → новый текст, null — не помещается
+          const editBody = (change, saved = '') =>
+            editNotes(
+              $,
+              (list, at) => {
+                const now = list.find((p) => p.id === id)
+                if (!now) return list
+                const body = change(now.body)
+                return body === null ? NOTE_TOO_LONG : body === now.body ? list : updatePage(list, id, { body }, at)
+              },
+              saved,
+            )
+          // Отметка пункта: строку ищем заново — текст мог поменяться из поля «Текст» или у Claude
+          const toggle = (l) => {
+            nb.focus = `line-${l.index}`
+            return editBody((body) => {
+              const now = noteLines(body)
+              const same = now[l.index]?.kind === 'check' && now[l.index].text === l.text ? now[l.index] : now.find((x) => x.kind === 'check' && x.text === l.text)
+              if (!same) return body
+              nb.focus = `line-${same.index}` // фокус — за пунктом, на какой строке он теперь
+              return toggleLine(body, same.index, !same.done)
+            })
+          }
+          const lineItem = (l) => {
+            if (l.kind === 'check')
+              return keep(
+                Button({
+                  key: `arcade-note-line-${l.index}`,
+                  label: `${l.done ? '☑' : '☐'} ${l.text}`,
+                  plain: true,
+                  ...(l.done ? { dimColor: true } : {}),
+                  ...(nb.focus === `line-${l.index}` ? { autoFocus: true } : {}),
+                  onPress: () => toggle(l),
+                }),
+              )
+            if (l.kind === 'h1') return keep(Text(desktop ? { size: 'heading', weight: 'semibold', wrap: 'wrap', children: [l.text] } : { bold: true, wrap: 'wrap', children: [l.text] }))
+            if (l.kind === 'h2') return keep(Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [l.text] } : { bold: true, wrap: 'wrap', children: [l.text] }))
+            if (l.kind === 'bullet') return keep(Text({ wrap: 'wrap', children: [`• ${l.text}`] }))
+            if (l.kind === 'text') return keep(Text({ wrap: 'wrap', children: [l.text] }))
+            return gap
+          }
+          // Просьба про другое приложение: набранное в поле «Текст» — сначала в страницу, Claude получит свежий текст
+          const askApp = async (kind, app = page.link?.app ?? '') => {
+            if (!(await editNotes($, (list) => list))) return
+            const now = notes.find((p) => p.id === id)
+            if (now) await giveClaude($, connectorPrompt(kind, { page: now, app }), 'ask')
+          }
+          // Голос: надиктованное (или набранное) в поле ввода Claude — в конец страницы, поле ввода — пустое
+          const takePrompt = async () => {
+            const { text } = await $.prompt.read().catch(() => ({ text: '' }))
+            nb.focus = 'take'
+            if (!String(text ?? '').trim()) {
+              nb.note = 'Поле ввода Claude пустое — надиктуй или впиши туда текст и нажми ещё раз.'
+              nb.bad = true
+              $.ui.invalidate('ui.render')
+              return
+            }
+            if (!(await editBody((body) => appendText(body, text), 'Текст из поля ввода Claude — в конце страницы.'))) return
+            await $.prompt.fill({ text: '', mode: 'replace' }).catch(() => {})
+          }
+          const hasText = lines.some((l) => l.kind !== 'blank')
+          // Карточка доски проектов: в какой она колонке и кнопки переноса — как на экране доски
+          const cardPlace = isBoard(parent)
+            ? [
+                keep(dim(`${tr('Колонка', lang)}: ${colName(parent.board.cols.find((c) => c.id === columnOf(page, parent.board.cols)) ?? parent.board.cols[0])}`)),
+                Box({
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  columnGap: 2,
+                  children: [
+                    ['left', '← Влево'],
+                    ['up', '↑ Выше'],
+                    ['down', '↓ Ниже'],
+                    ['right', 'Вправо →'],
+                  ].map(([where, label]) =>
+                    Button({
+                      key: `arcade-note-move-${where}`,
+                      label,
+                      ...(nb.focus === `move-${where}` ? { autoFocus: true } : {}),
+                      onPress: () => {
+                        nb.focus = `move-${where}`
+                        return editNotes($, (list, at) => moveCard(list, id, where, at))
+                      },
+                    }),
+                  ),
+                }),
+              ]
+            : []
+          items = [
+            parent ? keep(Button({ key: 'arcade-back', label: `← ${parent.title}`, onPress: leave(isBoard(parent) ? `board:${parent.id}` : `note:${parent.id}`) })) : Button({ key: 'arcade-back', label: '← Назад', onPress: leave('notes') }),
+            keep(section(page.title)),
+            ...cardPlace,
+            ...(hasText ? lines.slice(0, NOTE_LINES).map(lineItem) : [dim('Страница пустая — впиши текст или пункт ниже.')]),
+            ...(lines.length > NOTE_LINES ? [dim('Дальше — в поле «Текст» ниже.')] : []),
+            gap,
+            Input({
+              key: `arcade-note-add-${nb.field}`,
+              label: 'Новый пункт',
+              placeholder: 'пункт чек-листа',
+              submitLabel: tr('Добавить', lang),
+              ...(nb.focus === 'add' ? { autoFocus: true } : {}),
+              onSubmit: (value) => {
+                // Каждая строка — пункт чек-листа; «- » и «- [ ] » в начале не удваиваем
+                const add = String(value ?? '')
+                  .split(/\r?\n/)
+                  .map((x) => x.trim().replace(/^[-*] (\[[ xX]\] ?)?/, '').trim())
+                  .filter(Boolean)
+                  .map((x) => `- [ ] ${x}`)
+                  .join('\n')
+                if (!add) return
+                nb.focus = 'add'
+                return editBody((body) => appendText(body, add))
+              },
+            }),
+            gap,
+            Input({
+              key: `arcade-note-text-${nb.field}`,
+              label: 'Текст',
+              rows: 8,
+              value: page.body,
+              placeholder: '# Заголовок, - пункт, - [ ] дело',
+              submitLabel: tr('Сохранить', lang),
+              ...(nb.focus === 'text' ? { autoFocus: true } : {}),
+              // Набранное — в черновик, без перерисовки: значение поля не трогаем, пока человек пишет
+              onInput: (value) => {
+                nb.draft = { id, text: String(value ?? '') }
+              },
+              onSubmit: (value) => {
+                nb.draft = { id, text: String(value ?? '') }
+                nb.focus = 'text'
+                return editNotes($, (list) => list, 'Сохранено.')
+              },
+            }),
+            dim('Enter — сохранить; новая строка — как в поле ввода Claude.'),
+            Button({ key: 'arcade-note-take', label: 'Взять из поля ввода Claude', ...(nb.focus === 'take' ? { autoFocus: true } : {}), onPress: takePrompt }),
+            dim('  Перенесёт набранное или надиктованное в поле ввода Claude в конец страницы.'),
+            ...(VOICE_HINT[platform] ? [dim(VOICE_HINT[platform])] : []),
+            ...(parent
+              ? []
+              : [
+                  section('Подстраницы'),
+                  ...(children.length ? [column(children.flatMap((c) => pageTile(c, menuFrom === `note:${c.id}`)))] : []),
+                  Input({
+                    key: `arcade-note-sub-${nb.field}`,
+                    label: 'Новая подстраница',
+                    placeholder: 'название',
+                    submitLabel: tr('Создать', lang),
+                    onSubmit: (value) => createPage($, value, id),
+                  }),
+                ]),
+            gap,
+            Input({
+              key: `arcade-note-title-${nb.field}`,
+              label: 'Название',
+              value: page.title,
+              submitLabel: tr('Сохранить', lang),
+              onSubmit: (value) => {
+                const title = cleanTitle(value)
+                if (!title) {
+                  nb.note = 'Впиши название страницы.'
+                  nb.bad = true
+                  $.ui.invalidate('ui.render')
+                  return
+                }
+                return editNotes($, (list, at) => (title === page.title ? list : updatePage(list, id, { title }, at)), 'Сохранено.')
+              },
+            }),
+            gap,
+            Button({ key: 'arcade-note-send', label: 'Отдать Claude', onPress: () => sendNote($, id) }),
+            dim('  Claude получит страницу и сможет отмечать пункты и дописывать её.'),
+            section('Notion и другие приложения'),
+            ...(page.link
+              ? [
+                  keep(dim(`  ${tr('Связана с', lang)} ${page.link.app}: ${page.link.url}`)),
+                  Button({ key: 'arcade-note-push', label: 'Обновить в приложении', onPress: () => askApp('update') }),
+                  Button({ key: 'arcade-note-pull', label: 'Забрать из приложения', onPress: () => askApp('pull') }),
+                  ...(openUrlCommand(platform, page.link.url) ? [Button({ key: 'arcade-note-open', label: 'Открыть в браузере', onPress: () => openLink($, page.link.url) })] : []),
+                  Button({
+                    key: 'arcade-note-unlink',
+                    label: 'Отвязать',
+                    onPress: () => editNotes($, (list, at) => updatePage(list, id, { link: undefined }, at), 'Страница отвязана.'),
+                  }),
+                ]
+              : [
+                  Button({ key: 'arcade-note-notion', label: 'Отправить в Notion', onPress: () => askApp('push', 'Notion') }),
+                  Input({
+                    key: `arcade-note-app-${nb.field}`,
+                    label: 'В другое приложение',
+                    placeholder: 'Google Docs, Confluence, Obsidian…',
+                    submitLabel: tr('Отправить', lang),
+                    onSubmit: (value) => {
+                      const app = cleanTitle(value).slice(0, MAX_APP)
+                      if (app) return askApp('push', app)
+                    },
+                  }),
+                ]),
+            dim(CONNECTOR_HINT),
+            ...(typeof page.prev === 'string'
+              ? [
+                  Button({
+                    key: 'arcade-note-undo',
+                    label: 'Вернуть текст до правки Claude',
+                    onPress: () =>
+                      editNotes(
+                        $,
+                        (list, at) => {
+                          const now = list.find((p) => p.id === id)
+                          return typeof now?.prev === 'string' ? updatePage(list, id, { body: now.prev, prev: undefined }, at) : list
+                        },
+                        'Прежний текст вернулся.',
+                      ),
+                  }),
+                ]
+              : []),
+            gap,
+            Button({
+              key: 'arcade-note-delete',
+              label: nb.confirm === id ? 'Нажми ещё раз — удалить навсегда' : children.length ? 'Удалить страницу и подстраницы' : 'Удалить страницу',
+              onPress: async () => {
+                if (nb.confirm !== id) {
+                  nb.confirm = id
+                  $.ui.invalidate('ui.render')
+                  return
+                }
+                nb.confirm = null
+                if (nb.draft?.id === id) nb.draft = null
+                if (!(await editNotes($, (list) => removePage(list, id), 'Страница удалена.'))) return
+                nb.focus = ''
+                menuFrom = null
+                menu = parent ? (isBoard(parent) ? `board:${parent.id}` : `note:${parent.id}`) : 'notes'
+                $.ui.invalidate('ui.render')
+              },
+            }),
+            ...noteLine,
+            ...noticeLines,
+            ...hint,
+          ]
+        }
+      } else if (menu === 'tiktok') {
+        // TikTok: лента «Для тебя» и поиск TikTok по темам работы агента, своим темам или любому запросу. Смотрят на
+        // сайте TikTok, вход — человека. Названия тем, которые придумала модель, — уже на языке интерфейса (keep)
+        const builtin = builtinBrowser(e.surface)
+        const search = (query) => openTiktok($, e.surface, query)
+        const topicTiles = (yt.topics ?? []).flatMap((t, i) => {
+          const button = Button({ key: `arcade-tt-topic-${i}`, label: t.title, onPress: () => search(t.fixed ? tr(t.title, lang) : t.title) })
+          return [t.fixed ? button : keep(button), dim(t.direction === 'news' ? '  презентации и обзоры обновлений' : '  по теме работы агента')]
+        })
+        const ownTiles = myTopics.flatMap((t) => [keep(Button({ key: `arcade-tt-own-${t.id}`, label: t.title, onPress: () => search(t.title) })), dim('  своя тема')])
+        const column = (list) => (desktop ? tiles(list, 44) : Box({ flexDirection: 'column', children: list }))
+        items = [
+          back,
+          gap,
+          Button({ key: 'arcade-tt-feed', label: 'Лента «Для тебя»', autoFocus: true, onPress: () => search('') }),
+          dim('  Войди в TikTok сам — проще всего QR-кодом из приложения на телефоне. Arcade твой вход не видит.'),
+          section('Поиск по теме'),
+          ...(yt.loading === 'topics' || !yt.topics ? [Text({ children: ['Подбираю темы…'] })] : [column(topicTiles)]),
+          ...(ownTiles.length ? [section('Мои темы'), column(ownTiles)] : []),
+          gap,
+          Input({
+            key: 'arcade-tt-search',
+            label: 'Найти в TikTok',
+            placeholder: 'что угодно: рецепты, Rust, котики…',
+            onSubmit: (value) => {
+              const query = clean(value, 100)
+              if (query) search(query)
+            },
+          }),
+          ...(builtin || platform ? [gap, dim(builtin ? 'TikTok открывается во встроенном браузере Claude.' : 'TikTok открывается в браузере по умолчанию.')] : []),
           ...noticeLines,
           ...hint,
         ]
@@ -4786,6 +6206,7 @@ export function register(on) {
               },
             }),
             dim('  свои каналы и эфиры о программировании, технике и ретро-играх'),
+            ...topicTile('tiktok', 'TikTok', '  лента и поиск по теме работы агента; вход — твой'),
           ]),
           // Друзья, чаты и аккаунт; у свёрнутого раздела видно, что кто-то написал или зовёт в друзья
           ...foldable(
@@ -4840,6 +6261,30 @@ export function register(on) {
             ],
             `${acct.unread ? ` · 💬 ${acct.unread}` : ''}${acct.requests ? ` · 👥 ${acct.requests}` : ''}`,
           ),
+          // Работа: блокнот и доска проектов, которые ведут и человек, и Claude
+          ...foldable('work', 'Работа', [
+            Button({
+              key: 'arcade-menu-notes',
+              label: 'Блокнот',
+              ...(menuFrom === 'notes' ? { autoFocus: true } : {}),
+              onPress: () => {
+                nb.note = ''
+                nb.bad = false
+                open('notes')()
+              },
+            }),
+            dim('  страницы и чек-листы; Claude может дополнять'),
+            Button({
+              key: 'arcade-menu-boards',
+              label: 'Доска проектов',
+              ...(menuFrom === 'boards' ? { autoFocus: true } : {}),
+              onPress: () => {
+                open('boards')()
+                boardsOpened($)
+              },
+            }),
+            dim('  колонки и карточки; общие — с друзьями'),
+          ]),
           ...foldable('more', 'Ещё', [
             ...windowTiles,
             Button({

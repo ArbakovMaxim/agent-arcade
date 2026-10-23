@@ -4,7 +4,7 @@
 
 **English** · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Alpha (0.25).** Arcade works and is used every day, but it's an early version: things may break, and settings or the catalog may change between updates. Bug reports are very welcome — see [Feedback](#feedback).
+> **Alpha (0.26).** Arcade works and is used every day, but it's an early version: things may break, and settings or the catalog may change between updates. Bug reports are very welcome — see [Feedback](#feedback).
 
 Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that fills the wait while your agent is working. When the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
 
@@ -15,15 +15,16 @@ Everything in the catalog is free: the games are openly licensed, the books and 
 ## Features
 
 - **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt; it never steals focus unless you ask it to.
-- **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings).
-- **One menu, five sections.** *Play*, *Read & listen*, *Watch*, *Social* and *More* — fold the ones you don't need. On top: *Continue* the last game, *Search* and *Favorites*.
+- **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings). In Claude Desktop it can also close the tab you're watching, so the conversation is back in front of you.
+- **One menu, six sections.** *Play*, *Read & listen*, *Watch*, *Social*, *Work* and *More* — fold the ones you don't need. On top: *Continue* the last game, *Search* and *Favorites*.
 - **61 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy, adventures and board games.
 - **Read and listen.** 136 public-domain books, LibriVox audiobooks, and fresh articles and podcast episodes on the topic of the agent's work.
-- **Watch.** Fresh YouTube videos on the topic of the agent's work, and Twitch: your own channels and live streams about coding, tech, science and retro games.
+- **Watch.** Fresh YouTube videos on the topic of the agent's work, Twitch: your own channels and live streams about coding, tech, science and retro games, and TikTok: the *For You* feed and search on TikTok's own site, where you sign in yourself.
 - **NES and Flappy Arcade right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
 - **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, Go, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
 - **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle and chat one-on-one or in groups.
+- **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too; send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page. Boards with columns and cards — share one with friends, and everyone works on the same board.
 - **Search and favorites.** One search across games, books, audiobooks and Twitch channels, grouped by section and genre; mark anything with ☆ to keep it in *★ Favorites*.
 - **Your own games.** Add ROMs you own; they stay on your machine.
 - **13 interface languages:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — picked from your system or browser, English by default.
@@ -71,8 +72,9 @@ The plugin is installed for all sessions and apps. The VS Code extension has no 
 | *(on top)* | **▶ Continue** the last game, **🔍 Search**, **★ Favorites** |
 | **Play** | NES, Sega, Master System, PlayStation, Games; *Join* when someone is waiting online; **My games** |
 | **Read & listen** | Books, Audiobooks, Articles, Podcasts |
-| **Watch** | YouTube, Twitch |
+| **Watch** | YouTube, Twitch, TikTok |
 | **Social** | Friends, Chats, **Sign in with GitHub** (or **Account** once you're signed in) |
+| **Work** | Notebook, Project board |
 | **More** | Arcade window, Settings, 🌐 language, 🐞 Report a bug, ☕ Support the project |
 
 Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. Signed in, the menu header shows your @handle with the same counters.
@@ -87,7 +89,7 @@ Press a section's title to fold or unfold it. A folded section shows `▸` and h
 | **VS Code** | in the panel | browser window |
 | **Claude Desktop** | in the panel | Claude's built-in browser, or a browser window (pick in settings); shooters — always a browser window |
 
-The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing. Chats work right in the panel in the terminal and in Desktop; *Open as a page* opens them on the site the same way.
+The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing. Chats work right in the panel in the terminal and in Desktop; *Open as a page* opens them on the site the same way. The notebook and project boards live in the panel. TikTok opens in Claude's built-in browser in Desktop and in your default browser elsewhere, where you are likely signed in already.
 
 ## The catalog
 
@@ -126,11 +128,22 @@ Each game's card links to its license and source code.
 Signing in is optional — without it everything else works as before.
 
 - **Sign in with GitHub** (in *Social*): Arcade shows a code, you enter it on GitHub's page in your regular browser. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
-- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, your topics, Twitch channels, favorites, folded sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
+- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
 - **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
 - **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
 - **Chats.** One-on-one with a friend, groups of friends, or a group with all your friends in one press. Write right in the Arcade panel or open the chats page on the site. Messages are stored on Arcade's site and are not encrypted — don't write passwords or keys there.
 - **Sign out** stops syncing on this computer; **Delete account** (press twice) makes the site forget you and your settings.
+
+## Notebook and project boards
+
+Both are in the *Work* section of the menu.
+
+- **Notebook.** Pages and subpages; a line starting with `# ` is a heading, `- ` an item, `- [ ] ` a checklist item that ticks with a press. It is kept on this computer — up to 200 pages, 20,000 characters on a page.
+- **Claude keeps it too.** *Give to Claude* passes a page to Claude, or just ask Claude to write something down in Arcade. Claude uses the `mcp__arcade__notes` tool, which changes only the notebook and deletes nothing. If you don't like Claude's edit, *Restore the text from before Claude's edit*.
+- **Notion and other apps** — through Claude's connectors, so Arcade needs no keys or passwords: *Send to Notion*, *To another app*, *Import from Notion or another app*. A linked page can be updated in the app or imported again from it.
+- **Voice.** Dictate into Claude's prompt box with the system's own dictation (Win+H on Windows, Fn twice on macOS), then press *Take from Claude's prompt box* — the text moves to the end of the page.
+- **Project board.** Columns — *To do*, *Doing*, *Done* or your own, up to 8 — and cards; a card is a notebook page with text and a checklist. Press a card to pick it and move it with the arrows, press again to open it. Claude can run a board too: *Give to Claude*, or ask it to lay out tasks on a board in Arcade.
+- **Shared boards.** Signed in with a @handle, tick friends and press *Share*: everyone has the same cards, columns and name, and changes show up within seconds. The owner invites more friends, removes people and deletes the board from the site; anyone can leave; whatever happens, everyone keeps their own copy. Up to 3 shared boards of your own, 20 people and 200 cards on a board.
 
 ## Your own games
 
@@ -149,6 +162,8 @@ Open **Settings** in the *More* section of the `/arcade` menu:
 - **Panel size** — normal or full width.
 - **When the agent finishes** — banner and keep playing, pause with a banner, or straight back to the agent.
 - **When the agent asks for permission** — the same three options.
+- **When the browser opens** (Claude Desktop) — close the Arcade menu so the browser gets the full height, or keep the menu above it.
+- **Agent finished while you watch** (Claude Desktop) — close the tab Arcade opened for a video, a stream, TikTok, an article or an episode, so the chat with Claude is in front of you again, or just let you know.
 - **Notifications while playing in the window.**
 - **Key test and key remapping** (terminal).
 
@@ -158,7 +173,8 @@ Open **Settings** in the *More* section of the `/arcade` menu:
 - Your own ROMs, WADs, books and audiobook files never leave your machine or browser.
 - Online play goes through Arcade's server on Cloudflare: messages are relayed between players in a room and not stored — except moves of board games, which are kept so you can come back; a game untouched for a month is deleted.
 - Topics are suggested by Haiku in your own Claude Code session; Arcade's site never sees your conversation — only a short English search query when you use *Your own topic*. An article's address goes after `#`, so it never reaches Arcade's server.
-- Signed in, the site keeps your synced settings, favorites, @handle, friends and chats. The session key goes only to Arcade's site.
+- Signed in, the site keeps your synced settings, favorites, @handle, friends, chats and shared boards. The session key goes only to Arcade's site.
+- The notebook stays on your computer. Shared boards are stored on Arcade's site and are not encrypted, like chats. Pages go to Notion or another app only when you ask, through your own Claude connectors.
 - A bug report carries your text, the Arcade version, where it is open, the interface language and the OS — nothing else; without signing in it goes unsigned, and the site keeps no address.
 - Some games can reach the internet only when you ask them to — for example OpenTTD's optional survey and its *Online Content* button.
 

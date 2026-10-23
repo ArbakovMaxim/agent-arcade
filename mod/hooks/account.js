@@ -11,7 +11,7 @@ import { jsonFrom } from './youtube.js'
 // Что из $.store общее для всех компьютеров. Свои игры, каталог, последняя игра, браузер и графика — у каждого компьютера
 // свои: файлы игр, браузеры и терминал на другом компьютере другие. keepMenu — оставлять ли меню Arcade, когда
 // открылся встроенный браузер Desktop, collapsed — свёрнутые разделы главного меню, favorites — избранное
-export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites']
+export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites']
 const TOKEN = /^(\d{1,20})\.[A-Za-z0-9_-]{43}$/
 const DEVICE = /^[A-Za-z0-9_-]{8,100}$/
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/
@@ -20,11 +20,12 @@ const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close' }
+const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete' }
 
 // Адрес сайта для шага входа, настроек, ника, друзей, чатов или отчётов об ошибках: start, poll, logout, me, settings,
 // handle, friends, accept, unfriend, chats, messages, unread, send, opendm, group, members, chatticket, report (без
-// входа), myReport (со входом), reports, closeReport (только админу)
+// входа), myReport (со входом), reports, closeReport (только админу), общих досок: boards, boardsync, boardnew,
+// boardmembers, boarddelete
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }

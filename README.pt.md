@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · **Português** · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Alfa (0.25).** O Arcade funciona e é usado todos os dias, mas é uma versão inicial: algo pode quebrar, e as configurações ou o catálogo podem mudar entre atualizações. Relatos de erros são muito bem-vindos — veja [Feedback](#feedback).
+> **Alfa (0.26).** O Arcade funciona e é usado todos os dias, mas é uma versão inicial: algo pode quebrar, e as configurações ou o catálogo podem mudar entre atualizações. Relatos de erros são muito bem-vindos — veja [Feedback](#feedback).
 
 O Arcade é um plugin para o [Claude Code](https://claude.com/claude-code) que preenche a espera enquanto seu agente trabalha. Quando o agente fica ocupado por mais de 10 segundos, um pequeno *«jogar?»* aparece acima do prompt. Jogue alguma coisa — NES, Sega, PlayStation, Doom, xadrez e mais —, leia um livro, ouça um audiolivro ou um podcast, ou assista a um vídeo sobre o assunto em que o agente está trabalhando. O Arcade avisa assim que o agente termina ou precisa da sua permissão — você não perde nada.
 
@@ -15,15 +15,16 @@ Tudo no catálogo é gratuito: os jogos têm licenças abertas, os livros e audi
 ## Recursos
 
 - **Aparece sozinho.** Depois de 10 segundos de trabalho do agente, o Arcade oferece um jogo acima do prompt; ele nunca toma o foco a menos que você peça.
-- **Sabe o que o agente está fazendo.** Quando o agente termina ou pede permissão, um aviso aparece sobre o jogo — continue jogando, pause ou volte direto ao agente (você escolhe o comportamento nas configurações).
-- **Um menu, cinco seções.** *Jogar*, *Ler e ouvir*, *Assistir*, *Social* e *Mais* — recolha as que você não precisa. No topo: *Continuar* o último jogo, *Buscar* e *Favoritos*.
+- **Sabe o que o agente está fazendo.** Quando o agente termina ou pede permissão, um aviso aparece sobre o jogo — continue jogando, pause ou volte direto ao agente (você escolhe o comportamento nas configurações). No Claude Desktop ele também pode fechar a aba que você está assistindo, para a conversa voltar à sua frente.
+- **Um menu, seis seções.** *Jogar*, *Ler e ouvir*, *Assistir*, *Social*, *Trabalho* e *Mais* — recolha as que você não precisa. No topo: *Continuar* o último jogo, *Buscar* e *Favoritos*.
 - **61 jogos gratuitos** para NES (Dendy), Sega Mega Drive, Master System, PlayStation e uma aba *Jogos* com jogos de arcade, tiro, corrida, estratégia, aventuras e jogos de tabuleiro.
 - **Ler e ouvir.** 136 livros de domínio público, audiolivros do LibriVox, artigos e episódios recentes de podcasts sobre o assunto do trabalho do agente.
-- **Assistir.** Vídeos recentes do YouTube sobre o assunto do trabalho do agente e Twitch: seus próprios canais e transmissões ao vivo sobre programação, tecnologia, ciência e jogos retrô.
+- **Assistir.** Vídeos recentes do YouTube sobre o assunto do trabalho do agente, Twitch: seus próprios canais e transmissões ao vivo sobre programação, tecnologia, ciência e jogos retrô, e TikTok: o feed *Para você* e a busca no próprio site do TikTok, onde você entra por conta própria.
 - **NES e Flappy Arcade direto no Claude Code** — no terminal, no VS Code e no Claude Desktop. Todo o resto abre em uma janela do navegador; no Claude Desktop, por padrão, no navegador integrado do Claude (os jogos de tiro ainda abrem em uma janela do navegador: o navegador integrado não consegue capturar o mouse).
 - **Jogo online.** Jogos de console para dois pela rede, deathmatch e cooperativo no Doom, xadrez, go, damas e reversi contra pessoas ou contra o computador.
 - **«Quem está esperando online».** O Arcade mostra no Claude Code quando alguém está esperando um parceiro, com um botão *Entrar*.
 - **Amigos e conversas.** Um login opcional com o GitHub mantém suas configurações iguais em todos os seus computadores e dá a você um @apelido; adicione amigos pelo apelido exato e converse a dois ou em grupos.
+- **Caderno e quadros de projetos.** Páginas, subpáginas e checklists que o Claude também mantém; envie uma página para o Notion ou outro aplicativo, ou traga uma de lá, pelos conectores do Claude; dite na caixa de mensagem do Claude e leve o texto para uma página. Quadros com colunas e cartões — compartilhe um com amigos, e todos trabalham no mesmo quadro.
 - **Busca e favoritos.** Uma única busca em jogos, livros, audiolivros e canais da Twitch, agrupada por seção e gênero; marque qualquer coisa com ☆ para guardá-la em *★ Favoritos*.
 - **Seus próprios jogos.** Adicione ROMs que você possui; elas ficam no seu computador.
 - **13 idiomas de interface:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — pelo idioma do sistema ou do navegador, inglês por padrão.
@@ -71,8 +72,9 @@ O plugin é instalado para todas as sessões e aplicativos. A extensão do VS Co
 | *(topo)* | **▶ Continuar** o último jogo, **🔍 Buscar**, **★ Favoritos** |
 | **Jogar** | NES, Sega, Master System, PlayStation, Jogos; *Entrar* quando alguém espera online; **Meus jogos** |
 | **Ler e ouvir** | Livros, Audiolivros, Artigos, Podcasts |
-| **Assistir** | YouTube, Twitch |
+| **Assistir** | YouTube, Twitch, TikTok |
 | **Social** | Amigos, Conversas, **Entrar com o GitHub** (ou **Conta** depois de entrar) |
+| **Trabalho** | Caderno, Quadro de projetos |
 | **Mais** | Janela do Arcade, Configurações, 🌐 idioma, 🐞 Relatar um erro, ☕ Apoiar o projeto |
 
 Clique no título de uma seção para recolhê-la ou expandi-la. Uma seção recolhida mostra `▸` e quantos blocos ela contém, e *Social* também mostra novas mensagens 💬 e pedidos de amizade 👥. O Arcade lembra quais seções estão recolhidas. Depois de entrar, o cabeçalho do menu mostra seu @apelido com os mesmos contadores.
@@ -87,7 +89,7 @@ A **busca** começa a partir de duas letras e encontra título, autor ou gênero
 | **VS Code** | no painel | janela do navegador |
 | **Claude Desktop** | no painel | navegador integrado do Claude ou janela do navegador (escolha nas configurações); jogos de tiro — sempre uma janela do navegador |
 
-A janela do navegador é uma janela separada do Arcade (no seu navegador padrão ou no escolhido nas configurações), não uma aba entre as suas. As conversas funcionam direto no painel — no terminal e no Desktop; *Abrir como página* as abre do mesmo jeito no site.
+A janela do navegador é uma janela separada do Arcade (no seu navegador padrão ou no escolhido nas configurações), não uma aba entre as suas. As conversas funcionam direto no painel — no terminal e no Desktop; *Abrir como página* as abre do mesmo jeito no site. O caderno e os quadros de projetos ficam no painel. O TikTok abre no navegador integrado do Claude no Desktop e, nos outros lugares, no seu navegador padrão, onde você provavelmente já entrou na conta.
 
 ## O catálogo
 
@@ -126,11 +128,22 @@ O cartão de cada jogo tem links para a licença e o código-fonte.
 Entrar é opcional — sem isso, todo o resto funciona como antes.
 
 - **Entrar com o GitHub** (em *Social*): o Arcade mostra um código que você digita na página do GitHub no seu navegador de sempre. O Arcade só fica sabendo o nome e a imagem do seu perfil do GitHub — nenhum e-mail, nenhum acesso a repositórios.
-- **Sincronização.** Idioma, teclas, notificações, tamanho do painel, o que fazer com o jogo quando o agente avisa, seus temas, canais da Twitch, favoritos, seções recolhidas e seu recorde no Flappy Arcade ficam iguais em todos os seus computadores. Seus próprios jogos, o navegador e o modo gráfico continuam por computador.
+- **Sincronização.** Idioma, teclas, notificações, tamanho do painel, o que fazer com o jogo quando o agente avisa, as opções do navegador no Desktop, seus temas, canais da Twitch, favoritos, seções recolhidas e seu recorde no Flappy Arcade ficam iguais em todos os seus computadores. Seus próprios jogos, o navegador e o modo gráfico continuam por computador.
 - **@apelido.** Use seu nome do GitHub com um clique ou invente um: de 4 a 32 caracteres — letras latinas, números e `_`. Você pode mudá-lo até 5 vezes por dia.
 - **Amigos.** Adicione um amigo pelo @apelido exato: o pedido é aceito do outro lado, e vocês aparecem nas listas um do outro. Não há sugestões enquanto você digita, então ninguém consegue vasculhar quem usa o Arcade. Recusar e remover acontecem em silêncio.
 - **Conversas.** A dois com um amigo, grupos de amigos, ou um grupo com todos os seus amigos em um clique. Escreva direto no painel do Arcade ou abra a página de conversas no site. As mensagens ficam guardadas no site do Arcade e não são criptografadas — não escreva senhas nem chaves nelas.
 - **Sair** interrompe a sincronização neste computador; **Excluir conta** (pressione duas vezes) faz o site esquecer você e suas configurações.
+
+## Caderno e quadros de projetos
+
+Os dois ficam na seção *Trabalho* do menu.
+
+- **Caderno.** Páginas e subpáginas; uma linha que começa com `# ` é um título, com `- ` um item, com `- [ ] ` um item de checklist que se marca com um clique. Fica neste computador — até 200 páginas, 20.000 caracteres por página.
+- **O Claude também cuida dele.** *Passar ao Claude* entrega uma página ao Claude, ou simplesmente peça ao Claude para anotar algo no Arcade. O Claude usa a ferramenta `mcp__arcade__notes`, que só altera o caderno e não apaga nada. Se não gostar da edição do Claude: *Restaurar o texto de antes da edição do Claude*.
+- **Notion e outros aplicativos** — pelos conectores do Claude, então o Arcade não precisa de chaves nem senhas: *Enviar para o Notion*, *Para outro aplicativo*, *Importar do Notion ou de outro aplicativo*. Uma página vinculada pode ser atualizada no aplicativo ou importada de novo de lá.
+- **Voz.** Dite na caixa de mensagem do Claude com o ditado do próprio sistema (Win+H no Windows, Fn duas vezes no macOS) e pressione *Pegar da caixa de mensagem do Claude* — o texto vai para o fim da página.
+- **Quadro de projetos.** Colunas — *A fazer*, *Fazendo*, *Feito* ou as suas, até 8 — e cartões; um cartão é uma página do caderno com texto e checklist. Pressione um cartão para escolhê-lo e movê-lo com as setas, pressione de novo para abri-lo. O Claude também pode cuidar de um quadro: *Passar ao Claude*, ou peça para ele distribuir tarefas num quadro do Arcade.
+- **Quadros compartilhados.** Depois de entrar e com um @apelido, marque amigos e pressione *Compartilhar*: todos têm os mesmos cartões, colunas e nome, e as mudanças aparecem em segundos. O dono convida mais amigos, remove pessoas e exclui o quadro do site; qualquer um pode sair; aconteça o que acontecer, cada um fica com sua própria cópia. Até 3 quadros compartilhados seus, 20 pessoas e 200 cartões por quadro.
 
 ## Seus próprios jogos
 
@@ -149,6 +162,8 @@ Abra **Configurações** na seção *Mais* do menu `/arcade`:
 - **Tamanho do painel** — normal ou largura total.
 - **Quando o agente terminar** — aviso e continuar jogando, pausa com aviso, ou voltar direto ao agente.
 - **Quando o agente pedir permissão** — as mesmas três opções.
+- **Quando o navegador abrir** (Claude Desktop) — fechar o menu do Arcade para o navegador ocupar toda a altura, ou manter o menu acima dele.
+- **O agente terminou enquanto você assiste** (Claude Desktop) — fechar a aba que o Arcade abriu para um vídeo, uma transmissão, o TikTok, um artigo ou um episódio, para a conversa com o Claude voltar à sua frente, ou só avisar você.
 - **Notificações ao jogar em uma janela.**
 - **Teste de teclas e remapeamento** (terminal).
 
@@ -158,7 +173,8 @@ Abra **Configurações** na seção *Mais* do menu `/arcade`:
 - Suas ROMs, WADs, livros e arquivos de áudio nunca saem do seu computador ou navegador.
 - O jogo online passa pelo servidor do Arcade na Cloudflare: as mensagens são repassadas entre os jogadores de uma sala e não são guardadas — exceto as jogadas dos jogos de tabuleiro, mantidas para você poder voltar; uma partida parada por um mês é apagada.
 - Os temas são sugeridos pelo Haiku na sua própria sessão do Claude Code; o site do Arcade nunca vê sua conversa — só uma curta consulta de busca em inglês quando você usa *Seu próprio tema*. O endereço de um artigo vai depois de `#`, então nunca chega ao servidor do Arcade.
-- Depois de entrar, o site guarda suas configurações sincronizadas, favoritos, @apelido, amigos e conversas. A chave de sessão só é enviada ao site do Arcade.
+- Depois de entrar, o site guarda suas configurações sincronizadas, favoritos, @apelido, amigos, conversas e quadros compartilhados. A chave de sessão só é enviada ao site do Arcade.
+- O caderno fica no seu computador. Os quadros compartilhados ficam guardados no site do Arcade e não são criptografados, como as conversas. As páginas só vão para o Notion ou outro aplicativo quando você pede, pelos seus próprios conectores do Claude.
 - Um relatório de erro contém seu texto, a versão do Arcade, onde ele está aberto, o idioma da interface e o sistema operacional — nada mais; sem login ele vai sem assinatura, e o site não guarda nenhum endereço.
 - Alguns jogos só acessam a internet se você pedir — por exemplo, a pesquisa opcional do OpenTTD e seu botão *Online Content*.
 

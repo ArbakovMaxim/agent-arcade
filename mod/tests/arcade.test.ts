@@ -17,6 +17,8 @@ import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, descr
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseMe, parsePoll, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
+import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
+import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -167,6 +169,12 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
     return { value: { status: 404, ok: false, headers: {}, text: 'not found' } }
   })
   on('command.register', () => ({ value: undefined }))
+  // Инструменты мода для Claude (блокнот): Claude Code их принимает; registered — что мод зарегистрировал
+  const registered: any[] = []
+  on('tool.register', ($: any, e: any) => {
+    registered.push(e)
+    return { value: { tool: `mcp__arcade__${e.name}` } }
+  })
   on('ui.toast', ($: any, e: any) => {
     toasts.push(e.text)
     return { value: undefined }
@@ -241,7 +249,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches, requests, notifies, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills }
+  return { saved, opened, blits, clock, launches, toasts, fetches, requests, notifies, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered }
 }
 
 const BASH_MS = 2_000
@@ -1380,9 +1388,13 @@ test('Desktop: свои вызовы браузера Arcade разрешает 
   expect(ownDesktopCall('mcp__Claude_Browser__tabs_context', {})).toBe(true)
   expect(ownDesktopCall('mcp__Claude_Browser__tabs_select', { tabId: 'tab-1' })).toBe(true)
   expect(ownDesktopCall('mcp__ccd_view__show_pane', { pane: 'preview' })).toBe(true)
+  // TikTok и закрытие своей вкладки, когда агент закончил
+  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: 'https://www.tiktok.com/foryou' })).toBe(true)
+  expect(ownDesktopCall('mcp__Claude_Browser__tabs_close', { tabId: 'tab-1' })).toBe(true)
   // Чужой сайт, сайт с похожим началом, другая панель, другой инструмент — нет
   expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: 'https://example.com/' })).toBe(false)
   expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: `${SITE}.example.com/` })).toBe(false)
+  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: 'https://www.tiktok.com.example.com/' })).toBe(false)
   expect(ownDesktopCall('mcp__Claude_Browser__preview_start', {})).toBe(false)
   expect(ownDesktopCall('mcp__ccd_view__show_pane', { pane: 'terminal' })).toBe(false)
   expect(ownDesktopCall('mcp__Claude_Browser__javascript_tool', { text: '1' })).toBe(false)
@@ -3427,6 +3439,173 @@ test('search.js: просьба и разбор своей темы, «Мои т
   expect(listenUrl({ feed: 'it1', channel: 'Pod & Co', s: SIG.show, audio: 'https://cdn.example.net/a.mp3', title: 'A' }, 'en')).toBe(`${SITE}/listen?lang=en#f=it1&n=Pod%20%26%20Co&s=${SIG.show}&u=https%3A%2F%2Fcdn.example.net%2Fa.mp3&t=A`)
 })
 
+// TikTok: лента и поиск — на самом сайте TikTok, вход — человека; своих страниц и скриптов там у Arcade нет
+const TT = 'https://www.tiktok.com'
+
+test('Desktop: TikTok — в «Смотреть»; лента, темы и поиск открываются на сайте TikTok во встроенном браузере', async ($, on) => {
+  const tabs: any[] = [{ tabId: 'site', origin: SITE, isActive: true }]
+  const { clock, mcpCalls, launches } = stubs(on, { browser: 'ok', tabs, stored: { keepMenu: true } })
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'лента и поиск по теме работы агента; вход — твой' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  expect(await ui.find({ type: 'Text', text: '  Войди в TikTok сам — проще всего QR-кодом из приложения на телефоне. Arcade твой вход не видит.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'TikTok открывается во встроенном браузере Claude.' })).toBeDefined()
+  expect(await labels(ui, 'arcade-tt-topic-', 4)).toEqual(['ИИ-агенты и программирование', 'Веб-разработка', 'Новинки и презентации', undefined])
+  // Вкладка сайта Arcade — не вкладка TikTok: лента открывается в новой
+  await ui.press({ key: 'arcade-tt-feed' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start', 'show_pane'])
+  expect(mcpCalls[1]).toMatchObject({ server: 'Claude_Browser', args: { url: `${TT}/foryou` } })
+  expect(await ui.find({ type: 'Text', text: 'TikTok открыт во встроенном браузере Claude.' })).toBeDefined()
+  // Вкладка TikTok уже есть — поиск по теме идёт в неё
+  tabs.push({ tabId: 'tt', origin: TT, isActive: false })
+  mcpCalls.length = 0
+  await ui.press({ key: 'arcade-tt-topic-1' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'navigate', 'tabs_select', 'show_pane'])
+  expect(mcpCalls[1]).toMatchObject({ args: { url: `${TT}/search?q=${encodeURIComponent('Веб-разработка')}`, tabId: 'tt' } })
+  mcpCalls.length = 0
+  await ui.input({ key: 'arcade-tt-search', text: '  котики  ', kind: 'submit' })
+  expect(mcpCalls[1]).toMatchObject({ tool: 'navigate', args: { url: `${TT}/search?q=${encodeURIComponent('котики')}`, tabId: 'tt' } })
+  expect(launches.length).toBe(0)
+  await ui.unmount()
+})
+
+test('TikTok в терминале: лента — в браузере по умолчанию', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS })
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  expect(await ui.find({ type: 'Text', text: 'TikTok открывается в браузере по умолчанию.' })).toBeDefined()
+  await ui.press({ key: 'arcade-tt-feed' })
+  expect(launches.length).toBe(1)
+  expect(launches[0].env.ARCADE_URL).toBe(`${TT}/foryou`)
+  expect(await ui.find({ type: 'Text', text: 'TikTok открыт в браузере по умолчанию.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('TikTok без ОС: адрес — текстом', async ($, on) => {
+  const { clock, launches } = stubs(on)
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  expect(await ui.find({ type: 'Text', text: /TikTok открывается/ })).toBeUndefined()
+  await ui.input({ key: 'arcade-tt-search', text: 'rust', kind: 'submit' })
+  expect(launches.length).toBe(0)
+  expect(await ui.find({ type: 'Text', text: `TikTok: ${TT}/search?q=rust` })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: «Агент закончил, пока смотришь» — только для встроенного браузера, сохраняется с остальными настройками', async ($, on) => {
+  const { clock, saved } = stubs(on, { env: WINDOWS, browser: 'ok' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-back-on-done' })).toMatchObject({ props: { label: 'Агент закончил, пока смотришь: только сообщить' } })
+  expect(await ui.find({ type: 'Text', text: '  видео, TikTok, Twitch, статьи и подкасты; закрыть — вкладка закрывается, и перед тобой снова разговор с Claude' })).toBeDefined()
+  await ui.press({ key: 'arcade-back-on-done' })
+  expect(await ui.find({ key: 'arcade-back-on-done' })).toMatchObject({ props: { label: 'Агент закончил, пока смотришь: закрыть вкладку' } })
+  expect(saved.get('backOnDone')).toBe(true)
+  expect(Object.keys(saved.get('syncAt'))).toContain('backOnDone')
+  // Окно браузера — закрывать нечего
+  await ui.press({ key: 'arcade-opener' })
+  expect(await ui.find({ key: 'arcade-back-on-done' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Desktop: агент закончил, пока смотришь TikTok, — вкладку, которую открыл Arcade, закрываем, и только её', async ($, on) => {
+  const tabs: any[] = [{ tabId: 'tt', origin: TT, isActive: true }]
+  const { clock, mcpCalls, toasts } = stubs(on, { browser: 'ok', tabs, stored: { backOnDone: true, keepMenu: true } })
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  await ui.press({ key: 'arcade-tt-feed' })
+  // Открыл — спрашиваем, какая вкладка активна, и запоминаем её
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'navigate', 'tabs_select', 'show_pane', 'tabs_context'])
+  await $.turn.complete({ turnId: 't1' })
+  expect(mcpCalls.at(-1)).toMatchObject({ server: 'Claude_Browser', tool: 'tabs_close', args: { tabId: 'tt' } })
+  expect(mcpCalls.at(-1).consent).toBeDefined()
+  expect(toasts).toContain('Агент закончил — вкладку закрыл, перед тобой снова разговор')
+  // Вкладка уже закрыта — следующий конец хода её не трогает
+  mcpCalls.length = 0
+  await $.turn.start({ turnId: 't2' })
+  await $.turn.complete({ turnId: 't2' })
+  expect(mcpCalls).toEqual([])
+  expect(toasts.at(-1)).toBe('Агент закончил — Esc, чтобы вернуться')
+  await ui.unmount()
+})
+
+test('Desktop: «только сообщить» — вкладки не спрашиваем и не закрываем', async ($, on) => {
+  const tabs: any[] = [{ tabId: 'tt', origin: TT, isActive: true }]
+  const { clock, mcpCalls, toasts } = stubs(on, { browser: 'ok', tabs, stored: { keepMenu: true } })
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  await ui.press({ key: 'arcade-tt-feed' })
+  await $.turn.complete({ turnId: 't1' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'navigate', 'tabs_select', 'show_pane'])
+  expect(toasts).toContain('Агент закончил — Esc, чтобы вернуться')
+  await ui.unmount()
+})
+
+test('Desktop: TikTok открыл Claude по просьбе Arcade — конец этого хода вкладку не закрывает, конец следующего — закрывает', async ($, on) => {
+  const tabs: any[] = []
+  const { clock, mcpCalls, submits, toasts } = stubs(on, { submit: true, tabs, stored: { backOnDone: true } })
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  await ui.press({ key: 'arcade-tt-feed' })
+  expect(submits.length).toBe(1)
+  expect(submits[0].text).toBe(`Открой во встроенном браузере: ${TT}/foryou`)
+  await $.turn.start({ turnId: 't1', text: submits[0].text })
+  tabs.push({ tabId: 'tt', origin: TT, isActive: true })
+  await $.tool.call({ tool: 'mcp__Claude_Browser__preview_start', url: `${TT}/foryou` })
+  await $.turn.complete({ turnId: 't1' })
+  expect(mcpCalls.some((c) => c.tool === 'tabs_close')).toBe(false)
+  // Следующий ход агента кончился — закрываем. В режиме Auto закрыть не дают — тогда хотя бы сообщаем
+  await $.turn.start({ turnId: 't2', text: 'почини тесты' })
+  await $.turn.complete({ turnId: 't2' })
+  expect(mcpCalls.at(-1)).toMatchObject({ tool: 'tabs_close', args: { tabId: 'tt' } })
+  expect(toasts.at(-1)).toBe('Агент закончил — можно возвращаться')
+  await ui.unmount()
+})
+
+test('Desktop: Arcade прервал Claude ради TikTok — Claude вернулся к работе, и конец этого же хода вкладку закрывает', async ($, on) => {
+  const tabs: any[] = []
+  const { clock, mcpCalls, aborts, submits, toasts } = stubs(on, { abort: true, submit: true, tabs, stored: { backOnDone: true } })
+  ytModel(on, { topics: null, picks: null })
+  await start($)
+  await clock.advance(200)
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-tiktok' })
+  await ui.press({ key: 'arcade-tt-feed' })
+  expect(aborts).toEqual([{ turnId: 't1' }])
+  expect(submits[0].text).toBe(`Открой во встроенном браузере: ${TT}/foryou\n${BACK_TO_WORK}`)
+  await $.turn.complete({ turnId: 't1', reason: 'aborted', answer: '' })
+  await $.turn.start({ turnId: 't2', text: submits[0].text })
+  tabs.push({ tabId: 'tt', origin: TT, isActive: true })
+  await $.tool.call({ tool: 'mcp__Claude_Browser__preview_start', url: `${TT}/foryou` })
+  await $.turn.complete({ turnId: 't2' })
+  expect(mcpCalls.at(-1)).toMatchObject({ tool: 'tabs_close', args: { tabId: 'tt' } })
+  expect(toasts.at(-1)).toBe('Агент закончил — можно возвращаться')
+  await ui.unmount()
+})
+
 // Twitch: каталог Arcade, который отдаёт сайт (он уже ставит эфиры первыми); канал 18+ мод не показывает
 const TW_CATALOG = [
   { login: 'retroboi', name: 'RetroBoi', topics: ['retro'], live: { title: 'NES homebrew night', game: 'Retro', viewers: 1234 } },
@@ -3736,7 +3915,7 @@ test('account.js: ответы сайта про вход и настройки,
   expect(restoreStamps({ lang: 5, wide: 'x', junk: 3, notify: -1, keys: 0 })).toEqual({ lang: 5 })
   expect(restoreStamps(null)).toEqual({})
   // Встреча: сайт новее — оттуда; здесь новее — туда; на сайте нет — туда; не менял здесь (нет отметки) — с сайта
-  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites'])
+  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites'])
   expect(
     syncPlan(
       { lang: 'ru', wide: true, notify: false, onDone: 'pause' },
@@ -5283,6 +5462,1207 @@ test('отчёты по-английски: экран отчёта, списо�
   expect(await cyrillic()).toEqual([])
   await press('arcade-report-close-5')
   expect(await ui.find({ type: 'Text', text: 'Report closed.' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+// Блокнот: страницы — в $.store мода; Claude ведёт его инструментом mcp__arcade__notes
+const NOTES = 'mcp__arcade__notes'
+
+// Ключ поля блокнота по началу: номер в конце растёт, когда страница меняется не из этих полей
+async function noteKey(ui: any, prefix: string) {
+  let found: string | undefined
+  const walk = (n: any) => {
+    if (found || !n || typeof n !== 'object') return
+    const key = n.props?.key ?? n.key
+    if (typeof key === 'string' && key.startsWith(prefix)) found = key
+    for (const c of n.children ?? []) walk(c)
+  }
+  walk(await ui.drawn())
+  return found
+}
+
+// Поле блокнота по началу ключа: найти и ввести (по умолчанию — Enter)
+async function noteInput(ui: any, prefix: string, text: string, kind?: string) {
+  const key = await noteKey(ui, prefix)
+  if (!key) throw new Error(`нет поля ${prefix}`)
+  return ui.input({ key, text, ...(kind ? { kind } : {}) })
+}
+
+test('блокнот: хранилище, страницы и подстраницы, строки и чек-листы', () => {
+  // Что не сходится — мимо; подстраница без своей страницы — тоже
+  expect(restoreNotes(null)).toEqual([])
+  expect(
+    restoreNotes([
+      { id: 'a', title: ' План ', body: 'x\r\ny', parent: null, at: 5 },
+      { id: 'b', title: 'Сирота', body: '', parent: 'zz' },
+      { id: 'A!', title: 'x', body: '' },
+      { id: 'c', title: '  ', body: '' },
+      { id: 'a', title: 'дубль', body: '' },
+      { id: 'd', title: 'Под', body: '', parent: 'a' },
+    ]),
+  ).toEqual([
+    { id: 'a', title: 'План', body: 'x\ny', parent: null, at: 5 },
+    { id: 'd', title: 'Под', body: '', parent: 'a', at: 0 },
+  ])
+
+  // Новая — первой; id из времени, занят — с номером; подстраница — только под страницей верхнего уровня
+  let made: any = addPage([], { title: '  План  на неделю ' }, 1000)
+  expect(made.page).toEqual({ id: 'prs', title: 'План на неделю', body: '', parent: null, at: 1000 })
+  made = addPage(made.notes, { title: 'Покупки', parent: 'prs' }, 1000)
+  expect(made.page).toMatchObject({ id: 'prs1', parent: 'prs' })
+  const list = made.notes
+  expect(list.map((p: any) => p.id)).toEqual(['prs1', 'prs'])
+  expect(notesOrder(list).map((p: any) => p.title)).toEqual(['План на неделю', 'Покупки'])
+  expect(addPage(list, { title: 'Глубже', parent: 'prs1' }, 1)).toEqual({ error: 'parent' })
+  expect(addPage(list, { title: ' \n ' }, 1)).toEqual({ error: 'empty' })
+  const full = Array.from({ length: MAX_PAGES }, (_, i) => ({ id: `p${i}`, title: 't', body: '', parent: null, at: 0 }))
+  expect(addPage(full, { title: 'ещё' }, 1)).toEqual({ error: 'full' })
+  expect(fits([{ id: 'a', title: 't', body: 'x'.repeat(MAX_TOTAL), parent: null, at: 0 }])).toBe(false)
+  expect(removePage(list, 'prs')).toEqual([])
+  expect(removePage(list, 'prs1').map((p: any) => p.id)).toEqual(['prs'])
+  expect(findPage(list, ' покупки ')?.id).toBe('prs1')
+  expect(findPage(list, 'prs')?.title).toBe('План на неделю')
+  expect(findPage(list, ' ')).toBeNull()
+
+  // Строки: заголовки, пункты чек-листа (и с отступом), пункты списка, текст и пустые
+  const body = '# Неделя\n### Пн\n- [ ] тесты\n  - [x] ревью\n* молоко\n\nпросто текст'
+  expect(noteLines(body).map((l: any) => [l.kind, l.text, l.done ?? null])).toEqual([
+    ['h1', 'Неделя', null],
+    ['h2', 'Пн', null],
+    ['check', 'тесты', false],
+    ['check', 'ревью', true],
+    ['bullet', 'молоко', null],
+    ['blank', '', null],
+    ['text', 'просто текст', null],
+  ])
+  expect(checkStats(body)).toEqual({ done: 1, total: 2 })
+  expect(toggleLine(body, 2).split('\n')[2]).toBe('- [x] тесты')
+  expect(toggleLine(body, 3, false).split('\n')[3]).toBe('  - [ ] ревью')
+  expect(toggleLine(body, 3, true)).toBe(body)
+  expect(toggleLine(body, 4)).toBe(body)
+
+  // Дописать в конец: пустые строки по краям — прочь, пробелы — не дописываем, длиннее предела — null
+  expect(appendText('a', '\n\nb\n')).toBe('a\nb')
+  expect(appendText('a\n', 'b')).toBe('a\nb')
+  expect(appendText('', 'b')).toBe('b')
+  expect(appendText('a', '  \n ')).toBe('a')
+  expect(appendText('x'.repeat(MAX_BODY - 1), 'yy')).toBeNull()
+})
+
+test('блокнот: инструмент Claude — список, страница, новая страница, дописать, отметить; удалять не умеет', () => {
+  let notes: any[] = []
+  const call = (input: any, at = 2000) => {
+    const out = applyNotesTool(notes, input, at)
+    notes = out.notes
+    return out
+  }
+  expect(call({ action: 'list' })).toEqual({ notes: [], text: 'The notebook is empty.' })
+  expect(call({ action: 'create', title: 'Release', text: '- [ ] tests\n- [ ] changelog' })).toMatchObject({ text: 'Created page p1jk: Release.', changed: true })
+  expect(call({ action: 'create', title: 'Notes', parent: 'release' }).text).toBe('Created page p1jk1: Notes (under Release).')
+  expect(call({ action: 'create', title: 'Deep', parent: 'Notes' })).toMatchObject({ isError: true, text: '"Notes" is a subpage; subpages can only go under top-level pages.' })
+  expect(call({ action: 'create', title: 'X', parent: 'nope' }).text).toBe('No page "nope" to put the new page under.')
+  expect(call({ action: 'create', title: ' ' }).text).toBe('The page needs a title.')
+  expect(call({ action: 'create', title: 'Big', text: 'x'.repeat(MAX_BODY + 1) }).text).toBe('The text is too long: up to 20000 characters.')
+  expect(call({ action: 'list' }).text).toBe('Notebook pages:\n- p1jk: Release (0/2 done)\n  - p1jk1: Notes')
+
+  // Пункт — по номеру с единицы или по части текста; несколько совпадений — список пунктов
+  expect(call({ action: 'check', page: 'Release', item: '2' }).text).toBe('Ticked: changelog.')
+  expect(call({ action: 'check', page: 'Release', item: 'TEST' }).text).toBe('Ticked: tests.')
+  expect(call({ action: 'check', page: 'Release', item: 'tests', done: false }).text).toBe('Unticked: tests.')
+  expect(call({ action: 'append', page: 'p1jk', text: '- [ ] tag\n- [ ] test page' })).toMatchObject({ text: 'Added to Release.', changed: true })
+  expect(call({ action: 'check', page: 'Release', item: 'test' })).toMatchObject({
+    isError: true,
+    text: '"test" matches several items. Items:\n1. [ ] tests\n2. [x] changelog\n3. [ ] tag\n4. [ ] test page',
+  })
+  expect(call({ action: 'check', page: 'Release', item: '9' }).text).toMatch(/^No item "9"\. Items:\n1\. \[ \] tests/)
+  expect(call({ action: 'check', page: 'Notes', item: '1' }).text).toBe('Notes has no checklist items.')
+
+  expect(call({ action: 'read', page: 'Release' }).text).toBe('Page p1jk: Release\n\n- [ ] tests\n- [x] changelog\n- [ ] tag\n- [ ] test page\n\nSubpages:\n- p1jk1: Notes')
+  expect(call({ action: 'read', page: 'Notes' }).text).toBe('Page p1jk1: Notes (under Release)\n\n(empty)')
+  expect(call({ action: 'read', page: 'Nope' })).toMatchObject({ isError: true, text: 'No page "Nope". Use action list to see the pages.' })
+  expect(call({ action: 'append', page: 'Notes', text: ' ' })).toMatchObject({ isError: true, text: 'Nothing to add: text is empty.' })
+  expect(call({ action: 'append', page: 'Release', text: 'x'.repeat(MAX_BODY) }).text).toBe('The page would be over 20000 characters.')
+  expect(call({ action: 'delete', page: 'Release' })).toMatchObject({ isError: true, text: 'Unknown action: use list, read, create, append, check, replace, link or move.' })
+  expect(notes.map((p) => p.id)).toEqual(['p1jk1', 'p1jk'])
+})
+
+
+test('доска проектов: колонки и карточки — места, перенос, колонки; хранилище помнит доску', () => {
+  // Доска — страница верхнего уровня с колонками; карточки — её подстраницы с колонкой и местом
+  const made: any = addPage([], { title: 'Проект', board: {} }, 1000)
+  expect(made.page).toEqual({ id: 'prs', title: 'Проект', body: '', parent: null, at: 1000, board: { cols: DEFAULT_COLS } })
+  expect(DEFAULT_COLS.map((c) => COL_NAMES[c.id as keyof typeof COL_NAMES])).toEqual(['Сделать', 'В работе', 'Готово'])
+  expect([isBoard(made.page), isBoard({ ...made.page, parent: 'x' }), isBoard({ id: 'a', title: 'a', body: '', parent: null })]).toEqual([true, false, false])
+  let notes = made.notes
+  // В колонку по id (нет такой — в первую), под последнюю карточку
+  for (const [title, id, col] of [['a', 'ca', 'todo'], ['b', 'cb', 'todo'], ['c', 'cc', 'doing'], ['d', 'cd', 'nope']]) notes = addPage(notes, { title, parent: 'prs', id, col }, 1001).notes
+  const board = () => notes.find((p: any) => p.id === 'prs')
+  const titles = (col: string) => columnCards(notes, board(), col).map((p: any) => p.title)
+  expect([titles('todo'), titles('doing'), titles('done')]).toEqual([['a', 'b', 'd'], ['c'], []])
+  expect(notes.find((p: any) => p.id === 'cd')).toMatchObject({ col: 'todo', pos: 2 })
+  expect(columnOf({ col: 'gone' }, board().board.cols)).toBe('todo')
+  expect(notesOrder(notes).map((p: any) => p.title)).toEqual(['Проект', 'a', 'b', 'd', 'c'])
+  // id занят — свой из времени
+  expect(addPage(notes, { title: 'e', parent: 'prs', id: 'ca' }, 1000).page.id).toBe('prs1')
+
+  // Вверх и вниз — посередине между соседями; с края — как было; влево и вправо — вниз соседней колонки
+  notes = moveCard(notes, 'cb', 'up', 2000)
+  expect(titles('todo')).toEqual(['b', 'a', 'd'])
+  expect(notes.find((p: any) => p.id === 'cb')).toMatchObject({ pos: -1, at: 2000 })
+  notes = moveCard(notes, 'cb', 'down', 2001)
+  expect([titles('todo'), notes.find((p: any) => p.id === 'cb').pos]).toEqual([['a', 'b', 'd'], 1])
+  expect(moveCard(notes, 'ca', 'up', 2002)).toBe(notes)
+  expect(moveCard(notes, 'prs', 'down', 2002)).toBe(notes)
+  notes = moveCard(notes, 'cc', 'left', 2003)
+  expect([titles('todo'), titles('doing')]).toEqual([['a', 'b', 'd', 'c'], []])
+  expect(moveCard(notes, 'cc', 'left', 2004)).toBe(notes)
+  notes = moveCard(notes, 'cd', { col: 'done' }, 2005)
+  expect(notes.find((p: any) => p.id === 'cd')).toMatchObject({ col: 'done', pos: 0 })
+  // Середины нет — колонка нумеруется заново, правятся только сдвинутые
+  let same: any = addPage([], { title: 'Same', board: {} }, 1).notes
+  for (const id of ['x', 'y', 'z']) same = addPage(same, { title: id, parent: 'p1', id, pos: 0 }, 2).notes
+  same = moveCard(same, 'z', 'up', 3)
+  expect(columnCards(same, same.find((p: any) => p.id === 'p1'), 'todo').map((p: any) => [p.id, p.pos, p.at])).toEqual([
+    ['x', 0, 2],
+    ['z', 1, 3],
+    ['y', 2, 3],
+  ])
+
+  // Колонки: своя — в конец; пустое название, занятый id и девятая — нельзя; переименовать; убрать — только пустую и не последнюю
+  notes = addColumn(notes, 'prs', '  Проверка ', 'k1', 3000).notes
+  expect(board().board.cols).toEqual([...DEFAULT_COLS, { id: 'k1', name: 'Проверка' }])
+  expect([addColumn(notes, 'prs', '  ', 'k2', 1), addColumn(notes, 'prs', 'X', 'todo', 1), addColumn(notes, 'ca', 'X', 'k2', 1)]).toEqual([{ error: 'empty' }, { error: 'empty' }, { error: 'empty' }])
+  let full = notes
+  for (const n of [2, 3, 4, 5]) full = addColumn(full, 'prs', `K${n}`, `k${n}`, 1).notes
+  expect(addColumn(full, 'prs', 'K9', 'k9', 1)).toEqual({ error: 'many' })
+  notes = renameColumn(notes, 'prs', 'done', 'x'.repeat(40), 3001).notes
+  expect(board().board.cols[2]).toEqual({ id: 'done', name: 'x'.repeat(30) })
+  expect(renameColumn(notes, 'prs', 'done', ' ', 1)).toEqual({ error: 'empty' })
+  expect(removeColumn(notes, 'prs', 'todo', 1)).toEqual({ error: 'busy' })
+  notes = removeColumn(notes, 'prs', 'k1', 3002).notes
+  notes = removeColumn(notes, 'prs', 'doing', 3003).notes
+  expect(board().board.cols.map((c: any) => c.id)).toEqual(['todo', 'done'])
+  let one: any = addPage([], { title: 'One', board: { cols: [{ id: 'a' }] } }, 1).notes
+  expect(removeColumn(one, 'p1', 'a', 2)).toEqual({ error: 'last' })
+
+  // Колонки из хранилища и с сайта: от одной до восьми, id латиницей без повторов, название — непустое
+  expect(cleanCols([{ id: 'todo' }, { id: 'k1', name: '  Q\n ' }])).toEqual([{ id: 'todo' }, { id: 'k1', name: 'Q' }])
+  expect([cleanCols([]), cleanCols([{ id: 'a' }, { id: 'a' }]), cleanCols([{ id: 'A' }]), cleanCols([{ id: 'a', name: ' ' }]), cleanCols(Array.from({ length: 9 }, (_, i) => ({ id: `c${i}` }))), cleanCols('x')]).toEqual([
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+  ])
+
+  // Хранилище: доска с колонками и номером на сайте; у карточки нет колонки — первая, нет места — 0; у подстраницы обычной страницы их нет
+  const SHARED = 'b' + 'Q'.repeat(16)
+  expect(
+    restoreNotes([
+      { id: 'b1', title: 'Доска', body: '', parent: null, at: 1, board: { cols: [{ id: 'k1', name: 'Одна' }, { id: 'k2' }], share: SHARED } },
+      { id: 'b2', title: 'Кривая', body: '', parent: null, at: 1, board: { cols: [{ id: 'A' }], share: 'nope' } },
+      { id: 'c1', title: 'Карточка', body: '', parent: 'b1', at: 2, col: 'k2', pos: 1.5 },
+      { id: 'c2', title: 'Без места', body: '', parent: 'b1', at: 2, col: 'gone' },
+      { id: 'p1', title: 'Страница', body: '', parent: null, at: 1 },
+      { id: 'p2', title: 'Под', body: '', parent: 'p1', at: 1, col: 'todo', pos: 3 },
+    ]),
+  ).toEqual([
+    { id: 'b1', title: 'Доска', body: '', parent: null, at: 1, board: { cols: [{ id: 'k1', name: 'Одна' }, { id: 'k2' }], share: SHARED } },
+    { id: 'b2', title: 'Кривая', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } },
+    { id: 'c1', title: 'Карточка', body: '', parent: 'b1', at: 2, col: 'k2', pos: 1.5 },
+    { id: 'c2', title: 'Без места', body: '', parent: 'b1', at: 2, col: 'k1', pos: 0 },
+    { id: 'p1', title: 'Страница', body: '', parent: null, at: 1 },
+    { id: 'p2', title: 'Под', body: '', parent: 'p1', at: 1 },
+  ])
+})
+
+test('доска проектов: инструмент Claude — доска, карточка в колонку, перенос, список и чтение', () => {
+  let notes: any[] = []
+  let made = 0
+  const call = (input: any, at = 3000) => {
+    const out = applyNotesTool(notes, input, at, () => `c${++made}`)
+    notes = out.notes
+    return out
+  }
+  expect(call({ action: 'create', title: 'Sprint', board: true })).toMatchObject({ text: 'Created board p2bc: Sprint (a board with columns To do, Doing, Done).', changed: true })
+  expect(call({ action: 'create', title: 'Login', parent: 'Sprint' }).text).toBe('Created card c1: Login (card on Sprint, column To do).')
+  // Колонка — по id, английскому или русскому названию, без регистра
+  expect(call({ action: 'create', title: 'Tests', parent: 'p2bc', column: 'в работе' }).text).toBe('Created card c2: Tests (card on Sprint, column Doing).')
+  expect(call({ action: 'create', title: 'X', parent: 'Sprint', column: 'later' })).toMatchObject({ isError: true, text: 'No column "later" on Sprint. Columns: "To do", "Doing", "Done".' })
+  expect(call({ action: 'create', title: 'Inner', parent: 'Sprint', board: true })).toMatchObject({ isError: true, text: 'A board is a top-level page: create it without parent.' })
+  expect(call({ action: 'list' }).text).toBe('Notebook pages:\n- p2bc: Sprint [board: To do, Doing, Done]\n  - c1: Login (To do)\n  - c2: Tests (Doing)')
+
+  expect(call({ action: 'move', page: 'Login', column: 'DONE' })).toMatchObject({ text: 'Moved Login to Done.', changed: true })
+  expect(notes.find((p) => p.id === 'c1')).toMatchObject({ col: 'done', pos: 0 })
+  expect(call({ action: 'move', page: 'c1', column: 'done' })).toEqual({ notes, text: 'Login is already in Done.' })
+  expect(call({ action: 'move', page: 'Sprint', column: 'done' })).toMatchObject({ isError: true, text: 'Sprint is not a card on a board.' })
+  expect(call({ action: 'move', page: 'Login', column: 'nope' }).text).toBe('No column "nope" on Sprint. Columns: "To do", "Doing", "Done".')
+  expect(call({ action: 'read', page: 'Sprint' }).text).toBe('Board p2bc: Sprint\n\n## To do\n(no cards)\n\n## Doing\n- c2: Tests\n\n## Done\n- c1: Login')
+  expect(call({ action: 'read', page: 'Login' }).text).toBe('Page c1: Login (card on board Sprint, column Done)\n\n(empty)')
+
+  // Общая доска со своей колонкой — так и в списке
+  notes = updatePage(notes, 'p2bc', { board: { cols: [{ id: 'todo' }, { id: 'doing' }, { id: 'done', name: 'Shipped' }], share: 'b' + 'Q'.repeat(16) } }, 3001)
+  expect(call({ action: 'list' }).text).toBe('Notebook pages:\n- p2bc: Sprint [board, shared with friends: To do, Doing, Shipped]\n  - c2: Tests (Doing)\n  - c1: Login (Shipped)')
+  expect(call({ action: 'read', page: 'Sprint' }).text.split('\n')[0]).toBe('Board p2bc: Sprint (shared with friends)')
+  expect(call({ action: 'move', page: 'Tests', column: 'shipped' }).text).toBe('Moved Tests to Shipped.')
+})
+
+test('desks.js: ответы сайта про доски, основа из $.store, сверка — что уходит и что приходит', () => {
+  const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  const B1 = 'b' + 'Q'.repeat(16)
+  const B2 = 'b' + 'W'.repeat(16)
+  expect([BOARD_ID.test(B1), BOARD_ID.test('bQQQ'), BOARD_ID.test(`${B1}\n`)]).toEqual([true, false, false])
+  expect([cardId(), colId()].map((x) => /^c[0-9a-f]{15}$|^k[0-9a-f]{8}$/.test(x))).toEqual([true, true])
+  expect([MAX_OWNED, DESK_MEMBERS]).toEqual([3, 20])
+
+  // Ошибки сайта — понятным словом
+  const fails: [number, any][] = [[400, { error: 'name' }], [400, {}], [403, { error: 'owner' }], [403, { error: 'friend' }], [404, { error: 'gone' }], [404, {}], [409, { error: 'many' }], [409, { error: 'x' }], [413, {}], [429, { error: 'often' }], [429, {}], [401, {}], [503, { error: 'off' }]]
+  expect(fails.map(([s, d]) => boardFailure(reply(s, d), d))).toEqual(['name', 'invalid', 'owner', 'friend', 'gone', 'down', 'many', 'down', 'big', 'often', 'limit', 'auth', 'off'])
+  expect(boardFailure(null, null)).toBe('down')
+
+  // Список: доски как надо, ники — только как надо
+  const listed = { id: B1, name: '  Проект\n', owner: 7, rev: 4, at: 50 }
+  expect(parseBoards(reply(200, { me: { id: 583231 }, boards: [listed, { ...listed, id: 'bad' }, { ...listed, owner: 'x' }, { ...listed, id: B2, name: ' ', rev: -1 }], names: { 7: 'octo_pal', x: 'bad' } }))).toEqual({
+    me: '583231',
+    boards: [{ id: B1, name: 'Проект', owner: '7', rev: 4, at: 50 }],
+    names: { 7: 'octo_pal' },
+    error: '',
+  })
+  expect(parseBoards(reply(200, { boards: [] })).error).toBe('down')
+  expect(parseBoards(reply(401, {})).error).toBe('auth')
+
+  // Сверка: доска, карточки (и след удаления), что доска не взяла; чужой текст — чистим
+  const board = { id: B1, name: 'Проект', owner: '7', members: ['7', 583231, '7', 'x'], cols: [{ id: 'todo' }, { id: 'k1', name: 'Своя' }], rev: 9 }
+  const cards = [
+    { id: 'c1', title: 'one\u001b[2J', body: 'a\r\nb', col: 'k1', pos: 1.5 },
+    { id: 'c2', gone: true },
+    { id: 'C!', title: 'x', body: '', col: 'todo', pos: 0 },
+    { id: 'c3', title: ' ', body: '', col: 'todo', pos: 0 },
+    { id: 'c4', title: 'four', body: '', col: 'BAD', pos: 2 },
+  ]
+  expect(parseBoard(reply(200, { board, cards, full: true, refused: ['c9', 'BAD!'], names: { 7: 'octo_pal' } }))).toEqual({
+    board: { id: B1, name: 'Проект', owner: '7', members: ['7', '583231'], cols: [{ id: 'todo' }, { id: 'k1', name: 'Своя' }], rev: 9 },
+    cards: [
+      { id: 'c1', title: 'one [2J', body: 'a\nb', col: 'k1', pos: 1.5 },
+      { id: 'c2', gone: true },
+      { id: 'c4', title: 'four', body: '', col: '', pos: 2 },
+    ],
+    full: true,
+    refused: ['c9'],
+    names: { 7: 'octo_pal' },
+    error: '',
+  })
+  expect(parseBoard(reply(200, { board: { ...board, cols: [] }, cards: [] })).error).toBe('down')
+  expect(parseBoard(reply(409, { error: 'many' }))).toEqual({ board: null, cards: [], full: false, refused: [], names: {}, error: 'many' })
+  expect(parseBoardDone(reply(200, { ok: true }))).toEqual({ board: null, left: true, names: {}, error: '' })
+  expect(parseBoardDone(reply(200, { board, names: { 21: 'new_pal' } }))).toMatchObject({ board: { id: B1, rev: 9 }, left: false, names: { 21: 'new_pal' }, error: '' })
+  expect(parseBoardDone(reply(403, { error: 'owner' })).error).toBe('owner')
+
+  // Основа: только что взятая доска — rev 0, карточки блокнота считаются сверенными
+  let notes: any = addPage([], { title: 'Проект', board: { share: B1 } }, 10).notes
+  for (const [id, title] of [['c1', 'one'], ['c2', 'two'], ['c3', 'three']]) notes = addPage(notes, { title, parent: 'pa', id }, 11).notes
+  let base: any = { ...freshBase(notes, notes.find((p: any) => p.id === 'pa'), '7'), rev: 4 }
+  expect(base).toEqual({ page: 'pa', rev: 4, name: 'Проект', cols: DEFAULT_COLS, owner: '7', members: [], names: {}, cards: { c1: 11, c2: 11, c3: 11 }, held: {} })
+  expect(planSync(notes, base)).toEqual({ ops: [], sent: { puts: {}, dels: [] } })
+
+  // Здесь: название, колонка, правка, удаление, новая карточка — уходят по порядку
+  notes = updatePage(notes, 'pa', { title: 'Проект X' }, 12)
+  notes = renameColumn(notes, 'pa', 'done', 'Сдано', 12).notes
+  notes = updatePage(notes, 'c1', { body: 'текст' }, 13)
+  notes = removePage(notes, 'c2')
+  notes = addPage(notes, { title: 'four', parent: 'pa', id: 'c4' }, 14).notes
+  const cols = [{ id: 'todo' }, { id: 'doing' }, { id: 'done', name: 'Сдано' }]
+  const plan = planSync(notes, base)
+  expect(plan).toEqual({
+    ops: [{ name: 'Проект X' }, { cols }, { del: 'c2' }, { put: { id: 'c4', title: 'four', body: '', col: 'todo', pos: 3 } }, { put: { id: 'c1', title: 'one', body: 'текст', col: 'todo', pos: 0 } }],
+    sent: { name: 'Проект X', cols, puts: { c4: 14, c1: 13 }, dels: ['c2'] },
+  })
+
+  // Ответ: чужая правка и новая карточка — в блокнот; c1 поправили, пока шла сверка, — не трогаем; c4 доска не взяла
+  notes = updatePage(notes, 'c1', { body: 'ещё' }, 16)
+  const answer = parseBoard(
+    reply(200, {
+      board: { id: B1, name: 'Проект X', owner: '7', members: ['7', '583231'], cols, rev: 9 },
+      cards: [
+        { id: 'c3', title: 'three!', body: '', col: 'doing', pos: 0 },
+        { id: 'c5', title: 'five', body: 'x', col: 'done', pos: 0 },
+        { id: 'c1', title: 'one', body: 'текст', col: 'todo', pos: 0 },
+      ],
+      refused: ['c4'],
+      names: { 7: 'octo_pal' },
+    }),
+  )
+  let out: any = applySync(notes, base, answer, plan.sent, 20)
+  expect(out).toMatchObject({ refused: ['c4'], missed: false, changed: ['c3', 'c5'] })
+  expect(out.base).toEqual({ page: 'pa', rev: 9, name: 'Проект X', cols, owner: '7', members: ['7', '583231'], names: { 7: 'octo_pal' }, cards: { c1: 13, c3: 20, c5: 20 }, held: { c4: 14 } })
+  notes = out.notes
+  base = out.base
+  expect(notes.find((p: any) => p.id === 'c3')).toMatchObject({ title: 'three!', col: 'doing', at: 20 })
+  expect(notes.find((p: any) => p.id === 'c5')).toMatchObject({ title: 'five', body: 'x', parent: 'pa', col: 'done', pos: 0 })
+  expect(notes.find((p: any) => p.id === 'c1').body).toBe('ещё')
+  // Следующая сверка: c1 — снова; c4, которую доска не взяла, — только когда её снова поправят
+  expect(planSync(notes, base).ops).toEqual([{ put: { id: 'c1', title: 'one', body: 'ещё', col: 'todo', pos: 0 } }])
+  expect(planSync(updatePage(notes, 'c4', { body: '!' }, 21), base).ops.map((op: any) => op.put.id)).toEqual(['c4', 'c1'])
+
+  // На сайте: c3 удалили, доску переименовали — здесь название не трогали, значит как на сайте
+  const none = { puts: {}, dels: [] }
+  out = applySync(notes, base, parseBoard(reply(200, { board: { ...answer.board, name: 'Проект Y', rev: 10 }, cards: [{ id: 'c3', gone: true }] })), none, 22)
+  expect([out.changed, out.base.rev, out.base.name, out.notes.find((p: any) => p.id === 'pa').title, out.notes.some((p: any) => p.id === 'c3')]).toEqual([['c3'], 10, 'Проект Y', 'Проект Y', false])
+  // Доска целиком: сверенной карточки на сайте нет — нет и здесь; поправленная здесь и несверенная — остаются
+  out = applySync(out.notes, out.base, parseBoard(reply(200, { board: { ...answer.board, name: 'Проект Y', rev: 11 }, cards: [], full: true })), none, 23)
+  expect([out.changed, out.notes.filter((p: any) => p.parent === 'pa').map((p: any) => p.id), out.base.cards]).toEqual([['c5'], ['c4', 'c1'], {}])
+  // Доски в блокноте уже нет — ничего
+  expect(applySync(removePage(notes, 'pa'), base, answer, none, 24)).toBeNull()
+
+  // Основы переживают $.store; доски, которой нет в блокноте или она не общая, — нет
+  const saved = JSON.parse(JSON.stringify({ [B1]: { ...base, members: ['7', 'x', '7'], cards: { ...base.cards, 'BAD!': 1 } }, [B2]: { ...base, page: 'nope' }, bad: base }))
+  expect(restoreDesks(saved, notes)).toEqual({ [B1]: { ...base, members: ['7'] } })
+  expect(restoreDesks(saved, detachBoard(notes, 'pa', 30))).toEqual({})
+  expect([restoreDesks(null, notes), restoreDesks([], notes)]).toEqual([{}, {}])
+
+  // Доска больше не общая — остаётся своей; чужая из списка — новая доска без карточек и её основа
+  expect(detachBoard(notes, 'pa', 30).find((p: any) => p.id === 'pa').board).toEqual({ cols })
+  const plain = addPage([], { title: 'Своя', board: {} }, 1).notes
+  expect(detachBoard(plain, 'p1', 2)).toBe(plain)
+  const adopted: any = adoptBoard([], { id: B2, name: 'Общая', owner: '21', rev: 3, at: 0 }, 50)
+  expect(adopted.page).toEqual({ id: 'p1e', title: 'Общая', body: '', parent: null, at: 50, board: { cols: DEFAULT_COLS, share: B2 } })
+  expect(adopted.base).toEqual({ page: 'p1e', rev: 0, name: 'Общая', cols: DEFAULT_COLS, owner: '21', members: [], names: {}, cards: {}, held: {} })
+  const fullNotes = Array.from({ length: MAX_PAGES }, (_, i) => ({ id: `p${i}`, title: 't', body: '', parent: null, at: 0 }))
+  expect(adoptBoard(fullNotes, { id: B2, name: 'Общая', owner: '21', rev: 3, at: 0 }, 50)).toEqual({ error: 'full' })
+})
+
+test('блокнот: «Работа» → «Блокнот», страница с чек-листом, текст, подстраница, название и удаление вторым нажатием', async ($, on) => {
+  const { clock, saved } = stubs(on)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  expect(await ui.find({ key: 'arcade-fold-work' })).toMatchObject({ props: { label: '▾ Работа' } })
+  expect(await text('  страницы и чек-листы; Claude может дополнять')).toBeDefined()
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await text('Arcade · блокнот')).toBeDefined()
+  expect(await text('Страниц пока нет — впиши название новой выше.')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-new-') })).toMatchObject({ props: { label: 'Новая страница', submitLabel: 'Создать', autoFocus: true } })
+
+  // Новая страница открывается сразу, фокус — в «Новый пункт»
+  await noteInput(ui, 'arcade-note-new-', '  План на неделю ')
+  const id = pages()[0].id
+  expect(pages()).toMatchObject([{ id, title: 'План на неделю', body: '', parent: null }])
+  expect(await text('План на неделю')).toBeDefined()
+  expect(await text('Страница пустая — впиши текст или пункт ниже.')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-add-') })).toMatchObject({ props: { label: 'Новый пункт', submitLabel: 'Добавить', autoFocus: true } })
+
+  // Каждая строка — пункт чек-листа, «- » и «- [ ] » не удваиваются
+  await noteInput(ui, 'arcade-note-add-', 'тесты\n- [ ] ревью\n- молоко\n ')
+  expect(pages()[0].body).toBe('- [ ] тесты\n- [ ] ревью\n- [ ] молоко')
+  expect(await labels(ui, 'arcade-note-line-', 4)).toEqual(['☐ тесты', '☐ ревью', '☐ молоко', undefined])
+  await ui.press({ key: 'arcade-note-line-0' })
+  expect(await ui.find({ key: 'arcade-note-line-0' })).toMatchObject({ props: { label: '☑ тесты', dimColor: true, autoFocus: true } })
+  expect(pages()[0].body).toBe('- [x] тесты\n- [ ] ревью\n- [ ] молоко')
+
+  // Набранное в «Тексте» — черновик; отметка пункта сначала сохраняет его и находит пункт заново по тексту
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { label: 'Текст', value: '- [x] тесты\n- [ ] ревью\n- [ ] молоко', submitLabel: 'Сохранить' } })
+  await noteInput(ui, 'arcade-note-text-', '# Неделя\n- [x] тесты\n- [ ] ревью', 'change')
+  expect(pages()[0].body).toBe('- [x] тесты\n- [ ] ревью\n- [ ] молоко')
+  await ui.press({ key: 'arcade-note-line-0' })
+  expect(pages()[0].body).toBe('# Неделя\n- [ ] тесты\n- [ ] ревью')
+  expect(await ui.find({ key: 'arcade-note-line-1' })).toMatchObject({ props: { label: '☐ тесты', autoFocus: true } })
+  await noteInput(ui, 'arcade-note-text-', '# Неделя\n- [ ] тесты\n- [ ] ревью\n\n* созвон в пятницу')
+  expect(await text('Сохранено.')).toBeDefined()
+  expect(await text('• созвон в пятницу')).toBeDefined()
+  expect(pages()[0].body).toBe('# Неделя\n- [ ] тесты\n- [ ] ревью\n\n* созвон в пятницу')
+
+  // Название: пустое — нельзя
+  await noteInput(ui, 'arcade-note-title-', '   ')
+  expect(await text('Впиши название страницы.')).toBeDefined()
+  expect(pages()[0].title).toBe('План на неделю')
+  await noteInput(ui, 'arcade-note-title-', 'Неделя 43')
+  expect(pages()[0].title).toBe('Неделя 43')
+  expect(await text('Неделя 43')).toBeDefined()
+
+  // Подстраница: своей «Подстраницы» у неё нет, «Назад» — к странице
+  expect(await ui.find({ key: 'arcade-note-delete' })).toMatchObject({ props: { label: 'Удалить страницу' } })
+  await noteInput(ui, 'arcade-note-sub-', 'Покупки')
+  const sub = pages().find((p) => p.parent === id)
+  expect(sub).toMatchObject({ title: 'Покупки', body: '' })
+  expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Неделя 43' } })
+  expect(await noteKey(ui, 'arcade-note-sub-')).toBeUndefined()
+  expect(await text('Подстраницы')).toBeUndefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: `arcade-note-page-${sub.id}` })).toMatchObject({ props: { label: 'Покупки', autoFocus: true } })
+
+  // Список: страница, под ней подстрочка — сколько отмечено и первая строка; подстраница — со стрелкой
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: `arcade-note-page-${id}` })).toMatchObject({ props: { label: 'Неделя 43', autoFocus: true } })
+  expect(await text('  ☑ 0/2 · Неделя')).toBeDefined()
+  expect(await ui.find({ key: `arcade-note-page-${sub.id}` })).toMatchObject({ props: { label: '↳ Покупки' } })
+  expect(await text('  пустая страница')).toBeDefined()
+
+  // Удаление — вторым нажатием, вместе с подстраницами; уход со страницы отменяет первое нажатие
+  await ui.press({ key: `arcade-note-page-${id}` })
+  expect(await ui.find({ key: 'arcade-note-delete' })).toMatchObject({ props: { label: 'Удалить страницу и подстраницы' } })
+  await ui.press({ key: 'arcade-note-delete' })
+  expect(await ui.find({ key: 'arcade-note-delete' })).toMatchObject({ props: { label: 'Нажми ещё раз — удалить навсегда' } })
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: `arcade-note-page-${id}` })
+  expect(await ui.find({ key: 'arcade-note-delete' })).toMatchObject({ props: { label: 'Удалить страницу и подстраницы' } })
+  await ui.press({ key: 'arcade-note-delete' })
+  await ui.press({ key: 'arcade-note-delete' })
+  expect(pages()).toEqual([])
+  expect(await text('Страница удалена.')).toBeDefined()
+  expect(await text('Страниц пока нет — впиши название новой выше.')).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-notes' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+})
+
+test('доска проектов: «Работа» → доска, карточки, выбор и перенос, карточка-страница, колонки, Claude и удаление', async ($, on) => {
+  const { clock, saved, submits } = stubs(on, { submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const titles = (col: string) => columnCards(pages(), pages().find(isBoard), col).map((p: any) => p.title)
+  expect(await text('  колонки и карточки; общие — с друзьями')).toBeDefined()
+  await ui.press({ key: 'arcade-menu-boards' })
+  expect(await text('Arcade · доска проектов')).toBeDefined()
+  expect(await text('Досок пока нет — впиши название новой выше.')).toBeDefined()
+  expect(await text('Войди через GitHub — и сможешь вести доску вместе с друзьями.')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-board-new-') })).toMatchObject({ props: { label: 'Новая доска', submitLabel: 'Создать', autoFocus: true } })
+
+  // Новая доска открывается сразу: три колонки, курсор — в «Новой карточке» первой
+  await noteInput(ui, 'arcade-board-new-', '  Релиз 1.0 ')
+  const id = pages()[0].id
+  expect(pages()).toEqual([{ id, title: 'Релиз 1.0', body: '', parent: null, at: expect.any(Number), board: { cols: DEFAULT_COLS } }])
+  expect(await text('Релиз 1.0')).toBeDefined()
+  for (const t of ['Сделать · 0', 'В работе · 0', 'Готово · 0']) expect(await text(t)).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-card-new-todo-') })).toMatchObject({ props: { label: 'Новая карточка', submitLabel: 'Добавить', autoFocus: true } })
+  expect(await text('Нажми на карточку, чтобы выбрать её и переносить стрелками; ещё раз — открыть.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-board-login' })).toMatchObject({ props: { label: 'Войти через GitHub' } })
+
+  // Карточки — вниз своей колонки; курсор остаётся в поле этой колонки
+  await noteInput(ui, 'arcade-card-new-todo-', 'Логин')
+  await noteInput(ui, 'arcade-card-new-todo-', 'Тесты')
+  await noteInput(ui, 'arcade-card-new-doing-', 'Тег')
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-card-new-doing-') })).toMatchObject({ props: { autoFocus: true } })
+  const card = (title: string) => pages().find((p) => p.title === title).id
+  const [login, tests, tag] = ['Логин', 'Тесты', 'Тег'].map(card)
+  expect(pages().find((p) => p.id === login)).toMatchObject({ parent: id, col: 'todo', pos: 0 })
+  expect(login).toMatch(/^c[0-9a-f]{15}$/)
+  expect([titles('todo'), titles('doing')]).toEqual([['Логин', 'Тесты'], ['Тег']])
+  expect(await text('Сделать · 2')).toBeDefined()
+
+  // Первое нажатие выбирает карточку, стрелки переносят её; фокус — на нажатой стрелке
+  await ui.press({ key: `arcade-card-${login}` })
+  expect(await ui.find({ key: `arcade-card-${login}` })).toMatchObject({ props: { label: '▸ Логин', autoFocus: true } })
+  expect(await text('Выбрана карточка: Логин')).toBeDefined()
+  await ui.press({ key: 'arcade-board-right' })
+  expect(titles('doing')).toEqual(['Тег', 'Логин'])
+  expect(await ui.find({ key: 'arcade-board-right' })).toMatchObject({ props: { label: 'Вправо →', autoFocus: true } })
+  await ui.press({ key: 'arcade-board-up' })
+  expect(titles('doing')).toEqual(['Логин', 'Тег'])
+  await ui.press({ key: 'arcade-board-up' })
+  expect(titles('doing')).toEqual(['Логин', 'Тег'])
+  await ui.press({ key: 'arcade-board-unpick' })
+  expect(await ui.find({ key: `arcade-card-${login}` })).toMatchObject({ props: { label: 'Логин', autoFocus: true } })
+  expect(await text('Нажми на карточку, чтобы выбрать её и переносить стрелками; ещё раз — открыть.')).toBeDefined()
+
+  // Второе нажатие открывает карточку — страницу блокнота: колонка и перенос — и здесь, «Назад» — к доске
+  await ui.press({ key: `arcade-card-${login}` })
+  await ui.press({ key: `arcade-card-${login}` })
+  expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Релиз 1.0' } })
+  expect(await text('Колонка: В работе')).toBeDefined()
+  for (const [where, label] of [['left', '← Влево'], ['up', '↑ Выше'], ['down', '↓ Ниже'], ['right', 'Вправо →']]) expect(await ui.find({ key: `arcade-note-move-${where}` })).toMatchObject({ props: { label } })
+  expect(await noteKey(ui, 'arcade-note-sub-')).toBeUndefined()
+  await noteInput(ui, 'arcade-note-add-', 'кнопка входа')
+  await ui.press({ key: 'arcade-note-move-right' })
+  expect(await text('Колонка: Готово')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-move-right' })).toMatchObject({ props: { autoFocus: true } })
+  expect(pages().find((p) => p.id === login)).toMatchObject({ col: 'done', body: '- [ ] кнопка входа' })
+  await ui.press({ key: 'arcade-back' })
+  expect(await text('Arcade · доска проектов')).toBeDefined()
+  expect(await ui.find({ key: `arcade-card-${login}` })).toMatchObject({ props: { label: 'Логин', autoFocus: true } })
+  expect(await text('  ☑ 0/1')).toBeDefined()
+  expect(await text('Готово · 1')).toBeDefined()
+
+  // Колонки: новая — в конец, своё название, с карточками не убрать
+  await noteInput(ui, 'arcade-col-new-', 'Проверка')
+  const extra = pages().find(isBoard).board.cols[3]
+  expect(extra).toEqual({ id: expect.stringMatching(/^k[0-9a-f]{8}$/), name: 'Проверка' })
+  expect(await text('Проверка · 0')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-col-new-') })).toMatchObject({ props: { label: 'Новая колонка', autoFocus: true } })
+  await noteInput(ui, 'arcade-col-name-doing-', 'Идёт')
+  expect(await text('Идёт · 1')).toBeDefined()
+  expect(await text('Сохранено.')).toBeDefined()
+  await ui.press({ key: 'arcade-col-drop-doing' })
+  expect(await text('В колонке есть карточки — сначала перенеси их.')).toMatchObject({ props: { color: 'warning' } })
+  await ui.press({ key: `arcade-col-drop-${extra.id}` })
+  expect(await text('Колонка убрана.')).toBeDefined()
+  expect(pages().find(isBoard).board.cols).toEqual([{ id: 'todo' }, { id: 'doing', name: 'Идёт' }, { id: 'done' }])
+  await noteInput(ui, 'arcade-board-title-', '  ')
+  expect(await text('Впиши название доски.')).toBeDefined()
+  await noteInput(ui, 'arcade-board-title-', 'Релиз 1.1')
+  expect(await text('Релиз 1.1')).toBeDefined()
+
+  // Доска — Claude: колонки и карточки с id, чтобы он вёл их инструментом блокнота
+  await ui.press({ key: 'arcade-board-send' })
+  expect(submits.map((s) => s.text)).toEqual([
+    [
+      `Доска проектов из моего блокнота Arcade (id ${id}):`,
+      '',
+      '# Релиз 1.1',
+      '',
+      '## Сделать (колонка todo)',
+      `- Тесты (id ${tests})`,
+      '',
+      '## Идёт (колонка doing)',
+      `- Тег (id ${tag})`,
+      '',
+      '## Готово (колонка done)',
+      `- Логин (id ${login}) ☑ 0/1`,
+      '',
+      `Добавляй, правь и переноси карточки этой доски инструментом ${NOTES}.`,
+    ].join('\n'),
+  ])
+  expect(await text('Доска ушла Claude.')).toBeDefined()
+
+  // Список досок: плитка с числом карточек; в блокноте досок и карточек нет — туда ведёт «Доска проектов»
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: `arcade-desk-${id}` })).toMatchObject({ props: { label: 'Релиз 1.1', autoFocus: true } })
+  expect(await text('  карточек: 3')).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-boards' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await text('Страниц пока нет — впиши название новой выше.')).toBeDefined()
+  expect(await ui.find({ key: `arcade-note-page-${id}` })).toBeUndefined()
+  await ui.press({ key: 'arcade-note-boards' })
+  expect(await text('Arcade · доска проектов')).toBeDefined()
+
+  // Удаление — вторым нажатием, вместе с карточками
+  await ui.press({ key: `arcade-desk-${id}` })
+  await ui.press({ key: 'arcade-board-delete' })
+  expect(await ui.find({ key: 'arcade-board-delete' })).toMatchObject({ props: { label: 'Нажми ещё раз — удалить навсегда' } })
+  await ui.press({ key: 'arcade-board-delete' })
+  expect(pages()).toEqual([])
+  expect(await text('Доска удалена.')).toBeDefined()
+  expect(await text('Досок пока нет — впиши название новой выше.')).toBeDefined()
+  await ui.unmount()
+})
+
+// Сайт с общими досками octocat поверх chatsSite (друзья octo_pal 7 и new_pal 21). Карточка помнит номер правки доски
+// (r): сверка отдаёт поменявшиеся после since по порядку, удалённые — следами { id, gone }; since 0 — доску целиком.
+// board() заводит доску на сайте, put() — правка карточки за друга
+function boardsSite() {
+  const site = chatsSite()
+  const ME = OCTO.id
+  const names: Record<string, string> = { [ME]: 'octocat', 7: 'octo_pal', 21: 'new_pal' }
+  const boards: Record<string, any> = {}
+  let made = 0
+  const about = (b: any) => ({ id: b.id, name: b.name, owner: b.owner, members: b.members, cols: b.cols, rev: b.rev })
+  const put = (b: any, c: any) => {
+    b.cards[c.id] = { ...c, r: ++b.rev }
+  }
+  const board = (name: string, owner: string, members: string[], cards: any[] = [], cols: any[] = DEFAULT_COLS) => {
+    const b = { id: `b${String(++made).padStart(16, '0')}`, name, owner, members, cols, rev: 1, cards: {} as Record<string, any> }
+    boards[b.id] = b
+    for (const c of cards) put(b, c)
+    return b
+  }
+  const changed = (b: any, since: number) =>
+    Object.values(b.cards)
+      .filter((c: any) => c.r > since && !(since === 0 && c.gone))
+      .sort((x: any, y: any) => x.r - y.r)
+      .map(({ r, ...c }: any) => c)
+  const gone = { status: 404, json: { error: 'gone' } }
+  const mine = (id: string) => (boards[id]?.members.includes(ME) ? boards[id] : null)
+  const routes: Record<string, (request: any) => any> = {
+    'GET api/me/boards': () => ({
+      json: { me: { id: ME }, boards: Object.values(boards).filter((b) => b.members.includes(ME)).map((b) => ({ id: b.id, name: b.name, owner: b.owner, rev: b.rev, at: 0 })), names },
+    }),
+    'POST api/me/boards/new': ({ body }) => {
+      if (body.members.some((m: string) => !['7', '21'].includes(m))) return { status: 403, json: { error: 'friend' } }
+      return { json: { board: about(board(body.name, ME, [ME, ...body.members], [], body.cols)), cards: [], full: true, names } }
+    },
+    'POST api/me/boards/sync': ({ body }) => {
+      const b = mine(body.board)
+      if (!b) return gone
+      for (const op of body.ops) {
+        if (op.name) b.name = op.name
+        if (op.cols) b.cols = op.cols
+        if (op.name || op.cols) b.rev++
+        if (op.del) b.cards[op.del] = { id: op.del, gone: true, r: ++b.rev }
+        if (op.put) put(b, op.put)
+      }
+      return { json: { board: about(b), cards: changed(b, body.since), ...(body.since === 0 ? { full: true } : {}), ...(body.names ? { names } : {}) } }
+    },
+    'POST api/me/boards/members': ({ body }) => {
+      const b = mine(body.board)
+      if (!b) return gone
+      if (body.leave) {
+        b.members = b.members.filter((m: string) => m !== ME)
+        return { json: { ok: true } }
+      }
+      if (b.owner !== ME) return { status: 403, json: { error: 'owner' } }
+      b.members = [...b.members.filter((m: string) => !(body.remove ?? []).includes(m)), ...(body.add ?? [])]
+      b.rev++
+      return { json: { board: about(b), names } }
+    },
+    'POST api/me/boards/delete': ({ body }) => {
+      const b = mine(body.board)
+      if (!b) return gone
+      if (b.owner !== ME) return { status: 403, json: { error: 'owner' } }
+      delete boards[b.id]
+      return { json: { ok: true } }
+    },
+  }
+  const api = (path: string, request: any) => {
+    const route = routes[`${request.method} ${path}`]
+    return route ? route(request) : site.api(path, request)
+  }
+  return { api, boards, board, put }
+}
+
+test('доска проектов с друзьями: поделиться, правки уходят и приходят, позвать и убрать, удалить с сайта, чужие доски', HEAVY, async ($, on) => {
+  const { api, boards, board, put } = boardsSite()
+  const { clock, requests, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  // Мимо отправки правок после старта (4 с): дальше правки уходят по своему таймеру
+  await clock.advance(4_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const write = async (prefix: string, value: string) => {
+    await noteInput(ui, prefix, value)
+    await clock.settle()
+  }
+  await press('arcade-menu-boards')
+  expect(sent(requests, 'api/me/boards', 'GET').length).toBe(1)
+  expect(await text('Общие доски друзей появляются здесь сами.')).toBeDefined()
+  await write('arcade-board-new-', 'Релиз')
+  const id = pages()[0].id
+  await write('arcade-card-new-todo-', 'Логин')
+  const login = pages().find((p) => p.title === 'Логин').id
+
+  // Поделиться: отметить друзей галочками; без отметок — заметка
+  expect(await text('Отметь друзей и нажми «Поделиться» — доска станет общей: карточки, колонки и название у всех одни.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-desk-pick-7' })).toMatchObject({ props: { label: '☐ @octo_pal' } })
+  await press('arcade-board-share')
+  expect(await text('Отметь хотя бы одного друга.')).toMatchObject({ props: { color: 'warning' } })
+  await press('arcade-desk-pick-7')
+  expect(await ui.find({ key: 'arcade-desk-pick-7' })).toMatchObject({ props: { label: '☑ @octo_pal' } })
+  await press('arcade-board-share')
+  expect(sent(requests, 'api/me/boards/new', 'POST').map((r) => r.body)).toEqual([{ name: 'Релиз', cols: DEFAULT_COLS, members: ['7'] }])
+  const share = pages().find(isBoard).board.share
+  expect(share).toMatch(BOARD_ID)
+  // Карточки уходят первой сверкой
+  expect(sent(requests, 'api/me/boards/sync', 'POST')[0].body).toEqual({ board: share, since: 1, ops: [{ put: { id: login, title: 'Логин', body: '', col: 'todo', pos: 0 } }], names: true })
+  expect(Object.values(boards[share].cards).map((c: any) => c.title)).toEqual(['Логин'])
+  expect(await text('Доска общая — друзья увидят её в своей «Доске проектов».')).toBeDefined()
+  expect(await text('Общая доска — ты хозяин.')).toBeDefined()
+  expect(await text('@octocat · хозяин доски')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-desk-drop-7' })).toMatchObject({ props: { label: 'Убрать' } })
+  expect(await ui.find({ key: 'arcade-desk-pick-7' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-desk-pick-21' })).toMatchObject({ props: { label: '☐ @new_pal' } })
+  expect(await ui.find({ key: 'arcade-board-off' })).toMatchObject({ props: { label: 'Удалить с сайта' } })
+  expect(await ui.find({ key: 'arcade-board-delete' })).toBeUndefined()
+
+  // Правка уходит на сайт не сразу, а чуть погодя — несколько правок одной сверкой
+  await write('arcade-card-new-todo-', 'Тесты')
+  await write('arcade-card-new-todo-', 'Тег')
+  expect(Object.keys(boards[share].cards).length).toBe(1)
+  const syncs = sent(requests, 'api/me/boards/sync', 'POST').length
+  await clock.advance(1_500)
+  await clock.settle()
+  expect(sent(requests, 'api/me/boards/sync', 'POST').length).toBe(syncs + 1)
+  expect(Object.values(boards[share].cards).map((c: any) => c.title).sort()).toEqual(['Логин', 'Тег', 'Тесты'])
+
+  // Правки друга приходят сверкой открытой доски: карточка, новая карточка, название колонки
+  const b = boards[share]
+  put(b, { ...b.cards[login], title: 'Логин через GitHub', col: 'doing' })
+  put(b, { id: 'cpal1', title: 'Ревью', body: '- [x] код\n- [ ] тесты', col: 'done', pos: 0 })
+  b.cols = [{ id: 'todo' }, { id: 'doing' }, { id: 'done', name: 'Сдано' }]
+  b.rev++
+  await clock.advance(6_000)
+  await clock.settle()
+  expect(pages().find((p) => p.id === login)).toMatchObject({ title: 'Логин через GitHub', col: 'doing' })
+  expect(await text('В работе · 1')).toBeDefined()
+  expect(await text('Сдано · 1')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-card-cpal1' })).toMatchObject({ props: { label: 'Ревью' } })
+  expect(await text('  ☑ 1/2')).toBeDefined()
+
+  // Позвать ещё одного и убрать первого
+  await press('arcade-board-invite')
+  expect(await text('Отметь хотя бы одного друга.')).toBeDefined()
+  await press('arcade-desk-pick-21')
+  await press('arcade-board-invite')
+  expect(sent(requests, 'api/me/boards/members', 'POST').map((r) => r.body)).toEqual([{ board: share, add: ['21'] }])
+  expect(await text('Друзья позваны.')).toBeDefined()
+  expect(await text('@new_pal')).toBeDefined()
+  await press('arcade-desk-drop-7')
+  expect(await text('Участник убран.')).toBeDefined()
+  expect(boards[share].members).toEqual([OCTO.id, '21'])
+  expect(await ui.find({ key: 'arcade-desk-pick-7' })).toMatchObject({ props: { label: '☐ @octo_pal' } })
+
+  // Удалить с сайта — вторым нажатием; у себя доска остаётся своей
+  await press('arcade-board-off')
+  expect(await ui.find({ key: 'arcade-board-off' })).toMatchObject({ props: { label: 'Нажми ещё раз — удалить с сайта' } })
+  expect(sent(requests, 'api/me/boards/delete', 'POST').length).toBe(0)
+  await press('arcade-board-off')
+  expect(sent(requests, 'api/me/boards/delete', 'POST').map((r) => r.body)).toEqual([{ board: share }])
+  expect(boards[share]).toBeUndefined()
+  expect(await text('Доска удалена с сайта — у тебя и у друзей остались свои копии.')).toBeDefined()
+  expect(pages().find(isBoard).board).toEqual({ cols: [{ id: 'todo' }, { id: 'doing' }, { id: 'done', name: 'Сдано' }] })
+  expect(pages().filter((p) => p.parent === id).length).toBe(4)
+  expect(await ui.find({ key: 'arcade-board-delete' })).toMatchObject({ props: { label: 'Удалить доску' } })
+  expect(await ui.find({ key: 'arcade-board-share' })).toBeDefined()
+
+  // Доски друзей сами появляются в «Доске проектов» вместе с карточками
+  const plan = board('План друга', '7', ['7', OCTO.id], [
+    { id: 'cpal2', title: 'Смета', body: '', col: 'todo', pos: 0 },
+    { id: 'cpal3', title: 'Закупка', body: '', col: 'doing', pos: 0 },
+  ])
+  const old = board('Старый план', '7', ['7', OCTO.id], [{ id: 'cpal4', title: 'Черновик', body: '', col: 'todo', pos: 0 }])
+  await press('arcade-back')
+  const pageOf = (title: string) => pages().find((p) => p.title === title && isBoard(p))
+  expect([pageOf('План друга')?.board.share, pageOf('Старый план')?.board.share]).toEqual([plan.id, old.id])
+  expect(await ui.find({ key: `arcade-desk-${pageOf('План друга').id}` })).toMatchObject({ props: { label: 'План друга' } })
+  expect(await text('  карточек: 2 · общая, хозяин @octo_pal')).toBeDefined()
+  expect(await text('  карточек: 1 · общая, хозяин @octo_pal')).toBeDefined()
+  expect(await text('  карточек: 4')).toBeDefined()
+
+  // Друг убрал с доски — по таймеру списка она становится своей
+  old.members = ['7']
+  await clock.advance(30_000)
+  await clock.settle()
+  expect(pageOf('Старый план').board.share).toBeUndefined()
+  expect(await text('  карточек: 1')).toBeDefined()
+  expect(await text('Доски больше нет на сайте или тебя на ней нет — у тебя осталась своя копия.')).toBeDefined()
+
+  // Чужая доска: хозяин — друг, убирать и звать нельзя; выйти — вторым нажатием, копия остаётся
+  await press(`arcade-desk-${pageOf('План друга').id}`)
+  expect(await text('Общая доска, хозяин @octo_pal.')).toBeDefined()
+  expect(await text('@octo_pal · хозяин доски')).toBeDefined()
+  expect(await text('@octocat')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-card-cpal2' })).toMatchObject({ props: { label: 'Смета' } })
+  expect(await ui.find({ key: 'arcade-board-invite' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-board-delete' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-board-off' })).toMatchObject({ props: { label: 'Выйти с доски' } })
+  await press('arcade-board-off')
+  await press('arcade-board-off')
+  expect(sent(requests, 'api/me/boards/members', 'POST').at(-1).body).toEqual({ board: plan.id, leave: true })
+  expect(plan.members).toEqual(['7'])
+  expect(await text('Ты больше не на этой доске — у тебя осталась своя копия.')).toBeDefined()
+  expect(pageOf('План друга').board.share).toBeUndefined()
+  expect(pages().filter((p) => p.parent === pageOf('План друга').id).map((p) => p.title).sort()).toEqual(['Закупка', 'Смета'])
+  await ui.unmount()
+})
+
+test('блокнот: «Отдать Claude» — сразу, если Claude свободен; занят — страница ждёт в поле ввода', async ($, on) => {
+  const { clock, submits, fills } = stubs(on, { submit: true, draft: 'и ещё' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-notes' })
+  await noteInput(ui, 'arcade-note-new-', 'Релиз')
+  await noteInput(ui, 'arcade-note-add-', 'тег')
+  // Несохранённое в «Тексте» уходит вместе со страницей
+  await noteInput(ui, 'arcade-note-text-', '- [ ] тег\n- [ ] заметки', 'change')
+  await ui.press({ key: 'arcade-note-send' })
+  const page = `# Релиз\n- [ ] тег\n- [ ] заметки\n\nОтмечай сделанные пункты и дописывай итоги на этой странице инструментом ${NOTES}.`
+  expect(submits.length).toBe(1)
+  expect(submits[0].text).toMatch(/^Страница из моего блокнота Arcade \(id p\w+\):\n\n/)
+  expect(submits[0].text.endsWith(page)).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'Страница ушла Claude.' })).toBeDefined()
+  expect(fills.length).toBe(0)
+
+  // Claude занят — к тому, что уже набрано в поле ввода, с новой строки
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  await ui.press({ key: 'arcade-note-send' })
+  expect(submits.length).toBe(1)
+  expect(fills.length).toBe(1)
+  expect(fills[0]).toMatchObject({ mode: 'append' })
+  expect(fills[0].text.startsWith('\nСтраница из моего блокнота Arcade')).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'Claude занят — страница ждёт в поле ввода: отправь её, когда он освободится.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('блокнот: поле ввода не взяло страницу — так и говорим', async ($, on) => {
+  const { clock, submits, fills } = stubs(on, { submit: false, fill: false })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-notes' })
+  await noteInput(ui, 'arcade-note-new-', 'Релиз')
+  await ui.press({ key: 'arcade-note-send' })
+  expect(submits.length).toBe(1)
+  expect(fills.length).toBe(1)
+  expect(fills[0].text.startsWith('Страница из моего блокнота Arcade')).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'Не получилось отдать страницу — попробуй ещё раз, когда Claude освободится.' })).toMatchObject({ props: { color: 'warning' } })
+  await ui.unmount()
+})
+
+test('блокнот: Claude ведёт его инструментом mcp__arcade__notes — без вопроса человеку, правка ложится поверх набранного', async ($, on) => {
+  const { clock, saved, registered } = stubs(on)
+  await start($)
+  await clock.advance(200)
+  expect(registered.map((t) => [t.name, t.isDeferred])).toEqual([['notes', true]])
+  expect(await $.tool.check({ tool: NOTES, input: { action: 'list' } })).toMatchObject({ decision: 'allow' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-notes' })
+  const made: any = await $.tool.call({ tool: NOTES, action: 'create', title: 'План', text: '- [ ] тесты\n- [ ] ревью' })
+  const id = /^Created page (p\w+): План\.$/.exec(made.result)?.[1]
+  expect(id).toBeDefined()
+  // Экран рисуется заново: новая страница в списке
+  expect(await ui.find({ key: `arcade-note-page-${id}` })).toMatchObject({ props: { label: 'План' } })
+  expect(await ui.find({ type: 'Text', text: '  ☑ 0/2 · тесты' })).toBeDefined()
+
+  // Человек пишет в «Текст», Claude отмечает пункт — набранное не пропадает
+  await ui.press({ key: `arcade-note-page-${id}` })
+  await noteInput(ui, 'arcade-note-text-', '- [ ] тесты\n- [ ] ревью\n- [ ] деплой', 'change')
+  expect(await $.tool.call({ tool: NOTES, action: 'check', page: 'план', item: 'деплой' })).toMatchObject({ result: 'Ticked: деплой.' })
+  expect((saved.get('notes') as any[])[0].body).toBe('- [ ] тесты\n- [ ] ревью\n- [x] деплой')
+  expect(await ui.find({ key: 'arcade-note-line-2' })).toMatchObject({ props: { label: '☑ деплой' } })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { value: '- [ ] тесты\n- [ ] ревью\n- [x] деплой' } })
+  await $.tool.call({ tool: NOTES, action: 'append', page: id, text: '- итог: всё зелёное' })
+  expect(await ui.find({ type: 'Text', text: '• итог: всё зелёное' })).toBeDefined()
+
+  // Ошибка — модели ошибкой, блокнот как был
+  expect(await $.tool.call({ tool: NOTES, action: 'read', page: 'нет такой' })).toMatchObject({ deny: 'No page "нет такой". Use action list to see the pages.' })
+  expect((saved.get('notes') as any[]).length).toBe(1)
+  await ui.unmount()
+})
+
+test('блокнот: из $.store — после перезапуска; Desktop — заголовки крупно', async ($, on) => {
+  const stored = { notes: [{ id: 'pa', title: 'Неделя', body: '# Цели\n## Пн\n- [x] тесты\nтекст', parent: null, at: 1 }], keepMenu: true }
+  const { clock } = stubs(on, { stored })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await ui.find({ key: 'arcade-note-page-pa' })).toMatchObject({ props: { label: 'Неделя', autoFocus: true } })
+  await ui.press({ key: 'arcade-note-page-pa' })
+  expect(await ui.find({ type: 'Text', text: 'Цели' })).toMatchObject({ props: { size: 'heading', weight: 'semibold' } })
+  expect(await ui.find({ type: 'Text', text: 'Пн' })).toMatchObject({ props: { weight: 'semibold' } })
+  expect(await ui.find({ key: 'arcade-note-line-2' })).toMatchObject({ props: { label: '☑ тесты', dimColor: true } })
+  expect(await ui.find({ type: 'Text', text: 'текст' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('блокнот по-английски: экраны без русских букв, названия страниц — как написал человек', async ($, on) => {
+  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский' && !x.includes('Покупки'))
+  expect(await ui.find({ key: 'arcade-fold-work' })).toMatchObject({ props: { label: '▾ Work' } })
+  expect(await ui.find({ key: 'arcade-menu-notes' })).toMatchObject({ props: { label: 'Notebook' } })
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · notebook' })).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-new-') })).toMatchObject({ props: { label: 'New page', submitLabel: 'Create' } })
+  expect(await cyrillic()).toEqual([])
+  await noteInput(ui, 'arcade-note-new-', 'Weekly plan')
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-add-') })).toMatchObject({ props: { label: 'New item', submitLabel: 'Add' } })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { label: 'Text', submitLabel: 'Save' } })
+  expect(await cyrillic()).toEqual([])
+  await noteInput(ui, 'arcade-note-add-', 'tests')
+  await noteInput(ui, 'arcade-note-sub-', 'Покупки')
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-note-send' })
+  expect(await ui.find({ type: 'Text', text: 'The page went to Claude.' })).toBeDefined()
+  await ui.press({ key: 'arcade-note-delete' })
+  expect(await ui.find({ key: 'arcade-note-delete' })).toMatchObject({ props: { label: 'Press again — delete for good' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ type: 'Text', text: '  ☑ 0/1 · tests' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+test('блокнот: связь с другими приложениями — link, create с app и url; replace хранит прежний текст для отмены', () => {
+  // Связь: название приложения и полный адрес со схемой; пробелы в адресе, без схемы, слишком длинный — нет
+  expect(cleanLink(' Notion ', ' https://www.notion.so/Plan-abc ')).toEqual({ app: 'Notion', url: 'https://www.notion.so/Plan-abc' })
+  expect(cleanLink('Obsidian', 'obsidian://open?vault=w&file=Plan')).toEqual({ app: 'Obsidian', url: 'obsidian://open?vault=w&file=Plan' })
+  expect(cleanLink('Google   Docs', 'https://docs.google.com/d/1')?.app).toBe('Google Docs')
+  expect(cleanLink('x'.repeat(60), 'https://x.io')?.app).toBe('x'.repeat(MAX_APP))
+  expect(cleanLink(' ', 'https://x.io')).toBeNull()
+  expect(cleanLink('Notion', 'notion.so/plan')).toBeNull()
+  expect(cleanLink('Notion', 'javascript:alert(1)')).toBeNull()
+  expect(cleanLink('Notion', 'https://x.io/a b')).toBeNull()
+  expect(cleanLink('Notion', `https://x.io/${'a'.repeat(MAX_URL)}`)).toBeNull()
+
+  // Из $.store: связь и прежний текст — если сходятся; прежний текст считается в объём блокнота
+  expect(
+    restoreNotes([
+      { id: 'a', title: 'План', body: 'новый', parent: null, at: 1, link: { app: 'Notion', url: 'https://www.notion.so/p' }, prev: 'старый\r\nтекст' },
+      { id: 'b', title: 'Связь', body: '', parent: null, at: 2, link: { app: 'Notion', url: 'javascript:alert(1)' }, prev: 5 },
+    ]),
+  ).toEqual([
+    { id: 'a', title: 'План', body: 'новый', parent: null, at: 1, link: { app: 'Notion', url: 'https://www.notion.so/p' }, prev: 'старый\nтекст' },
+    { id: 'b', title: 'Связь', body: '', parent: null, at: 2 },
+  ])
+  expect(fits([{ id: 'a', title: 't', body: '', prev: 'x'.repeat(MAX_TOTAL), parent: null, at: 0 }])).toBe(false)
+
+  let notes: any[] = []
+  const call = (input: any, at = 2000) => {
+    const out = applyNotesTool(notes, input, at)
+    notes = out.notes
+    return out
+  }
+  const BAD_LINK = 'A link needs app (e.g. Notion, up to 40 characters) and url: the full address of the page in that app, like https://…, up to 500 characters.'
+  expect(call({ action: 'create', title: 'Plan', text: '- [ ] tests', app: 'Notion', url: 'https://www.notion.so/Plan-1' })).toMatchObject({ text: 'Created page p1jk: Plan, linked to Notion.', changed: true })
+  expect(notes[0].link).toEqual({ app: 'Notion', url: 'https://www.notion.so/Plan-1' })
+  expect(call({ action: 'create', title: 'Bad', url: 'https://x.io' })).toMatchObject({ isError: true, text: BAD_LINK })
+  expect(notes.length).toBe(1)
+  expect(call({ action: 'create', title: 'Draft' }).text).toBe('Created page p1jk1: Draft.')
+  expect(call({ action: 'list' }).text).toBe('Notebook pages:\n- p1jk1: Draft\n- p1jk: Plan (0/1 done) [Notion]')
+  expect(call({ action: 'read', page: 'plan' }).text).toBe('Page p1jk: Plan\nLinked to Notion: https://www.notion.so/Plan-1\n\n- [ ] tests')
+
+  expect(call({ action: 'link', page: 'Draft', app: 'Google Docs', url: 'https://docs.google.com/document/d/1' })).toMatchObject({ text: 'Linked Draft to Google Docs: https://docs.google.com/document/d/1.', changed: true })
+  expect(call({ action: 'link', page: 'Draft', app: 'Notion' })).toMatchObject({ isError: true, text: BAD_LINK })
+  expect(findPage(notes, 'Draft')?.link).toEqual({ app: 'Google Docs', url: 'https://docs.google.com/document/d/1' })
+
+  // Замена: прежний текст — в prev, для отмены человеком; тот же текст — ничего не меняет
+  expect(call({ action: 'replace', page: 'Plan' })).toMatchObject({ isError: true, text: 'Give the new text of the page in text.' })
+  expect(call({ action: 'replace', page: 'Plan', text: 'x'.repeat(MAX_BODY + 1) }).text).toBe('The text is too long: up to 20000 characters.')
+  expect(call({ action: 'replace', page: 'Plan', text: '- [x] tests\r\n- [ ] deploy' })).toMatchObject({ text: 'Replaced the text of Plan. The user can undo it in Arcade.', changed: true })
+  expect(findPage(notes, 'Plan')).toMatchObject({ body: '- [x] tests\n- [ ] deploy', prev: '- [ ] tests' })
+  const same = call({ action: 'replace', page: 'Plan', text: '- [x] tests\n- [ ] deploy' })
+  expect(same).toMatchObject({ text: 'Plan already has this text.' })
+  expect(same.changed).toBeUndefined()
+  expect(call({ action: 'replace', page: 'Plan', text: 'v3' }).changed).toBe(true)
+  expect(findPage(notes, 'Plan')).toMatchObject({ body: 'v3', prev: '- [x] tests\n- [ ] deploy' })
+})
+
+test('блокнот: Notion и другие приложения — просьбы Claude через его коннекторы, связь, браузер, отмена правки Claude', async ($, on) => {
+  const { clock, saved, submits, fills, launches } = stubs(on, { env: WINDOWS, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const NO_TOOLS = 'Нет инструментов этого приложения — ничего не делай, только объясни, как подключить его коннектор в Claude.'
+  const URL = 'https://www.notion.so/Plan-abc'
+  await ui.press({ key: 'arcade-menu-notes' })
+
+  // Забрать из приложения: Arcade только передаёт просьбу — страницу заводит Claude, своим коннектором и нашим инструментом
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-import-') })).toMatchObject({ props: { label: 'Забрать из Notion или другого приложения', submitLabel: 'Забрать' } })
+  expect(await text('  Через коннекторы Claude: ключи и пароли Arcade не нужны. Нет коннектора — Claude подскажет, как подключить.')).toBeDefined()
+  await noteInput(ui, 'arcade-note-import-', '   ')
+  expect(submits.length).toBe(0)
+  await noteInput(ui, 'arcade-note-import-', ` ${URL} \n`)
+  expect(submits[0].text).toBe(
+    [
+      'Забери страницу из другого приложения в мой блокнот Arcade.',
+      `Что забрать: ${URL}`,
+      '',
+      'Найди и прочитай её инструментами коннектора (Notion, Google Docs и других). Потом создай страницу блокнота: mcp__arcade__notes, action create, с её названием и текстом, а в app и url — приложение и адрес той страницы, чтобы они остались связаны.',
+      NO_TOOLS,
+    ].join('\n'),
+  )
+  expect(await text('Просьба ушла Claude.')).toBeDefined()
+  const made: any = await $.tool.call({ tool: NOTES, action: 'create', title: 'План', text: '- [ ] тесты', app: 'Notion', url: URL })
+  const id = /^Created page (p\w+): План, linked to Notion\.$/.exec(made.result)?.[1]
+  expect(id).toBeDefined()
+  expect(await text('  ☑ 0/1 · ↗ Notion · тесты')).toBeDefined()
+
+  // Связанная страница: адрес, «Обновить», «Забрать», «Открыть в браузере», «Отвязать»; «Отправить» — нет
+  await ui.press({ key: `arcade-note-page-${id}` })
+  expect(await text('Notion и другие приложения')).toBeDefined()
+  expect(await text(`  Связана с Notion: ${URL}`)).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-push' })).toMatchObject({ props: { label: 'Обновить в приложении' } })
+  expect(await ui.find({ key: 'arcade-note-pull' })).toMatchObject({ props: { label: 'Забрать из приложения' } })
+  expect(await ui.find({ key: 'arcade-note-open' })).toMatchObject({ props: { label: 'Открыть в браузере' } })
+  expect(await ui.find({ key: 'arcade-note-unlink' })).toMatchObject({ props: { label: 'Отвязать' } })
+  expect(await ui.find({ key: 'arcade-note-notion' })).toBeUndefined()
+  expect(await noteKey(ui, 'arcade-note-app-')).toBeUndefined()
+
+  // Обновить там: набранное в «Тексте» сначала ложится в страницу — Claude получает свежий текст
+  await noteInput(ui, 'arcade-note-text-', '- [ ] тесты\n- [ ] ревью', 'change')
+  await ui.press({ key: 'arcade-note-push' })
+  expect(pages()[0].body).toBe('- [ ] тесты\n- [ ] ревью')
+  expect(submits[1].text).toBe(
+    [
+      'Обнови страницу в другом приложении текстом из моего блокнота Arcade.',
+      'Приложение: Notion',
+      `Адрес: ${URL}`,
+      `Страница блокнота: ${id}`,
+      '',
+      '# План',
+      '- [ ] тесты\n- [ ] ревью',
+      '',
+      'Замени текст той страницы на этот инструментами коннектора этого приложения.',
+      NO_TOOLS,
+    ].join('\n'),
+  )
+
+  // Забрать оттуда: Claude заменяет текст страницы, прежний остаётся — кнопка возвращает его
+  await ui.press({ key: 'arcade-note-pull' })
+  expect(submits[2].text).toBe(
+    [
+      'Забери текст страницы из другого приложения в мой блокнот Arcade.',
+      'Приложение: Notion',
+      `Адрес: ${URL}`,
+      `Страница блокнота: ${id}`,
+      '',
+      'Прочитай ту страницу инструментами коннектора этого приложения и замени её текстом текст страницы блокнота: mcp__arcade__notes, action replace. Прежний текст останется в Arcade для отмены.',
+      NO_TOOLS,
+    ].join('\n'),
+  )
+  expect(await ui.find({ key: 'arcade-note-undo' })).toBeUndefined()
+  expect(await $.tool.call({ tool: NOTES, action: 'replace', page: id, text: '- [x] тесты\n- [ ] деплой' })).toMatchObject({ result: 'Replaced the text of План. The user can undo it in Arcade.' })
+  expect(await ui.find({ key: 'arcade-note-line-1' })).toMatchObject({ props: { label: '☐ деплой' } })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { value: '- [x] тесты\n- [ ] деплой' } })
+  expect(await ui.find({ key: 'arcade-note-undo' })).toMatchObject({ props: { label: 'Вернуть текст до правки Claude' } })
+  await ui.press({ key: 'arcade-note-undo' })
+  expect(pages()[0].body).toBe('- [ ] тесты\n- [ ] ревью')
+  expect(pages()[0].prev).toBeUndefined()
+  expect(await text('Прежний текст вернулся.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-undo' })).toBeUndefined()
+
+  // Открыть в браузере — браузером по умолчанию, только https
+  await ui.press({ key: 'arcade-note-open' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(URL)
+  expect(await text('Страница открыта в браузере.')).toBeDefined()
+  expect(await $.tool.call({ tool: NOTES, action: 'link', page: id, app: 'Obsidian', url: 'obsidian://open?file=plan' })).toMatchObject({ result: 'Linked План to Obsidian: obsidian://open?file=plan.' })
+  expect(await text('  Связана с Obsidian: obsidian://open?file=plan')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-open' })).toBeUndefined()
+
+  // Отвязать: снова «Отправить в Notion» и поле для другого приложения
+  await ui.press({ key: 'arcade-note-unlink' })
+  expect(pages()[0].link).toBeUndefined()
+  expect(await text('Страница отвязана.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-push' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-notion' })).toMatchObject({ props: { label: 'Отправить в Notion' } })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-app-') })).toMatchObject({ props: { label: 'В другое приложение', submitLabel: 'Отправить' } })
+  await ui.press({ key: 'arcade-note-notion' })
+  expect(submits[3].text).toBe(
+    [
+      'Перенеси страницу из моего блокнота Arcade в другое приложение.',
+      'Приложение: Notion',
+      `Страница блокнота: ${id}`,
+      '',
+      '# План',
+      '- [ ] тесты\n- [ ] ревью',
+      '',
+      'Создай там новую страницу с этим названием и текстом инструментами коннектора этого приложения. Потом свяжи её со страницей блокнота: mcp__arcade__notes, action link, с названием приложения и адресом новой страницы.',
+      NO_TOOLS,
+    ].join('\n'),
+  )
+  await noteInput(ui, 'arcade-note-app-', '  ')
+  expect(submits.length).toBe(4)
+  await noteInput(ui, 'arcade-note-app-', ' Google   Docs ')
+  expect(submits[4].text.split('\n').slice(0, 2)).toEqual(['Перенеси страницу из моего блокнота Arcade в другое приложение.', 'Приложение: Google Docs'])
+
+  // Claude занят — просьба ждёт в поле ввода
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  await ui.press({ key: 'arcade-note-notion' })
+  expect(submits.length).toBe(5)
+  expect(fills.at(-1)).toMatchObject({ mode: 'append' })
+  expect(fills.at(-1).text.startsWith('Перенеси страницу из моего блокнота Arcade в другое приложение.')).toBe(true)
+  expect(await text('Claude занят — просьба ждёт в поле ввода: отправь её, когда он освободится.')).toBeDefined()
+  await ui.unmount()
+})
+
+test('блокнот: голос — диктовка системы; «Взять из поля ввода Claude» переносит набранное там в конец страницы', async ($, on) => {
+  const { clock, saved, fills } = stubs(on, { env: WINDOWS, draft: 'купить молоко\nпозвонить маме\n' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  await ui.press({ key: 'arcade-menu-notes' })
+  await noteInput(ui, 'arcade-note-new-', 'Дела')
+  await noteInput(ui, 'arcade-note-add-', 'тесты')
+  expect(await text('  Голосом: Win+H — диктовка Windows пишет туда, где курсор.')).toBeDefined()
+  expect(await text('  Голосом: дважды Fn — диктовка macOS пишет туда, где курсор.')).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-take' })).toMatchObject({ props: { label: 'Взять из поля ввода Claude' } })
+  await ui.press({ key: 'arcade-note-take' })
+  expect((saved.get('notes') as any[])[0].body).toBe('- [ ] тесты\nкупить молоко\nпозвонить маме')
+  // Поле ввода Claude после переноса — пустое
+  expect(fills.map((x: any) => [x.text, x.mode])).toEqual([['', 'replace']])
+  expect(await text('Текст из поля ввода Claude — в конце страницы.')).toBeDefined()
+  expect(await text('купить молоко')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-take' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+})
+
+test('блокнот: голос на macOS — подсказка про Fn; поле ввода Claude пустое — так и говорим, страница как была', async ($, on) => {
+  const { clock, saved, fills } = stubs(on, { uname: 'Darwin' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  await ui.press({ key: 'arcade-menu-notes' })
+  await noteInput(ui, 'arcade-note-new-', 'Дела')
+  expect(await text('  Голосом: дважды Fn — диктовка macOS пишет туда, где курсор.')).toBeDefined()
+  expect(await text('  Голосом: Win+H — диктовка Windows пишет туда, где курсор.')).toBeUndefined()
+  await ui.press({ key: 'arcade-note-take' })
+  expect(await text('Поле ввода Claude пустое — надиктуй или впиши туда текст и нажми ещё раз.')).toMatchObject({ props: { color: 'warning' } })
+  expect((saved.get('notes') as any[])[0].body).toBe('')
+  expect(fills.length).toBe(0)
+  await ui.unmount()
+})
+
+test('блокнот по-английски: Notion, другие приложения и голос — экраны без русских букв, просьбы Claude по-английски', async ($, on) => {
+  const { clock, saved, submits } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const NO_TOOLS = 'If you have no tools for that app, do nothing else — just explain how to connect its connector in Claude.'
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-import-') })).toMatchObject({ props: { label: 'Import from Notion or another app', placeholder: 'link or page title', submitLabel: 'Import' } })
+  expect(await text("  Through Claude's connectors: Arcade needs no keys or passwords. No connector — Claude will tell you how to connect one.")).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await noteInput(ui, 'arcade-note-import-', 'Roadmap')
+  expect(submits[0].text.split('\n').slice(0, 2)).toEqual(['Bring a page from another app into my Arcade notebook.', 'What to bring: Roadmap'])
+  expect(submits[0].text.endsWith(NO_TOOLS)).toBe(true)
+  expect(await text('The request went to Claude.')).toBeDefined()
+
+  await noteInput(ui, 'arcade-note-new-', 'Weekly plan')
+  const id = (saved.get('notes') as any[])[0].id
+  expect(await ui.find({ key: 'arcade-note-take' })).toMatchObject({ props: { label: "Take from Claude's prompt box" } })
+  expect(await text("  Moves what you typed or dictated in Claude's prompt box to the end of the page.")).toBeDefined()
+  expect(await text('  By voice: Win+H — Windows dictation types where the cursor is.')).toBeDefined()
+  expect(await text('Notion and other apps')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-notion' })).toMatchObject({ props: { label: 'Send to Notion' } })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-app-') })).toMatchObject({ props: { label: 'To another app', submitLabel: 'Send' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-note-take' })
+  expect(await text("Claude's prompt box is empty — dictate or type text there and press again.")).toBeDefined()
+  await ui.press({ key: 'arcade-note-notion' })
+  expect(submits[1].text.split('\n').slice(0, 5)).toEqual(['Move a page from my Arcade notebook to another app.', 'App: Notion', `Notebook page: ${id}`, '', '# Weekly plan'])
+  expect(submits[1].text.endsWith(NO_TOOLS)).toBe(true)
+
+  // Claude связал страницу и заменил текст: всё вокруг — по-английски
+  await $.tool.call({ tool: NOTES, action: 'link', page: 'Weekly plan', app: 'Notion', url: 'https://www.notion.so/Weekly-1' })
+  await $.tool.call({ tool: NOTES, action: 'replace', page: 'Weekly plan', text: '- [ ] tests' })
+  expect(await text('  Linked to Notion: https://www.notion.so/Weekly-1')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-push' })).toMatchObject({ props: { label: 'Update in the app' } })
+  expect(await ui.find({ key: 'arcade-note-pull' })).toMatchObject({ props: { label: 'Import from the app' } })
+  expect(await ui.find({ key: 'arcade-note-open' })).toMatchObject({ props: { label: 'Open in browser' } })
+  expect(await ui.find({ key: 'arcade-note-unlink' })).toMatchObject({ props: { label: 'Unlink' } })
+  expect(await ui.find({ key: 'arcade-note-undo' })).toMatchObject({ props: { label: "Restore the text from before Claude's edit" } })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-note-pull' })
+  expect(submits[2].text.split('\n').slice(0, 4)).toEqual(['Bring the text of a page from another app into my Arcade notebook.', 'App: Notion', 'Address: https://www.notion.so/Weekly-1', `Notebook page: ${id}`])
+  await ui.press({ key: 'arcade-note-push' })
+  expect(submits[3].text.split('\n')[0]).toBe('Update a page in another app with the text from my Arcade notebook.')
+  await ui.press({ key: 'arcade-note-open' })
+  expect(await text('The page is open in the browser.')).toBeDefined()
+  await ui.press({ key: 'arcade-note-undo' })
+  expect(await text('The previous text is back.')).toBeDefined()
+  await ui.press({ key: 'arcade-note-unlink' })
+  expect(await text('The page is unlinked.')).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })
