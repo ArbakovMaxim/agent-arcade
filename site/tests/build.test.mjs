@@ -2,16 +2,18 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build, download, checkChannels, checkFeeds, checkTwitch } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
-// Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск
+// Временные папки теста — каждая с копией каталога; в конце всё убираем, чтобы не забивать диск. Лежат рядом с кешем
+// скачанных игр (site/.cache): на том же диске сборка ставит их большие файлы ссылками, а не копирует сотни мегабайт
 const temps = []
+const TMP = path.join(ROOT, '.cache', 'tmp')
+fs.mkdirSync(TMP, { recursive: true })
 const temp = (name) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `arcade-${name}-`))
+  const dir = fs.mkdtempSync(path.join(TMP, `arcade-${name}-`))
   temps.push(dir)
   return dir
 }
@@ -359,10 +361,44 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openttd').inject = [
   // Изоляция для потоков и offline: сама игра в сеть не ходит (иначе спрашивает обновления у wz2100.net)
   const isolation = fs.readFileSync(path.join(dir, '_headers'), 'utf8')
   assert.match(isolation, /\/web-games\/warzone2100\/\*\n  Cross-Origin-Embedder-Policy: require-corp\n  Cross-Origin-Opener-Policy: same-origin\n  Cross-Origin-Resource-Policy: same-origin\n  Content-Security-Policy: connect-src 'self'\n/)
-  assert.equal(isolation.match(/Content-Security-Policy/g).length, 1, 'остальным играм — без ограничений')
+  assert.equal(isolation.match(/Content-Security-Policy/g).length, 2, 'кроме Warzone и OpenArena — без ограничений')
 }
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'warzone2100').download.edit['index.html'][0].find = 'нет такого' }), /правка «счётчик Cloudflare Web Analytics» нашла мест: 0/)
 assert.throws(broken((d) => { d.games.find((g) => g.id === 'warzone2100').offline = 'yes' }), /offline — только true/)
+// OpenArena: pk3 из архива 0.8.8 скачаны при сборке (download), большие — кусками; программы, missionpack
+// и pak2-players-mature не выложены. Мышь захвачена (mouse), в сеть не ходит (offline), потоков нет — без изоляции
+{
+  const dir = temp('openarena')
+  const built = build({ root: ROOT, out: dir })
+  const g = built.games.openarena
+  assert.deepEqual([g.kind, g.page, g.shelf, g.mouse], ['web', 'web-games/openarena/', 'shooters', true])
+  assert.equal(g.download, undefined, 'откуда скачаны данные — не дело окна')
+  const oa = path.join(dir, 'web-games/openarena')
+  const page = fs.readFileSync(path.join(oa, 'index.html'), 'utf8')
+  const order = ['arcade-parts.js', 'arcade-pause.js', 'arcade-start.js'].map((f) => page.indexOf(`src="${f}"`))
+  assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > order[i - 1])), `склейка кусков — раньше запуска: ${order}`)
+  // Выложены ровно pk3, которые ждёт arcade-start.js, и тех же размеров: больше 25 МиБ — кусками, остальные целиком
+  const baseoa = 'openarena-0.8.8/baseoa'
+  const paks = [...fs.readFileSync(path.join(oa, 'arcade-start.js'), 'utf8').matchAll(/\['([^']+\.pk3)', (\d+)\]/g)].map((m) => [m[1], Number(m[2])])
+  assert.equal(paks.length, 8)
+  const parts = JSON.parse(fs.readFileSync(path.join(oa, 'arcade-parts.js'), 'utf8').match(/^window\.ARCADE_PARTS = (.*)$/m)[1])
+  assert.deepEqual(Object.keys(parts).sort(), paks.filter(([, size]) => size > 25 * 1024 * 1024).map(([name]) => `${baseoa}/${name}`).sort())
+  for (const [name, size] of paks) {
+    const whole = parts[`${baseoa}/${name}`]
+    assert.equal(whole ? whole.size : fs.statSync(path.join(oa, baseoa, name)).size, size, name)
+    for (const p of whole?.parts ?? []) assert.ok(fs.existsSync(path.join(oa, baseoa, p)), p)
+  }
+  const files = fs.readdirSync(oa, { recursive: true }).map((f) => f.split(path.sep).join('/')).filter((f) => fs.statSync(path.join(oa, f)).isFile())
+  for (const f of files) assert.ok(fs.statSync(path.join(oa, f)).size <= 25 * 1024 * 1024, `${f} больше 25 МиБ`)
+  assert.deepEqual(files.filter((f) => f.endsWith('.pk3')).sort(), paks.filter(([name]) => !parts[`${baseoa}/${name}`]).map(([name]) => `${baseoa}/${name}`).sort())
+  assert.deepEqual(files.filter((f) => /mature|missionpack|\.(exe|dll|x86|x86_64|ub|dylib)$|^openarena-0\.8\.8\/[^/]+$/.test(f)), [], 'программы, missionpack и mature-пак не выложены')
+  // Движок из Actions выложен вместе с исходниками; два BUILD.txt (игры и движка) — с именем папки
+  for (const f of ['ioquake3.js', 'ioquake3.wasm', 'COPYING.txt', 'BUILD.txt', 'ioq3-src.tar.gz']) assert.ok(files.includes(`engine/${f}`), `engine/${f}`)
+  for (const f of ['COPYING', 'README', 'CREDITS', 'readme_088.txt', 'openarena-BUILD.txt', 'COPYING.txt', 'engine-BUILD.txt']) assert.ok(fs.existsSync(path.join(dir, 'licenses/openarena', f)), f)
+  const headers = fs.readFileSync(path.join(dir, '_headers'), 'utf8')
+  assert.match(headers, /\/web-games\/openarena\/\*\n  Content-Security-Policy: connect-src 'self'\n/)
+}
+assert.throws(broken((d) => { d.games.find((g) => g.id === 'openarena').mouse = 'yes' }), /mouse — только true/)
 // Группа «Игры» и полки: у игр группы — полка; /games — вкладка группы
 {
   const dir = temp('groups')

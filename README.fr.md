@@ -100,7 +100,7 @@ La fenêtre de navigateur est une fenêtre Arcade séparée (votre navigateur pa
 | **Master System** | 4 jeux : Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **Jeux → Jeux d’arcade** | Flappy Arcade — le jeu à un bouton d’Arcade : se joue directement dans le panneau et dans la fenêtre Arcade ; le parcours du jour est le même pour tout le monde, votre meilleur score est conservé |
-| **Jeux → Jeux de tir** | Freedoom Phase 1 et 2 (remplaçants libres de Doom), le deathmatch FreeDM, Blasphemer (remplaçant libre de Heretic), le deathmatch BlasphDM |
+| **Jeux → Jeux de tir** | Freedoom Phase 1 et 2 (remplaçants libres de Doom), le deathmatch FreeDM, Blasphemer (remplaçant libre de Heretic), le deathmatch BlasphDM, OpenArena — jeu de tir en arène sur le moteur de Quake III contre des bots (GPL-2.0) |
 | **Jeux → Jeux de course** | HexGL — course futuriste antigravité |
 | **Jeux → Stratégie** | OpenTTD — magnat du transport (GPL-2.0) ; Micropolis — le code ouvert du célèbre jeu de construction de ville de 1989, votre ville est enregistrée dans le navigateur (micropolisJS, GPL-3.0 avec conditions supplémentaires et la Micropolis Public Name License) ; Warzone 2100 — stratégie en temps réel avec campagne et escarmouche contre l’ordinateur, vous concevez vos propres unités, les sauvegardes restent dans le navigateur (GPL-2.0-or-later) |
 | **Jeux → Aventures** | Quatre aventures classiques gratuites des années 90 dans ScummVM (GPL-3.0-or-later) : Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress et Nippon Safes, Inc. — données de jeu freeware redistribuables avec autorisation ; sauvegarde à tout moment avec F5 |

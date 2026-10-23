@@ -1339,6 +1339,51 @@
       }
     },
     {
+      "id": "openarena",
+      "console": "web",
+      "kind": "web",
+      "page": "games/openarena/index.html",
+      "offline": true,
+      "mouse": true,
+      "download": {
+        "url": "https://download.tuxfamily.org/openarena/rel/088/openarena-0.8.8.zip",
+        "size": 425189255,
+        "sha256": "5a8faf7f5b51f351b0a1618c06b6b98a5f1a6758f1d39818de2c87df2a0bac4a",
+        "skip": [
+          "openarena-0.8.8/*",
+          "openarena-0.8.8/missionpack/*",
+          "*.ub",
+          "*.dylib",
+          "*.icns",
+          "PkgInfo",
+          "Info.plist",
+          "._*",
+          "pak2-players-mature.pk3"
+        ]
+      },
+      "shelf": "shooters",
+      "title": "OpenArena",
+      "genre": "шутер",
+      "about": "Арена-шутер на движке Quake III: deathmatch и захват флага против ботов на десятках карт, свои модели игроков, оружие и музыка. Только с компьютером; первая загрузка — около 380 МБ, настройки остаются в браузере.",
+      "about_en": "Arena shooter on the Quake III engine: deathmatch and capture the flag against bots on dozens of maps, with its own player models, weapons and music. Bots only; the first load is about 380 MB, settings stay in your browser.",
+      "keys": "мышь — прицел · огонь — левая кнопка · ходьба — WASD · прыжок — пробел · присесть — C · оружие — колёсико или 1–9 · счёт — Tab · меню — Esc",
+      "license": {
+        "name": "GPL-2.0",
+        "author": "авторы OpenArena (OpenArena Team); движок — ioquake3",
+        "source": "https://github.com/OpenArena/legacy",
+        "commit": "0.8.8",
+        "files": [
+          "games/openarena/COPYING",
+          "games/openarena/README",
+          "games/openarena/CREDITS",
+          "games/openarena/readme_088.txt",
+          "games/openarena/BUILD.txt",
+          "games/openarena/engine/COPYING.txt",
+          "games/openarena/engine/BUILD.txt"
+        ]
+      }
+    },
+    {
       "id": "scummvm",
       "console": "web",
       "kind": "web",

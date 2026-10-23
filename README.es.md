@@ -100,7 +100,7 @@ La ventana del navegador es una ventana de Arcade aparte (tu navegador predeterm
 | **Master System** | 4 juegos: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **Juegos → Juegos arcade** | Flappy Arcade — el juego de un solo botón propio de Arcade: se juega directamente en el panel y en la ventana de Arcade; el recorrido del día es el mismo para todos y tu mejor puntuación se guarda |
-| **Juegos → Disparos** | Freedoom Phase 1 y 2 (sustitutos libres de Doom), deathmatch FreeDM, Blasphemer (sustituto libre de Heretic), deathmatch BlasphDM |
+| **Juegos → Disparos** | Freedoom Phase 1 y 2 (sustitutos libres de Doom), deathmatch FreeDM, Blasphemer (sustituto libre de Heretic), deathmatch BlasphDM, OpenArena — shooter de arena con el motor de Quake III contra bots (GPL-2.0) |
 | **Juegos → Carreras** | HexGL — carreras futuristas antigravedad |
 | **Juegos → Estrategia** | OpenTTD — magnate del transporte (GPL-2.0); Micropolis — el código abierto del clásico constructor de ciudades de 1989, tu ciudad se guarda en el navegador (micropolisJS, GPL-3.0 con términos adicionales y la Micropolis Public Name License); Warzone 2100 — estrategia en tiempo real con campaña y escaramuza contra el ordenador, diseñas tus propias unidades, las partidas guardadas se quedan en el navegador (GPL-2.0-or-later) |
 | **Juegos → Aventuras** | Cuatro aventuras clásicas gratuitas de los 90 en ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress y Nippon Safes, Inc. — datos de juego freeware con permiso de redistribución; guarda en cualquier momento con F5 |

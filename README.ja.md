@@ -100,7 +100,7 @@ claude plugin install arcade@agent-arcade
 | **マスターシステム** | 4 本：Balloon Master、SkyHaul、Food Fighter、Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **ゲーム → アーケード** | Flappy Arcade — Arcade オリジナルのワンボタンゲーム。パネル内と Arcade ウィンドウでそのまま遊べます。その日のコースは全員共通で、自己ベストが保存されます |
-| **ゲーム → シューティング** | Freedoom Phase 1 と 2（Doom の自由な代替）、FreeDM デスマッチ、Blasphemer（Heretic の自由な代替）、BlasphDM デスマッチ |
+| **ゲーム → シューティング** | Freedoom Phase 1 と 2（Doom の自由な代替）、FreeDM デスマッチ、Blasphemer（Heretic の自由な代替）、BlasphDM デスマッチ、OpenArena（Quake III エンジンのアリーナシューター、ボットと対戦、GPL-2.0） |
 | **ゲーム → レース** | HexGL — 近未来の反重力レース |
 | **ゲーム → ストラテジー** | OpenTTD — 輸送会社経営（GPL-2.0）。Micropolis — 1989 年の名作街づくりゲームのオープンソース版で、街はブラウザーに保存されます（micropolisJS、追加条項付き GPL-3.0 と Micropolis Public Name License）。Warzone 2100 — キャンペーンとコンピューター相手の対戦があるリアルタイムストラテジーで、ユニットは自分で設計し、セーブはブラウザーに残ります（GPL-2.0-or-later） |
 | **ゲーム → アドベンチャー** | ScummVM（GPL-3.0-or-later）で遊ぶ 90 年代の無料クラシックアドベンチャー 4 本：Beneath a Steel Sky、Flight of the Amazon Queen、Lure of the Temptress、Nippon Safes, Inc. — 再配布が許可されたフリーウェアのゲームデータ。F5 でいつでもセーブ |

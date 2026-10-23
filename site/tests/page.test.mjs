@@ -2,7 +2,6 @@
 // Запуск: node tests/page.test.mjs
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import vm from 'node:vm'
 import { webcrypto } from 'node:crypto'
@@ -10,7 +9,9 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { build, download } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
-const DIST = fs.mkdtempSync(path.join(os.tmpdir(), 'arcade-site-'))
+// Рядом с кешем скачанных игр (site/.cache): на том же диске их большие файлы встают ссылками, без копий
+fs.mkdirSync(path.join(ROOT, '.cache', 'tmp'), { recursive: true })
+const DIST = fs.mkdtempSync(path.join(ROOT, '.cache', 'tmp', 'arcade-site-'))
 process.on('exit', () => fs.rmSync(DIST, { recursive: true, force: true })) // собранный сайт — только на время теста
 await download({ root: ROOT }) // игры из каталога, которые сборка скачивает: Warzone 2100
 build({ root: ROOT, out: DIST })
@@ -406,7 +407,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(doom.ctx.EJS_gameUrl, catalog.games['freedoom-1'].rom.url)
   assert.match(doom.byId.keys.textContent, /огонь — A/)
   const lib = await makePage(new Map(), { search: '?tab=doom' })
-  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'])
+  assert.deepEqual(lib.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm', 'openarena'])
   lib.byId.library.querySelectorAll('.open-rom')[0].click()
   assert.equal(lib.byId['local-rom'].accept, '.wad,.zip')
   lib.ctx.__wad = new TextEncoder().encode('IWAD' + '\0'.repeat(64))
@@ -757,7 +758,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   const arcade = await makePage(new Map(), { search: '?tab=games' })
   assert.deepEqual(arcade.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['flappy'], 'по умолчанию — первая полка, аркады')
   const shooters = await makePage(new Map(), { search: '?tab=games&shelf=shooters' })
-  assert.deepEqual(shooters.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm'], 'полка шутеров')
+  assert.deepEqual(shooters.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['freedm', 'freedoom-1', 'freedoom-2', 'blasphemer', 'blasphdm', 'openarena'], 'полка шутеров')
   assert.equal(shooters.byId.library.querySelectorAll('.open-rom').length, 2, 'у шутеров — «Открыть свой файл» (WAD) и язык')
   // Переключение полки — свой адрес
   strategy.byId.library.querySelectorAll('.shelf').find((b) => b.dataset.shelf === 'board').click()

@@ -100,7 +100,7 @@ claude plugin install arcade@agent-arcade
 | **Master System** | 4 款游戏：Balloon Master、SkyHaul、Food Fighter、Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **游戏 → 街机** | Flappy Arcade — Arcade 自己的单键游戏：可直接在面板和 Arcade 窗口中玩；每天的赛道对所有人相同，会保存你的最佳成绩 |
-| **游戏 → 射击** | Freedoom Phase 1 和 2（Doom 的免费替代品）、FreeDM 死亡竞赛、Blasphemer（Heretic 的免费替代品）、BlasphDM 死亡竞赛 |
+| **游戏 → 射击** | Freedoom Phase 1 和 2（Doom 的免费替代品）、FreeDM 死亡竞赛、Blasphemer（Heretic 的免费替代品）、BlasphDM 死亡竞赛、OpenArena（Quake III 引擎的竞技场射击游戏，与机器人对战，GPL-2.0） |
 | **游戏 → 竞速** | HexGL — 未来风格的反重力竞速 |
 | **游戏 → 策略** | OpenTTD — 运输大亨（GPL-2.0）；Micropolis — 1989 年经典城市建造游戏的开源代码，城市保存在浏览器中（micropolisJS，带附加条款的 GPL-3.0 和 Micropolis Public Name License）；Warzone 2100 — 即时战略游戏，有战役和对战电脑的遭遇战，单位由你自己设计，存档保存在浏览器中（GPL-2.0-or-later） |
 | **游戏 → 冒险** | 在 ScummVM（GPL-3.0-or-later）中运行的四款 90 年代免费经典冒险游戏：Beneath a Steel Sky、Flight of the Amazon Queen、Lure of the Temptress 和 Nippon Safes, Inc. — 允许再分发的免费游戏数据；随时按 F5 存档 |
