@@ -713,7 +713,7 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, normalHandle, handleProblem, ticketName } = await import('../worker/account.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName } = await import('../worker/account.js')
   const KEY = 'a'.repeat(43)
   assert.equal(sessionId(`Bearer 42.${KEY}`), '42')
   assert.equal(sessionId(`Bearer 42.${KEY}x`), null)
@@ -945,12 +945,111 @@ try {
     assert.equal((await nick('octo_more')).status, 200)
     assert.equal((await go('GET', '/api/me', { token: other.body.token })).body.handle, 'octo_cat')
 
+    // Друзья: заявка по точному нику, принять, отклонить, отменить, удалить; у 42 ник octo_more, у 7 — octo_cat
+    const t42 = tokens.at(-1)
+    const t7 = other.body.token
+    const friendsOf = (token) => go('GET', '/api/me/friends', { token })
+    const ask = (handle, token) => go('POST', '/api/me/friends', { body: { handle }, token })
+    const accept = (id, token) => go('POST', '/api/me/friends/accept', { body: { id }, token })
+    const unfriend = (id, token) => go('POST', '/api/me/friends/remove', { body: { id }, token })
+    const circleOf = (id) => objects.get(`gh:${id}`).store.get('circle')
+    const p42 = { id: '42', handle: 'octo_more' }
+    const p7 = { id: '7', handle: 'octo_cat' }
+    assert.deepEqual(await go('PUT', '/api/me/friends', { token: t42 }), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await go('GET', '/api/me/friends'), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('POST', '/api/me/names', { body: { ids: ['42'] }, token: t42 }), { status: 404, body: { error: 'not found' } }, 'реестр снаружи не виден')
+    assert.deepEqual(await friendsOf(t42), { status: 200, body: { friends: [], incoming: [], outgoing: [] } })
+    // Без своего ника звать нельзя
+    gh.user = { id: 9, login: 'third' }
+    const t9 = (await enter('10.0.0.9')).body.token
+    assert.deepEqual(await ask('octo_cat', t9), { status: 409, body: { error: 'nohandle' } })
+    // Ник не того вида, свой, ничей
+    assert.deepEqual(await ask('ab', t42), { status: 400, body: { error: 'invalid' } })
+    assert.deepEqual(await go('POST', '/api/me/friends', { body: '{', token: t42 }), { status: 400, body: { error: 'invalid' } })
+    assert.deepEqual(await ask(' @Octo_More ', t42), { status: 400, body: { error: 'self' } })
+    assert.deepEqual(await ask('nobody_here', t42), { status: 404, body: { error: 'nobody' } })
+    assert.deepEqual(await ask('octo_two', t42), { status: 404, body: { error: 'nobody' } }, 'отпущенный ник — ничей')
+    // Заявка: у 42 — в «твоих заявках», у 7 — в «заявках тебе»; повтор — без второй заявки
+    assert.deepEqual(await ask('OCTO_CAT', t42), { status: 200, body: { status: 'sent', friends: [], incoming: [], outgoing: [p7] } })
+    assert.deepEqual((await friendsOf(t7)).body, { friends: [], incoming: [p42], outgoing: [] })
+    const me7 = (await go('GET', '/api/me', { token: t7 })).body
+    assert.equal(me7.requests, 1)
+    assert.equal(me7.friends, undefined)
+    assert.deepEqual((await ask('octo_cat', t42)).body, { status: 'sent', friends: [], incoming: [], outgoing: [p7] })
+    assert.equal((await friendsOf(t7)).body.incoming.length, 1)
+    // Принять: друзья с обеих сторон
+    assert.deepEqual(await accept('x', t7), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await accept('9', t7), { status: 404, body: { error: 'gone' } }, 'заявки от 9 нет')
+    assert.deepEqual(await accept('42', t7), { status: 200, body: { friends: [p42], incoming: [], outgoing: [] } })
+    assert.deepEqual((await friendsOf(t42)).body, { friends: [p7], incoming: [], outgoing: [] })
+    const counts42 = (await go('GET', '/api/me', { token: t42 })).body
+    assert.equal(counts42.friends, 1)
+    assert.equal(counts42.requests, undefined)
+    assert.equal((await ask('octo_cat', t42)).body.status, 'friends', 'уже друзья')
+    assert.equal((await accept('42', t7)).status, 200, 'принять ещё раз — ничего не меняется')
+    // Сменил ник — дружба на месте, в списке новый ник
+    assert.equal((await nick('octo_renamed', t42)).status, 200)
+    assert.deepEqual((await friendsOf(t7)).body.friends, [{ id: '42', handle: 'octo_renamed' }])
+    assert.equal((await nick('octo_more', t42)).status, 200)
+
+    // Отклонить — молча: у 42 заявка так и ждёт, новая заявка от 42 тихо не доходит
+    assert.equal((await nick('third_one', t9)).status, 200)
+    const p9 = { id: '9', handle: 'third_one' }
+    assert.equal((await ask('third_one', t42)).body.status, 'sent')
+    assert.deepEqual((await friendsOf(t9)).body.incoming, [p42])
+    assert.deepEqual(await unfriend('42', t9), { status: 200, body: { friends: [], incoming: [], outgoing: [] } })
+    assert.ok(circleOf(9).declined['42'])
+    assert.deepEqual((await friendsOf(t42)).body.outgoing, [p9], 'отказ молча')
+    assert.equal((await ask('third_one', t42)).body.status, 'sent')
+    assert.deepEqual((await friendsOf(t9)).body.incoming, [], 'снова позвать — не доходит')
+    // Передумал и позвал сам: у 42 его заявка ждала — сразу друзья, отказ забыт
+    assert.deepEqual(await ask('octo_more', t9), { status: 200, body: { status: 'friends', friends: [p42], incoming: [], outgoing: [] } })
+    assert.deepEqual((await friendsOf(t42)).body.friends, [p7, p9], 'друзья — по нику')
+    assert.deepEqual(circleOf(9).declined, {})
+    // Удалить друга — он пропадает с обеих сторон
+    assert.deepEqual((await unfriend('42', t9)).body.friends, [])
+    assert.deepEqual((await friendsOf(t42)).body.friends, [p7])
+    // Отказ держится месяц, потом заявка снова доходит
+    assert.equal((await ask('third_one', t42)).body.status, 'sent')
+    await unfriend('42', t9)
+    objects.get('gh:9').store.set('circle', { ...circleOf(9), declined: { 42: Date.now() - DECLINE_HOLD_MS - 1 } })
+    assert.equal((await ask('third_one', t42)).body.status, 'sent')
+    assert.deepEqual((await friendsOf(t9)).body.incoming, [p42])
+    assert.deepEqual((await accept('42', t9)).body.friends, [p42])
+    assert.deepEqual((await unfriend('9', t42)).body.friends, [p7])
+    assert.deepEqual((await friendsOf(t9)).body, { friends: [], incoming: [], outgoing: [] })
+    // Отменить свою заявку — у того она пропадает; отказом это не считается
+    assert.deepEqual((await ask('octo_cat', t9)).body.outgoing, [p7])
+    assert.deepEqual((await friendsOf(t7)).body.incoming, [p9])
+    assert.deepEqual((await unfriend('7', t9)).body.outgoing, [])
+    assert.deepEqual((await friendsOf(t7)).body.incoming, [])
+    assert.deepEqual(circleOf(9).declined, {})
+    assert.equal((await unfriend('12345', t9)).status, 200, 'чужой номер — просто список')
+    assert.deepEqual(await unfriend(7, t9), { status: 400, body: { error: 'bad request' } })
+
+    // У 7 заявок через край — «занят»; у 9 друзей через край — «полно». Номера без ника в реестре — удалённые
+    // аккаунты: список их убирает
+    const fakes = (n) => Object.fromEntries(Array.from({ length: n }, (_, i) => [String(1000 + i), Date.now()]))
+    objects.get('gh:7').store.set('circle', { ...circleOf(7), incoming: fakes(MAX_INCOMING) })
+    assert.deepEqual(await ask('octo_cat', t9), { status: 409, body: { error: 'busy' } })
+    assert.deepEqual((await friendsOf(t7)).body, { friends: [p42], incoming: [], outgoing: [] })
+    assert.deepEqual(circleOf(7).incoming, {}, 'удалённые аккаунты ушли из круга')
+    objects.get('gh:9').store.set('circle', { ...circleOf(9), friends: fakes(MAX_FRIENDS) })
+    assert.deepEqual(await ask('octo_cat', t9), { status: 409, body: { error: 'full' } })
+    assert.equal((await go('GET', '/api/me', { token: t9 })).body.friends, MAX_FRIENDS)
+    assert.deepEqual((await friendsOf(t9)).body.friends, [])
+    // Не больше REQUESTS_DAILY заявок в сутки, опечатки тоже считаются
+    for (let i = circleOf(9).asked.length; i < REQUESTS_DAILY; i++) assert.equal((await ask(`no_one_${i}`, t9)).status, 404)
+    assert.deepEqual(await ask('octo_cat', t9), { status: 429, body: { error: 'often' } })
+    assert.deepEqual((await friendsOf(t7)).body.incoming, [])
+
     // Удалить аккаунт — ничего не остаётся, а ник месяц держится, потом свободен
     assert.deepEqual(await go('DELETE', '/api/me', { token: tokens.at(-1) }), { status: 200, body: { ok: true } })
     assert.equal(account42.store.size, 0)
     assert.equal(account42.storage.alarm, null)
     assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).status, 401)
     assert.equal(registry.get('owner:42'), undefined)
+    assert.deepEqual(objects.get('gh:7').store.get('circle').friends, {}, 'удалённый аккаунт уходит у друзей')
     assert.deepEqual(await nick('octo_more', other.body.token), { status: 409, body: { error: 'taken' } })
     Date.now = () => realNow() + 2 * 86_400_000 + 2 * HANDLE_HOLD_MS + 2000
     assert.equal((await nick('octo_more', other.body.token)).status, 200)

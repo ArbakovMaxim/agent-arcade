@@ -103,7 +103,16 @@
   "live · {0} · viewers: {1}",
   "Your handle: @{0}",
   "Take @{0}",
-  "@{0} is taken — choose another one."
+  "@{0} is taken — choose another one.",
+  "requests for you: {0} · friends: {1}",
+  "friends: {0}",
+  "@{0} not found — check the handle.",
+  "@{0} has too many requests — try again later.",
+  "Request sent: @{0} will see it in their “Friends”.",
+  "You and @{0} are friends now.",
+  "Request from @{0} declined.",
+  "Request to @{0} cancelled.",
+  "@{0} is no longer your friend."
  ],
  "site": [
   "Played in total: {0}",

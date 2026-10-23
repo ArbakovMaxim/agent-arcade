@@ -5,7 +5,7 @@
 // Приложение GitHub — OAuth App с включённым Device Flow; его client ID не секрет и лежит в vars (GITHUB_CLIENT_ID),
 // client secret сайту не нужен. Почты и доступа к репозиториям Arcade не просит: scope пустой.
 // Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
-// аккаунт человека.
+// аккаунт человека и его друзья.
 import { sign, signed } from './discover.js'
 
 const MINUTE = 60_000
@@ -31,6 +31,14 @@ export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 export const HANDLE_HOLD_MS = 30 * DAY // сменённый ник месяц держится за прежним хозяином: никто другой его не возьмёт
 export const HANDLE_CHANGES = 5 // смен ника в сутки — чтобы не занимать чужие ники пачкой
 export const TICKET_MS = 12 * 60 * MINUTE // сколько живёт подпись ника для сетевых игр
+// Друзья: друзей вместе со своими заявками — не больше MAX_FRIENDS, заявок тебе — не больше MAX_INCOMING, заявок в
+// сутки — REQUESTS_DAILY (и ник с опечаткой — тоже заявка: перебирать чужие ники незачем). Отклонённый месяц не может
+// позвать снова: его заявка молча не доходит
+export const MAX_FRIENDS = 100
+export const MAX_INCOMING = 50
+export const REQUESTS_DAILY = 20
+export const DECLINE_HOLD_MS = 30 * DAY
+const ACCOUNT_ID = /^\d{1,20}$/
 // Ники, которыми легко выдать себя за Arcade, Claude или GitHub: сами слова и ники, где они — часть через _
 const RESERVED = new Set(['administrator', 'anonymous', 'everyone', 'guest', 'help', 'helpdesk', 'info', 'moderator', 'mods', 'noreply', 'null', 'owner', 'root', 'security', 'staff', 'system', 'team', 'undefined', 'abuse', 'contact', 'postmaster', 'webmaster', 'robot', 'service', 'settings', 'account'])
 const RESERVED_PARTS = ['arcade', 'admin', 'support', 'claude', 'anthropic', 'github', 'official', 'moderator', 'system']
@@ -47,6 +55,10 @@ const ROUTES = {
   'DELETE /api/me': ['user', '/delete'],
   'PUT /api/me/settings': ['user', '/settings'],
   'PUT /api/me/handle': ['user', '/handle'],
+  'GET /api/me/friends': ['user', '/friends'],
+  'POST /api/me/friends': ['user', '/befriend'],
+  'POST /api/me/friends/accept': ['user', '/accept'],
+  'POST /api/me/friends/remove': ['user', '/unfriend'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
@@ -66,12 +78,20 @@ async function readBody(request) {
 // --- Маршрут Worker'а -----------------------------------------------------------------------------------------
 // POST /api/auth/start → { device, code, url, interval, expires }: код для github.com/login/device
 // POST /api/auth/poll { device } → { status: 'pending' | 'expired' | 'denied' } или { status: 'ok', token, user }
-// GET /api/me → { user, settings, handle?, ticket? }, PUT /api/me/settings { settings } → { settings },
+// GET /api/me → { user, settings, handle?, ticket?, friends?, requests? } (сколько друзей и заявок тебе),
+// PUT /api/me/settings { settings } → { settings },
 // PUT /api/me/handle { handle } → { handle, ticket? }, POST /api/auth/logout, DELETE /api/me — с ключом сессии.
 // 401 — ключа нет или он не подходит ({ error: 'auth' }), 503 — вход не настроен ({ error: 'off' }) или GitHub не
 // принял приложение ({ error: 'app' }), 429 — лимит адреса, 502 — GitHub не ответил. Ник: 400 — не того вида
 // ({ error: 'invalid' }) или запрещён ({ error: 'reserved' }), 409 — занят ({ error: 'taken' }), 429 — слишком
-// часто меняли ({ error: 'often' })
+// часто меняли ({ error: 'often' }).
+// Друзья: GET /api/me/friends → { friends, incoming, outgoing } — списки { id, handle } (друзья, заявки тебе, твои
+// заявки); POST /api/me/friends { handle } — заявка по точному нику, POST /api/me/friends/accept { id } — принять,
+// POST /api/me/friends/remove { id } — удалить друга, отклонить заявку или отменить свою; отвечают тем же списком,
+// заявка — ещё и status: 'sent' | 'friends'. 400 — ник не того вида ({ error: 'invalid' }) или свой ({ error: 'self' }),
+// 404 — такого ника нет ({ error: 'nobody' }) или заявки уже нет ({ error: 'gone' }), 409 — сначала возьми свой ник
+// ({ error: 'nohandle' }), друзей и заявок уже много ({ error: 'full' }) или у него слишком много заявок
+// ({ error: 'busy' }), 429 — заявок за сутки много ({ error: 'often' })
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
@@ -109,8 +129,8 @@ export function mergeSettings(stored, incoming, now) {
 }
 
 // --- @ник ----------------------------------------------------------------------------------------------------
-// Ник — подпись человека в сетевых играх (дальше — в друзьях и чате). Друзья будут держаться за номер аккаунта, а не
-// за ник, поэтому его можно менять когда угодно. Что пришло → ник строчными, без @ в начале; не строка — ''
+// Ник — подпись человека в сетевых играх и в друзьях (дальше — в чате). Друзья держатся за номер аккаунта, а не за
+// ник, поэтому его можно менять когда угодно. Что пришло → ник строчными, без @ в начале; не строка — ''
 export function normalHandle(text) {
   return typeof text === 'string' ? text.trim().replace(/^@/, '').toLowerCase() : ''
 }
@@ -141,6 +161,27 @@ export async function ticketName(secret, ticket, now) {
 
 const bytes = (value) => new TextEncoder().encode(JSON.stringify(value)).length
 const today = (now) => new Date(now).toISOString().slice(0, 10)
+const refuse = (error, status) => Response.json({ error }, { status })
+const without = (map, id) => Object.fromEntries(Object.entries(map).filter(([key]) => key !== id))
+
+// Тело запроса из мода: JSON-объект; не он — {}
+function parsed(text) {
+  try {
+    const value = JSON.parse(text)
+    return value && typeof value === 'object' ? value : {}
+  } catch {
+    return {}
+  }
+}
+
+// Круг после того, как id стал другом: из заявок он уходит
+const befriended = (circle, id, now) => ({
+  ...circle,
+  friends: { ...circle.friends, [id]: now },
+  incoming: without(circle.incoming, id),
+  outgoing: without(circle.outgoing, id),
+  declined: without(circle.declined, id),
+})
 
 async function sha256(text) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
@@ -155,7 +196,7 @@ function randomKey() {
 // Экземпляр 'auth': коды GitHub, выдача ключей сессии и реестр ников — handle:<ник> → { id, until? } (чей ник и, если
 // его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle, changes } (ник
 // человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
-// ключей сессии), settings, handle и seen — когда человек последний раз заходил
+// ключей сессии), settings, handle, seen — когда человек последний раз заходил, и circle — его друзей и заявки
 export class Account {
   constructor(ctx, env) {
     this.ctx = ctx
@@ -172,6 +213,12 @@ export class Account {
       if (path === '/login') return await this.login(await request.json())
       if (path === '/claim') return await this.claim(await request.json())
       if (path === '/release') return await this.release(await request.json())
+      if (path === '/lookup') return await this.lookup(await request.json())
+      if (path === '/names') return await this.names(await request.json())
+      // От экземпляров других людей: заявка, ответ на свою заявку, «забудь меня»
+      if (path === '/incoming') return await this.incoming(await request.json())
+      if (path === '/accepted') return await this.accepted(await request.json())
+      if (path === '/drop') return await this.drop(await request.json())
       const hash = await this.session(request.headers.get('Authorization'))
       if (!hash) return Response.json({ error: 'auth' }, { status: 401 })
       if (path === '/me') return await this.me()
@@ -179,6 +226,10 @@ export class Account {
       if (path === '/handle') return await this.setHandle(await request.text())
       if (path === '/logout') return await this.logout(hash)
       if (path === '/delete') return await this.remove()
+      if (path === '/friends') return await this.list()
+      if (path === '/befriend') return await this.befriend(await request.text())
+      if (path === '/accept') return await this.accept(await request.text())
+      if (path === '/unfriend') return await this.unfriend(await request.text())
       return Response.json({ error: 'not found' }, { status: 404 })
     } catch (error) {
       if (error instanceof LimitError) return Response.json({ error: 'limit' }, { status: 429 })
@@ -291,7 +342,16 @@ export class Account {
   async me() {
     const { id, login, avatar } = (await this.ctx.storage.get('user')) ?? {}
     const handle = await this.ctx.storage.get('handle')
-    return Response.json({ user: { id, login, ...(avatar ? { avatar } : {}) }, settings: (await this.ctx.storage.get('settings')) ?? {}, ...(await this.named(handle)) })
+    const circle = await this.circle()
+    const friends = Object.keys(circle.friends).length
+    const requests = Object.keys(circle.incoming).filter((other) => !circle.friends[other]).length
+    return Response.json({
+      user: { id, login, ...(avatar ? { avatar } : {}) },
+      settings: (await this.ctx.storage.get('settings')) ?? {},
+      ...(await this.named(handle)),
+      ...(friends ? { friends } : {}),
+      ...(requests ? { requests } : {}),
+    })
   }
 
   // Ник и его подпись для ответа; без ника — ничего, без LINK_SECRET — ник без подписи
@@ -350,6 +410,184 @@ export class Account {
     return Response.json({ ok: true })
   }
 
+  // Реестр: чей это ник сейчас. Сменённый или отпущенный ник, пока держится за прежним хозяином, — ничей
+  async lookup({ handle }) {
+    const record = typeof handle === 'string' && HANDLE.test(handle) ? await this.ctx.storage.get(`handle:${handle}`) : null
+    if (!record || record.until) return refuse('nobody', 404)
+    return Response.json({ id: record.id })
+  }
+
+  // Реестр: ники по номерам — для списка друзей; у удалённого аккаунта ника нет. Хранилище отдаёт не больше 128
+  // ключей за раз
+  async names({ ids }) {
+    if (!Array.isArray(ids) || ids.length > MAX_FRIENDS + MAX_INCOMING || !ids.every((id) => typeof id === 'string' && ACCOUNT_ID.test(id))) return refuse('bad request', 400)
+    const names = {}
+    for (let i = 0; i < ids.length; i += 128) {
+      const owners = await this.ctx.storage.get(ids.slice(i, i + 128).map((id) => `owner:${id}`))
+      for (const [key, owner] of owners) if (owner?.handle) names[key.slice('owner:'.length)] = owner.handle
+    }
+    return Response.json({ names })
+  }
+
+  // --- Друзья ---------------------------------------------------------------------------------------------------
+  // Круг человека — circle: friends, incoming (заявки ему) и outgoing (его заявки) — { номер: когда }, declined — кого
+  // и когда он отклонил, asked — когда он звал в друзья за последние сутки. Друзья держатся за номер аккаунта, ники для
+  // списка — из реестра. Дружба взаимная: каждая сторона хранит свой круг, экземпляры сообщают друг другу о заявках
+  async circle() {
+    const circle = (await this.ctx.storage.get('circle')) ?? {}
+    return { friends: circle.friends ?? {}, incoming: circle.incoming ?? {}, outgoing: circle.outgoing ?? {}, declined: circle.declined ?? {}, asked: circle.asked ?? [] }
+  }
+
+  // Сохранить круг; старые отказы и заявки старше суток не храним
+  async saveCircle(circle, now) {
+    const declined = Object.fromEntries(Object.entries(circle.declined).filter(([, at]) => now - at < DECLINE_HOLD_MS))
+    await this.ctx.storage.put('circle', { ...circle, declined, asked: circle.asked.filter((at) => now - at < DAY) })
+  }
+
+  // Вопрос к экземпляру другого человека
+  person(id, path, body) {
+    const space = this.env.ACCOUNT
+    return space.get(space.idFromName(`gh:${id}`)).fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))
+  }
+
+  // Списки с никами: друзья — по нику, заявки — по времени. Кто сразу и друг, и в заявках — только друг. Номер без
+  // ника в реестре — аккаунт удалён: он уходит из круга
+  async list(status) {
+    let circle = await this.circle()
+    const ids = [...new Set([...Object.keys(circle.friends), ...Object.keys(circle.incoming), ...Object.keys(circle.outgoing)])]
+    let names = {}
+    if (ids.length) {
+      const answer = await this.registry('/names', { ids })
+      if (!answer.ok) throw new Error(`registry: ${answer.status}`)
+      names = (await answer.json()).names ?? {}
+    }
+    const gone = ids.filter((id) => !names[id])
+    if (gone.length) {
+      circle = await this.circle()
+      for (const id of gone) circle = { ...circle, friends: without(circle.friends, id), incoming: without(circle.incoming, id), outgoing: without(circle.outgoing, id) }
+      await this.saveCircle(circle, Date.now())
+    }
+    const people = (map, skip) =>
+      Object.entries(map)
+        .filter(([id]) => names[id] && !skip.some((other) => other[id]))
+        .sort((a, b) => a[1] - b[1])
+        .map(([id]) => ({ id, handle: names[id] }))
+    const friends = people(circle.friends, []).sort((a, b) => a.handle.localeCompare(b.handle))
+    return Response.json({ ...(status ? { status } : {}), friends, incoming: people(circle.incoming, [circle.friends]), outgoing: people(circle.outgoing, [circle.friends, circle.incoming]) })
+  }
+
+  // Позвать в друзья по точному нику. Он уже звал тебя — это согласие, сразу друзья
+  async befriend(text) {
+    const handle = normalHandle(parsed(text).handle)
+    if (!HANDLE.test(handle)) return refuse('invalid', 400)
+    const mine = await this.ctx.storage.get('handle')
+    if (!mine) return refuse('nohandle', 409)
+    if (handle === mine) return refuse('self', 400)
+    const { id: me } = (await this.ctx.storage.get('user')) ?? {}
+    const now = Date.now()
+    let circle = await this.circle()
+    const asked = circle.asked.filter((at) => now - at < DAY)
+    if (asked.length >= REQUESTS_DAILY) return refuse('often', 429)
+    await this.saveCircle({ ...circle, asked: [...asked, now] }, now)
+    const found = await this.registry('/lookup', { handle })
+    if (found.status === 404) return refuse('nobody', 404)
+    if (!found.ok) throw new Error(`registry: ${found.status}`)
+    const { id } = await found.json()
+    if (id === me) return refuse('self', 400)
+    circle = await this.circle()
+    if (circle.friends[id]) return this.list('friends')
+    if (circle.incoming[id]) return this.welcome(id, me, 'friends')
+    if (!circle.outgoing[id] && Object.keys(circle.friends).length + Object.keys(circle.outgoing).length >= MAX_FRIENDS) return refuse('full', 409)
+    const answer = await this.person(id, '/incoming', { id: me })
+    if (answer.status === 404) return refuse('nobody', 404)
+    if (!answer.ok) throw new Error(`friend: ${answer.status}`)
+    const { status } = await answer.json()
+    if (status === 'full') return refuse('busy', 409)
+    circle = await this.circle()
+    const made = status === 'friends'
+    await this.saveCircle(made ? befriended(circle, id, now) : { ...circle, outgoing: { ...circle.outgoing, [id]: now }, declined: without(circle.declined, id) }, now)
+    return this.list(made ? 'friends' : 'sent')
+  }
+
+  async accept(text) {
+    const { id } = parsed(text)
+    if (typeof id !== 'string' || !ACCOUNT_ID.test(id)) return refuse('bad request', 400)
+    const { id: me } = (await this.ctx.storage.get('user')) ?? {}
+    return this.welcome(id, me)
+  }
+
+  // Принять заявку id: он узнаёт об этом, оба — друзья. Он её уже отменил или удалил аккаунт — заявки нет
+  async welcome(id, me, status) {
+    const now = Date.now()
+    let circle = await this.circle()
+    if (circle.friends[id]) return this.list(status)
+    if (!circle.incoming[id]) return refuse('gone', 404)
+    if (Object.keys(circle.friends).length + Object.keys(circle.outgoing).length >= MAX_FRIENDS) return refuse('full', 409)
+    const answer = await this.person(id, '/accepted', { id: me })
+    if (answer.status === 404) {
+      circle = await this.circle()
+      await this.saveCircle({ ...circle, incoming: without(circle.incoming, id) }, now)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`friend: ${answer.status}`)
+    await this.saveCircle(befriended(await this.circle(), id, now), now)
+    return this.list(status)
+  }
+
+  // Удалить друга или отменить свою заявку — он забывает тебя; отклонить заявку — молча: у того, кто звал, она так
+  // и ждёт ответа, а снова позвать он сможет через месяц
+  async unfriend(text) {
+    const { id } = parsed(text)
+    if (typeof id !== 'string' || !ACCOUNT_ID.test(id)) return refuse('bad request', 400)
+    const { id: me } = (await this.ctx.storage.get('user')) ?? {}
+    let circle = await this.circle()
+    if (circle.friends[id] || circle.outgoing[id]) {
+      const answer = await this.person(id, '/drop', { id: me })
+      if (!answer.ok && answer.status !== 404) throw new Error(`friend: ${answer.status}`)
+    }
+    const now = Date.now()
+    circle = await this.circle()
+    const declined = circle.incoming[id] && !circle.friends[id] ? { ...circle.declined, [id]: now } : circle.declined
+    await this.saveCircle({ ...circle, friends: without(circle.friends, id), incoming: without(circle.incoming, id), outgoing: without(circle.outgoing, id), declined }, now)
+    return this.list()
+  }
+
+  // Заявка от id: 'friends' — уже друзья или этот человек сам звал id (тогда друзья теперь), 'sent' — заявка ждёт
+  // ответа, 'full' — заявок слишком много. Аккаунта здесь нет — 404, и ничего не записываем
+  async incoming({ id }) {
+    if (typeof id !== 'string' || !ACCOUNT_ID.test(id) || !(await this.ctx.storage.get('user'))) return refuse('nobody', 404)
+    const now = Date.now()
+    const circle = await this.circle()
+    if (circle.friends[id]) return Response.json({ status: 'friends' })
+    if (circle.outgoing[id]) {
+      await this.saveCircle(befriended(circle, id, now), now)
+      return Response.json({ status: 'friends' })
+    }
+    if (circle.incoming[id] || circle.declined[id] > now - DECLINE_HOLD_MS) return Response.json({ status: 'sent' })
+    if (Object.keys(circle.incoming).length >= MAX_INCOMING) return Response.json({ status: 'full' })
+    await this.saveCircle({ ...circle, incoming: { ...circle.incoming, [id]: now } }, now)
+    return Response.json({ status: 'sent' })
+  }
+
+  // id принял заявку этого человека — друзья. Заявки уже нет — 404
+  async accepted({ id }) {
+    const circle = await this.circle()
+    if (circle.friends[id]) return Response.json({ ok: true })
+    if (typeof id !== 'string' || !circle.outgoing[id] || !(await this.ctx.storage.get('user'))) return refuse('gone', 404)
+    const now = Date.now()
+    await this.saveCircle(befriended(circle, id, now), now)
+    return Response.json({ ok: true })
+  }
+
+  // id удалил этого человека из друзей, отменил заявку или удалил аккаунт: забыть id. Нечего забывать — не пишем
+  async drop({ id }) {
+    const circle = await this.circle()
+    if (typeof id !== 'string' || !(circle.friends[id] || circle.incoming[id] || circle.outgoing[id])) return Response.json({ ok: true })
+    const now = Date.now()
+    await this.saveCircle({ ...circle, friends: without(circle.friends, id), incoming: without(circle.incoming, id), outgoing: without(circle.outgoing, id) }, now)
+    return Response.json({ ok: true })
+  }
+
   async saveSettings(text) {
     let incoming = null
     try {
@@ -388,10 +626,15 @@ export class Account {
     } else await this.ctx.storage.setAlarm(seen + IDLE_MS)
   }
 
-  // Перед удалением аккаунта — отпустить его ник в реестре
+  // Перед удалением аккаунта — убрать его у друзей и у тех, с кем были заявки, и отпустить ник в реестре. Кто не
+  // ответил, уберёт его сам: у номера в реестре больше нет ника
   async forget() {
     const { id } = (await this.ctx.storage.get('user')) ?? {}
-    if (id && (await this.ctx.storage.get('handle'))) {
+    if (!id) return
+    const circle = await this.circle()
+    const others = new Set([...Object.keys(circle.friends), ...Object.keys(circle.incoming), ...Object.keys(circle.outgoing)])
+    await Promise.allSettled([...others].map((other) => this.person(other, '/drop', { id })))
+    if (await this.ctx.storage.get('handle')) {
       const answer = await this.registry('/release', { id })
       if (!answer.ok) throw new Error(`registry: ${answer.status}`)
     }
