@@ -9,9 +9,9 @@ import { siteUrl } from './catalog.js'
 import { jsonFrom } from './youtube.js'
 
 // Что из $.store общее для всех компьютеров. Свои игры, каталог, последняя игра, браузер и графика — у каждого компьютера
-// свои: файлы игр, браузеры и терминал на другом компьютере другие. collapsed — свёрнутые разделы главного меню,
-// favorites — избранное
-export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites']
+// свои: файлы игр, браузеры и терминал на другом компьютере другие. keepMenu — оставлять ли меню Arcade, когда
+// открылся встроенный браузер Desktop, collapsed — свёрнутые разделы главного меню, favorites — избранное
+export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites']
 const TOKEN = /^(\d{1,20})\.[A-Za-z0-9_-]{43}$/
 const DEVICE = /^[A-Za-z0-9_-]{8,100}$/
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/

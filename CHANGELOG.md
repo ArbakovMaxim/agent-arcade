@@ -1,5 +1,13 @@
 # Changelog · Список изменений
 
+## 0.25.2 — в настройках Desktop — «Когда открывается браузер: закрывать меню / оставлять меню» · Desktop settings get “When the browser opens: close the menu / keep the menu”
+
+- “Close the menu” is the default and works as before: the Arcade pane closes and the built-in browser gets the full height · «закрывать меню» — по умолчанию и как раньше: панель Arcade закрывается, встроенный браузер — во всю высоту
+- “Keep the menu” leaves the Arcade pane open, and Desktop puts the browser below it; the two can't stand side by side · «оставлять меню» оставляет панель Arcade открытой, а Desktop ставит браузер под ней; рядом их не поставить
+- Works for everything that opens in the built-in browser — games, videos, articles, chats — and also when Claude opens the page at Arcade's request · действует на всё, что открывается во встроенном браузере, — игры, видео, статьи, чаты, — и когда страницу по просьбе Arcade открывает Claude
+- Shown only while the built-in browser is chosen; shooters (browser window) and Dendy (in the pane) are unchanged · пункт виден, только пока выбран встроенный браузер; шутеры (окно браузера) и Денди (в панели) — без изменений
+- Remembered and, signed in, synced to your other computers like the language and pane size · запоминается и со входом синхронизируется на другие компьютеры, как язык и размер панели
+
 ## 0.25.1 — в открытом чате под полем ввода и на странице чатов `/chat` — строка, что переписка не шифруется; в английском меню Desktop подпись под «Войти через GitHub» больше не остаётся по-русски · an open chat and the `/chat` page say under the message box that messages are not encrypted; in the English Desktop menu the note under “Sign in with GitHub” is no longer left in Russian
 
 - Under the message box, in the Arcade pane and on the site page: “Messages are not encrypted — never write passwords or keys here.”; the chat list already said so · под полем для сообщения — в окне Arcade и на странице сайта: «Переписка не шифруется — не пиши сюда пароли и ключи.»; в списке чатов это уже было

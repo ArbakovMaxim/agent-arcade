@@ -1214,6 +1214,51 @@ test('Desktop: в настройках — встроенный браузер �
   await ui.unmount()
 })
 
+test('Desktop: «Когда открывается браузер» — только для встроенного браузера, сохраняется с остальными настройками', async ($, on) => {
+  const { clock, saved } = stubs(on, { env: WINDOWS, site: segaCatalog(), browser: 'ok' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-keep-menu' })).toMatchObject({ props: { label: 'Когда открывается браузер: закрывать меню' } })
+  expect(await ui.find({ type: 'Text', text: '  закрывать — браузер во всю высоту; оставлять — браузер встаёт под меню Arcade' })).toBeDefined()
+  await ui.press({ key: 'arcade-keep-menu' })
+  expect(await ui.find({ key: 'arcade-keep-menu' })).toMatchObject({ props: { label: 'Когда открывается браузер: оставлять меню' } })
+  expect(saved.get('keepMenu')).toBe(true)
+  expect(Object.keys(saved.get('syncAt'))).toContain('keepMenu') // уйдёт на сайт, как язык и размер панели
+  // Окно браузера — панель Arcade и так не закрывается
+  await ui.press({ key: 'arcade-opener' })
+  expect(await ui.find({ key: 'arcade-keep-menu' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('Desktop: меню оставляем — встроенный браузер открылся, панель Arcade не закрывается', async ($, on) => {
+  const { clock, mcpCalls, closed } = stubs(on, { site: segaCatalog(), browser: 'ok', stored: { keepMenu: true } })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start', 'show_pane'])
+  expect(closed).toEqual([]) // браузер встаёт под панелью Arcade
+  expect(await ui.find({ type: 'Text', text: 'Miniplanets открыт во встроенном браузере Claude.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('Desktop: меню оставляем — и когда игру открыл Claude по просьбе Arcade', async ($, on) => {
+  const { clock, mcpCalls, submits, closed } = stubs(on, { site: segaCatalog(), submit: true, stored: { keepMenu: true } })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  expect(submits.length).toBe(1)
+  await $.tool.call({ tool: 'mcp__Claude_Browser__navigate', url: `${SITE}/?game=miniplanets`, tabId: 'tab-1' })
+  expect(mcpCalls.at(-1)).toMatchObject({ tool: 'show_pane', args: { pane: 'preview' } })
+  expect(closed).toEqual([])
+  await ui.unmount()
+})
+
 test('Desktop: окно браузера выбрано в прошлый раз — «Окно Arcade» и «В окне» открывают его', async ($, on) => {
   // Каталог и последняя игра — из прошлого сеанса, как в жизни
   const copy = JSON.parse(segaCatalog())
@@ -3691,7 +3736,7 @@ test('account.js: ответы сайта про вход и настройки,
   expect(restoreStamps({ lang: 5, wide: 'x', junk: 3, notify: -1, keys: 0 })).toEqual({ lang: 5 })
   expect(restoreStamps(null)).toEqual({})
   // Встреча: сайт новее — оттуда; здесь новее — туда; на сайте нет — туда; не менял здесь (нет отметки) — с сайта
-  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites'])
+  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites'])
   expect(
     syncPlan(
       { lang: 'ru', wide: true, notify: false, onDone: 'pause' },
