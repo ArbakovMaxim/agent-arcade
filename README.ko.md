@@ -100,7 +100,7 @@ claude plugin install arcade@agent-arcade
 | **마스터 시스템** | 게임 4개: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **게임 → 아케이드** | Flappy Arcade — Arcade가 직접 만든 원버튼 게임. 패널과 Arcade 창에서 바로 플레이할 수 있고, 그날의 코스는 모두에게 같으며, 내 최고 기록이 저장됩니다 |
-| **게임 → 슈팅** | Freedoom Phase 1과 2(Doom의 무료 대체판), FreeDM 데스매치, Blasphemer(Heretic의 무료 대체판), BlasphDM 데스매치 |
+| **게임 → 슈팅** | Freedoom Phase 1과 2(Doom의 무료 대체판), FreeDM 데스매치, Blasphemer(Heretic의 무료 대체판), BlasphDM 데스매치, OpenArena(Quake III 엔진의 아레나 슈팅, 봇과 대전, GPL-2.0) |
 | **게임 → 레이싱** | HexGL — 미래형 반중력 레이싱 |
 | **게임 → 전략** | OpenTTD — 운송 회사 경영(GPL-2.0). Micropolis — 1989년 고전 도시 건설 게임의 오픈 소스 코드로, 도시는 브라우저에 저장됩니다(micropolisJS, 추가 조항이 붙은 GPL-3.0과 Micropolis Public Name License). Warzone 2100 — 캠페인과 컴퓨터 상대 전투가 있는 실시간 전략 게임으로, 유닛을 직접 설계하고 저장은 브라우저에 남습니다(GPL-2.0-or-later) |
 | **게임 → 어드벤처** | ScummVM(GPL-3.0-or-later)으로 즐기는 90년대 무료 고전 어드벤처 4편: Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress, Nippon Safes, Inc. — 재배포가 허용된 프리웨어 게임 데이터. 언제든 F5로 저장 |

@@ -1288,7 +1288,7 @@ test('Desktop: окно браузера выбрано в прошлый раз
   await ui.unmount()
 })
 
-// Полки «Шутеры» и «Гонки»: FreeDM просит захваченную мышь, HexGL — нет
+// Полки «Шутеры» и «Гонки»: FreeDM и OpenArena (браузерная, mouse в каталоге) просят захваченную мышь, HexGL — нет
 function shooterCatalog() {
   const site = JSON.parse(siteCatalog())
   site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'web', title: 'Браузерные', group: 'games' })
@@ -1296,6 +1296,7 @@ function shooterCatalog() {
   site.shelves = [{ id: 'shooters', title: 'Шутеры' }, { id: 'racing', title: 'Гонки' }]
   const sha = 'e'.repeat(64)
   site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  site.games.openarena = { console: 'web', kind: 'web', shelf: 'shooters', page: 'web-games/openarena/', mouse: true, title: 'OpenArena', genre: 'шутер', about: 'боты', keys: '…' }
   site.games.hexgl = { console: 'web', kind: 'web', shelf: 'racing', page: 'web-games/hexgl/', title: 'HexGL', genre: 'гонки', about: 'гонки', keys: '…' }
   return JSON.stringify(site)
 }
@@ -1313,6 +1314,9 @@ test('Desktop: шутеры — окном браузера и при встро
   await ui.press({ key: 'arcade-game-freedm' })
   expect(launches.length).toBe(1)
   expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?game=freedm`)
+  await ui.press({ key: 'arcade-game-openarena' })
+  expect(launches.length).toBe(2)
+  expect(launches[1].env.ARCADE_URL).toBe(`${SITE}/?game=openarena`)
   await ui.press({ key: 'arcade-open-tab-shelf-shooters' })
   expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=games&shelf=shooters`)
   expect(mcpCalls).toEqual([])
@@ -1323,7 +1327,7 @@ test('Desktop: шутеры — окном браузера и при встро
   expect(await ui.find({ type: 'Text', text: MOUSE_NOTE })).toBeUndefined()
   await ui.press({ key: 'arcade-game-hexgl' })
   expect(mcpCalls.map((c) => c.tool)).toEqual(['tabs_context', 'preview_start', 'show_pane'])
-  expect(launches.length).toBe(2)
+  expect(launches.length).toBe(3)
   await ui.unmount()
 })
 
@@ -2247,6 +2251,10 @@ test('настольные игры: мод знает их без ROM, откр
   expect(parseCatalog(JSON.stringify(site)).games.find((g: any) => g.id === 'chess')).toMatchObject({ console: 'board', kind: 'board', title: 'Шахматы' })
   const withWeb = { ...site, consoles: [...site.consoles, { id: 'web', title: 'Браузерные' }], games: { ...site.games, hexgl: { console: 'web', kind: 'web', page: 'web-games/hexgl/index.html', title: 'HexGL', genre: 'гонки', about: 'гонки', keys: '…' } } }
   expect(parseCatalog(JSON.stringify(withWeb)).games.find((g: any) => g.id === 'hexgl')).toMatchObject({ console: 'web', kind: 'web', title: 'HexGL' })
+  // mouse — только true и только у браузерной игры
+  expect(parseCatalog(JSON.stringify(withWeb)).games.find((g: any) => g.id === 'hexgl').mouse).toBeUndefined()
+  const mice = { ...withWeb, games: { ...withWeb.games, hexgl: { ...withWeb.games.hexgl, mouse: true }, chess: { ...site.games.chess, mouse: true }, oa: { ...withWeb.games.hexgl, title: 'OA', mouse: 'yes' } } }
+  expect(parseCatalog(JSON.stringify(mice)).games.filter((g: any) => g.mouse).map((g: any) => g.id)).toEqual(['hexgl'])
   const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site), files: { 'api/lobbies': JSON.stringify({ doom: 0, games: {}, board: { chess: 1 } }) } })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await clock.advance(2_500)

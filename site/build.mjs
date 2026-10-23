@@ -141,6 +141,20 @@ function copy(from, to) {
   fs.copyFileSync(from, to)
 }
 
+// Файл из кеша скачанных игр (.cache/web) — жёсткой ссылкой, если сборка на том же диске: сотни мегабайт OpenArena
+// не копируются в каждую сборку заново. Ссылкой — только крупные файлы, мелкие проще скопировать. Править такой
+// файл на месте нельзя — правка ушла бы и в кеш. Другой диск или ссылки запрещены — обычная копия
+const LINK_MIN = 1024 * 1024
+function place(from, to) {
+  if (fs.statSync(from).size < LINK_MIN) return copy(from, to)
+  fs.mkdirSync(path.dirname(to), { recursive: true })
+  try {
+    fs.linkSync(from, to)
+  } catch {
+    fs.copyFileSync(from, to)
+  }
+}
+
 // Эмулятор Sega (EmulatorJS + ядро Genesis Plus GX) → dist/emulatorjs/, лицензии → dist/licenses/emulatorjs/.
 // Одна правка: без проверки обновлений, чтобы страница не обращалась к cdn.emulatorjs.org.
 function copyEmulatorJS(from, out) {
@@ -363,6 +377,7 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
       if (!folders.some((f) => fs.existsSync(path.join(f, path.basename(g.page))))) fail(`${where}: нет страницы игры ${g.page}`)
       if (g.isolated !== undefined && g.isolated !== true) fail(`${where}: isolated — только true`)
       if (g.offline !== undefined && g.offline !== true) fail(`${where}: offline — только true`)
+      if (g.mouse !== undefined && g.mouse !== true) fail(`${where}: mouse — только true`)
       const walk = (base, dir) => {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
           const full = path.join(dir, entry.name)
@@ -375,7 +390,8 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
             }
             const to = path.join(out, 'web-games', g.id, path.relative(base, full))
             if (fs.existsSync(to)) fail(`${where}: ${path.relative(base, full)} есть и в архиве, и в папке игры`)
-            copy(full, to)
+            if (base === prepared) place(full, to)
+            else copy(full, to)
           }
         }
       }
@@ -389,6 +405,7 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
         const html = fs.readFileSync(pageOut, 'utf8')
         const at = html.search(/<script[^>]*\ssrc=/i)
         if (at < 0) fail(`${where}: в странице игры нет подключаемого скрипта — некуда вставить ${script}`)
+        fs.rmSync(pageOut) // вдруг это жёсткая ссылка в кеш (place) — пишем новый файл, кеш не трогаем
         fs.writeFileSync(pageOut, `${html.slice(0, at)}<script src="${script}"></script>${html.slice(at)}`)
       }
       // В одной сборке бывает несколько игр с одноимёнными readme (ScummVM) — тогда к имени добавляется папка: sky-readme.txt
@@ -402,6 +419,8 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
       })
       games[g.id] = {
         ...(g.shelf ? { shelf: g.shelf } : {}), // полка во вкладке группы: шутеры, гонки, стратегии, настольные
+        // Игре нужна захваченная мышь (шутер): мод открывает её окном браузера, а не во встроенном браузере Claude
+        ...(g.mouse ? { mouse: true } : {}),
         // Cloudflare отвечает на …/index.html переходом на папку — сразу даём адрес папки
         console: g.console, kind: 'web', page: `web-games/${g.id}/${path.basename(g.page) === 'index.html' ? '' : path.basename(g.page).replace(/\.html?$/i, '')}`, title: g.title, genre: g.genre, about: g.about, about_en: g.about_en, keys: g.keys,
         credit: `${g.title} \u00a9 ${license.author}, ${license.name}`,

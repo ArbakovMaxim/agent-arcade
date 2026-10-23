@@ -100,7 +100,7 @@ claude plugin install arcade@agent-arcade
 | **Master System** | 4 игры: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **Игры → Аркады** | Flappy Arcade — своя игра Arcade на одну кнопку: прямо в панели и в окне Arcade; трасса дня одна для всех, рекорд запоминается |
-| **Игры → Шутеры** | Freedoom Phase 1 и 2 (свободная замена Doom), deathmatch FreeDM, Blasphemer (свободная замена Heretic), deathmatch BlasphDM |
+| **Игры → Шутеры** | Freedoom Phase 1 и 2 (свободная замена Doom), deathmatch FreeDM, Blasphemer (свободная замена Heretic), deathmatch BlasphDM, OpenArena — арена-шутер на движке Quake III против ботов (GPL-2.0) |
 | **Игры → Гонки** | HexGL — футуристические гонки на антигравитационных кораблях |
 | **Игры → Стратегии** | OpenTTD — транспортная стратегия (GPL-2.0); Micropolis — открытый код классического градостроителя 1989 года, город сохраняется в браузере (micropolisJS, GPL-3.0 с дополнительными условиями и Micropolis Public Name License); Warzone 2100 — стратегия в реальном времени с кампанией и боем против компьютера, свои машины собираешь сам, сохранения остаются в браузере (GPL-2.0-or-later) |
 | **Игры → Квесты** | Четыре бесплатных классических квеста 90-х в ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress и Nippon Safes, Inc. — бесплатные данные игр с правом распространения; сохраняйся в любой момент по F5 |

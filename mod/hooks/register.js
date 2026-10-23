@@ -803,8 +803,10 @@ function builtinBrowser(surface, mouse = false) {
   return surface === 'desktop' && (!platform || (desktopOpener === 'builtin' && !mouse))
 }
 
+// Шутеры: Doom-подобные и браузерные игры, которым каталог сайта ставит mouse (OpenArena)
 function mouseGame(id) {
-  return gameById(id)?.console === 'doom'
+  const g = gameById(id)
+  return g?.console === 'doom' || g?.mouse === true
 }
 const MOUSE_NOTE = 'Встроенный браузер Claude не даёт игре захватить мышь, поэтому шутеры открываются окном браузера.'
 

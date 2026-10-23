@@ -64,6 +64,7 @@
     'градостроитель': 'city builder',
     'мышь — строить · инструменты — на панели слева': 'mouse — build · tools — on the left panel',
     'мышь — выбирать и отдавать приказы · стрелки — камера · колёсико — масштаб': 'mouse — select and give orders · arrows — camera · wheel — zoom',
+    'мышь — прицел · огонь — левая кнопка · ходьба — WASD · прыжок — пробел · присесть — C · оружие — колёсико или 1–9 · счёт — Tab · меню — Esc': 'mouse — aim · fire — left button · move — WASD · jump — Space · crouch — C · weapon — wheel or 1–9 · score — Tab · menu — Esc',
     'Квесты': 'Adventures',
     'квест': 'adventure',
     'мышь — ходить, смотреть, брать · F5 — меню и сохранение': 'mouse — walk, look, take · F5 — menu and saving',

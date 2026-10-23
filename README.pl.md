@@ -100,7 +100,7 @@ Okno przeglądarki to osobne okno Arcade (w domyślnej przeglądarce lub tej wyb
 | **Master System** | 4 gry: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **Gry → Gry zręcznościowe** | Flappy Arcade — własna gra Arcade na jeden przycisk: działa bezpośrednio w panelu i w oknie Arcade; trasa dnia jest dla wszystkich ta sama, a twój rekord się zapisuje |
-| **Gry → Strzelanki** | Freedoom Phase 1 i 2 (wolne zamienniki Dooma), deathmatch FreeDM, Blasphemer (wolny zamiennik Heretica), deathmatch BlasphDM |
+| **Gry → Strzelanki** | Freedoom Phase 1 i 2 (wolne zamienniki Dooma), deathmatch FreeDM, Blasphemer (wolny zamiennik Heretica), deathmatch BlasphDM, OpenArena — strzelanka arenowa na silniku Quake III przeciwko botom (GPL-2.0) |
 | **Gry → Wyścigi** | HexGL — futurystyczne wyścigi antygrawitacyjne |
 | **Gry → Strategie** | OpenTTD — potentat transportowy (GPL-2.0); Micropolis — otwarty kod klasycznej gry o budowie miasta z 1989 roku, twoje miasto zapisuje się w przeglądarce (micropolisJS, GPL-3.0 z dodatkowymi warunkami i Micropolis Public Name License); Warzone 2100 — strategia czasu rzeczywistego z kampanią i potyczką z komputerem, własne jednostki projektujesz sam, zapisy zostają w przeglądarce (GPL-2.0-or-later) |
 | **Gry → Przygodówki** | Cztery darmowe klasyczne przygodówki z lat 90. w ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress i Nippon Safes, Inc. — dane gier freeware, które wolno rozpowszechniać za zgodą; zapis w dowolnej chwili klawiszem F5 |

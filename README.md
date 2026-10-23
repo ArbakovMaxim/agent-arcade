@@ -100,7 +100,7 @@ The browser window is a separate Arcade window (your default browser or the one 
 | **Master System** | 4 games: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
 | **PlayStation** | Hello Pong |
 | **Games → Arcade games** | Flappy Arcade — Arcade's own one-button game: plays right in the panel and in the Arcade window; the course of the day is the same for everyone, your best score is kept |
-| **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch |
+| **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch, OpenArena — arena shooter on the Quake III engine against bots (GPL-2.0) |
 | **Games → Racing** | HexGL — futuristic anti-gravity racing |
 | **Games → Strategy** | OpenTTD — transport tycoon (GPL-2.0); Micropolis — the open-source code of the classic 1989 city builder, your city is saved in the browser (micropolisJS, GPL-3.0 with additional terms and the Micropolis Public Name License); Warzone 2100 — real-time strategy with a campaign and skirmish against the computer, you design your own units, saves stay in the browser (GPL-2.0-or-later) |
 | **Games → Adventures** | Four free classic 90s adventures in ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress and Nippon Safes, Inc. — freeware game data with permission to redistribute; save at any moment with F5 |

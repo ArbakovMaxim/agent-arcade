@@ -97,7 +97,9 @@ export function parseCatalog(text) {
       // У книги — ещё автор и путь к тексту: читалка в окне (а потом и в панели)
       const book = g.kind === 'book' && typeof g.text === 'string' && /^books\/[\w-]+\/book\.json$/.test(g.text) ? { author: String(g.author ?? '').slice(0, 80), text: g.text } : {}
       if (g.kind === 'book' && !book.text) continue
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...texts, kind: g.kind, ...shelfOf(g), ...book })
+      // Браузерный шутер (OpenArena) просит захваченную мышь — Desktop открывает его окном браузера
+      const mouse = g.kind === 'web' && g.mouse === true ? { mouse: true } : {}
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...texts, kind: g.kind, ...shelfOf(g), ...book, ...mouse })
       continue
     }
     const rom = g.rom ?? {}

@@ -1,5 +1,15 @@
 # Changelog · Список изменений
 
+## 0.29.0 — OpenArena на полке «Шутеры»: арена-шутер на движке Quake III, deathmatch и захват флага против ботов на десятках карт; настройки остаются в браузере · OpenArena on the “Shooters” shelf: an arena shooter on the Quake III engine, deathmatch and capture the flag against bots on dozens of maps; settings stay in your browser
+
+- OpenArena 0.8.8 (GPL-2.0): the game's pk3 files from the official archive, unchanged; bots only, no online play; the first load is about 380 MB · OpenArena 0.8.8 (GPL-2.0): pk3 игры из официального архива без изменений; только боты, без игры по сети; первая загрузка — около 380 МБ
+- The engine is ioquake3 (GPL-2.0) built for the browser (WebAssembly) in GitHub Actions, with the source of that exact commit next to it · движок — ioquake3 (GPL-2.0), собранный для браузера (WebAssembly) в GitHub Actions, рядом — исходники ровно этого коммита
+- Not included: the programs for Windows, Linux and macOS, the missionpack, and `pak2-players-mature.pk3` (OpenArena's README says it can be removed) · не выкладываются программы для Windows, Linux и macOS, missionpack и `pak2-players-mature.pk3` (по README OpenArena его можно удалить)
+- Like Doom, the game captures the mouse, so in Claude Desktop it opens in a browser window; the new `mouse` catalog flag tells the mod which web games need that · как Doom, игра захватывает мышь, поэтому в Claude Desktop открывается окном браузера; новый флаг каталога `mouse` говорит моду, каким браузерным играм это нужно
+- Away from the Arcade window the game pauses — frames, clock and sound, so the bots don't play on without you — and saves your settings · когда окно Arcade не в фокусе, игра на паузе — кадры, часы и звук, чтобы боты не играли без тебя, — и сохраняет настройки
+- The site: the build downloads the archive and checks the size and SHA-256, takes only the pk3 files, stores those over 25 MiB in parts and links large files from its cache instead of copying them; the game's folder is `offline` · сайт: сборка скачивает архив и сверяет размер и SHA-256, берёт из него только pk3, кладёт те, что больше 25 МиБ, кусками и крупные файлы берёт из своего кеша жёсткими ссылками, а не копиями; папка игры — `offline`
+- The description and key hints are translated into all 13 languages, and the README lists the game in all 13 · описание и подсказка клавиш переведены на все 13 языков, и README называет игру на всех 13
+
 ## 0.28.0 — Warzone 2100 на полке «Стратегии»: стратегия в реальном времени с кампанией и боем против компьютера, машины собираешь сам из корпуса, шасси и оружия; сохранения остаются в браузере · Warzone 2100 on the “Strategy” shelf: real-time strategy with a campaign and skirmish against the computer, you design your own units from body, propulsion and weapon; saves stay in your browser
 
 - The official browser build of Warzone 2100 4.7.0 (GPL-2.0-or-later), game code and data unchanged; the first load is about 65 MB, then the browser keeps it · официальная браузерная сборка Warzone 2100 4.7.0 (GPL-2.0-or-later), код и данные игры без изменений; первая загрузка — около 65 МБ, дальше её держит браузер

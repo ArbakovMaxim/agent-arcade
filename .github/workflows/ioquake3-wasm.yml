@@ -1,0 +1,79 @@
+# Сборка движка ioquake3 (GPL-2.0) для браузера — для OpenArena. Emscripten той версии, которой собирает свой
+# CI ioquake3, способ — из README ioquake3 (emcmake cmake). Игровой код и данные — из OpenArena: их сайт Arcade
+# скачивает при сборке (download в каталоге), поэтому QVM игры здесь не собираются.
+# Результат — в site/content/games/openarena/engine. Запуск вручную: Actions → «Сборка ioquake3-wasm» → Run workflow
+# (из main), на других ветках — сам, когда меняется этот файл.
+name: Сборка ioquake3-wasm
+
+on:
+  workflow_dispatch:
+  # Кнопка Run workflow есть только у workflow из main; на ветке сборка запускается, когда меняется этот файл.
+  # main не трогаем: туда движок попадает только через PR
+  push:
+    branches-ignore: [main]
+    paths: [.github/workflows/ioquake3-wasm.yml]
+
+permissions:
+  contents: write
+
+env:
+  IOQ3_REPO: https://github.com/ioquake/ioq3
+  # Тегов и релизов у ioquake3 нет — закрепляем коммит
+  IOQ3_COMMIT: 87a99d18206e878a20289f05ac3c16005dcae5c3
+  EMSDK_VERSION: '3.1.58'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Исходники ioquake3 на закреплённом коммите
+        run: |
+          git init -q /tmp/ioq3
+          git -C /tmp/ioq3 fetch -q --depth 1 "$IOQ3_REPO" "$IOQ3_COMMIT"
+          git -C /tmp/ioq3 checkout -q FETCH_HEAD
+          git -C /tmp/ioq3 log -1 --format='%H %cd %s'
+
+      - name: Emscripten
+        run: |
+          git clone -q --depth 1 https://github.com/emscripten-core/emsdk /tmp/emsdk
+          /tmp/emsdk/emsdk install "$EMSDK_VERSION"
+          /tmp/emsdk/emsdk activate "$EMSDK_VERSION"
+
+      - name: Сборка движка
+        working-directory: /tmp/ioq3
+        run: |
+          source /tmp/emsdk/emsdk_env.sh
+          # QVM — от OpenArena; голосовой чат и Mumble в браузере не нужны; IDBFS — настройки игрока в браузере;
+          # ioquake3 даёт движку 256 МБ памяти — пусть растёт, если картам OpenArena не хватит
+          emcmake cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_GAME_QVMS=OFF -DUSE_VOIP=OFF -DUSE_MUMBLE=OFF -DCMAKE_EXE_LINKER_FLAGS="-lidbfs.js -sALLOW_MEMORY_GROWTH=1"
+          cmake --build build -j"$(nproc)"
+          ls -la build/Release
+
+      - name: Движок и исходники — в репозиторий
+        run: |
+          OUT=site/content/games/openarena/engine
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          cp /tmp/ioq3/build/Release/ioquake3.js /tmp/ioq3/build/Release/ioquake3.wasm "$OUT/"
+          cp /tmp/ioq3/COPYING.txt "$OUT/COPYING.txt"
+          # Исходники ровно этого коммита — для GPL; если архив больше лимита Cloudflare, оставляем ссылку на коммит
+          git -C /tmp/ioq3 archive --format=tar.gz --prefix="ioq3-${IOQ3_COMMIT}/" -o /tmp/ioq3-src.tar.gz HEAD
+          src_size=$(stat -c %s /tmp/ioq3-src.tar.gz)
+          if [ "$src_size" -lt 25000000 ]; then cp /tmp/ioq3-src.tar.gz "$OUT/ioq3-src.tar.gz"; fi
+          {
+            echo "ioquake3 для браузера — © id Software и авторы ioquake3, GPL-2.0 (COPYING.txt)."
+            echo "Исходники: ${IOQ3_REPO}, коммит ${IOQ3_COMMIT}$( [ "$src_size" -lt 25000000 ] && echo ' (архив ioq3-src.tar.gz рядом)' )."
+            echo "Собрано в GitHub Actions без изменений кода, способом из README ioquake3: Emscripten ${EMSDK_VERSION}, emcmake cmake."
+            echo "Параметры: -DBUILD_GAME_QVMS=OFF -DUSE_VOIP=OFF -DUSE_MUMBLE=OFF, ссылка с -lidbfs.js -sALLOW_MEMORY_GROWTH=1. SDL2 — порт Emscripten (zlib)."
+          } > "$OUT/BUILD.txt"
+          # Ни одного файла больше 25 МиБ — иначе Cloudflare его не примет
+          big=$(find "$OUT" -type f -size +25M)
+          if [ -n "$big" ]; then echo "файлы больше 25 МиБ: $big"; ls -la "$OUT"; exit 1; fi
+          ls -la "$OUT"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "ioquake3-wasm: сборка ioquake3 ${IOQ3_COMMIT:0:7} (Emscripten ${EMSDK_VERSION})"
+          git push

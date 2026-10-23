@@ -1,0 +1,13 @@
+OpenArena 0.8.8 для браузера — © авторы OpenArena (OpenArena Team), GPL-2.0 (COPYING, README, CREDITS, readme_088.txt).
+Исходники игры 0.8.8 (код QVM и движок): https://github.com/OpenArena/legacy
+Данные — официальный архив openarena-0.8.8.zip с https://download.tuxfamily.org/openarena/rel/088/
+(SHA-256 5a8faf7f5b51f351b0a1618c06b6b98a5f1a6758f1d39818de2c87df2a0bac4a). Arcade скачивает его при сборке сайта
+(site/build.mjs) и выкладывает только pk3 из baseoa без изменений:
+- не выкладываются программы для Windows, Linux и macOS, missionpack и pak2-players-mature.pk3
+  (по README OpenArena его можно удалить: он нужен только для игры на чистых серверах);
+- pk3 больше 25 МиБ лежат кусками *.partN; arcade-parts.js склеивает их в браузере в исходный файл.
+Движок — ioquake3 (GPL-2.0), собранный для браузера в GitHub Actions: engine/ и engine/BUILD.txt
+(.github/workflows/ioquake3-wasm.yml).
+Код Arcade: index.html и arcade-start.js загружают pk3 и запускают движок с игрой baseoa без сети (только боты);
+arcade-pause.js ставит игру на паузу, когда окно Arcade не в фокусе. Настройки игрока хранятся в браузере.
+Сайт отдаёт папку игры с заголовком Content-Security-Policy: connect-src 'self' — игра никуда не ходит в сеть.
