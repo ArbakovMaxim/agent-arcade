@@ -5721,7 +5721,9 @@ export function register(on) {
         }
         const noteLine = dk.note ? [gap, dk.bad ? Text({ color: 'warning', children: [dk.note] }) : dim(dk.note)] : []
         const row = (children) => Box({ flexDirection: 'row', columnGap: 2, children })
-        const wrapRow = (children) => Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, children })
+        const wrapRow = (children) => Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, rowGap: desktop ? 'sm' : 0, children })
+        // В Desktop строки одной группы — с промежутком по высоте: поля и кнопки иначе слипаются
+        const stack = (key, list) => (desktop ? [Box({ key, flexDirection: 'column', rowGap: 'sm', children: list })] : list)
         const strong = (text) => Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [text] } : { bold: true, children: [text] })
         const column = (list) => (desktop ? tiles(list, 44) : Box({ flexDirection: 'column', children: list }))
         const friends = fr.list?.friends ?? []
@@ -6048,63 +6050,65 @@ export function register(on) {
             section('Колонки'),
             // В Desktop у полей колонок нет подписи слева (название и так в поле): подписи разной длины сдвигали поля
             // и кнопки вразнобой. «Убрать колонку» — в той же строке, что и поле
-            ...board.board.cols.flatMap((c) => {
-              const name = keep(
-                Input({
-                  key: `arcade-col-name-${c.id}-${field}`,
-                  ...(desktop ? {} : { label: colName(c) }),
-                  value: colName(c),
-                  submitLabel: tr('Сохранить', lang),
-                  onSubmit: (value) => {
-                    if (cleanTitle(value) === colName(c)) return
-                    return editBoard(
-                      $,
-                      (list, at) => {
-                        const done = renameColumn(list, id, c.id, value, at)
-                        return done.error ? 'Впиши название колонки.' : done.notes
-                      },
-                      'Сохранено.',
-                    )
-                  },
-                }),
-              )
-              const drop =
-                board.board.cols.length > 1
-                  ? [
-                      Button({
-                        key: `arcade-col-drop-${c.id}`,
-                        label: 'Убрать колонку',
-                        onPress: () =>
-                          editBoard(
-                            $,
-                            (list, at) => {
-                              const done = removeColumn(list, id, c.id, at)
-                              if (done.error === 'busy') return 'В колонке есть карточки — сначала перенеси их.'
-                              if (done.error === 'last') return 'Последнюю колонку не убрать.'
-                              return done.error ? list : done.notes
-                            },
-                            'Колонка убрана.',
-                          ),
-                      }),
-                    ]
-                  : []
-              return desktop ? [Box({ key: `col-row-${c.id}`, flexDirection: 'row', alignItems: 'center', columnGap: 'sm', children: [name, ...drop] })] : [name, ...drop]
-            }),
-            Input({
-              key: `arcade-col-new-${field}`,
-              ...(desktop ? { placeholder: 'Новая колонка' } : { label: 'Новая колонка', placeholder: 'название: проверка, на паузе…' }),
-              submitLabel: tr('Добавить', lang),
-              ...focusOn('col-new'),
-              onSubmit: (value) => {
-                dk.focus = 'col-new'
-                return editBoard($, (list, at) => {
-                  const done = addColumn(list, id, value, colId(), at)
-                  return done.error === 'many' ? 'Колонок — не больше 8.' : done.error ? 'Впиши название колонки.' : done.notes
-                })
-              },
-            }),
+            ...stack('board-cols', [
+              ...board.board.cols.flatMap((c) => {
+                const name = keep(
+                  Input({
+                    key: `arcade-col-name-${c.id}-${field}`,
+                    ...(desktop ? {} : { label: colName(c) }),
+                    value: colName(c),
+                    submitLabel: tr('Сохранить', lang),
+                    onSubmit: (value) => {
+                      if (cleanTitle(value) === colName(c)) return
+                      return editBoard(
+                        $,
+                        (list, at) => {
+                          const done = renameColumn(list, id, c.id, value, at)
+                          return done.error ? 'Впиши название колонки.' : done.notes
+                        },
+                        'Сохранено.',
+                      )
+                    },
+                  }),
+                )
+                const drop =
+                  board.board.cols.length > 1
+                    ? [
+                        Button({
+                          key: `arcade-col-drop-${c.id}`,
+                          label: 'Убрать колонку',
+                          onPress: () =>
+                            editBoard(
+                              $,
+                              (list, at) => {
+                                const done = removeColumn(list, id, c.id, at)
+                                if (done.error === 'busy') return 'В колонке есть карточки — сначала перенеси их.'
+                                if (done.error === 'last') return 'Последнюю колонку не убрать.'
+                                return done.error ? list : done.notes
+                              },
+                              'Колонка убрана.',
+                            ),
+                        }),
+                      ]
+                    : []
+                return desktop ? [Box({ key: `col-row-${c.id}`, flexDirection: 'row', alignItems: 'center', columnGap: 'sm', children: [name, ...drop] })] : [name, ...drop]
+              }),
+              Input({
+                key: `arcade-col-new-${field}`,
+                ...(desktop ? { placeholder: 'Новая колонка' } : { label: 'Новая колонка', placeholder: 'название: проверка, на паузе…' }),
+                submitLabel: tr('Добавить', lang),
+                ...focusOn('col-new'),
+                onSubmit: (value) => {
+                  dk.focus = 'col-new'
+                  return editBoard($, (list, at) => {
+                    const done = addColumn(list, id, value, colId(), at)
+                    return done.error === 'many' ? 'Колонок — не больше 8.' : done.error ? 'Впиши название колонки.' : done.notes
+                  })
+                },
+              }),
+            ]),
             section('Общий доступ'),
-            ...shareItems,
+            ...stack('board-share', shareItems),
             ...noticeLines,
             ...hint,
           ]
