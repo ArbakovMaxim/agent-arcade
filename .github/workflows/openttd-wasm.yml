@@ -20,7 +20,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
+      # Run workflow по умолчанию предлагает ветку plugin — копию main без site/; с неё собираем в main, как раньше
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name == 'plugin' && 'main' || '' }}
 
       - name: Исходники OpenTTD на теге релиза
         run: git clone --depth 1 --branch "$OPENTTD_TAG" "$OPENTTD_REPO" /tmp/openttd

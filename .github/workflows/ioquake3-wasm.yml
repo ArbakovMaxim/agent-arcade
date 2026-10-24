@@ -7,10 +7,10 @@ name: Сборка ioquake3-wasm
 
 on:
   workflow_dispatch:
-  # Кнопка Run workflow есть только у workflow из main; на ветке сборка запускается, когда меняется этот файл.
-  # main не трогаем: туда движок попадает только через PR
+  # Кнопка Run workflow есть только у workflow из ветки по умолчанию; на ветке сборка запускается, когда меняется этот файл.
+  # main не трогаем: туда движок попадает только через PR; plugin пишет только workflow «Ветка plugin»
   push:
-    branches-ignore: [main]
+    branches-ignore: [main, plugin]
     paths: [.github/workflows/ioquake3-wasm.yml]
 
 permissions:
@@ -27,7 +27,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
+      # Run workflow по умолчанию предлагает ветку plugin — копию main без site/; с неё собираем в main, как раньше
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name == 'plugin' && 'main' || '' }}
 
       - name: Исходники ioquake3 на закреплённом коммите
         run: |

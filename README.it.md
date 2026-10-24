@@ -56,6 +56,16 @@ Il plugin viene installato per tutte le sessioni e le app. L’estensione di VS 
 /plugin update arcade@agent-arcade
 ```
 
+Poi riavvia Claude Code. Il marketplace scarica solo il plugin — pochi MiB, senza il sito — quindi l’aggiornamento richiede pochi secondi. Se Arcade è già installato, non devi fare nulla: il marketplace si adegua da solo al prossimo aggiornamento.
+
+Se `/plugin update` dice *already at the latest version* ma è uscita una nuova versione di Arcade, il marketplace non si è aggiornato. Per capire perché, esegui `claude plugin marketplace update agent-arcade` in un terminale. Se dice *timed out*, concedi 10 minuti alla clonazione:
+
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
+
+In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade`. Poi esegui di nuovo `/plugin update arcade@agent-arcade`.
+
 **Disinstallazione:** `/plugin uninstall arcade@agent-arcade`
 
 ## Come si usa
@@ -219,6 +229,7 @@ tools/   strumenti di build: libri, audiolibri, traduzioni, heretic-wasm
 - Avviare il plugin dal repository: `claude --plugin-dir ./mod`
 - Test del plugin: `claude plugin validate ./mod`, poi `claude plugin test` dentro `mod/`
 - Test del sito: `npm test` dentro `site/`; build: `node build.mjs`; il deploy avviene automaticamente da `main` tramite Cloudflare Workers Builds.
+- Si lavora in `main`, e anche le pull request vanno lì. Il branch predefinito `plugin` è una copia di `main` senza `site/`, aggiornata da una GitHub Action a ogni push: il marketplace dei plugin scarica quello invece dell’intero repository.
 - Libri: `node tools/books/build.mjs` scarica e ripulisce i libri del catalogo (elenco — `tools/books/books.json`).
 - Traduzioni: `node tools/i18n/collect.mjs`, poi `node tools/i18n/check.mjs` — vedi [tools/i18n/README.md](tools/i18n/README.md).
 

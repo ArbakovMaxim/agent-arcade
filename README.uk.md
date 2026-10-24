@@ -56,6 +56,16 @@ claude plugin install arcade@agent-arcade
 /plugin update arcade@agent-arcade
 ```
 
+Потім перезапусти Claude Code. Маркетплейс завантажує лише плагін — кілька МіБ, без сайту, — тож оновлення займає секунди. Якщо Arcade вже встановлено, нічого робити не треба: маркетплейс перемкнеться сам під час наступного оновлення.
+
+Якщо `/plugin update` пише *already at the latest version*, а нова версія Arcade вже вийшла, — маркетплейс не оновився. Причину покаже `claude plugin marketplace update agent-arcade` у терміналі. Якщо там *timed out*, дай клонуванню 10 хвилин:
+
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
+
+У PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade`. Потім знову `/plugin update arcade@agent-arcade`.
+
 **Видалення:** `/plugin uninstall arcade@agent-arcade`
 
 ## Як користуватися
@@ -219,6 +229,7 @@ tools/   допоміжні збирачі: книги, аудіокниги, п
 - Запуск плагіна з репозиторію: `claude --plugin-dir ./mod`
 - Тести плагіна: `claude plugin validate ./mod`, потім `claude plugin test` у `mod/`
 - Тести сайту: `npm test` у `site/`; збірка: `node build.mjs`; деплой відбувається автоматично з `main` через Cloudflare Workers Builds.
+- Робота йде в `main`, pull request'и — туди ж. Гілка за замовчуванням `plugin` — копія `main` без `site/`, яку GitHub Action оновлює на кожен пуш: маркетплейс плагінів завантажує її, а не весь репозиторій.
 - Книги: `node tools/books/build.mjs` завантажує й очищує книги каталогу (список — `tools/books/books.json`).
 - Переклади: `node tools/i18n/collect.mjs`, потім `node tools/i18n/check.mjs` — див. [tools/i18n/README.md](tools/i18n/README.md).
 

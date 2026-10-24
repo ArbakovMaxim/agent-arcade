@@ -20,7 +20,10 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
+      # Run workflow по умолчанию предлагает ветку plugin — копию main без site/; с неё собираем в main, как раньше
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name == 'plugin' && 'main' || '' }}
 
       - name: Исходники doom-wasm и Chocolate Doom на закреплённых коммитах
         run: |

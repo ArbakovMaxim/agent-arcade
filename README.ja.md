@@ -56,6 +56,16 @@ claude plugin install arcade@agent-arcade
 /plugin update arcade@agent-arcade
 ```
 
+その後 Claude Code を再起動します。マーケットプレイスがダウンロードするのはプラグインだけ（数 MiB、サイトは含みません）なので、アップデートは数秒で終わります。すでに Arcade をインストールしている場合は何もする必要はありません。次のアップデートでマーケットプレイスが自動的に切り替わります。
+
+`/plugin update` が *already at the latest version* と表示するのに新しいバージョンの Arcade が出ている場合は、マーケットプレイスが更新されていません。ターミナルで `claude plugin marketplace update agent-arcade` を実行すると理由がわかります。*timed out* と表示されたら、クローンに 10 分の猶予を与えます：
+
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
+
+PowerShell では `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade` です。その後、もう一度 `/plugin update arcade@agent-arcade` を実行します。
+
 **アンインストール：** `/plugin uninstall arcade@agent-arcade`
 
 ## 使い方
@@ -219,6 +229,7 @@ tools/   ビルド用ツール：本、オーディオブック、翻訳、heret
 - リポジトリからプラグインを起動：`claude --plugin-dir ./mod`
 - プラグインのテスト：`claude plugin validate ./mod`、続いて `mod/` で `claude plugin test`
 - サイトのテスト：`site/` で `npm test`。ビルド：`node build.mjs`。デプロイは Cloudflare Workers Builds により `main` から自動で行われます。
+- 作業は `main` で行い、プルリクエストも `main` に送ってください。デフォルトブランチ `plugin` は `site/` を除いた `main` のコピーで、プッシュのたびに GitHub Action が更新します。プラグインのマーケットプレイスはリポジトリ全体ではなくこのブランチをダウンロードします。
 - 本：`node tools/books/build.mjs` でカタログの本をダウンロードして整えます（一覧 — `tools/books/books.json`）。
 - 翻訳：`node tools/i18n/collect.mjs`、続いて `node tools/i18n/check.mjs` — [tools/i18n/README.md](tools/i18n/README.md) を参照。
 

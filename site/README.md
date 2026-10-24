@@ -44,6 +44,7 @@ build.mjs              собирает сайт в dist/
    - Deploy command: `npx wrangler deploy`;
    - Root directory (Path): `site`, если сайт лежит в подпапке репозитория.
 3. Deploy. Дальше каждый пуш в `main` выкладывает сайт заново. Адрес — `agent-arcade.<поддомен аккаунта>.workers.dev`.
+4. Settings → Build → Branch control: production branch — `main`. Ветка по умолчанию на GitHub — `plugin`: копия репозитория без `site/` для маркетплейса плагинов, её пишет `.github/workflows/plugin-branch.yml`. Cloudflare при подключении предлагает ветку по умолчанию — выбери `main`. Сборки превью для `plugin` падают сразу: в ней нет `site/`.
 
 ## Проверить
 
