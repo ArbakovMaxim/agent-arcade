@@ -56,6 +56,16 @@ Eklenti tüm oturumlar ve uygulamalar için kurulur. VS Code eklentisinde `/plug
 /plugin update arcade@agent-arcade
 ```
 
+Ardından Claude Code’u yeniden başlat. Marketplace yalnızca eklentiyi indirir — birkaç MiB, site olmadan — bu yüzden güncelleme saniyeler sürer. Arcade zaten kuruluysa bir şey yapmana gerek yok: marketplace bir sonraki güncellemede kendiliğinden geçiş yapar.
+
+`/plugin update` *already at the latest version* diyor ama Arcade’in yeni sürümü çıkmışsa marketplace yenilenmemiştir. Nedenini görmek için terminalde `claude plugin marketplace update agent-arcade` komutunu çalıştır. *timed out* yazıyorsa klonlamaya 10 dakika ver:
+
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
+
+PowerShell’de: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade`. Ardından `/plugin update arcade@agent-arcade` komutunu yeniden çalıştır.
+
 **Kaldırma:** `/plugin uninstall arcade@agent-arcade`
 
 ## Kullanım
@@ -219,6 +229,7 @@ tools/   derleme araçları: kitaplar, sesli kitaplar, çeviriler, heretic-wasm
 - Eklentiyi depodan çalıştırmak: `claude --plugin-dir ./mod`
 - Eklenti testleri: `claude plugin validate ./mod`, ardından `mod/` içinde `claude plugin test`
 - Site testleri: `site/` içinde `npm test`; derleme: `node build.mjs`; dağıtım `main` dalından Cloudflare Workers Builds ile otomatik yapılır.
+- Çalışmalar `main` dalında yapılır, pull request'ler de oraya açılır. Varsayılan dal `plugin`, `site/` olmadan `main` dalının bir kopyasıdır ve her push'ta bir GitHub Action tarafından güncellenir: eklenti marketplace’i tüm depo yerine bu dalı indirir.
 - Kitaplar: `node tools/books/build.mjs` katalogdaki kitapları indirir ve temizler (liste — `tools/books/books.json`).
 - Çeviriler: `node tools/i18n/collect.mjs`, ardından `node tools/i18n/check.mjs` — bkz. [tools/i18n/README.md](tools/i18n/README.md).
 

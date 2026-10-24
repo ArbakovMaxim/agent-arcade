@@ -56,6 +56,16 @@ claude plugin install arcade@agent-arcade
 /plugin update arcade@agent-arcade
 ```
 
+然后重启 Claude Code。插件市场只下载插件本身（几 MiB，不含网站），所以更新只需几秒。已经安装了 Arcade 的话无需任何操作：下次更新时插件市场会自动切换。
+
+如果 `/plugin update` 显示 *already at the latest version*，但 Arcade 已经发布了新版本，说明插件市场没有刷新。在终端中运行 `claude plugin marketplace update agent-arcade` 可以看到原因。如果显示 *timed out*，就给克隆留出 10 分钟：
+
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
+
+PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade`。然后再次运行 `/plugin update arcade@agent-arcade`。
+
 **卸载：** `/plugin uninstall arcade@agent-arcade`
 
 ## 使用方法
@@ -219,6 +229,7 @@ tools/   构建辅助工具：书籍、有声书、翻译、heretic-wasm
 - 从仓库运行插件：`claude --plugin-dir ./mod`
 - 插件测试：`claude plugin validate ./mod`，然后在 `mod/` 中运行 `claude plugin test`
 - 网站测试：在 `site/` 中运行 `npm test`；构建：`node build.mjs`；通过 Cloudflare Workers Builds 从 `main` 自动部署。
+- 开发在 `main` 上进行，Pull Request 也请提交到 `main`。默认分支 `plugin` 是去掉 `site/` 的 `main` 副本，每次推送时由 GitHub Action 更新：插件市场下载的是这个分支，而不是整个仓库。
 - 书籍：`node tools/books/build.mjs` 下载并清理目录中的书籍（列表 — `tools/books/books.json`）。
 - 翻译：`node tools/i18n/collect.mjs`，然后 `node tools/i18n/check.mjs` — 见 [tools/i18n/README.md](tools/i18n/README.md)。
 

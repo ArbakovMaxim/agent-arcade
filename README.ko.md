@@ -56,6 +56,16 @@ claude plugin install arcade@agent-arcade
 /plugin update arcade@agent-arcade
 ```
 
+그런 다음 Claude Code를 다시 시작합니다. 마켓플레이스는 플러그인만 내려받으므로(몇 MiB, 사이트 제외) 업데이트는 몇 초면 끝납니다. 이미 Arcade를 설치했다면 따로 할 일은 없습니다. 다음 업데이트 때 마켓플레이스가 알아서 전환됩니다.
+
+`/plugin update`가 *already at the latest version*이라고 하는데 새 Arcade 버전이 나왔다면 마켓플레이스가 갱신되지 않은 것입니다. 터미널에서 `claude plugin marketplace update agent-arcade`를 실행하면 이유가 나옵니다. *timed out*이라고 나오면 클론에 10분을 줍니다:
+
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
+
+PowerShell에서는 `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade`입니다. 그런 다음 `/plugin update arcade@agent-arcade`를 다시 실행합니다.
+
 **제거:** `/plugin uninstall arcade@agent-arcade`
 
 ## 사용 방법
@@ -219,6 +229,7 @@ tools/   빌드 도구: 책, 오디오북, 번역, heretic-wasm
 - 저장소에서 플러그인 실행: `claude --plugin-dir ./mod`
 - 플러그인 테스트: `claude plugin validate ./mod`, 그다음 `mod/`에서 `claude plugin test`
 - 사이트 테스트: `site/`에서 `npm test`. 빌드: `node build.mjs`. 배포는 Cloudflare Workers Builds를 통해 `main`에서 자동으로 이루어집니다.
+- 작업은 `main`에서 하고 풀 리퀘스트도 `main`으로 보내 주세요. 기본 브랜치 `plugin`은 `site/`를 뺀 `main`의 복사본으로, 푸시할 때마다 GitHub Action이 갱신합니다. 플러그인 마켓플레이스는 저장소 전체 대신 이 브랜치를 내려받습니다.
 - 책: `node tools/books/build.mjs`로 카탈로그 책을 내려받아 정리합니다(목록 — `tools/books/books.json`).
 - 번역: `node tools/i18n/collect.mjs`, 그다음 `node tools/i18n/check.mjs` — [tools/i18n/README.md](tools/i18n/README.md) 참고.
 
