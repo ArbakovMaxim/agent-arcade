@@ -1,0 +1,4 @@
+
+# Локальное состояние wrangler dev (комнаты Durable Objects)
+.wrangler/
+site/.wrangler/

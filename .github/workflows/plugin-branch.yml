@@ -1,0 +1,79 @@
+# Ветка plugin — облегчённая копия main для маркетплейса Claude Code: всё, кроме site/ (~3,5 МиБ вместо ~377 МиБ).
+# Claude Code обновляет маркетплейс свежим клоном ветки по умолчанию (git clone --depth 1) и ждёт его 2 минуты —
+# клон main с играми и книгами сайта не успевал, и обновление оставалось на старой версии. Поэтому ветка по умолчанию
+# на GitHub — plugin, а сайт Cloudflare, как и раньше, собирает из main.
+# Ветку пишет только этот workflow — на каждый пуш в main; правки — в main, через PR. Вручную: Actions → «Ветка plugin».
+name: Ветка plugin
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Пуши в main подряд: следующий запуск ждёт предыдущий, чтобы коммит лёг поверх свежей ветки
+concurrency:
+  group: plugin-branch
+  cancel-in-progress: false
+
+env:
+  BRANCH: plugin
+  # Клон должен успевать за 2 минуты и на медленной связи: 20 МиБ — запас в пять с лишним раз от нынешних ~3,5 МиБ
+  MAX_MIB: 20
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      # Всегда свежий main, даже если запуск — с ветки plugin; site/ не качаем и не раскладываем
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          filter: blob:none
+          sparse-checkout: |
+            /*
+            !/site/
+          sparse-checkout-cone-mode: false
+
+      - name: Дерево main без site/ — в ветку plugin
+        run: |
+          # Отдельный индекс: рабочая папка и индекс checkout остаются как есть
+          export GIT_INDEX_FILE="$RUNNER_TEMP/plugin.index"
+          git read-tree "$(git ls-tree HEAD | awk -F '\t' '$2 != "site"' | git mktree)"
+          # Ссылки README на site/ — в main: в ветке plugin этой папки нет
+          for f in $(git ls-files ':(glob)*.md'); do
+            blob=$(git cat-file blob "HEAD:$f" | sed "s#](site/#](https://github.com/$GITHUB_REPOSITORY/tree/main/site/#g" | git hash-object -w --stdin)
+            git update-index --cacheinfo "100644,$blob,$f"
+          done
+          tree=$(git write-tree)
+
+          size=$(git ls-tree -r -l "$tree" | awk '{ s += $4 } END { print s + 0 }')
+          echo "Ветка $BRANCH: $((size / 1024)) КиБ"
+          if [ "$size" -gt $((MAX_MIB * 1024 * 1024)) ]; then
+            echo "::error::Ветка $BRANCH больше $MAX_MIB МиБ — клон маркетплейса снова может не успевать. Крупное — в site/."
+            git ls-tree -r -l "$tree" | sort -k4 -n -r | head -20
+            exit 1
+          fi
+
+          parent=""
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            git fetch -q --depth=1 --filter=blob:none origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
+            parent=$(git rev-parse "refs/remotes/origin/$BRANCH")
+            # Тот же снимок — без коммита: новый коммит заставил бы всех игроков заново качать маркетплейс
+            if [ "$(git rev-parse "$parent^{tree}")" = "$tree" ]; then
+              echo "В $BRANCH уже это дерево — менялся только site/"
+              exit 0
+            fi
+          fi
+
+          # В сообщении нет темы коммита main: «#номер» и «fixes …» с ветки по умолчанию трогали бы issues и PR
+          main=$(git rev-parse HEAD)
+          export GIT_AUTHOR_NAME="github-actions[bot]" GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          commit=$(git commit-tree "$tree" ${parent:+-p "$parent"} \
+            -m "Sync from main ${main:0:7}" \
+            -m "Everything in main except site/, for the Claude Code plugin marketplace. Built by .github/workflows/plugin-branch.yml from $main.")
+          git push origin "$commit:refs/heads/$BRANCH"

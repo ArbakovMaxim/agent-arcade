@@ -1,0 +1,2135 @@
+// Копия site/content/feeds.json — запас, если сайт недоступен. Тест сайта сверяет их.
+export default {
+  "version": 1,
+  "articles": [
+    {
+      "id": "simon-willison",
+      "name": "Simon Willison",
+      "lang": "en",
+      "url": "https://simonwillison.net/atom/everything/",
+      "topics": [
+        "ai",
+        "tools"
+      ],
+      "hosts": [
+        "simonwillison.net"
+      ]
+    },
+    {
+      "id": "infoq",
+      "name": "InfoQ",
+      "lang": "en",
+      "url": "https://feed.infoq.com/",
+      "topics": [
+        "arch",
+        "backend",
+        "news"
+      ],
+      "hosts": [
+        "www.infoq.com"
+      ]
+    },
+    {
+      "id": "cloudflare",
+      "name": "The Cloudflare Blog",
+      "lang": "en",
+      "url": "https://blog.cloudflare.com/rss/",
+      "topics": [
+        "devops",
+        "security",
+        "backend"
+      ],
+      "hosts": [
+        "blog.cloudflare.com"
+      ]
+    },
+    {
+      "id": "ars-technica",
+      "name": "Ars Technica",
+      "lang": "en",
+      "url": "https://feeds.arstechnica.com/arstechnica/technology-lab",
+      "topics": [
+        "news"
+      ],
+      "hosts": [
+        "arstechnica.com"
+      ]
+    },
+    {
+      "id": "techcrunch-ai",
+      "name": "TechCrunch AI",
+      "lang": "en",
+      "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
+      "topics": [
+        "news",
+        "ai"
+      ],
+      "hosts": [
+        "techcrunch.com"
+      ]
+    },
+    {
+      "id": "krebs",
+      "name": "Krebs on Security",
+      "lang": "en",
+      "url": "https://krebsonsecurity.com/feed/",
+      "topics": [
+        "security"
+      ],
+      "hosts": [
+        "krebsonsecurity.com"
+      ]
+    },
+    {
+      "id": "bleepingcomputer",
+      "name": "BleepingComputer",
+      "lang": "en",
+      "url": "https://www.bleepingcomputer.com/feed/",
+      "topics": [
+        "security",
+        "news"
+      ],
+      "hosts": [
+        "www.bleepingcomputer.com"
+      ]
+    },
+    {
+      "id": "the-hacker-news",
+      "name": "The Hacker News",
+      "lang": "en",
+      "url": "https://feeds.feedburner.com/TheHackersNews",
+      "topics": [
+        "security"
+      ],
+      "hosts": [
+        "thehackernews.com"
+      ]
+    },
+    {
+      "id": "rust-blog",
+      "name": "Rust Blog",
+      "lang": "en",
+      "url": "https://blog.rust-lang.org/feed.xml",
+      "topics": [
+        "langs"
+      ],
+      "hosts": [
+        "blog.rust-lang.org"
+      ]
+    },
+    {
+      "id": "go-blog",
+      "name": "The Go Blog",
+      "lang": "en",
+      "url": "https://go.dev/blog/feed.atom",
+      "topics": [
+        "langs",
+        "backend"
+      ],
+      "hosts": [
+        "go.dev"
+      ]
+    },
+    {
+      "id": "python-blog",
+      "name": "Python Insider",
+      "lang": "en",
+      "url": "https://blog.python.org/feeds/posts/default?alt=rss",
+      "topics": [
+        "langs"
+      ],
+      "hosts": [
+        "blog.python.org"
+      ]
+    },
+    {
+      "id": "typescript",
+      "name": "TypeScript Blog",
+      "lang": "en",
+      "url": "https://devblogs.microsoft.com/typescript/feed/",
+      "topics": [
+        "web",
+        "langs"
+      ],
+      "hosts": [
+        "devblogs.microsoft.com"
+      ]
+    },
+    {
+      "id": "swift",
+      "name": "Swift.org",
+      "lang": "en",
+      "url": "https://www.swift.org/atom.xml",
+      "topics": [
+        "mobile",
+        "langs"
+      ],
+      "hosts": [
+        "www.swift.org"
+      ]
+    },
+    {
+      "id": "android-developers",
+      "name": "Android Developers Blog",
+      "lang": "en",
+      "url": "https://developer.android.com/static/blog/atom.xml",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "android-developers.googleblog.com",
+        "developer.android.com"
+      ]
+    },
+    {
+      "id": "game-developer",
+      "name": "Game Developer",
+      "lang": "en",
+      "url": "https://www.gamedeveloper.com/rss.xml",
+      "topics": [
+        "gamedev"
+      ],
+      "hosts": [
+        "www.gamedeveloper.com"
+      ]
+    },
+    {
+      "id": "godot",
+      "name": "Godot Engine",
+      "lang": "en",
+      "url": "https://godotengine.org/rss.xml",
+      "topics": [
+        "gamedev"
+      ],
+      "hosts": [
+        "godotengine.org"
+      ]
+    },
+    {
+      "id": "quanta-cs",
+      "name": "Quanta Magazine",
+      "lang": "en",
+      "url": "https://www.quantamagazine.org/computer-science/feed/",
+      "topics": [
+        "cs"
+      ],
+      "hosts": [
+        "www.quantamagazine.org"
+      ]
+    },
+    {
+      "id": "hugging-face",
+      "name": "Hugging Face Blog",
+      "lang": "en",
+      "url": "https://huggingface.co/blog/feed.xml",
+      "topics": [
+        "ai"
+      ],
+      "hosts": [
+        "huggingface.co"
+      ]
+    },
+    {
+      "id": "stack-overflow",
+      "name": "The Stack Overflow Blog",
+      "lang": "en",
+      "url": "https://stackoverflow.blog/feed/",
+      "topics": [
+        "tools",
+        "arch",
+        "news"
+      ],
+      "hosts": [
+        "stackoverflow.blog"
+      ]
+    },
+    {
+      "id": "netflix-tech",
+      "name": "Netflix TechBlog",
+      "lang": "en",
+      "url": "https://netflixtechblog.com/feed",
+      "topics": [
+        "arch",
+        "backend"
+      ],
+      "hosts": [
+        "netflixtechblog.com"
+      ]
+    },
+    {
+      "id": "vscode",
+      "name": "Visual Studio Code",
+      "lang": "en",
+      "url": "https://code.visualstudio.com/feed.xml",
+      "topics": [
+        "tools"
+      ],
+      "hosts": [
+        "code.visualstudio.com"
+      ]
+    },
+    {
+      "id": "chrome-developers",
+      "name": "Chrome for Developers",
+      "lang": "en",
+      "url": "https://developer.chrome.com/static/blog/feed.xml",
+      "topics": [
+        "web"
+      ],
+      "hosts": [
+        "developer.chrome.com"
+      ]
+    },
+    {
+      "id": "web-dev",
+      "name": "web.dev",
+      "lang": "en",
+      "url": "https://web.dev/static/blog/feed.xml",
+      "topics": [
+        "web"
+      ],
+      "hosts": [
+        "web.dev"
+      ]
+    },
+    {
+      "id": "google-ai",
+      "name": "Google AI Blog",
+      "lang": "en",
+      "url": "https://blog.google/innovation-and-ai/technology/ai/rss/",
+      "topics": [
+        "ai"
+      ],
+      "hosts": [
+        "blog.google"
+      ]
+    },
+    {
+      "id": "docker",
+      "name": "Docker Blog",
+      "lang": "en",
+      "url": "https://www.docker.com/feed/",
+      "topics": [
+        "devops"
+      ],
+      "hosts": [
+        "www.docker.com"
+      ]
+    },
+    {
+      "id": "martin-fowler",
+      "name": "Martin Fowler",
+      "lang": "en",
+      "url": "https://martinfowler.com/feed.atom",
+      "topics": [
+        "arch"
+      ],
+      "hosts": [
+        "martinfowler.com"
+      ]
+    },
+    {
+      "id": "julia-evans",
+      "name": "Julia Evans",
+      "lang": "en",
+      "url": "https://jvns.ca/atom.xml",
+      "topics": [
+        "cs",
+        "tools"
+      ],
+      "hosts": [
+        "jvns.ca"
+      ]
+    },
+    {
+      "id": "github-blog",
+      "name": "The GitHub Blog",
+      "lang": "en",
+      "url": "https://github.blog/feed/",
+      "topics": [
+        "tools"
+      ],
+      "hosts": [
+        "github.blog"
+      ]
+    },
+    {
+      "id": "dev-ai",
+      "name": "DEV: #ai",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/ai",
+      "topics": [
+        "ai"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-webdev",
+      "name": "DEV: #webdev",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/webdev",
+      "topics": [
+        "web"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-devops",
+      "name": "DEV: #devops",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/devops",
+      "topics": [
+        "devops"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-gamedev",
+      "name": "DEV: #gamedev",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/gamedev",
+      "topics": [
+        "gamedev"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-mobile",
+      "name": "DEV: #mobile",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/mobile",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-security",
+      "name": "DEV: #security",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/security",
+      "topics": [
+        "security"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-architecture",
+      "name": "DEV: #architecture",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/architecture",
+      "topics": [
+        "arch"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-algorithms",
+      "name": "DEV: #algorithms",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/algorithms",
+      "topics": [
+        "cs"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-backend",
+      "name": "DEV: #backend",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/backend",
+      "topics": [
+        "backend"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-programming",
+      "name": "DEV: #programming",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/programming",
+      "topics": [
+        "langs"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "dev-opensource",
+      "name": "DEV: #opensource",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/opensource",
+      "topics": [
+        "tools",
+        "opensource"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "planetscale-blog",
+      "name": "PlanetScale Blog",
+      "lang": "en",
+      "url": "https://planetscale.com/blog/feed.atom",
+      "topics": [
+        "data",
+        "backend"
+      ],
+      "hosts": [
+        "planetscale.com"
+      ]
+    },
+    {
+      "id": "duckdb-blog",
+      "name": "DuckDB Blog",
+      "lang": "en",
+      "url": "https://duckdb.org/feed.xml",
+      "topics": [
+        "data"
+      ],
+      "hosts": [
+        "duckdb.org"
+      ]
+    },
+    {
+      "id": "flowingdata",
+      "name": "FlowingData",
+      "lang": "en",
+      "url": "https://flowingdata.com/feed",
+      "topics": [
+        "data"
+      ],
+      "hosts": [
+        "flowingdata.com"
+      ]
+    },
+    {
+      "id": "data-engineering-weekly",
+      "name": "Data Engineering Weekly",
+      "lang": "en",
+      "url": "https://www.dataengineeringweekly.com/feed",
+      "topics": [
+        "data"
+      ],
+      "hosts": [
+        "www.dataengineeringweekly.com"
+      ]
+    },
+    {
+      "id": "seattle-data-guy",
+      "name": "SeattleDataGuy's Newsletter",
+      "lang": "en",
+      "url": "https://seattledataguy.substack.com/feed",
+      "topics": [
+        "data"
+      ],
+      "hosts": [
+        "seattledataguy.substack.com"
+      ]
+    },
+    {
+      "id": "hackaday",
+      "name": "Hackaday",
+      "lang": "en",
+      "url": "https://hackaday.com/blog/feed/",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "hackaday.com"
+      ]
+    },
+    {
+      "id": "cnx-software",
+      "name": "CNX Software",
+      "lang": "en",
+      "url": "https://www.cnx-software.com/feed/",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "www.cnx-software.com"
+      ]
+    },
+    {
+      "id": "raspberry-pi",
+      "name": "Raspberry Pi News",
+      "lang": "en",
+      "url": "https://www.raspberrypi.com/news/feed/",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "www.raspberrypi.com"
+      ]
+    },
+    {
+      "id": "chips-and-cheese",
+      "name": "Chips and Cheese",
+      "lang": "en",
+      "url": "https://chipsandcheese.com/feed",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "chipsandcheese.com"
+      ]
+    },
+    {
+      "id": "hackster-news",
+      "name": "Hackster News",
+      "lang": "en",
+      "url": "https://www.hackster.io/news.atom",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "www.hackster.io"
+      ]
+    },
+    {
+      "id": "lwn",
+      "name": "LWN.net",
+      "lang": "en",
+      "url": "https://lwn.net/headlines/rss",
+      "topics": [
+        "opensource",
+        "news"
+      ],
+      "hosts": [
+        "lwn.net"
+      ]
+    },
+    {
+      "id": "phoronix",
+      "name": "Phoronix",
+      "lang": "en",
+      "url": "https://www.phoronix.com/rss.php",
+      "topics": [
+        "opensource",
+        "hardware"
+      ],
+      "hosts": [
+        "www.phoronix.com"
+      ]
+    },
+    {
+      "id": "omg-ubuntu",
+      "name": "OMG! Ubuntu",
+      "lang": "en",
+      "url": "https://www.omgubuntu.co.uk/feed",
+      "topics": [
+        "opensource"
+      ],
+      "hosts": [
+        "www.omgubuntu.co.uk"
+      ]
+    },
+    {
+      "id": "9to5linux",
+      "name": "9to5Linux",
+      "lang": "en",
+      "url": "https://9to5linux.com/feed",
+      "topics": [
+        "opensource",
+        "news"
+      ],
+      "hosts": [
+        "9to5linux.com"
+      ]
+    },
+    {
+      "id": "osi-blog",
+      "name": "Open Source Initiative",
+      "lang": "en",
+      "url": "https://opensource.org/blog/feed",
+      "topics": [
+        "opensource"
+      ],
+      "hosts": [
+        "opensource.org"
+      ]
+    },
+    {
+      "id": "google-testing",
+      "name": "Google Testing Blog",
+      "lang": "en",
+      "url": "https://testing.googleblog.com/feeds/posts/default?alt=rss&redirect=false",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "testing.googleblog.com"
+      ]
+    },
+    {
+      "id": "antithesis-blog",
+      "name": "Antithesis Blog",
+      "lang": "en",
+      "url": "https://antithesis.com/blog/rss.xml",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "antithesis.com"
+      ]
+    },
+    {
+      "id": "dev-testing",
+      "name": "DEV: #testing",
+      "lang": "en",
+      "url": "https://dev.to/feed/tag/testing",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "dev.to"
+      ]
+    },
+    {
+      "id": "satisfice",
+      "name": "Satisfice (James Bach)",
+      "lang": "en",
+      "url": "https://www.satisfice.com/blog/feed",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "www.satisfice.com"
+      ]
+    },
+    {
+      "id": "developsense",
+      "name": "DevelopSense (Michael Bolton)",
+      "lang": "en",
+      "url": "https://developsense.com/feed",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "developsense.com"
+      ]
+    },
+    {
+      "id": "nngroup",
+      "name": "Nielsen Norman Group",
+      "lang": "en",
+      "url": "https://www.nngroup.com/feed/rss/",
+      "topics": [
+        "design"
+      ],
+      "hosts": [
+        "www.nngroup.com"
+      ]
+    },
+    {
+      "id": "smashing-magazine",
+      "name": "Smashing Magazine",
+      "lang": "en",
+      "url": "https://www.smashingmagazine.com/feed/",
+      "topics": [
+        "design",
+        "web"
+      ],
+      "hosts": [
+        "smashingmagazine.com"
+      ]
+    },
+    {
+      "id": "ux-collective",
+      "name": "UX Collective",
+      "lang": "en",
+      "url": "https://uxdesign.cc/feed",
+      "topics": [
+        "design"
+      ],
+      "hosts": [
+        "uxdesign.cc"
+      ]
+    },
+    {
+      "id": "adrian-roselli",
+      "name": "Adrian Roselli",
+      "lang": "en",
+      "url": "https://adrianroselli.com/feed",
+      "topics": [
+        "design",
+        "web"
+      ],
+      "hosts": [
+        "adrianroselli.com"
+      ]
+    },
+    {
+      "id": "brad-frost",
+      "name": "Brad Frost",
+      "lang": "en",
+      "url": "https://bradfrost.com/feed/",
+      "topics": [
+        "design",
+        "web"
+      ],
+      "hosts": [
+        "bradfrost.com"
+      ]
+    },
+    {
+      "id": "pragmatic-engineer",
+      "name": "The Pragmatic Engineer",
+      "lang": "en",
+      "url": "https://newsletter.pragmaticengineer.com/feed",
+      "topics": [
+        "career",
+        "news"
+      ],
+      "hosts": [
+        "newsletter.pragmaticengineer.com"
+      ]
+    },
+    {
+      "id": "lethain",
+      "name": "Irrational Exuberance (Will Larson)",
+      "lang": "en",
+      "url": "https://lethain.com/feeds/",
+      "topics": [
+        "career",
+        "arch"
+      ],
+      "hosts": [
+        "lethain.com"
+      ]
+    },
+    {
+      "id": "leaddev",
+      "name": "LeadDev",
+      "lang": "en",
+      "url": "https://leaddev.com/feed",
+      "topics": [
+        "career"
+      ],
+      "hosts": [
+        "leaddev.com"
+      ]
+    },
+    {
+      "id": "refactoring-fm",
+      "name": "Refactoring",
+      "lang": "en",
+      "url": "https://refactoring.fm/feed",
+      "topics": [
+        "career"
+      ],
+      "hosts": [
+        "refactoring.fm"
+      ]
+    },
+    {
+      "id": "engineering-manager",
+      "name": "The Engineering Manager",
+      "lang": "en",
+      "url": "https://www.theengineeringmanager.com/feed/",
+      "topics": [
+        "career"
+      ],
+      "hosts": [
+        "www.theengineeringmanager.com"
+      ]
+    },
+    {
+      "id": "ycombinator-blog",
+      "name": "Y Combinator Blog",
+      "lang": "en",
+      "url": "https://www.ycombinator.com/blog/rss/",
+      "topics": [
+        "startups"
+      ],
+      "hosts": [
+        "www.ycombinator.com"
+      ]
+    },
+    {
+      "id": "techcrunch-startups",
+      "name": "TechCrunch Startups",
+      "lang": "en",
+      "url": "https://techcrunch.com/category/startups/feed/",
+      "topics": [
+        "startups",
+        "news"
+      ],
+      "hosts": [
+        "techcrunch.com"
+      ]
+    },
+    {
+      "id": "saastr",
+      "name": "SaaStr",
+      "lang": "en",
+      "url": "https://www.saastr.com/feed/",
+      "topics": [
+        "startups"
+      ],
+      "hosts": [
+        "www.saastr.com"
+      ]
+    },
+    {
+      "id": "a-smart-bear",
+      "name": "A Smart Bear",
+      "lang": "en",
+      "url": "https://longform.asmartbear.com/index.xml",
+      "topics": [
+        "startups"
+      ],
+      "hosts": [
+        "longform.asmartbear.com"
+      ]
+    },
+    {
+      "id": "science-news",
+      "name": "Science News",
+      "lang": "en",
+      "url": "https://www.sciencenews.org/feed",
+      "topics": [
+        "science"
+      ],
+      "hosts": [
+        "www.sciencenews.org"
+      ]
+    },
+    {
+      "id": "quanta-physics",
+      "name": "Quanta Magazine: Physics",
+      "lang": "en",
+      "url": "https://www.quantamagazine.org/physics/feed/",
+      "topics": [
+        "science"
+      ],
+      "hosts": [
+        "www.quantamagazine.org"
+      ]
+    },
+    {
+      "id": "ars-technica-science",
+      "name": "Ars Technica: Science",
+      "lang": "en",
+      "url": "https://feeds.arstechnica.com/arstechnica/science",
+      "topics": [
+        "science",
+        "space"
+      ],
+      "hosts": [
+        "arstechnica.com"
+      ]
+    },
+    {
+      "id": "knowable-magazine",
+      "name": "Knowable Magazine",
+      "lang": "en",
+      "url": "https://knowablemagazine.org/rss",
+      "topics": [
+        "science"
+      ],
+      "hosts": [
+        "knowablemagazine.org"
+      ]
+    },
+    {
+      "id": "physics-world",
+      "name": "Physics World",
+      "lang": "en",
+      "url": "https://physicsworld.com/feed/",
+      "topics": [
+        "science"
+      ],
+      "hosts": [
+        "physicsworld.com"
+      ]
+    },
+    {
+      "id": "nasa",
+      "name": "NASA",
+      "lang": "en",
+      "url": "https://www.nasa.gov/feed/",
+      "topics": [
+        "space",
+        "science"
+      ],
+      "hosts": [
+        "science.nasa.gov",
+        "www.nasa.gov"
+      ]
+    },
+    {
+      "id": "esa-space-science",
+      "name": "ESA Space Science",
+      "lang": "en",
+      "url": "https://www.esa.int/rssfeed/Our_Activities/Space_Science",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "www.esa.int"
+      ]
+    },
+    {
+      "id": "universe-today",
+      "name": "Universe Today",
+      "lang": "en",
+      "url": "https://www.universetoday.com/feed/",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "www.universetoday.com"
+      ]
+    },
+    {
+      "id": "spaceflight-now",
+      "name": "Spaceflight Now",
+      "lang": "en",
+      "url": "https://spaceflightnow.com/feed/",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "spaceflightnow.com"
+      ]
+    },
+    {
+      "id": "nasaspaceflight",
+      "name": "NASASpaceFlight.com",
+      "lang": "en",
+      "url": "https://www.nasaspaceflight.com/feed/",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "www.nasaspaceflight.com"
+      ]
+    },
+    {
+      "id": "quanta-math",
+      "name": "Quanta Magazine: Mathematics",
+      "lang": "en",
+      "url": "https://www.quantamagazine.org/mathematics/feed/",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "www.quantamagazine.org"
+      ]
+    },
+    {
+      "id": "aperiodical",
+      "name": "The Aperiodical",
+      "lang": "en",
+      "url": "https://aperiodical.com/feed/",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "aperiodical.com"
+      ]
+    },
+    {
+      "id": "fiddler-on-the-proof",
+      "name": "Fiddler on the Proof",
+      "lang": "en",
+      "url": "https://thefiddler.substack.com/feed",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "thefiddler.substack.com"
+      ]
+    },
+    {
+      "id": "tanya-khovanova",
+      "name": "Tanya Khovanova's Math Blog",
+      "lang": "en",
+      "url": "https://blog.tanyakhovanova.com/feed/",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "blog.tanyakhovanova.com"
+      ]
+    },
+    {
+      "id": "infinitely-more",
+      "name": "Infinitely More (Joel David Hamkins)",
+      "lang": "en",
+      "url": "https://www.infinitelymore.xyz/feed",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "www.infinitelymore.xyz"
+      ]
+    },
+    {
+      "id": "computer-history-museum",
+      "name": "Computer History Museum",
+      "lang": "en",
+      "url": "https://computerhistory.org/feed/",
+      "topics": [
+        "history"
+      ],
+      "hosts": [
+        "computerhistory.org"
+      ]
+    },
+    {
+      "id": "abort-retry-fail",
+      "name": "Abort Retry Fail",
+      "lang": "en",
+      "url": "https://www.abortretry.fail/feed",
+      "topics": [
+        "history",
+        "retro"
+      ],
+      "hosts": [
+        "www.abortretry.fail"
+      ]
+    },
+    {
+      "id": "chip-letter",
+      "name": "The Chip Letter",
+      "lang": "en",
+      "url": "https://thechipletter.substack.com/feed",
+      "topics": [
+        "history"
+      ],
+      "hosts": [
+        "thechipletter.substack.com"
+      ]
+    },
+    {
+      "id": "digital-antiquarian",
+      "name": "The Digital Antiquarian",
+      "lang": "en",
+      "url": "https://www.filfre.net/feed/",
+      "topics": [
+        "history",
+        "retro",
+        "gamedev"
+      ],
+      "hosts": [
+        "www.filfre.net"
+      ]
+    },
+    {
+      "id": "ieee-spectrum-history",
+      "name": "IEEE Spectrum: Tech History",
+      "lang": "en",
+      "url": "https://spectrum.ieee.org/feeds/topic/tech-history.rss",
+      "topics": [
+        "history"
+      ],
+      "hosts": [
+        "spectrum.ieee.org"
+      ]
+    },
+    {
+      "id": "time-extension",
+      "name": "Time Extension",
+      "lang": "en",
+      "url": "https://www.timeextension.com/feeds/latest",
+      "topics": [
+        "retro"
+      ],
+      "hosts": [
+        "www.timeextension.com"
+      ]
+    },
+    {
+      "id": "hackaday-retrocomputing",
+      "name": "Hackaday: Retrocomputing",
+      "lang": "en",
+      "url": "https://hackaday.com/category/retrocomputing/feed/",
+      "topics": [
+        "retro",
+        "history"
+      ],
+      "hosts": [
+        "hackaday.com"
+      ]
+    },
+    {
+      "id": "video-game-history-foundation",
+      "name": "Video Game History Foundation",
+      "lang": "en",
+      "url": "https://gamehistory.org/feed/",
+      "topics": [
+        "retro",
+        "history"
+      ],
+      "hosts": [
+        "gamehistory.org"
+      ]
+    },
+    {
+      "id": "retrorgb",
+      "name": "RetroRGB",
+      "lang": "en",
+      "url": "https://www.retrorgb.com/feed",
+      "topics": [
+        "retro"
+      ],
+      "hosts": [
+        "retrorgb.com"
+      ]
+    },
+    {
+      "id": "dolphin-emulator",
+      "name": "Dolphin Emulator Blog",
+      "lang": "en",
+      "url": "https://dolphin-emu.org/blog/feeds/",
+      "topics": [
+        "retro"
+      ],
+      "hosts": [
+        "dolphin-emu.org"
+      ]
+    },
+    {
+      "id": "swiftlee",
+      "name": "SwiftLee",
+      "lang": "en",
+      "url": "https://www.avanderlee.com/feed/",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "www.avanderlee.com"
+      ]
+    },
+    {
+      "id": "proandroiddev",
+      "name": "ProAndroidDev",
+      "lang": "en",
+      "url": "https://proandroiddev.com/feed",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "proandroiddev.com"
+      ]
+    },
+    {
+      "id": "gamefromscratch",
+      "name": "GameFromScratch",
+      "lang": "en",
+      "url": "https://gamefromscratch.com/feed/",
+      "topics": [
+        "gamedev",
+        "news"
+      ],
+      "hosts": [
+        "gamefromscratch.com"
+      ]
+    },
+    {
+      "id": "how-to-market-a-game",
+      "name": "How To Market A Game",
+      "lang": "en",
+      "url": "https://howtomarketagame.com/feed/",
+      "topics": [
+        "gamedev",
+        "startups"
+      ],
+      "hosts": [
+        "howtomarketagame.com"
+      ]
+    },
+    {
+      "id": "john-d-cook",
+      "name": "John D. Cook",
+      "lang": "en",
+      "url": "https://www.johndcook.com/blog/feed/",
+      "topics": [
+        "cs",
+        "math"
+      ],
+      "hosts": [
+        "www.johndcook.com"
+      ]
+    },
+    {
+      "id": "computational-complexity",
+      "name": "Computational Complexity",
+      "lang": "en",
+      "url": "https://blog.computationalcomplexity.org/feeds/posts/default",
+      "topics": [
+        "cs",
+        "math"
+      ],
+      "hosts": [
+        "blog.computationalcomplexity.org"
+      ]
+    },
+    {
+      "id": "kubernetes-blog",
+      "name": "Kubernetes Blog",
+      "lang": "en",
+      "url": "https://kubernetes.io/feed.xml",
+      "topics": [
+        "devops"
+      ],
+      "hosts": [
+        "kubernetes.io"
+      ]
+    },
+    {
+      "id": "the-new-stack",
+      "name": "The New Stack",
+      "lang": "en",
+      "url": "https://thenewstack.io/feed/",
+      "topics": [
+        "devops",
+        "news"
+      ],
+      "hosts": [
+        "thenewstack.io"
+      ]
+    }
+  ],
+  "podcasts": [
+    {
+      "id": "se-daily",
+      "name": "Software Engineering Daily",
+      "lang": "en",
+      "url": "https://softwareengineeringdaily.com/feed/podcast/",
+      "topics": [
+        "arch",
+        "backend",
+        "devops",
+        "ai"
+      ],
+      "hosts": [
+        "softwareengineeringdaily.com"
+      ]
+    },
+    {
+      "id": "security-now",
+      "name": "Security Now",
+      "lang": "en",
+      "url": "https://feeds.twit.tv/sn.xml",
+      "topics": [
+        "security"
+      ],
+      "hosts": [
+        "twit.tv"
+      ]
+    },
+    {
+      "id": "risky-business",
+      "name": "Risky Business",
+      "lang": "en",
+      "url": "https://risky.biz/feeds/risky-business/",
+      "topics": [
+        "security",
+        "news"
+      ],
+      "hosts": [
+        "risky.biz"
+      ]
+    },
+    {
+      "id": "intelligent-machines",
+      "name": "Intelligent Machines",
+      "lang": "en",
+      "url": "https://feeds.twit.tv/twig.xml",
+      "topics": [
+        "news",
+        "ai"
+      ],
+      "hosts": [
+        "twit.tv"
+      ]
+    },
+    {
+      "id": "se-radio",
+      "name": "Software Engineering Radio",
+      "lang": "en",
+      "url": "https://seradio.libsyn.com/rss",
+      "topics": [
+        "arch",
+        "backend",
+        "cs",
+        "langs"
+      ],
+      "hosts": [
+        "se-radio.net",
+        "www.se-radio.net"
+      ]
+    },
+    {
+      "id": "talk-python",
+      "name": "Talk Python To Me",
+      "lang": "en",
+      "url": "https://talkpython.fm/episodes/rss",
+      "topics": [
+        "langs"
+      ],
+      "hosts": [
+        "talkpython.fm"
+      ]
+    },
+    {
+      "id": "python-bytes",
+      "name": "Python Bytes",
+      "lang": "en",
+      "url": "https://pythonbytes.fm/episodes/rss",
+      "topics": [
+        "langs",
+        "news"
+      ],
+      "hosts": [
+        "pythonbytes.fm"
+      ]
+    },
+    {
+      "id": "darknet-diaries",
+      "name": "Darknet Diaries",
+      "lang": "en",
+      "url": "https://feeds.megaphone.fm/darknetdiaries",
+      "topics": [
+        "security"
+      ],
+      "hosts": [
+        "darknetdiaries.com"
+      ]
+    },
+    {
+      "id": "twiml",
+      "name": "The TWIML AI Podcast",
+      "lang": "en",
+      "url": "https://feeds.megaphone.fm/MLN2155636147",
+      "topics": [
+        "ai"
+      ],
+      "hosts": [
+        "twimlai.com",
+        "listen.twimlai.com"
+      ]
+    },
+    {
+      "id": "shoptalk",
+      "name": "ShopTalk Show",
+      "lang": "en",
+      "url": "https://shoptalkshow.com/feed/podcast",
+      "topics": [
+        "web"
+      ],
+      "hosts": [
+        "shoptalkshow.com"
+      ]
+    },
+    {
+      "id": "android-backstage",
+      "name": "Android Developers Backstage",
+      "lang": "en",
+      "url": "https://feeds.feedburner.com/blogspot/AndroidDevelopersBackstage",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "adbackstage.libsyn.com"
+      ]
+    },
+    {
+      "id": "hanselminutes",
+      "name": "Hanselminutes",
+      "lang": "en",
+      "url": "https://feeds.simplecast.com/gvtxUiIf",
+      "topics": [
+        "tools",
+        "web",
+        "arch"
+      ],
+      "hosts": [
+        "www.hanselminutes.com"
+      ]
+    },
+    {
+      "id": "corecursive",
+      "name": "CoRecursive",
+      "lang": "en",
+      "url": "https://corecursive.com/feed",
+      "topics": [
+        "cs"
+      ],
+      "hosts": [
+        "corecursive.com"
+      ]
+    },
+    {
+      "id": "kubernetes-podcast",
+      "name": "Kubernetes Podcast from Google",
+      "lang": "en",
+      "url": "https://kubernetespodcast.com/feeds/audio.xml",
+      "topics": [
+        "devops"
+      ],
+      "hosts": [
+        "kubernetespodcast.com",
+        "e780d51f-f115-44a6-8252-aed9216bb521.libsyn.com"
+      ]
+    },
+    {
+      "id": "lex-fridman",
+      "name": "Lex Fridman Podcast",
+      "lang": "en",
+      "url": "https://lexfridman.com/feed/podcast/",
+      "topics": [
+        "ai",
+        "cs"
+      ],
+      "hosts": [
+        "lexfridman.com"
+      ]
+    },
+    {
+      "id": "hard-fork",
+      "name": "Hard Fork",
+      "lang": "en",
+      "url": "https://feeds.simplecast.com/l2i9YnTd",
+      "topics": [
+        "news",
+        "ai"
+      ],
+      "hosts": [
+        "www.nytimes.com"
+      ]
+    },
+    {
+      "id": "game-developer-podcast",
+      "name": "Game Developer Podcast",
+      "lang": "en",
+      "url": "https://feed.podbean.com/gamedeveloper/feed.xml",
+      "topics": [
+        "gamedev"
+      ],
+      "hosts": [
+        "gamedeveloper.podbean.com"
+      ]
+    },
+    {
+      "id": "data-engineering-podcast",
+      "name": "Data Engineering Podcast",
+      "lang": "en",
+      "url": "https://serve.podhome.fm/rss/1c0357c0-6aba-5766-a2d5-2090d8dab6bc",
+      "topics": [
+        "data"
+      ],
+      "hosts": [
+        "www.dataengineeringpodcast.com"
+      ]
+    },
+    {
+      "id": "postgres-fm",
+      "name": "Postgres FM",
+      "lang": "en",
+      "url": "https://feeds.transistor.fm/postgres-fm",
+      "topics": [
+        "data",
+        "backend"
+      ],
+      "hosts": [
+        "share.transistor.fm"
+      ]
+    },
+    {
+      "id": "analytics-engineering",
+      "name": "The Analytics Engineering Podcast",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/352538/destinations/2880773.xml",
+      "topics": [
+        "data"
+      ],
+      "hosts": [
+        "roundup.getdbt.com"
+      ]
+    },
+    {
+      "id": "amp-hour",
+      "name": "The Amp Hour",
+      "lang": "en",
+      "url": "https://theamphour.com/feed/podcast/",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "theamphour.com"
+      ]
+    },
+    {
+      "id": "embedded-fm",
+      "name": "Embedded",
+      "lang": "en",
+      "url": "https://embedded.fm/episodes?format=rss",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "embedded.fm"
+      ]
+    },
+    {
+      "id": "hackaday-podcast",
+      "name": "Hackaday Podcast",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/305027/destinations/2437685.xml",
+      "topics": [
+        "hardware"
+      ],
+      "hosts": [
+        "hackaday.com",
+        "hackaday.libsyn.com"
+      ]
+    },
+    {
+      "id": "changelog",
+      "name": "The Changelog",
+      "lang": "en",
+      "url": "https://changelog.com/podcast/feed",
+      "topics": [
+        "opensource",
+        "tools"
+      ],
+      "hosts": [
+        "changelog.com"
+      ]
+    },
+    {
+      "id": "linux-unplugged",
+      "name": "LINUX Unplugged",
+      "lang": "en",
+      "url": "https://feeds.jupiterbroadcasting.com/lup",
+      "topics": [
+        "opensource"
+      ],
+      "hosts": [
+        "linuxunplugged.com"
+      ]
+    },
+    {
+      "id": "late-night-linux",
+      "name": "Late Night Linux",
+      "lang": "en",
+      "url": "https://latenightlinux.com/feed/mp3",
+      "topics": [
+        "opensource"
+      ],
+      "hosts": [
+        "latenightlinux.com"
+      ]
+    },
+    {
+      "id": "testguild",
+      "name": "TestGuild Automation Podcast",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/51668/destinations/184057.xml",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "testtalks.libsyn.com",
+        "app.testguild.com"
+      ]
+    },
+    {
+      "id": "ab-testing",
+      "name": "AB Testing",
+      "lang": "en",
+      "url": "https://anchor.fm/s/45580f58/podcast/rss",
+      "topics": [
+        "testing"
+      ],
+      "hosts": [
+        "podcasters.spotify.com"
+      ]
+    },
+    {
+      "id": "sre-prodcast",
+      "name": "Google SRE Prodcast",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/407036/destinations/3367133.xml",
+      "topics": [
+        "testing",
+        "devops"
+      ],
+      "hosts": [
+        "sre.google"
+      ]
+    },
+    {
+      "id": "nng-ux-podcast",
+      "name": "NN/G UX Podcast",
+      "lang": "en",
+      "url": "https://anchor.fm/s/2125a62c/podcast/rss",
+      "topics": [
+        "design"
+      ],
+      "hosts": [
+        "podcasters.spotify.com"
+      ]
+    },
+    {
+      "id": "design-better",
+      "name": "Design Better",
+      "lang": "en",
+      "url": "https://feeds.megaphone.fm/designbetter",
+      "topics": [
+        "design"
+      ],
+      "hosts": [
+        "designbetterpodcast.com"
+      ]
+    },
+    {
+      "id": "dive-club",
+      "name": "Dive Club",
+      "lang": "en",
+      "url": "https://media.rss.com/diveclub/feed.xml",
+      "topics": [
+        "design"
+      ],
+      "hosts": [
+        "rss.com"
+      ]
+    },
+    {
+      "id": "pragmatic-engineer-podcast",
+      "name": "The Pragmatic Engineer Podcast",
+      "lang": "en",
+      "url": "https://api.substack.com/feed/podcast/458709.rss",
+      "topics": [
+        "career"
+      ],
+      "hosts": [
+        "newsletter.pragmaticengineer.com"
+      ]
+    },
+    {
+      "id": "soft-skills-engineering",
+      "name": "Soft Skills Engineering",
+      "lang": "en",
+      "url": "https://softskills.audio/feed.xml",
+      "topics": [
+        "career"
+      ],
+      "hosts": [
+        "softskills.audio"
+      ]
+    },
+    {
+      "id": "tech-lead-journal",
+      "name": "Tech Lead Journal",
+      "lang": "en",
+      "url": "https://anchor.fm/s/265d7c64/podcast/rss",
+      "topics": [
+        "career",
+        "arch"
+      ],
+      "hosts": [
+        "podcasters.spotify.com"
+      ]
+    },
+    {
+      "id": "engineering-enablement",
+      "name": "Engineering Enablement by DX",
+      "lang": "en",
+      "url": "https://anchor.fm/s/1116ee148/podcast/rss",
+      "topics": [
+        "tools",
+        "career"
+      ],
+      "hosts": [
+        "podcasters.spotify.com"
+      ]
+    },
+    {
+      "id": "stack-overflow-podcast",
+      "name": "The Stack Overflow Podcast",
+      "lang": "en",
+      "url": "https://rss.art19.com/the-stack-overflow-podcast",
+      "topics": [
+        "tools",
+        "news"
+      ],
+      "hosts": [
+        "stackoverflow.blog"
+      ]
+    },
+    {
+      "id": "stacktrace",
+      "name": "Stacktrace",
+      "lang": "en",
+      "url": "https://stacktracepodcast.fm/feed.rss",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "stacktracepodcast.fm"
+      ]
+    },
+    {
+      "id": "empower-apps",
+      "name": "Empower Apps",
+      "lang": "en",
+      "url": "https://feeds.transistor.fm/empowerapps-show",
+      "topics": [
+        "mobile"
+      ],
+      "hosts": [
+        "share.transistor.fm"
+      ]
+    },
+    {
+      "id": "game-design-round-table",
+      "name": "The Game Design Round Table",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/232646/destinations/1719626.xml",
+      "topics": [
+        "gamedev"
+      ],
+      "hosts": [
+        "tgdrt.libsyn.com"
+      ]
+    },
+    {
+      "id": "dev-game-club",
+      "name": "Dev Game Club",
+      "lang": "en",
+      "url": "https://devgameclub.libsyn.com/rss",
+      "topics": [
+        "gamedev"
+      ],
+      "hosts": [
+        "devgameclub.libsyn.com"
+      ]
+    },
+    {
+      "id": "syntax",
+      "name": "Syntax",
+      "lang": "en",
+      "url": "https://feed.syntax.fm/rss",
+      "topics": [
+        "web"
+      ],
+      "hosts": [
+        "syntax.fm"
+      ]
+    },
+    {
+      "id": "codepen-radio",
+      "name": "CodePen Radio",
+      "lang": "en",
+      "url": "https://blog.codepen.io/feed/podcast/codepen-radio/",
+      "topics": [
+        "web",
+        "design"
+      ],
+      "hosts": [
+        "blog.codepen.io"
+      ]
+    },
+    {
+      "id": "dotnet-rocks",
+      "name": ".NET Rocks!",
+      "lang": "en",
+      "url": "https://www.spreaker.com/show/5634793/episodes/feed",
+      "topics": [
+        "backend",
+        "langs"
+      ],
+      "hosts": [
+        "www.spreaker.com"
+      ]
+    },
+    {
+      "id": "fallthrough",
+      "name": "Fallthrough",
+      "lang": "en",
+      "url": "https://feeds.transistor.fm/fallthrough",
+      "topics": [
+        "backend",
+        "langs"
+      ],
+      "hosts": [
+        "fallthrough.fm",
+        "share.transistor.fm",
+        "fallthrough.skriptble.press"
+      ]
+    },
+    {
+      "id": "screaming-in-the-cloud",
+      "name": "Screaming in the Cloud",
+      "lang": "en",
+      "url": "https://feeds.transistor.fm/screaming-in-the-cloud",
+      "topics": [
+        "devops"
+      ],
+      "hosts": [
+        "share.transistor.fm"
+      ]
+    },
+    {
+      "id": "fork-around-find-out",
+      "name": "Fork Around And Find Out",
+      "lang": "en",
+      "url": "https://feeds.transistor.fm/fork-around-and-find-out",
+      "topics": [
+        "devops"
+      ],
+      "hosts": [
+        "share.transistor.fm"
+      ]
+    },
+    {
+      "id": "startups-for-the-rest-of-us",
+      "name": "Startups For the Rest of Us",
+      "lang": "en",
+      "url": "https://www.startupsfortherestofus.com/feed/podcast",
+      "topics": [
+        "startups"
+      ],
+      "hosts": [
+        "www.startupsfortherestofus.com"
+      ]
+    },
+    {
+      "id": "acquired",
+      "name": "Acquired",
+      "lang": "en",
+      "url": "https://feeds.transistor.fm/acquired",
+      "topics": [
+        "startups",
+        "history"
+      ],
+      "hosts": [
+        "www.acquired.fm"
+      ]
+    },
+    {
+      "id": "lennys-podcast",
+      "name": "Lenny's Podcast",
+      "lang": "en",
+      "url": "https://api.substack.com/feed/podcast/10845.rss",
+      "topics": [
+        "startups"
+      ],
+      "hosts": [
+        "www.lennysnewsletter.com"
+      ]
+    },
+    {
+      "id": "short-wave",
+      "name": "Short Wave",
+      "lang": "en",
+      "url": "https://feeds.npr.org/510351/podcast.xml",
+      "topics": [
+        "science"
+      ],
+      "hosts": [
+        "www.npr.org"
+      ]
+    },
+    {
+      "id": "science-friday",
+      "name": "Science Friday",
+      "lang": "en",
+      "url": "https://feeds.simplecast.com/h18ZIZD_",
+      "topics": [
+        "science"
+      ],
+      "hosts": [
+        "www.wnycstudios.org"
+      ]
+    },
+    {
+      "id": "quanta-podcast",
+      "name": "The Quanta Podcast",
+      "lang": "en",
+      "url": "https://www.quantamagazine.org/feed/podcast",
+      "topics": [
+        "science",
+        "math",
+        "cs"
+      ],
+      "hosts": [
+        "play.prx.org"
+      ]
+    },
+    {
+      "id": "planetary-radio",
+      "name": "Planetary Radio",
+      "lang": "en",
+      "url": "https://www.omnycontent.com/d/playlist/d95da206-8ee8-4ba5-ba8d-ad1200b4e5a4/cf13d5f5-6040-458d-ab5a-ad200189747d/b75c9f7f-4a63-438e-b506-ad2001897499/podcast.rss",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "omny.fm"
+      ]
+    },
+    {
+      "id": "houston-we-have-a-podcast",
+      "name": "Houston We Have a Podcast",
+      "lang": "en",
+      "url": "https://www.nasa.gov/feeds/podcasts/houston-we-have-a-podcast",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "www.nasa.gov"
+      ]
+    },
+    {
+      "id": "off-nominal",
+      "name": "Off-Nominal",
+      "lang": "en",
+      "url": "https://feeds.simplecast.com/iyz_ESAp",
+      "topics": [
+        "space"
+      ],
+      "hosts": [
+        "offnom.com"
+      ]
+    },
+    {
+      "id": "joy-of-why",
+      "name": "The Joy of Why",
+      "lang": "en",
+      "url": "https://joy.quantamagazine.org/",
+      "topics": [
+        "math",
+        "science"
+      ],
+      "hosts": [
+        "play.prx.org"
+      ]
+    },
+    {
+      "id": "a-problem-squared",
+      "name": "A Problem Squared",
+      "lang": "en",
+      "url": "https://anchor.fm/s/eb804d78/podcast/rss",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "podcasters.spotify.com"
+      ]
+    },
+    {
+      "id": "breaking-math",
+      "name": "Breaking Math Podcast",
+      "lang": "en",
+      "url": "https://media.rss.com/breaking-math/feed.xml",
+      "topics": [
+        "math"
+      ],
+      "hosts": [
+        "rss.com"
+      ]
+    },
+    {
+      "id": "advent-of-computing",
+      "name": "Advent of Computing",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/177941/destinations/1206722.xml",
+      "topics": [
+        "history"
+      ],
+      "hosts": [
+        "adventofcomputing.libsyn.com"
+      ]
+    },
+    {
+      "id": "engines-of-our-ingenuity",
+      "name": "The Engines of Our Ingenuity",
+      "lang": "en",
+      "url": "https://cdn.houstonpublicmedia.org/podcasts/engines-of-our-ingenuity-apple-podcasts.xml",
+      "topics": [
+        "history",
+        "science"
+      ],
+      "hosts": [
+        "www.houstonpublicmedia.org"
+      ]
+    },
+    {
+      "id": "floppy-days",
+      "name": "Floppy Days",
+      "lang": "en",
+      "url": "https://rss.libsyn.com/shows/42282/destinations/130236.xml",
+      "topics": [
+        "history",
+        "retro"
+      ],
+      "hosts": [
+        "floppydays.libsyn.com"
+      ]
+    },
+    {
+      "id": "the-retro-hour",
+      "name": "The Retro Hour",
+      "lang": "en",
+      "url": "https://audioboom.com/channels/4970769.rss",
+      "topics": [
+        "retro"
+      ],
+      "hosts": [
+        "audioboom.com"
+      ]
+    },
+    {
+      "id": "retronauts",
+      "name": "Retronauts",
+      "lang": "en",
+      "url": "https://audioboom.com/channels/5081747.rss",
+      "topics": [
+        "retro"
+      ],
+      "hosts": [
+        "audioboom.com"
+      ]
+    },
+    {
+      "id": "video-game-history-hour",
+      "name": "Video Game History Hour",
+      "lang": "en",
+      "url": "https://anchor.fm/s/370d6ccc/podcast/rss",
+      "topics": [
+        "retro",
+        "history"
+      ],
+      "hosts": [
+        "podcasters.spotify.com"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "arcade",
+  "version": "0.30.1",
+  "description": "Games while your Claude Code agent works — NES, Sega, PlayStation, Doom, chess and online play · Игры, пока агент работает",
+  "author": {
+    "name": "Max Arbakov"
+  },
+  "homepage": "https://github.com/ArbakovMaxim/agent-arcade",
+  "repository": "https://github.com/ArbakovMaxim/agent-arcade",
+  "license": "AGPL-3.0-only"
+}

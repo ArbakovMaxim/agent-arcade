@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.nes binary
+*.tar.gz binary
+*.png binary
+# Данные игр ScummVM — как в архивах: перевод строк не трогаем, иначе размеры разойдутся с games/index.json
+site/content/games/scummvm/games/** -text

@@ -1,0 +1,89 @@
+# Сборка OpenTTD для браузера — официальная сборка Emscripten из исходников OpenTTD (GPL-2.0), в Docker-образе
+# с той версией Emscripten, которую закрепил релиз. Графика — OpenGFX (GPL-2.0) с официального CDN OpenTTD,
+# с проверкой контрольной суммы. Результат — в site/content/games/openttd.
+# Запуск вручную: Actions → «Сборка openttd-wasm» → Run workflow. Сборка долгая: OpenTTD большой.
+name: Сборка openttd-wasm
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  OPENTTD_REPO: https://github.com/OpenTTD/OpenTTD
+  OPENTTD_TAG: '15.3'
+  OPENGFX_VERSION: '8.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      # Run workflow по умолчанию предлагает ветку plugin — копию main без site/; с неё собираем в main, как раньше
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.ref_name == 'plugin' && 'main' || '' }}
+
+      - name: Исходники OpenTTD на теге релиза
+        run: git clone --depth 1 --branch "$OPENTTD_TAG" "$OPENTTD_REPO" /tmp/openttd
+
+      - name: Образ Emscripten из Dockerfile релиза
+        run: docker build -t emsdk-openttd /tmp/openttd/os/emscripten
+
+      - name: Вспомогательные инструменты сборки
+        working-directory: /tmp/openttd
+        run: |
+          mkdir -p build-host
+          docker run --rm -v "$PWD:$PWD" -u "$(id -u):$(id -g)" --workdir "$PWD/build-host" emsdk-openttd cmake .. -DOPTION_TOOLS_ONLY=ON
+          docker run --rm -v "$PWD:$PWD" -u "$(id -u):$(id -g)" --workdir "$PWD/build-host" emsdk-openttd make -j"$(nproc)" tools
+
+      - name: Сборка игры
+        working-directory: /tmp/openttd
+        run: |
+          mkdir -p build
+          docker run --rm -v "$PWD:$PWD" -u "$(id -u):$(id -g)" --workdir "$PWD/build" emsdk-openttd emcmake cmake .. -DHOST_BINARY_DIR=../build-host -DCMAKE_BUILD_TYPE=Release -DOPTION_USE_ASSERTS=OFF
+          docker run --rm -v "$PWD:$PWD" -u "$(id -u):$(id -g)" --workdir "$PWD/build" emsdk-openttd emmake make -j"$(nproc)"
+          ls -la build/openttd.*
+
+      - name: Графика OpenGFX с официального CDN, с проверкой контрольной суммы
+        run: |
+          base="https://cdn.openttd.org/opengfx-releases/${OPENGFX_VERSION}"
+          curl -sfL -o /tmp/opengfx.zip "$base/opengfx-${OPENGFX_VERSION}-all.zip"
+          curl -sfL -o /tmp/opengfx.sha256 "$base/opengfx-${OPENGFX_VERSION}-all.zip.sha256sum" || true
+          if [ -s /tmp/opengfx.sha256 ]; then
+            expected="$(cut -d' ' -f1 /tmp/opengfx.sha256)"
+            actual="$(sha256sum /tmp/opengfx.zip | cut -d' ' -f1)"
+            [ "$expected" = "$actual" ] || { echo "контрольная сумма OpenGFX не совпала"; exit 1; }
+            echo "OpenGFX: контрольная сумма совпала ($actual)"
+          else
+            echo "OpenGFX: файла контрольной суммы нет — sha256 $(sha256sum /tmp/opengfx.zip | cut -d' ' -f1)"
+          fi
+          mkdir -p /tmp/opengfx && unzip -q /tmp/opengfx.zip -d /tmp/opengfx && ls -la /tmp/opengfx
+
+      - name: Игра, графика и исходники — в репозиторий
+        run: |
+          OUT=site/content/games/openttd
+          rm -rf "$OUT" && mkdir -p "$OUT/baseset"
+          cp /tmp/openttd/build/openttd.* "$OUT/"
+          cp /tmp/opengfx/*.tar "$OUT/baseset/"
+          cp /tmp/openttd/COPYING.md "$OUT/LICENSE.md"
+          # Исходники ровно этого релиза — для GPL; если архив больше лимита Cloudflare, оставляем ссылку на тег
+          git -C /tmp/openttd archive --format=tar.gz --prefix="openttd-${OPENTTD_TAG}/" -o "/tmp/openttd-src.tar.gz" HEAD
+          src_size=$(stat -c %s /tmp/openttd-src.tar.gz)
+          if [ "$src_size" -lt 25000000 ]; then cp /tmp/openttd-src.tar.gz "$OUT/openttd-${OPENTTD_TAG}-src.tar.gz"; fi
+          {
+            echo "OpenTTD ${OPENTTD_TAG} для браузера — © авторы OpenTTD, GPL-2.0 (LICENSE.md)."
+            echo "Исходники: ${OPENTTD_REPO}, тег ${OPENTTD_TAG}$( [ "$src_size" -lt 25000000 ] && echo ' (архив рядом)' )."
+            echo "Собрано в GitHub Actions без изменений официальным способом из os/emscripten/README.md: Docker-образ из os/emscripten/Dockerfile."
+            echo "Графика — OpenGFX ${OPENGFX_VERSION} (GPL-2.0) с https://cdn.openttd.org/opengfx-releases/${OPENGFX_VERSION}/, файл baseset/ без изменений."
+          } > "$OUT/BUILD.txt"
+          # Ни одного файла больше 25 МиБ — иначе Cloudflare его не примет
+          big=$(find "$OUT" -type f -size +25M)
+          if [ -n "$big" ]; then echo "файлы больше 25 МиБ: $big"; ls -la "$OUT"; exit 1; fi
+          ls -la "$OUT" "$OUT/baseset"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$OUT"
+          git commit -m "openttd-wasm: сборка OpenTTD ${OPENTTD_TAG} и OpenGFX ${OPENGFX_VERSION}"
+          git push
