@@ -6906,6 +6906,46 @@ test('доска проектов: «Работа» → доска, карточ
   await ui.unmount()
 })
 
+test('Desktop: доска — «Новая карточка» без подписи слева, колонки ровными строками, действия — карточками с иконками', async ($, on) => {
+  const { clock, saved } = stubs(on)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const pages = () => saved.get('notes') as any[]
+  await ui.press({ key: 'arcade-menu-boards' })
+  await noteInput(ui, 'arcade-board-new-', 'Релиз')
+  // В узкой колонке подпись слева сжимала поле до пары букв: подсказка — в самом поле
+  const cardNew = await ui.find({ key: await noteKey(ui, 'arcade-card-new-todo-') })
+  expect(cardNew).toMatchObject({ props: { placeholder: 'Новая карточка', submitLabel: 'Добавить', autoFocus: true } })
+  expect(cardNew.props.label).toBeUndefined()
+  await noteInput(ui, 'arcade-card-new-todo-', 'Логин')
+  expect(pages().find((p) => p.title === 'Логин')).toMatchObject({ col: 'todo' })
+  // Колонки: поле без подписи и «Убрать колонку» — в одной строке, поля встают ровно друг под другом
+  for (const col of ['todo', 'doing', 'done']) {
+    const line = await ui.find({ key: `col-row-${col}` })
+    expect(line).toMatchObject({ props: { flexDirection: 'row' } })
+    expect(JSON.stringify(line)).toContain(`"arcade-col-drop-${col}"`)
+    const name = await ui.find({ key: await noteKey(ui, `arcade-col-name-${col}-`) })
+    expect(name.props.label).toBeUndefined()
+  }
+  const colNew = await ui.find({ key: await noteKey(ui, 'arcade-col-new-') })
+  expect(colNew).toMatchObject({ props: { placeholder: 'Новая колонка' } })
+  expect(colNew.props.label).toBeUndefined()
+  // «Отдать Claude», «Удалить доску» и «Войти через GitHub» — карточки со своими иконками и описанием
+  const [send, remove, login] = await Promise.all(['arcade-board-send', 'arcade-board-delete', 'arcade-board-login'].map(async (key) => JSON.stringify(await ui.find({ key: `card-${key}` }))))
+  expect(send).toContain('Claude получит доску с карточками и сможет добавлять, править и переносить их.')
+  expect(remove).toContain('Доска удалится вместе с колонками и карточками.')
+  expect(login).toContain('Войди через GitHub — и сможешь вести доску вместе с друзьями.')
+  const icon = (card: string) => /"source":"((?:[^"\\]|\\.)*)"/.exec(card)![1]
+  expect(new Set([send, remove, login].map(icon)).size).toBe(3)
+  // Плитка удаления жмётся как кнопка: второе нажатие удаляет доску
+  await ui.press({ key: 'arcade-board-delete' })
+  expect(await ui.find({ key: 'arcade-board-delete' })).toMatchObject({ props: { label: 'Нажми ещё раз — удалить навсегда' } })
+  await ui.press({ key: 'arcade-board-delete' })
+  expect(pages()).toEqual([])
+  await ui.unmount()
+})
+
 // Сайт с общими досками octocat поверх chatsSite (друзья octo_pal 7 и new_pal 21). Карточка помнит номер правки доски
 // (r): сверка отдаёт поменявшиеся после since по порядку, удалённые — следами { id, gone }; since 0 — доску целиком.
 // board() заводит доску на сайте, put() — правка карточки за друга
