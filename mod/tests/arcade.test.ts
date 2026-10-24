@@ -5544,6 +5544,51 @@ test('аватарка: выбирают только в «Аккаунте» �
   await ui.unmount()
 })
 
+test('Desktop: аккаунт — аватарки плитками одного размера, подписи в две строки; синхронизация, выход и удаление — карточками', HEAVY, async ($, on) => {
+  const { api } = chatsSite()
+  const { clock } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  // Группы под заголовками, как в настройках
+  for (const title of ['Аватарка', 'Синхронизация и вход']) expect(await ui.find({ type: 'Text', text: title })).toMatchObject({ props: { size: 'heading' } })
+  // Каждая аватарка и «Без аватарки» — плитка в рамке одного размера; выбранная — в рамке цвета выбора
+  const frames = (await ui.findAll({})).filter((x: any) => /^card-arcade-avatar-/.test(x.key ?? ''))
+  expect(frames.length).toBe(25)
+  expect(new Set(frames.map((x: any) => `${x.props.borderStyle} ${x.props.width}×${x.props.minHeight}`))).toEqual(new Set(['round 16×6']))
+  expect(await ui.find({ key: 'card-arcade-avatar-none' })).toMatchObject({ props: { borderColor: 'suggestion' } })
+  expect(await ui.find({ key: 'card-arcade-avatar-5' })).toMatchObject({ props: { borderColor: 'subtle' } })
+  // На «Без аватарки» — буква ника, как будет без неё
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-avatar-none' }))).toContain(JSON.stringify(letterSvg('octocat')))
+  // Длинное название переносится внутри плитки, а не раздвигает её
+  const bun = JSON.stringify(await ui.find({ key: 'card-arcade-avatar-13' }))
+  expect(bun).toContain('"wrap":"wrap"')
+  expect(bun).toContain('девушка с пучком')
+  await ui.press({ key: 'arcade-avatar-5' })
+  await clock.settle()
+  expect(await ui.find({ key: 'card-arcade-avatar-5' })).toMatchObject({ props: { borderColor: 'suggestion' } })
+  expect(await ui.find({ key: 'card-arcade-avatar-none' })).toMatchObject({ props: { borderColor: 'subtle' } })
+  // Синхронизировать, выйти и удалить — карточки со своими иконками и описанием, как в меню
+  const cards = ['arcade-account-sync', 'arcade-account-logout', 'arcade-account-delete'].map(async (key) => JSON.stringify(await ui.find({ key: `card-${key}` })))
+  const [sync, logout, remove] = await Promise.all(cards)
+  expect(sync).toContain('"alt":"Синхронизировать сейчас"')
+  expect(sync).toContain('Настройки синхронизированы.')
+  expect(logout).toContain('на этом компьютере; настройки останутся здесь как есть')
+  expect(remove).toContain('сайт Arcade забудет тебя и твои настройки; здесь всё останется')
+  // Иконка — первая картинка карточки; у трёх они разные, а не джойстик по умолчанию
+  const icon = (card: string) => /"source":"((?:[^"\\]|\\.)*)"/.exec(card)![1]
+  expect(new Set([sync, logout, remove].map(icon)).size).toBe(3)
+  expect(await ui.find({ key: 'arcade-account-sync' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+  // В VS Code — те же плитки аватарок с переносом подписи
+  const code = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  expect(await code.find({ key: 'card-arcade-avatar-13' })).toMatchObject({ props: { width: 16 } })
+  expect(JSON.stringify(await code.find({ key: 'arcade-avatar-13' }))).toContain('"wrap":"wrap"')
+  await code.unmount()
+})
+
 test('картинка группы: ставит и убирает только хозяин, в переписке — служебной строкой', HEAVY, async ($, on) => {
   const { api, chats } = chatsSite()
   const { clock, requests } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
@@ -5566,6 +5611,9 @@ test('картинка группы: ставит и убирает только
   await press('arcade-chat-members')
   expect(await text(/^Картинка группы$/)).toBeDefined()
   expect(await ui.find({ key: 'arcade-chat-pic-none' })).toMatchObject({ props: { label: 'Без картинки', variant: 'primary' } })
+  // Картинки группы — те же плитки в рамках, что у аватарок
+  expect(await ui.find({ key: 'card-arcade-chat-pic-3' })).toMatchObject({ props: { borderStyle: 'round', width: 16 } })
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-chat-pic-none' }))).toContain('"alt":"Без картинки"')
   await press('arcade-chat-pic-3')
   expect(members().at(-1)).toEqual({ chat: group, pic: 3 })
   expect(await text('Картинка группы изменена.')).toBeDefined()

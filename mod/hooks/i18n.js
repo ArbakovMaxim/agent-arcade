@@ -335,6 +335,7 @@ const EXACT = {
   'Настройки синхронизированы.': 'Settings are in sync.',
   'Настройки ещё не синхронизированы.': "Settings haven't been synced yet.",
   'Синхронизировать сейчас': 'Sync now',
+  'Синхронизация и вход': 'Sync and sign-in',
   'Выйти': 'Sign out',
   '  на этом компьютере; настройки останутся здесь как есть': '  on this computer; settings stay here as they are',
   'Удалить аккаунт': 'Delete account',

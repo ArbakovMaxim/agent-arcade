@@ -413,6 +413,7 @@ export default {
   "Strategy": "策略",
   "Streams open in Claude's built-in browser.": "直播将在 Claude 的内置浏览器中打开。",
   "Subpages": "子页面",
+  "Sync and sign-in": "同步与登录",
   "Sync now": "立即同步",
   "Syncing the board with the Arcade site…": "正在与 Arcade 网站同步看板…",
   "Syncing…": "正在同步…",

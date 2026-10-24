@@ -413,6 +413,7 @@ export default {
   "Strategy": "Стратегії",
   "Streams open in Claude's built-in browser.": "Трансляції відкриваються у вбудованому браузері Claude.",
   "Subpages": "Підсторінки",
+  "Sync and sign-in": "Синхронізація та вхід",
   "Sync now": "Синхронізувати зараз",
   "Syncing the board with the Arcade site…": "Звіряю дошку з сайтом Arcade…",
   "Syncing…": "Синхронізую…",

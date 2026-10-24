@@ -413,6 +413,7 @@ export default {
   "Strategy": "ストラテジー",
   "Streams open in Claude's built-in browser.": "配信は Claude の内蔵ブラウザで開きます。",
   "Subpages": "サブページ",
+  "Sync and sign-in": "同期とサインイン",
   "Sync now": "今すぐ同期",
   "Syncing the board with the Arcade site…": "ボードを Arcade のサイトと同期しています…",
   "Syncing…": "同期しています…",

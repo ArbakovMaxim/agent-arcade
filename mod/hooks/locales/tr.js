@@ -413,6 +413,7 @@ export default {
   "Strategy": "Strateji",
   "Streams open in Claude's built-in browser.": "Yayınlar Claude’un yerleşik tarayıcısında açılır.",
   "Subpages": "Alt sayfalar",
+  "Sync and sign-in": "Eşitleme ve giriş",
   "Sync now": "Şimdi eşitle",
   "Syncing the board with the Arcade site…": "Pano Arcade sitesiyle eşitleniyor…",
   "Syncing…": "Eşitleniyor…",

@@ -298,7 +298,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f', opener: '#3e63dd', 'keep-menu': '#12a594', 'back-on-done': '#f76b15', wide: '#8e4ec6', 'on-done': '#30a46c', 'on-permission': '#ffb224', notify: '#e5484d', 'msg-notify': '#0090ff' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f', opener: '#3e63dd', 'keep-menu': '#12a594', 'back-on-done': '#f76b15', wide: '#8e4ec6', 'on-done': '#30a46c', 'on-permission': '#ffb224', notify: '#e5484d', 'msg-notify': '#0090ff', 'account-sync': '#0090ff', 'account-logout': '#8b8d98', 'account-delete': '#e5484d' }
 // Серая иконка — у раздела, убранного из главного меню
 const OFF_COLOR = '#8b8d98'
 function iconSvg(kind, color) {
@@ -347,8 +347,12 @@ function iconSvg(kind, color) {
     check: `<circle cx="24" cy="24" r="16" fill="${c}"/><path d="M16 24.5l6 6 11-12" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
     alert: `<circle cx="24" cy="24" r="16" fill="${c}"/><rect x="22" y="13" width="4" height="14" rx="2" fill="#fff"/><circle cx="24" cy="33" r="2.5" fill="#fff"/>`,
     bell: `<path d="M24 8a10 10 0 0 0-10 10v8l-4 6h28l-4-6v-8A10 10 0 0 0 24 8z" fill="${c}"/><path d="M20 35a4 4 0 0 0 8 0" fill="${c}"/>`,
+    // Аккаунт: две стрелки по кругу — синхронизация, дверь со стрелкой наружу — выход, корзина — удалить
+    sync: `<path d="M36.2 19.6A13 13 0 0 0 11 24M11.8 28.4A13 13 0 0 0 37 24" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M6.5 20l4.5 5.5 4.5-5.5M32.5 28l4.5-5.5 4.5 5.5" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+    exit: `<path d="M22 9H13a4 4 0 0 0-4 4v22a4 4 0 0 0 4 4h9" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M19 24h19" stroke="${c}" stroke-width="4" stroke-linecap="round"/><path d="M31 16l8 8-8 8" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+    trash: `<path d="M9 13h30" stroke="${c}" stroke-width="4" stroke-linecap="round"/><path d="M19 12V8h10v4" stroke="${c}" stroke-width="3" fill="none"/><path d="M13 17h22l-2 21a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3z" fill="${c}"/><path d="M20.5 22v13M27.5 22v13" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban', opener: 'window', 'keep-menu': 'stack', 'back-on-done': 'back', wide: 'widen', 'on-done': 'check', 'on-permission': 'alert', notify: 'bell', 'msg-notify': 'bubble' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban', opener: 'window', 'keep-menu': 'stack', 'back-on-done': 'back', wide: 'widen', 'on-done': 'check', 'on-permission': 'alert', notify: 'bell', 'msg-notify': 'bubble', 'account-sync': 'sync', 'account-logout': 'exit', 'account-delete': 'trash' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -4289,25 +4293,45 @@ export function register(on) {
       const section = (title) => (desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [Text({ size: 'heading', weight: 'semibold', children: [title] })] }) : Text({ bold: true, dimColor: true, children: [title] }))
       // Картинки (аватарки, плитки) — везде, кроме терминала: там то же самое текстом
       const pictures = !terminal
-      // Выбор одной из AVATAR_COUNT картинок: своя аватарка в «Аккаунте», картинка группы у её хозяина. Картинка и под ней
-      // название кнопкой, в терминале — одни названия; выбранная — главной кнопкой. Последняя — без картинки (снова буква)
-      const picGrid = (prefix, current, onPick, noneLabel) =>
+      // Выбор одной из AVATAR_COUNT картинок: своя аватарка в «Аккаунте», картинка группы у её хозяина. Каждая — плитка
+      // одного размера в рамке: картинка и под ней название кнопкой, длинное — в две строки; выбранная — главной кнопкой
+      // и рамкой цвета выбора. Последняя — без картинки: на ней буква, как будет без аватарки (noneSvg). В терминале —
+      // одни названия
+      const PIC_TILE = 16 // ширина плитки в клетках: самое длинное слово названия («космонавт») встаёт целиком
+      const picTile = (key, source, alt, button, selected) =>
         Box({
+          key: `card-${key}`,
+          flexDirection: 'column',
+          alignItems: 'center',
+          rowGap: 'xs',
+          borderStyle: 'round',
+          borderColor: selected ? 'suggestion' : 'subtle',
+          padding: 'sm',
+          width: PIC_TILE,
+          minHeight: 6,
+          overflow: 'hidden',
+          hover: { borderColor: 'suggestion', backgroundColor: '#8080801a' },
+          children: [keep(Svg({ source, alt, width: 40, height: 40 })), button],
+        })
+      const picGrid = (prefix, current, onPick, noneLabel, noneSvg) => {
+        const choice = (key, label, selected, onPress) =>
+          Button({ key, label, ...(selected ? { variant: 'primary' } : {}), ...(pictures ? { children: [Text({ wrap: 'wrap', children: [label] })] } : {}), onPress })
+        const none = choice(`${prefix}-none`, noneLabel, !validPic(current), () => onPick(null))
+        return Box({
           flexDirection: 'row',
           flexWrap: 'wrap',
           columnGap: pictures ? 'sm' : 2,
           rowGap: pictures ? 'sm' : 0,
-          alignItems: 'flex-end',
           children: [
             ...Array.from({ length: AVATAR_COUNT }, (_, n) => {
               const name = avatarName(n, lang)
-              const button = keep(Button({ key: `${prefix}-${n}`, label: name, ...(n === current ? { variant: 'primary' } : {}), onPress: () => onPick(n) }))
-              if (!pictures) return button
-              return Box({ flexDirection: 'column', alignItems: 'center', children: [keep(Svg({ source: avatarSvg(n), alt: name, width: 40, height: 40 })), button] })
+              const button = keep(choice(`${prefix}-${n}`, name, n === current, () => onPick(n)))
+              return pictures ? picTile(`${prefix}-${n}`, avatarSvg(n), name, button, n === current) : button
             }),
-            Button({ key: `${prefix}-none`, label: noneLabel, ...(validPic(current) ? {} : { variant: 'primary' }), onPress: () => onPick(null) }),
+            pictures ? picTile(`${prefix}-none`, noneSvg, noneLabel, none, !validPic(current)) : none,
           ],
         })
+      }
       // Своя тема в темах YouTube, статей и подкастов: поле ввода с подсказкой или заметкой, «Мои темы» плитками и
       // «Забыть мои темы». Названия своих тем — на языке интерфейса или как их написал человек (keep)
       const ownTopics = (kind, short, focus, hintText) => {
@@ -4570,29 +4594,39 @@ export function register(on) {
             ...(take ? [Button({ key: 'arcade-account-take', label: `Взять @${take}`, onPress: () => claimHandle($, take) })] : []),
             Input({ key: 'arcade-account-handle', label: acct.handle ? 'Сменить ник' : 'Свой ник', placeholder: 'латинские буквы, цифры и _, от 4 до 32 знаков', onSubmit: (value) => claimHandle($, value) }),
             ...(acct.naming ? [dim('Проверяю ник…')] : acct.handleNote ? [Text({ color: 'warning', children: [acct.handleNote] })] : []),
-            gap,
-            // Аватарку выбирают только здесь; чаты на сайте, в Desktop, VS Code и терминале её только показывают
+            // Дальше — группы под заголовками, как в настройках. В Desktop отступ сверху даёт сам заголовок
+            ...(desktop ? [] : [gap]),
+            section('Аватарка'),
+            // Аватарку выбирают только здесь; чаты на сайте, в Desktop, VS Code и терминале её только показывают.
+            // Нынешняя — крупно, ниже с отступом — выбор
             Box({
               flexDirection: 'row',
               alignItems: 'center',
               columnGap: 'sm',
+              marginBottom: pictures ? 'md' : 1,
               children: [
                 ...(pictures ? [Svg({ source: picSvg(acct.pic, acct.handle || '?', acct.handle || '?'), alt: 'Аватарка', width: 56, height: 56 })] : []),
-                Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [Text({ children: ['Аватарка'] }), dim('Её видят друзья в чатах. Без неё — первая буква ника.')] }),
+                Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [dim('Её видят друзья в чатах. Без неё — первая буква ника.')] }),
               ],
             }),
-            picGrid('arcade-avatar', acct.pic, (n) => pickAvatar($, n), 'Без аватарки'),
+            picGrid('arcade-avatar', acct.pic, (n) => pickAvatar($, n), 'Без аватарки', picSvg(null, acct.handle || '?', acct.handle || '?')),
             ...(acct.picking ? [dim('Сохраняю аватарку…')] : acct.picNote ? [Text({ color: 'warning', children: [acct.picNote] })] : []),
-            gap,
+            ...(desktop ? [] : [gap]),
+            section('Синхронизация и вход'),
             dim('Общие для всех компьютеров: язык, клавиши, уведомления, размер панели, что делать с игрой по сигналу агента, свои темы, каналы Twitch и рекорд Flappy Arcade.'),
-            dim(acct.syncing ? 'Синхронизирую…' : acct.syncedAt ? 'Настройки синхронизированы.' : 'Настройки ещё не синхронизированы.'),
             ...note,
-            gap,
-            Button({ key: 'arcade-account-sync', label: 'Синхронизировать сейчас', autoFocus: true, onPress: () => syncAccount($) }),
-            Button({ key: 'arcade-account-logout', label: 'Выйти', onPress: () => logout($) }),
-            dim('  на этом компьютере; настройки останутся здесь как есть'),
-            Button({ key: 'arcade-account-delete', label: acct.confirmDelete ? 'Точно удалить? Нажми ещё раз' : 'Удалить аккаунт', onPress: () => deleteAccount($) }),
-            dim('  сайт Arcade забудет тебя и твои настройки; здесь всё останется'),
+            // Действия — плитками, как везде; у синхронизации в описании — как она прошла
+            tiles(
+              [
+                Button({ key: 'arcade-account-sync', label: 'Синхронизировать сейчас', autoFocus: true, onPress: () => syncAccount($) }),
+                dim(acct.syncing ? 'Синхронизирую…' : acct.syncedAt ? 'Настройки синхронизированы.' : 'Настройки ещё не синхронизированы.'),
+                Button({ key: 'arcade-account-logout', label: 'Выйти', onPress: () => logout($) }),
+                dim('  на этом компьютере; настройки останутся здесь как есть'),
+                Button({ key: 'arcade-account-delete', label: acct.confirmDelete ? 'Точно удалить? Нажми ещё раз' : 'Удалить аккаунт', onPress: () => deleteAccount($) }),
+                dim('  сайт Arcade забудет тебя и твои настройки; здесь всё останется'),
+              ],
+              40,
+            ),
             ...noticeLines,
             ...hint,
           ]
@@ -5287,7 +5321,10 @@ export function register(on) {
               : []),
             // Картинку группы ставит хозяин; без неё — первая буква названия
             ...(owner
-              ? [section('Картинка группы'), picGrid('arcade-chat-pic', current, (n) => n !== current && changeMembers($, { pic: n }, 'Картинка группы изменена.'), 'Без картинки')]
+              ? [
+                  section('Картинка группы'),
+                  picGrid('arcade-chat-pic', current, (n) => n !== current && changeMembers($, { pic: n }, 'Картинка группы изменена.'), 'Без картинки', picSvg(null, about.name || tr('Группа', lang), about.id)),
+                ]
               : []),
             ...(about ? [gap, Button({ key: 'arcade-chat-leave', label: ch.confirmLeave ? 'Точно выйти? Нажми ещё раз' : 'Выйти из группы', onPress: () => leaveGroup($) })] : []),
             ...(ch.busy === 'members' ? [dim('Сохраняю…')] : note),
