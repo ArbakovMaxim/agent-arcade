@@ -287,6 +287,7 @@ export default {
   "Pane size: normal": "Panel boyutu: normal",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Duraklatıldı: ajan bitirdi. Herhangi bir oyun tuşu — oynamaya devam et, Esc — ajana dön",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Duraklatıldı: ajan izin bekliyor. Herhangi bir oyun tuşu — oynamaya devam et, Esc — ajana dön",
+  "Pick a chat on the left or start a new one.": "Soldan bir sohbet seç ya da yenisini başlat.",
   "Picking articles…": "Makaleler seçiliyor…",
   "Picking episodes…": "Bölümler seçiliyor…",
   "Picking topics…": "Konular seçiliyor…",

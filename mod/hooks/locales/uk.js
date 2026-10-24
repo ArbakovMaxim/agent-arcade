@@ -287,6 +287,7 @@ export default {
   "Pane size: normal": "Розмір панелі: звичайний",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Пауза: агент закінчив. Будь-яка клавіша гри — грати далі, Esc — до агента",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Пауза: агент чекає на дозвіл. Будь-яка клавіша гри — грати далі, Esc — до агента",
+  "Pick a chat on the left or start a new one.": "Вибери чат ліворуч або почни новий.",
   "Picking articles…": "Підбираю статті…",
   "Picking episodes…": "Підбираю випуски…",
   "Picking topics…": "Підбираю теми…",

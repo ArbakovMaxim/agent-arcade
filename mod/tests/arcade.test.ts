@@ -5268,6 +5268,63 @@ test('Desktop: чаты открываются на странице во вст
   await ui.unmount()
 })
 
+test('Desktop, широкая панель: список чатов слева не пропадает, переписка, новый чат и участники — справа; узкая — по очереди', HEAVY, async ($, on) => {
+  const { api } = chatsSite()
+  const { clock } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const text = (t: string | RegExp) => ui.find({ type: 'Text', text: t })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const picked = async (id: string) => (await ui.find({ key: `chat-row-${id}` }))!.props.backgroundColor
+  await press('arcade-menu-chats')
+  // Чат не выбран: слева список и «Новый чат» главной кнопкой, справа — подсказка
+  expect(await text('Выбери чат слева или начни новый.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chat-new' })).toMatchObject({ props: { variant: 'primary' } })
+  expect(await text(' 2 ')).toBeDefined()
+  // Открыл чат с другом — список на месте, «← Чаты» не нужна; открытый подсвечен, его непрочитанные прочитаны
+  await press(`arcade-chat-open-${DM}`)
+  expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Сообщение' } })
+  expect(await ui.find({ key: 'arcade-chats-back' })).toBeUndefined()
+  expect(await ui.find({ key: `arcade-chat-open-${CLUB}` })).toBeDefined()
+  expect(await picked(DM)).toBeDefined()
+  expect(await picked(CLUB)).toBeUndefined()
+  expect(await text(' 2 ')).toBeUndefined()
+  // Отправил — в списке слева сразу «ты: …»
+  await ui.input({ key: (await ui.find({ type: 'Input' }))!.key!, text: 'see you at 8', kind: 'submit' })
+  await clock.settle()
+  expect(await text(/^ты: see you at 8$/)).toBeDefined()
+  // Другой чат — прямо из списка; участники группы — тоже справа, а нажать на открытый чат — снова к переписке
+  await press(`arcade-chat-open-${CLUB}`)
+  expect(await picked(CLUB)).toBeDefined()
+  expect(await picked(DM)).toBeUndefined()
+  await press('arcade-chat-members')
+  expect(await text(/^управляет группой$/)).toBeDefined()
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toBeDefined()
+  await press(`arcade-chat-open-${CLUB}`)
+  expect(await ui.find({ key: 'arcade-chat-members' })).toBeDefined()
+  // «Новый чат» — справа, список остаётся; «← Назад» — в главное меню
+  await press('arcade-chat-new')
+  expect(await ui.find({ key: 'arcade-chat-dm-21' })).toBeDefined()
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toBeDefined()
+  await press('arcade-back')
+  expect(await ui.find({ key: 'arcade-menu-chats' })).toBeDefined()
+  await ui.unmount()
+  // Узкая панель — как раньше, по очереди: в переписке списка нет, «← Чаты» — к нему
+  const narrow = await $.ui.mount({ ...PANE, surface: 'desktop', viewport: { columns: 60, rows: 40 } })
+  await narrow.press({ key: 'arcade-menu-chats' })
+  await clock.settle()
+  expect(await narrow.find({ type: 'Text', text: 'Выбери чат слева или начни новый.' })).toBeUndefined()
+  await narrow.press({ key: `arcade-chat-open-${DM}` })
+  await clock.settle()
+  expect(await narrow.find({ key: 'arcade-chats-back' })).toBeDefined()
+  expect(await narrow.find({ key: `arcade-chat-open-${CLUB}` })).toBeUndefined()
+  await narrow.unmount()
+})
+
 test('чаты по-английски: экраны, служебные сообщения и плитка без русских букв', HEAVY, async ($, on) => {
   const { api } = chatsSite()
   const { clock, requests, launches } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, api, stored: { account: { token: TOKEN, user: OCTO } } })
@@ -5464,9 +5521,9 @@ test('картинка группы: ставит и убирает только
   expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)).toContain(avatarSvg(7))
   await ui.input({ key: (await ui.find({ type: 'Input' }))!.key!, text: 'hi all', kind: 'submit' })
   await clock.settle()
-  // В списке: картинка группы, под названием своё — с «ты:»
-  await press('arcade-chats-back')
-  expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)).toContain(avatarSvg(7))
+  // В списке слева от переписки: картинка группы, под названием своё — с «ты:»
+  expect(await ui.find({ key: 'arcade-chats-back' })).toBeUndefined()
+  expect((await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.source === avatarSvg(7)).length).toBe(2)
   expect(await text(/^ты: hi all$/)).toBeDefined()
   await press(`arcade-chat-open-${CLUB}`)
   await press('arcade-chat-members')

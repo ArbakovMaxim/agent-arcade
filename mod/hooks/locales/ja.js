@@ -287,6 +287,7 @@ export default {
   "Pane size: normal": "ペインのサイズ：標準",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "一時停止：エージェントが完了しました。ゲームのキー — プレイを続ける、Esc — エージェントに戻る",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "一時停止：エージェントが許可を待っています。ゲームのキー — プレイを続ける、Esc — エージェントに戻る",
+  "Pick a chat on the left or start a new one.": "左のチャットを選ぶか、新しく始めてください。",
   "Picking articles…": "記事を選んでいます…",
   "Picking episodes…": "エピソードを選んでいます…",
   "Picking topics…": "テーマを選んでいます…",
