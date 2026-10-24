@@ -1,4 +1,4 @@
-// Мои игры в окне: свои файлы хранятся только в этом браузере (IndexedDB) и никуда не отправляются.
+// Мои игры и книги в окне: свои файлы и скачанные книги хранятся только в этом браузере (IndexedDB) и никуда не отправляются.
 // Денди и Sega узнаются по заголовку и получают id по хешу — тот же, что в моде (/arcade-add), поэтому мод
 // может открыть свою игру здесь. PlayStation — образы дисков на сотни мегабайт: их не читаем целиком,
 // id — по имени, размеру и дате файла.
@@ -66,7 +66,7 @@
     return all
       .filter((e) => e.console === consoleId)
       .sort((a, b) => b.added - a.added)
-      .map(({ id, console, title, size, added }) => ({ id, console, title, size, added }))
+      .map(({ id, console, title, author, ref, size, added }) => ({ id, console, title, author, ref, size, added }))
   }
 
   async function sha256(bytes) {
@@ -143,5 +143,11 @@
     return entry
   }
 
-  window.ArcadeMine = { ACCEPT, list, get, add, remove }
+  // Книга из открытой библиотеки, уже разобранная: { id: ref, console: 'books', ref, title, author, lang, book, size, added }
+  async function save(entry) {
+    await put(entry)
+    return entry
+  }
+
+  window.ArcadeMine = { ACCEPT, list, get, add, save, remove }
 })()

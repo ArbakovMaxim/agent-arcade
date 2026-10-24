@@ -49,9 +49,15 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
       blur() {},
       click() { for (const f of this.listeners.click ?? []) f({}) },
       focus() { page.focused = node },
-      append(...kids) { for (const k of kids) node.children.push(typeof k === 'string' ? { textContent: k, children: [] } : k) },
-      appendChild(kid) { node.children.push(kid); page.appended.push(kid); if (kid.tagName === 'script' && page.onScript) page.onScript(kid); return kid },
+      append(...kids) { for (const k of kids) node.children.push(adopt(k)) },
+      appendChild(kid) { node.children.push(adopt(kid)); page.appended.push(kid); if (kid.tagName === 'script' && page.onScript) page.onScript(kid); return kid },
+      prepend(...kids) { node.children.unshift(...kids.map(adopt)) },
+      insertBefore(kid, ref) { const at = node.children.indexOf(ref); node.children.splice(at < 0 ? node.children.length : at, 0, adopt(kid)); return kid },
+      remove() { if (node.parentNode) node.parentNode.children = node.parentNode.children.filter((c) => c !== node) },
       replaceChildren() { node.children = [] },
+      setAttribute(k, v) { (node.attributes ??= {})[k] = String(v) },
+      get isConnected() { return true },
+      querySelector(selector) { return node.querySelectorAll(selector)[0] ?? null },
       querySelectorAll(selector) {
         const cls = selector.replace(/^\./, '')
         const found = []
@@ -60,6 +66,12 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
         return found
       },
       getContext: () => ({ createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }), putImageData() { page.draws++ } }),
+    }
+    // Ребёнок знает родителя: remove() убирает его из списка
+    const adopt = (k) => {
+      const kid = typeof k === 'string' ? { textContent: k, children: [] } : k
+      kid.parentNode = node
+      return kid
     }
     return node
   }
@@ -79,7 +91,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
       close() { this.closed = true }
       emit(type, data) { for (const fn of this.listeners[type] || []) fn({ data }) }
     },
-    history: { replaceState: (s, title, url) => { page.replaced = url }, pushState: (s, title, url) => { page.pushed = url } },
+    history: { replaceState: (s, title, url) => { page.replaced = url; if (String(url).startsWith('?')) search = url }, pushState: (s, title, url) => { page.pushed = url } },
     fetch: network(net),
     performance: { now: () => now },
     requestAnimationFrame: (cb) => raf.push(cb),
@@ -108,7 +120,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
       setTimeout(() => script.onload && script.onload(), 0)
     }
   }
-  for (const file of ['i18n.js', 'jsnes.js', 'mapper28.js', 'stats.js', 'mine.js', 'library.js', 'game.js', 'boot.js']) {
+  for (const file of ['i18n.js', 'jsnes.js', 'mapper28.js', 'stats.js', 'mine.js', 'open-library.js', 'library.js', 'game.js', 'boot.js']) {
     vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
   }
   // Ждём, пока каталог и игра скачаются и проверятся: проверка хеша в Node идёт в другом потоке
@@ -118,7 +130,7 @@ async function makePage(storage, { search = '?game=thwaite', hash = '', pads = [
     const overlayShown = byId.overlay?.classList.contains('shown')
     const segaStarted = page.appended.some((s) => s.src === 'emulatorjs/loader.js')
     const flappy = page.appended.some((s) => s.src === 'flappy.js') // своя игра: движок подключён
-    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game' || n.id === 'reader-root' || (n.id === 'audio-root' && n.children?.length)) // настольные, браузерные, книги, аудиокниги
+    const board = (byId.stage?.children ?? []).some((n) => (n.id === 'board-root' && n.children?.length) || n.id === 'web-game' || n.id === 'reader-root' || (n.className === 'reader-status' && n.classList.contains('failed')) || (n.id === 'audio-root' && n.children?.length)) // настольные, браузерные, книги (и ошибка книги), аудиокниги
     return library > 0 || segaStarted || board || flappy || (overlayShown && hint !== '' && hint !== 'Загружаю игру…')
   }
   for (let i = 0; i < 500 && !settled(); i++) await new Promise((r) => setTimeout(r, 2))
@@ -950,44 +962,74 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(gws.sent.length, before, 'после сдачи ходов нет')
 }
 
-// --- Аудиокниги: проигрыватель (главы, скорость, место прослушивания), свои файлы, полка «Аудиокниги» -------------
+// --- Аудиокниги: LibriVox с archive.org (главы, скорость, место, «Скачать»), свои файлы, вкладка «Аудиокниги» ---------
 {
-  const withAudio = (bytes) => {
-    const c = JSON.parse(bytes.toString('utf8'))
-    // только тестовая книга: аудиокниги каталога и полки их языков убираем
-    for (const [id, g] of Object.entries(c.games)) if (g.kind === 'audio') delete c.games[id]
-    c.shelves = c.shelves.filter((s) => !/^audio-/.test(s.id) || s.id === 'audio-mine')
-    c.shelves.splice(c.shelves.findIndex((s) => s.id === 'audio-mine'), 0, { id: 'audio-en', title: 'English' }) // как в сборке: языки — перед «Моими аудиокнигами»
-    c.games['test-audio'] = { console: 'audiobooks', kind: 'audio', shelf: 'audio-en', title: 'The Test Tale', author: 'A. Author', reader: 'R. Reader', genre: 'сказки', keys: '…', chapters: [{ title: 'Chapter 1', url: 'https://archive.org/download/x/1.mp3', seconds: 600 }, { title: 'Chapter 2', url: 'https://archive.org/download/x/2.mp3', seconds: 540 }] }
-    return JSON.stringify(c)
+  // archive.org отвечает окну сам (CORS): запись и главы — поддельные, остальное — файлы собранного сайта
+  const site = network()
+  const record = {
+    metadata: { title: 'The Test Tale', creator: 'A. Author' },
+    files: [
+      { name: 'tale_02_64kb.mp3', title: 'Chapter 2', track: '2', length: '9:00', size: '524288' },
+      { name: 'tale_01_64kb.mp3', title: 'Chapter 1', track: '1', length: '10:00', size: '1048576' },
+      { name: 'tale_01_128kb.mp3', title: 'Chapter 1', track: '1', length: '10:00', size: '2000' },
+    ],
+  }
+  const archive = async (url) => {
+    const u = String(url)
+    if (u === 'https://archive.org/metadata/testtale') return { ok: true, status: 200, json: async () => record }
+    if (u.startsWith('https://archive.org/download/testtale/')) return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array(8)]) }
+    return site(url)
   }
   const store = new Map()
-  const page = await makePage(store, { search: '?game=test-audio&lang=en', net: { override: { 'catalog.json': withAudio } } })
+  const page = await makePage(store, { search: '?audio=librivox:testtale&lang=en', globals: { fetch: archive } })
   await until(() => page.ctx.ArcadeAudio && page.ctx.ArcadeAudio.player)
   const p = page.ctx.ArcadeAudio.player
   const root = page.byId.stage.children.find((n) => n.id === 'audio-root')
-  assert.equal(root.querySelectorAll('.audio-chapter').length, 2, 'главы списком')
-  assert.equal(p.audio.src, 'https://archive.org/download/x/1.mp3', 'звук — прямо с archive.org')
+  assert.equal(root.querySelectorAll('.audio-chapter').length, 2, 'главы списком — только MP3 64 кбит/с')
+  assert.equal(p.audio.src, 'https://archive.org/download/testtale/tale_01_64kb.mp3', 'звук — прямо с archive.org, главы по номерам дорожек')
   root.querySelectorAll('.audio-speed').find((b) => String(b.dataset.speed) === '1.5').click()
   assert.equal(p.speed, 1.5)
   root.querySelectorAll('.audio-next')[0].click()
   assert.equal(p.chapter, 1)
-  assert.equal(p.audio.src, 'https://archive.org/download/x/2.mp3')
-  assert.deepEqual([JSON.parse(store.get('arcade:audio:test-audio')).chapter, JSON.parse(store.get('arcade:audio:test-audio')).speed], [1, 1.5], 'место и скорость запомнились')
-  // Свои аудиокниги: файлы глав — одна книга, по порядку имён; хранятся в браузере; «Удалить»
+  assert.equal(p.audio.src, 'https://archive.org/download/testtale/tale_02_64kb.mp3')
+  const at = JSON.parse(store.get('arcade:audio:librivox:testtale'))
+  assert.deepEqual([at.chapter, at.speed], [1, 1.5], 'место и скорость запомнились')
+  // «Скачать в этот браузер»: главы по одной — в браузер; книга — в «Моих аудиокнигах»
+  const download = root.querySelectorAll('.audio-download')[0]
+  assert.equal(download.textContent, 'Download to this browser · 1.5 MB')
+  download.click()
+  await until(() => textOf(root).includes('Downloaded:'))
   const A = page.ctx.ArcadeAudio
+  const kept = await A.getMine('librivox:testtale')
+  assert.deepEqual(JSON.parse(JSON.stringify([kept.title, kept.files.map((f) => f.title)])), ['The Test Tale', ['Chapter 1', 'Chapter 2']])
+  assert.equal(root.querySelectorAll('.audio-download').length, 0, 'кнопка «Скачать» убрана')
+  // Свои аудиокниги: файлы глав — одна книга, по порядку имён; хранятся в браузере; «Удалить»
   const entry = await A.addFiles([{ name: 'Book 02.mp3', type: 'audio/mpeg', size: 10 }, { name: 'Book 01.mp3', type: 'audio/mpeg', size: 12 }])
   assert.deepEqual(JSON.parse(JSON.stringify([entry.title, entry.files.map((f) => f.name)])), ['Book', ['Book 01.mp3', 'Book 02.mp3']])
-  assert.equal((await A.listMine()).length, 1)
+  assert.equal((await A.listMine()).length, 2)
   await A.removeMine(entry.id)
-  assert.equal((await A.listMine()).length, 0)
+  assert.deepEqual(Array.from(await A.listMine(), (m) => m.id), ['librivox:testtale'])
   await assert.rejects(A.addFiles([{ name: 'notes.txt', type: 'text/plain', size: 5 }]), /not audio files/)
-  // Вкладка «Аудиокниги»: полки языков и «Мои аудиокниги»; на полке языка — жанры, как у книг
-  const tab = await makePage(new Map(), { search: '?tab=listening&shelf=audio-en&lang=en', net: { override: { 'catalog.json': withAudio } } })
-  assert.deepEqual(tab.byId.library.querySelectorAll('.shelf').filter((b) => !/genre-chip/.test(b.className)).map((b) => b.textContent), ['English', 'My audiobooks'])
-  assert.deepEqual(tab.byId.library.querySelectorAll('.genre-chip').map((b) => b.textContent), ['All', 'Fairy tales'], 'жанры аудиокниг — как у книг')
-  const mineShelf = await makePage(new Map(), { search: '?tab=listening&shelf=audio-mine&lang=en' })
-  assert.deepEqual(mineShelf.byId.library.querySelectorAll('.card').map((c) => c.dataset.game), ['my-audio'])
+  // Вкладка «Аудиокниги»: список раздела — с сервера Arcade, язык книг — как у окна
+  const lists = []
+  const listing = async (url) => {
+    if (!String(url).startsWith('/api/books/list?')) return site(url)
+    lists.push(Object.fromEntries(new URL(String(url), 'https://arcade.test').searchParams))
+    return { ok: true, status: 200, json: async () => ({ items: [{ ref: 'librivox:testtale', source: 'librivox', title: 'The Test Tale', author: 'A. Author' }], more: false }) }
+  }
+  const tab = await makePage(new Map(), { search: '?tab=audiobooks&lang=en', globals: { fetch: listing } })
+  await until(() => tab.byId.library.querySelectorAll('.card').length)
+  assert.deepEqual(lists, [{ kind: 'audio', lang: 'en', page: '1', section: 'popular' }])
+  assert.deepEqual(tab.byId.library.querySelectorAll('.genre-chip').slice(0, 3).map((b) => b.textContent), ['My audiobooks', 'Popular', 'Fiction'])
+  const card = tab.byId.library.querySelectorAll('.card')[0]
+  assert.equal(card.href, '?audio=librivox%3Atesttale')
+  assert.equal(card.querySelectorAll('.genre')[0].textContent, 'A. Author · LibriVox')
+  assert.equal(card.querySelectorAll('.stats')[0].textContent, 'not listened yet')
+  // Старая ссылка «Мои аудиокниги» — раздел «Мои» вкладки
+  const mineShelf = await makePage(new Map(), { search: '?game=my-audio&lang=en', globals: { fetch: listing } })
+  assert.equal(mineShelf.replaced, '?tab=audiobooks&section=mine')
+  await until(() => mineShelf.byId.library.querySelectorAll('.empty').some((e) => /^Nothing here yet/.test(e.textContent)))
+  assert.match(mineShelf.byId.library.querySelectorAll('.genre-chip')[0].className, /\bactive\b/)
 }
 
 // --- Flappy Arcade: своя игра — движок flappy.js из мода, подсказка клавиш на языке окна ------------------------
@@ -1040,9 +1082,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match(dm.sockets[0].url, /\/net\/room\/dm-blasphdm$/)
 }
 
-// --- Книги: разбор EPUB, FB2, TXT; читалка каталога и своей книги; закладка ------------------------------------------
+// --- Книги: разбор EPUB, FB2, TXT; открытая библиотека — Gutenberg, Викитека, вкладка «Книги»; своя книга -----------
 {
-  const BOOK = Object.keys(catalog.games).find((id) => catalog.games[id].kind === 'book')
   const page = await makePage(new Map(), { search: '' })
   vm.runInContext(fs.readFileSync(path.join(DIST, 'book-format.js'), 'utf8'), page.ctx)
   const F = page.ctx.ArcadeBookFormat
@@ -1072,43 +1113,106 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(epub.title, 'The Time Machine')
   assert.deepEqual(Array.from(epub.chapters, (c) => c.title), ['I', 'II'])
   assert.equal(epub.chapters[0].paragraphs[1], 'His grey eyes shone & twinkled.')
-  // Читалка книги каталога: главы, закладка запоминается и возвращает к абзацу
+  // Книга Project Gutenberg: EPUB — через сервер Arcade, собирается в читалке и остаётся в «Моих книгах» браузера
   const storage = new Map()
-  const reader = await makePage(storage, { search: `?game=${BOOK}` })
+  const reader = await makePage(storage, { search: '?book=gutenberg:35', net: { override: { 'api/books/file?gutenberg=35': zipped } } })
   await until(() => reader.byId.stage.children.some((n) => n.id === 'reader-root'))
-  const view = reader.ctx.ArcadeReader.view
-  assert.equal(view.root.querySelectorAll('.reader-chapter').length, catalog.games[BOOK].chapters)
-  view.save()
-  const saved = JSON.parse(storage.get(`arcade:book:${BOOK}`))
+  assert.equal(reader.ctx.ArcadeReader.view.root.querySelectorAll('.reader-chapter').length, 2)
+  const kept = await reader.ctx.ArcadeMine.get('gutenberg:35')
+  assert.deepEqual([kept.title, kept.ref, kept.console], ['The Time Machine', 'gutenberg:35', 'books'])
+  reader.ctx.ArcadeReader.view.save()
+  const saved = JSON.parse(storage.get('arcade:book:gutenberg:35'))
   assert.equal(typeof saved.c, 'number')
   assert.equal(typeof saved.p, 'number')
-  storage.set(`arcade:book:${BOOK}`, JSON.stringify({ c: 1, p: 3, percent: 42 }))
-  const again = await makePage(storage, { search: `?game=${BOOK}` })
-  await until(() => again.byId.stage.children.some((n) => n.id === 'reader-root'))
-  assert.match(textOf(again.ctx.ArcadeReader.view.root), /42%/, 'вернулись к закладке')
-  // Библиотека книг: жанры переведены; у книги — сколько прочитано по закладке
-  const shelf = await makePage(new Map([[`arcade:book:${BOOK}`, JSON.stringify({ c: 0, p: 3, percent: 16 })]]), { search: '?tab=books&lang=en' })
-  assert.ok(!/[А-Яа-яЁё]/.test(shelf.byId.library.querySelectorAll('.genre').map((g) => g.textContent.split(' · ').pop()).join(' ')), 'жанры книг по-английски')
-  const stats = shelf.byId.library.querySelectorAll('.stats').map((x) => x.textContent)
-  assert.ok(stats.includes('read 16%'), 'прочитано 16%')
-  assert.ok(shelf.byId.library.querySelectorAll('.genre-head').length >= 1, 'на полке — заголовки жанров')
-  // Непрочитанная книга — на своей языковой полке
-  const other = Object.keys(catalog.games).find((id) => catalog.games[id].kind === 'book' && id !== BOOK)
-  const otherShelf = await makePage(new Map(), { search: `?tab=reading&shelf=${catalog.games[other].shelf}&lang=en` })
-  assert.ok(otherShelf.byId.library.querySelectorAll('.stats').map((x) => x.textContent).includes('not read yet'))
-  assert.deepEqual(otherShelf.byId.library.querySelectorAll('.shelf').filter((b) => !/genre-chip/.test(b.className)).map((b) => b.textContent), ['English', 'Українська'], 'полки «Книг» — языки')
-  // Ряд жанров на полке книг: «All» и жанры полки; выбор жанра оставляет его книги; адрес с &genre= открывает жанр
-  const shelfId = catalog.games[BOOK].shelf
-  const g0 = catalog.games[BOOK].genre
-  const genres = await makePage(new Map(), { search: `?tab=reading&shelf=${shelfId}&lang=en` })
-  const chips = genres.byId.library.querySelectorAll('.genre-chip')
-  assert.equal(chips[0].textContent, 'All')
-  assert.match(chips[0].className, /\bactive\b/)
-  chips.find((c) => c.dataset.genre === g0).click()
-  const shown = genres.byId.library.querySelectorAll('.card').map((c) => c.dataset.game)
-  assert.ok(shown.length >= 1 && shown.every((id) => catalog.games[id].genre === g0), 'только книги выбранного жанра')
-  const direct = await makePage(new Map(), { search: `?tab=reading&shelf=${shelfId}&genre=${encodeURIComponent(g0)}&lang=en` })
-  assert.match(direct.byId.library.querySelectorAll('.genre-chip').find((c) => c.dataset.genre === g0).className, /\bactive\b/)
+  // Второй раз — из браузера, без сети, и к закладке
+  reader.ctx.fetch = async () => { throw new Error('Failed to fetch') }
+  storage.set('arcade:book:gutenberg:35', JSON.stringify({ c: 1, p: 0, percent: 42 }))
+  await reader.ctx.ArcadeReader.startRef('gutenberg:35')
+  assert.match(textOf(reader.ctx.ArcadeReader.view.root), /42%/, 'открылась из «Моих книг» и вернулась к закладке')
+  // Нет такой книги — понятная ошибка и ссылка к книгам
+  const missing = await makePage(new Map(), { search: '?book=gutenberg:99999' })
+  const status = missing.byId.stage.children.find((n) => n.className === 'reader-status')
+  assert.equal(status.textContent, 'Не получилось открыть книгу: Этой книги в Project Gutenberg нет.')
+  assert.equal(status.children.at(-1).href, '?tab=books')
+  // Книга Викитеки: главная страница — оглавление, главы — подстраницы; название и автор — из имени страницы
+  const site = network()
+  const ROOT_PAGE = 'Капитанская дочка (Пушкин)'
+  const wiki = []
+  const wikisource = async (url) => {
+    const u = String(url)
+    if (!u.startsWith('https://ru.wikisource.org/w/api.php?')) return site(url)
+    const name = new URL(u).searchParams.get('page')
+    wiki.push(name)
+    const answer = (text) => ({ ok: true, status: 200, json: async () => ({ parse: { title: name, text } }) })
+    if (name === ROOT_PAGE) return answer(['I', 'II'].map((n) => `<li><a href="/wiki/x" title="${ROOT_PAGE}/Глава ${n}">Глава ${n}. Часть ${n}</a></li>`).join(''))
+    if (name.startsWith(`${ROOT_PAGE}/Глава `)) return answer(`<p>${story('Береги платье снову, а честь смолоду.')}</p>`)
+    return { ok: true, status: 200, json: async () => ({ error: { code: 'missingtitle' } }) }
+  }
+  const ws = await makePage(new Map(), { search: `?book=${encodeURIComponent(`wikisource:ru:${ROOT_PAGE}`)}`, globals: { fetch: wikisource } })
+  await until(() => ws.byId.stage.children.some((n) => n.id === 'reader-root'))
+  assert.deepEqual(wiki, [ROOT_PAGE, `${ROOT_PAGE}/Глава I`, `${ROOT_PAGE}/Глава II`])
+  assert.equal(ws.ctx.ArcadeReader.view.root.querySelectorAll('.reader-chapter').length, 2)
+  const wsKept = await ws.ctx.ArcadeMine.get(`wikisource:ru:${ROOT_PAGE}`)
+  assert.deepEqual([wsKept.title, wsKept.author, wsKept.lang], ['Капитанская дочка', 'Пушкин', 'ru'])
+  // Вкладка «Книги»: язык книг — как у окна, разделы, «Ещё», ошибка и «Ещё раз», другой язык, поиск
+  const asks = []
+  let down = false
+  const books = async (url) => {
+    if (!String(url).startsWith('/api/books/list?')) return site(url)
+    const q = Object.fromEntries(new URL(String(url), 'https://arcade.test').searchParams)
+    asks.push(q)
+    if (down) return { ok: false, status: 502, json: async () => ({}) }
+    const items = q.page === '1' ? [{ ref: 'gutenberg:1342', source: 'gutenberg', title: 'Pride and Prejudice', author: 'Jane Austen' }] : [{ ref: `wikisource:ru:${ROOT_PAGE}`, source: 'wikisource', title: 'Капитанская дочка', author: 'Пушкин' }]
+    return { ok: true, status: 200, json: async () => ({ items, more: q.page === '1' }) }
+  }
+  const shelf = await makePage(new Map([['arcade:book:gutenberg:1342', JSON.stringify({ c: 0, p: 3, percent: 16 })]]), { search: '?tab=books', globals: { fetch: books } })
+  const shelfLib = shelf.byId.library
+  await until(() => shelfLib.querySelectorAll('.card').length)
+  assert.deepEqual(asks, [{ kind: 'book', lang: 'ru', page: '1', section: 'popular' }])
+  const first = shelfLib.querySelectorAll('.card')[0]
+  assert.equal(first.href, '?book=gutenberg%3A1342')
+  assert.equal(first.querySelectorAll('.genre')[0].textContent, 'Jane Austen · Project Gutenberg')
+  assert.equal(first.querySelectorAll('.stats')[0].textContent, 'прочитано 16%')
+  shelfLib.querySelectorAll('.ol-more')[0].click()
+  await until(() => shelfLib.querySelectorAll('.card').length === 2)
+  assert.equal(asks.at(-1).page, '2')
+  assert.equal(shelfLib.querySelectorAll('.card')[1].querySelectorAll('.genre')[0].textContent, 'Пушкин · Викитека')
+  assert.equal(shelfLib.querySelectorAll('.ol-more').length, 0, 'страниц больше нет')
+  // Раздел «Стихи»: сервер не ответил — ошибка и «Ещё раз»
+  down = true
+  shelfLib.querySelectorAll('.genre-chip').find((b) => b.dataset.section === 'poetry').click()
+  await until(() => shelfLib.querySelectorAll('.failed').length)
+  assert.deepEqual(asks.at(-1), { kind: 'book', lang: 'ru', page: '1', section: 'poetry' })
+  assert.equal(shelf.pushed, '?tab=books&book-lang=ru&section=poetry')
+  assert.match(textOf(shelfLib.querySelectorAll('.failed')[0]), /^Список не загрузился: сервер ответил 502/)
+  down = false
+  shelfLib.querySelectorAll('.ol-more')[0].click()
+  await until(() => shelfLib.querySelectorAll('.card').length)
+  assert.equal(shelfLib.querySelectorAll('.failed').length, 0)
+  // Язык книг — свой выбор читателя: запоминается, раздел остаётся
+  const pick = shelfLib.querySelectorAll('.lang').find((s) => s.title === 'Язык книг')
+  assert.equal(pick.value, 'ru')
+  pick.value = 'en'
+  for (const f of pick.listeners.change) f({})
+  await until(() => asks.at(-1).lang === 'en')
+  assert.deepEqual(asks.at(-1), { kind: 'book', lang: 'en', page: '1', section: 'poetry' })
+  assert.equal(shelf.ctx.localStorage.getItem('arcade:books-lang'), 'en')
+  assert.equal(shelf.pushed, '?tab=books&book-lang=en&section=poetry')
+  // Поиск по названию или автору: пробелы схлопнуты, раздел снят
+  const form = shelfLib.querySelectorAll('.ol-controls')[0]
+  form.children.find((c) => c.name === 'q').value = '  Остров   сокровищ '
+  for (const f of form.listeners.submit) f({ preventDefault() {} })
+  await until(() => asks.at(-1).q)
+  assert.deepEqual(asks.at(-1), { kind: 'book', lang: 'en', page: '1', q: 'Остров сокровищ' })
+  assert.ok(shelfLib.querySelectorAll('.genre-head').some((h) => h.textContent === 'Поиск: Остров сокровищ'))
+  assert.ok(shelfLib.querySelectorAll('.genre-chip').every((b) => !/\bactive\b/.test(b.className)), 'в поиске ни один раздел не выбран')
+  // Окно по-английски: разделы переведены, книги — на английском, пока читатель не выбрал другой язык
+  const before = asks.length
+  const en = await makePage(new Map(), { search: '?tab=books&lang=en', globals: { fetch: books } })
+  await until(() => asks.length > before)
+  assert.equal(asks.at(-1).lang, 'en')
+  assert.deepEqual(en.byId.library.querySelectorAll('.genre-chip').slice(0, 4).map((b) => b.textContent), ['My books', 'Popular', 'Fiction', 'Poetry'])
+  assert.ok(!/[А-Яа-яЁё]/.test(en.byId.library.querySelectorAll('.genre-chip').map((b) => b.textContent).join(' ')), 'все разделы по-английски')
   // Украинский: описания игр — английские, а не русские
   const uk = await makePage(new Map(), { search: '?tab=nes&lang=uk' })
   assert.ok(!/[ыэъё]/i.test(uk.byId.library.querySelectorAll('.about').map((a) => a.textContent).join(' ')), 'описания не по-русски')

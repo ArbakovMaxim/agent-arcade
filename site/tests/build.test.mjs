@@ -31,23 +31,9 @@ assert.equal(catalog.version, 1)
 assert.equal(catalog.built, '2026-10-17T12:00:00.000Z')
 assert.deepEqual(catalog.consoles.map((c) => c.id), ['nes', 'sega', 'sms', 'psx', 'doom', 'board', 'web', 'books', 'audiobooks'])
 const source = JSON.parse(fs.readFileSync(path.join(ROOT, 'content', 'catalog.json'), 'utf8'))
-// Игры каталога и книги из content/books/index.json — в этом порядке
-const bookIndex = path.join(ROOT, 'content', 'books', 'index.json')
-const indexed = fs.existsSync(bookIndex) ? JSON.parse(fs.readFileSync(bookIndex, 'utf8')).map((b) => b.id) : []
-const audioIndex = path.join(ROOT, 'content', 'audiobooks', 'index.json')
-const audioList = fs.existsSync(audioIndex) ? JSON.parse(fs.readFileSync(audioIndex, 'utf8')) : []
-const audioIds = audioList.map((b) => b.id)
-const audioShelves = [...new Set(audioList.map((b) => `audio-${b.lang}`))]
-assert.deepEqual(Object.keys(catalog.games), [...source.games.map((g) => g.id), ...indexed, ...audioIds, 'my-audio'])
-assert.equal(catalog.games['my-audio'].kind, 'audio-mine', 'карточка своих аудиокниг — всегда')
-// Полка языка — сама: аудиокнига на новом языке даёт полку «audio-<язык>» с названием языка на нём
-{
-  const dir = temp('audio')
-  const built = build({ root: ROOT, out: dir, audiobooks: [{ id: 'test-de', title: 'Märchen', author: 'Grimm', lang: 'de', genre: 'сказки', source: 'https://librivox.org/x/', chapters: [{ title: 'Eins', url: 'https://archive.org/download/x/1.mp3', seconds: 60 }] }] })
-  assert.equal(built.games['test-de'].shelf, 'audio-de')
-  assert.deepEqual(built.shelves.find((s) => s.id === 'audio-de'), { id: 'audio-de', title: 'Deutsch' })
-  assert.ok(built.shelves.findIndex((s) => s.id === 'audio-de') < built.shelves.findIndex((s) => s.id === 'audio-mine'), 'языки — перед «Моими аудиокнигами»')
-}
+// Книг и аудиокниг в каталоге нет: их ищут по разделам в Project Gutenberg, Викитеке и LibriVox (worker/books.js)
+assert.deepEqual(Object.keys(catalog.games), source.games.map((g) => g.id))
+assert.deepEqual(Object.values(catalog.games).filter((g) => ['book', 'audio', 'audio-mine'].includes(g.kind)), [], 'книг в каталоге нет')
 assert.deepEqual(Object.keys(catalog.games).slice(0, 3), ['thwaite', 'croom', 'rfk'])
 assert.ok(Object.keys(catalog.games).length >= 12, 'в каталоге все игры')
 assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf8')), catalog)
@@ -55,7 +41,7 @@ assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'catalog.json'), 'utf
 for (const file of ['vendor/stockfish/stockfish-19-lite-single.js', 'vendor/stockfish/stockfish-19-lite-single.wasm', 'licenses/stockfish/LICENSE.txt', 'chess.js']) assert.ok(fs.existsSync(path.join(out, file)), `в сборке есть ${file}`)
 
 for (const [id, game] of Object.entries(catalog.games)) {
-  if (['board', 'web', 'book', 'pane', 'audio', 'audio-mine'].includes(game.kind)) continue // без ROM — проверены отдельно
+  if (['board', 'web', 'pane'].includes(game.kind)) continue // без ROM — проверены отдельно
   const romPath = source.games.find((g) => g.id === id).rom
   const rom = fs.readFileSync(path.join(ROOT, 'content', romPath))
   const ext = path.extname(romPath)
@@ -263,7 +249,6 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'thwaite').console = 
   const dir = temp('about-en')
   const built = build({ root: ROOT, out: dir })
   for (const [id, g] of Object.entries(built.games)) {
-    if (g.kind === 'book') continue // у книг описание необязательно: в карточке — автор, жанр, год
     assert.ok(typeof g.about_en === 'string' && g.about_en.length > 10, `${id}: есть английское описание`)
     assert.ok(!/[А-Яа-яЁё]/.test(g.about_en), `${id}: описание по-английски`)
   }
@@ -404,9 +389,9 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openarena').mouse = 
 {
   const dir = temp('groups')
   const built = build({ root: ROOT, out: dir })
-  assert.deepEqual(built.groups.map((g) => g.id), ['games', 'reading', 'listening'])
+  assert.deepEqual(built.groups.map((g) => g.id), ['games'])
   assert.equal(built.support.url, 'https://ko-fi.com/agentarcade', 'ссылка «Поддержать проект» — в каталоге')
-  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'quests', 'board', 'books-en', 'books-uk', ...audioShelves, 'audio-mine'])
+  assert.deepEqual(built.shelves.map((s) => s.id), ['arcade', 'shooters', 'racing', 'strategy', 'quests', 'board'])
   // Своя игра Flappy Arcade: вид pane, движок flappy, в окне — тот же файл движка из мода
   assert.deepEqual([built.games.flappy.kind, built.games.flappy.engine, built.games.flappy.shelf], ['pane', 'flappy', 'arcade'])
   const flappyJs = fs.readFileSync(path.join(dir, 'flappy.js'), 'utf8')
@@ -420,27 +405,11 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openarena').mouse = 
   assert.equal(page.window.ArcadeAvatars.AVATAR_COUNT, AVATAR_COUNT)
   assert.equal(AVATAR_COUNT, 24)
   assert.match(page.window.ArcadeAvatars.avatarSvg(7), /^<svg /)
-  // книга — на полке своего языка
-  for (const g of Object.values(built.games).filter((x) => x.kind === 'book')) assert.equal(g.shelf, `books-${g.lang}`)
   assert.equal(built.games.hexgl.shelf, 'racing')
   assert.equal(built.games.thwaite.shelf, undefined, 'у игр приставок полки нет')
   assert.match(fs.readFileSync(path.join(dir, '_redirects'), 'utf8'), /\/games \/\?tab=games 302/)
 }
 assert.throws(broken((d) => { delete d.games.find((g) => g.id === 'hexgl').shelf }), /игра hexgl: у игр группы games должна быть полка/)
-// Книги: book.json — в сайте, в каталоге — автор, язык, главы и слова; без файла книги сборка падает
-{
-  const dir = temp('books')
-  const built = build({ root: ROOT, out: dir })
-  const books = Object.entries(built.games).filter(([, g]) => g.kind === 'book')
-  assert.ok(books.length >= 2, 'книги каталога на месте — из content/books/index.json')
-  for (const [id, g] of books) {
-    assert.equal(g.console, 'books')
-    assert.equal(g.text, `books/${id}/book.json`)
-    assert.ok(g.author && g.lang && g.chapters >= 1 && g.words > 0, `${id}: автор, язык, главы, слова`)
-    const book = JSON.parse(fs.readFileSync(path.join(dir, g.text), 'utf8'))
-    assert.equal(book.chapters.length, g.chapters)
-    assert.ok(fs.existsSync(path.join(dir, 'licenses', id, 'LICENSE.txt')), `${id}: лицензия`)
-  }
-}
-assert.throws(broken((d) => { d.games.push({ id: 'nope-book', console: 'books', kind: 'book', text: 'books/nope/book.json', title: 'X', author: 'Y', lang: 'en', genre: 'роман', keys: '…', license: { name: 'общественное достояние', author: 'Y', source: 'https://example.org', files: [] } }) }), /нет файла книги/)
+// Книга в каталоге — уже не вид игры: без ROM сборка её не примет
+assert.throws(broken((d) => { d.games.push({ id: 'nope-book', console: 'books', kind: 'book', title: 'X', genre: 'роман', about: 'книга', about_en: 'a book', keys: '…', license: { name: 'общественное достояние', author: 'Y', source: 'https://example.org' } }) }), /игра nope-book: нет поля rom/)
 console.log('Sega: все проверки прошли')

@@ -1,7 +1,8 @@
 // Аудиокниги: проигрыватель (главы, пауза, ±30 с, ползунок, скорость, клавиши, кнопки системы — Media Session),
-// место прослушивания запоминается само. Книги каталога — из LibriVox (общественное достояние), звук идёт прямо с
-// archive.org. Свои аудиокниги — файлы MP3/M4A/M4B/OGG/Opus, хранятся только в этом браузере (IndexedDB), на сервер
-// не уходят. Несколько файлов — главы, по порядку имён.
+// место прослушивания запоминается само. Книги LibriVox (общественное достояние) — по ссылке librivox:<запись
+// archive.org>: звук идёт прямо с archive.org, «Скачать» кладёт главы в этот браузер. Свои аудиокниги — файлы
+// MP3/M4A/M4B/OGG/Opus, хранятся только в этом браузере (IndexedDB), на сервер не уходят. Несколько файлов — главы,
+// по порядку имён.
 ;(() => {
   const T = (s) => (typeof window.T === 'function' ? window.T(s) : s)
   const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2]
@@ -120,23 +121,91 @@
     return root
   }
 
-  async function start(catalog, id) {
-    const root = rootOf()
-    if (id === 'my-audio') return mineView(root, catalog)
-    if (id.startsWith('my-audio-')) {
-      const own = await getMine(id)
-      if (!own) {
-        root.append(el('p', 'color:#e0c070', T('Этой аудиокниги в браузере больше нет — открой свои файлы ещё раз')))
-        return
-      }
-      const urls = own.files.map((f) => URL.createObjectURL(f.blob))
-      return player(root, { id, title: own.title, author: '', reader: '', chapters: own.files.map((f, i) => ({ title: bare(f.name), src: urls[i] })), mine: true })
+  // Книга из этого браузера: свои файлы или скачанная из LibriVox
+  function playMine(root, own) {
+    document.title = `${own.title} · Arcade`
+    const chapters = own.files.map((f) => ({ title: f.title || bare(f.name), src: URL.createObjectURL(f.blob), seconds: f.seconds }))
+    return player(root, { id: own.id, title: own.title, author: own.author || '', reader: '', chapters, mine: true })
+  }
+
+  // --- LibriVox: запись archive.org → главы (MP3 64 кбит/с) ---------------------------------------------------------
+  const one = (v) => String((Array.isArray(v) ? v[0] : v) ?? '').trim()
+  // «18:52», «1:02:03» или секунды «1132.4»
+  const seconds = (v) => {
+    const parts = String(v ?? '').split(':').map(Number)
+    if (parts.some((n) => !Number.isFinite(n))) return 0
+    return Math.round(parts.reduce((sum, n) => sum * 60 + n, 0))
+  }
+  async function librivox(id) {
+    const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`)
+    if (!response.ok) throw new Error(T(`сервер ответил ${response.status}`))
+    const data = await response.json()
+    const files = (data.files || []).filter((f) => /_64kb.mp3$/i.test(f.name || ''))
+    if (!files.length) throw new Error(T('В этой записи нет глав в MP3.'))
+    files.sort((a, b) => (Number.parseInt(a.track, 10) || 0) - (Number.parseInt(b.track, 10) || 0) || a.name.localeCompare(b.name, undefined, { numeric: true }))
+    const meta = data.metadata || {}
+    const path = (name) => name.split('/').map(encodeURIComponent).join('/')
+    return {
+      title: one(meta.title) || id,
+      author: one(meta.creator),
+      chapters: files.map((f) => ({ title: one(f.title) || bare(f.name).replace(/ 64kb$/i, ''), src: `https://archive.org/download/${encodeURIComponent(id)}/${path(f.name)}`, seconds: seconds(f.length), size: Number(f.size) || 0 })),
     }
-    const game = catalog.games[id]
-    document.title = `${game.title} · Arcade`
-    const keys = document.getElementById('keys')
-    if (keys) keys.textContent = T(game.keys || '')
-    player(root, { id, title: game.title, author: game.author || '', reader: game.reader || '', chapters: (game.chapters || []).map((c) => ({ title: c.title, src: c.url, seconds: c.seconds })) })
+  }
+
+  // Аудиокнига по ссылке: своя (my-audio-…) или уже скачанная — из браузера; LibriVox — с archive.org, с кнопкой «Скачать»
+  async function startRef(ref) {
+    const root = rootOf()
+    const own = await getMine(ref)
+    if (own) return playMine(root, own)
+    if (ref.startsWith('my-audio-')) {
+      root.append(el('p', 'color:#e0c070', T('Этой аудиокниги в браузере больше нет — открой свои файлы ещё раз')))
+      return
+    }
+    const m = /^librivox:([\w.-]{1,100})$/.exec(ref)
+    const status = el('p', 'color:#9a9aa3', T('Загружаю главы…'))
+    root.append(status)
+    let book
+    try {
+      if (!m) throw new Error(T('Такой книги нет.'))
+      book = await librivox(m[1])
+    } catch (err) {
+      status.style.color = '#e0c070'
+      status.textContent = T(`Не получилось открыть аудиокнигу: ${err.message}`)
+      const back = el('a', 'color:#7fb2ff', T('← К аудиокнигам'))
+      back.href = '?tab=audiobooks'
+      root.append(back)
+      return
+    }
+    status.remove()
+    document.title = `${book.title} · Arcade`
+    player(root, { id: ref, ...book, reader: '', download: true })
+  }
+
+  // «Скачать»: все главы — в этот браузер, по одной; потом книга играет без интернета и лежит в «Моих аудиокнигах»
+  function downloadButton(book, status) {
+    const total = book.chapters.reduce((n, c) => n + (c.size || 0), 0)
+    const b = button(total ? T(`Скачать в этот браузер · ${mb(total)}`) : T('Скачать в этот браузер'), async () => {
+      b.disabled = true
+      try {
+        const files = []
+        for (const [i, c] of book.chapters.entries()) {
+          status.textContent = T(`Скачиваю главу ${i + 1} из ${book.chapters.length}`)
+          const response = await fetch(c.src)
+          if (!response.ok) throw new Error(T(`сервер ответил ${response.status}`))
+          files.push({ name: `${String(i + 1).padStart(3, '0')}.mp3`, title: c.title, seconds: c.seconds, type: 'audio/mpeg', blob: await response.blob() })
+        }
+        const entry = { id: book.id, ref: book.id, title: book.title, author: book.author, files, size: files.reduce((n, f) => n + f.blob.size, 0), at: Date.now() }
+        const base = await db()
+        if (base) await ask(base, 'readwrite', (s) => s.put(entry))
+        else memory.set(entry.id, entry)
+        status.textContent = T('Скачано: книга играет и без интернета — она в «Моих аудиокнигах»')
+        b.remove()
+      } catch (err) {
+        status.textContent = T(`Не получилось скачать: ${err.message}`)
+        b.disabled = false
+      }
+    }, 'audio-download')
+    return b
   }
 
   // Проигрыватель. book.episode — один выпуск подкаста: без глав, ⏮ ⏭ и списка
@@ -168,6 +237,7 @@
     const list = el('div', 'margin-top:14px;max-height:40vh;overflow:auto;border:1px solid #3a3a44;border-radius:8px')
     list.className = 'audio-chapters'
     root.append(head, status, now, bar, clock, controls, speeds, list, audio)
+    if (book.download) root.insertBefore(downloadButton(book, status), list)
 
     // Запуск звука: в старых браузерах play() не возвращает Promise, а где-то его нет вовсе
     const playAudio = () => {
@@ -299,51 +369,12 @@
     if (book.mine) {
       root.append(el('p', 'color:#6f6f78;font-size:13px;margin-top:14px', T('Файлы этой книги хранятся только в этом браузере и никуда не отправляются')))
       const back = el('a', 'color:#7fb2ff', T('← Мои аудиокниги'))
-      back.href = '?game=my-audio'
+      back.href = '?tab=audiobooks&section=mine'
       root.append(back)
     }
     load(chapter, resumeAt, false)
     window.ArcadeAudio.player = { audio, book, get chapter() { return chapter }, get speed() { return speed }, load, toggle, seek, save }
   }
 
-  // Мои аудиокниги: список, «Открыть свои файлы», «Удалить»
-  async function mineView(root) {
-    document.title = `${T('Мои аудиокниги')} · Arcade`
-    const draw = async (note = '') => {
-      root.replaceChildren()
-      root.append(el('h2', 'margin:6px 0', T('Мои аудиокниги')), el('p', 'color:#9a9aa3', T('Свои MP3, M4A, M4B, OGG или Opus: можно выбрать сразу все файлы глав — они встанут по порядку имён. Файлы хранятся только в этом браузере и никуда не отправляются.')))
-      const input = el('input')
-      input.type = 'file'
-      input.multiple = true
-      input.accept = ACCEPT
-      input.style.display = 'none'
-      input.addEventListener('change', async () => {
-        try {
-          const entry = await addFiles(input.files)
-          location.search = `?game=${encodeURIComponent(entry.id)}`
-        } catch (err) {
-          draw(err.message)
-        }
-      })
-      const open = button(T('Открыть свои файлы'), () => input.click(), 'audio-open', true)
-      root.append(open, input, el('p', 'min-height:1.4em;color:#e0c070', note))
-      const all = await listMine()
-      if (!all.length) root.append(el('p', 'color:#6f6f78', T('Своих аудиокниг пока нет')))
-      for (const b of all) {
-        const row = el('div', 'margin:8px 0;padding:10px 12px;border:1px solid #3a3a44;border-radius:8px')
-        row.className = 'audio-mine'
-        row.append(el('div', 'font-weight:600', b.title), el('div', 'color:#9a9aa3;font-size:13px', `${b.files.length} ${T(b.files.length === 1 ? 'файл' : 'файлов')} · ${mb(b.size)}`))
-        const listen = el('a', 'color:#7fb2ff;margin-right:14px', T('Слушать'))
-        listen.href = `?game=${encodeURIComponent(b.id)}`
-        row.append(listen, button(T('Удалить'), async () => {
-          await removeMine(b.id)
-          draw()
-        }, 'audio-remove'))
-        root.append(row)
-      }
-    }
-    await draw()
-  }
-
-  window.ArcadeAudio = { start, open: (root, book) => player(root, book), addFiles, listMine, getMine, removeMine, titleOf, ACCEPT }
+  window.ArcadeAudio = { startRef, open: (root, book) => player(root, book), addFiles, listMine, getMine, removeMine, titleOf, ACCEPT }
 })()

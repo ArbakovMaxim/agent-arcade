@@ -1684,6 +1684,240 @@ try {
   }
 }
 
+// --- Открытая библиотека: списки Gutenberg, Викитеки и LibriVox, файл книги Gutenberg (worker/books.js) ------------
+{
+  const { LANGS, SECTIONS, bookQuery } = await import('../worker/books.js')
+  // Языки и разделы — одни у сервера, мода и окна (подписи разделов — у мода и окна одинаковые)
+  const mod = await import('../../mod/hooks/books.js')
+  assert.deepEqual(Object.keys(mod.BOOK_LANGS), Object.keys(LANGS))
+  assert.deepEqual(Object.keys(mod.BOOK_SECTIONS), Object.keys(SECTIONS))
+  const vm = await import('node:vm')
+  const win = {}
+  vm.runInNewContext(fs.readFileSync(new URL('../web/open-library.js', import.meta.url), 'utf8'), { window: win, URLSearchParams, location: { search: '' } })
+  assert.deepEqual(JSON.parse(JSON.stringify(win.ArcadeOpenLibrary.LANGS)), Object.keys(LANGS))
+  assert.deepEqual(JSON.parse(JSON.stringify(win.ArcadeOpenLibrary.SECTIONS)), mod.BOOK_SECTIONS)
+  for (const text of ['  Остров   сокровищ! ', "O'Brien — «Мать»", 'a'.repeat(90) + ' b', '<script>x</script>']) {
+    assert.equal(mod.bookQuery(text), bookQuery(text), `поиск чистится одинаково: ${text}`)
+  }
+
+  // Источники — подставные: Gutenberg (OPDS и EPUB), Wikidata (категории разделов), Викитека (поиск по названиям и по
+  // категории), archive.org (поиск LibriVox). Украинских книг у Gutenberg одна — разделы на украинском идут из Викитеки
+  const asked = []
+  const down = new Set()
+  const once = new Set() // сбиваются на одном запросе
+  const entry = (id, title, author) => `<entry><id>https://www.gutenberg.org/ebooks/${id}.opds</id><title>${title}</title><content type="text">${author}</content></entry>`
+  const opds = (more) =>
+    `<feed><entry><id>https://www.gutenberg.org/ebooks/search.opds/?sort_order=title</id><title>Sort Alphabetically</title></entry>` +
+    entry(1342, 'Pride and Prejudice', 'Austen, Jane') +
+    entry(5160, 'Ivanhoe (Finnish)', 'Scott, Walter') +
+    entry(76, 'Tom &amp; Huck', 'Twain, Mark') +
+    (more ? '<link rel="next" href="x"/>' : '') +
+    '</feed>'
+  const pages = [
+    { title: 'Остров сокровищ (Стивенсон)', index: 3 },
+    { title: 'Остров сокровищ (Стивенсон)/Глава I', index: 1 },
+    { title: 'ВЭ/ВТ/Остров', index: 2 },
+    { title: 'Остров (значения)', index: 4, pageprops: { disambiguation: '' } },
+    { title: 'Шаблон:Остров', index: 5 },
+    { title: 'Остров сокровищ (1883)', index: 6 },
+  ]
+  const sitelinks = { Q3919902: 'Категорія:Романи', Q5611832: 'Категорія:Енциклопедії' }
+  const shelfPages = [
+    { title: 'Захар Беркут (Франко)/Розділ I', index: 2 },
+    { title: 'Кайдашева сім\'я (Нечуй-Левицький)', index: 1 },
+    { title: 'Захар Беркут (Франко)', index: 3 },
+    { title: 'УРЕ/Роман', index: 4 },
+    { title: 'Роман (значення)', index: 5, pageprops: { disambiguation: '' } },
+  ]
+  const docs = [
+    { identifier: 'alice_librivox', title: "Alice's Adventures in Wonderland, by Lewis Carroll", creator: ['Lewis Carroll', 'Reader'] },
+    { identifier: 'bad id/../x', title: 'Чужой' },
+    { identifier: 'untitled_librivox' },
+  ]
+  const realFetch = globalThis.fetch
+  globalThis.fetch = async (input) => {
+    const url = new URL(input instanceof Request ? input.url : String(input))
+    asked.push(url)
+    if (down.has(url.hostname) || once.delete(url.hostname)) return new Response('нет', { status: 503 })
+    if (url.pathname === '/ebooks/search.opds/' && url.searchParams.get('query').includes('l.uk')) {
+      return new Response(`<feed>${url.searchParams.has('start_index') ? '' : entry(2600, 'Кобзар', 'Шевченко, Тарас')}</feed>`)
+    }
+    if (url.pathname === '/ebooks/search.opds/') return new Response(opds(url.searchParams.get('start_index') !== '976'))
+    if (url.pathname === '/ebooks/35.epub.noimages') return new Response(new Uint8Array([80, 75, 3, 4]))
+    if (url.pathname === '/ebooks/36.epub.noimages') return new Response('xx', { headers: { 'Content-Length': String(40 * 1024 * 1024) } })
+    if (url.hostname === 'www.wikidata.org') {
+      const site = url.searchParams.get('sitefilter')
+      const link = (id) => (site === 'ukwikisource' && sitelinks[id] ? { [site]: { site, title: sitelinks[id] } } : {})
+      return Response.json({ entities: Object.fromEntries(url.searchParams.get('ids').split('|').map((id) => [id, { id, sitelinks: link(id) }])) })
+    }
+    if (url.hostname.endsWith('.wikisource.org') && url.searchParams.get('gsrsearch').startsWith('deepcat:')) {
+      return Response.json({ query: { pages: shelfPages }, continue: { gsroffset: 50 } })
+    }
+    if (url.hostname.endsWith('.wikisource.org')) return Response.json({ query: { pages } })
+    if (url.pathname === '/advancedsearch.php') return Response.json({ response: { numFound: 30, docs } })
+    return new Response('нет', { status: 404 })
+  }
+  try {
+    const go = (path, init) => worker.fetch(new Request(`https://arcade.test${path}`, init), {})
+    // Ошибки запроса
+    for (const [path, status] of [
+      ['/api/books/list?lang=ru', 400],
+      ['/api/books/list?kind=book&lang=xx', 400],
+      ['/api/books/list?kind=book&lang=ru&section=cooking', 400],
+      ['/api/books/list?kind=book&lang=ru&q=%21a%21', 400],
+      ['/api/books/file?gutenberg=../1', 400],
+      ['/api/books/other', 404],
+    ]) {
+      assert.equal((await go(path)).status, status, path)
+    }
+    assert.equal((await go('/api/books/list?kind=book&lang=ru', { method: 'POST' })).status, 405)
+    assert.equal(asked.length, 0, 'с плохим запросом к источникам не ходим')
+
+    // Раздел книг: Gutenberg — тема и язык, по скачиваниям; страница — сдвиг на 25; название — без приписки языка
+    let r = await go('/api/books/list?kind=book&lang=ru&section=poetry&page=2')
+    assert.equal(r.status, 200)
+    assert.match(r.headers.get('Cache-Control'), /max-age=21600/)
+    let body = await r.json()
+    assert.deepEqual(body, {
+      items: [
+        { ref: 'gutenberg:1342', source: 'gutenberg', title: 'Pride and Prejudice', author: 'Austen, Jane' },
+        { ref: 'gutenberg:5160', source: 'gutenberg', title: 'Ivanhoe', author: 'Scott, Walter' },
+        { ref: 'gutenberg:76', source: 'gutenberg', title: 'Tom & Huck', author: 'Twain, Mark' },
+      ],
+      more: true,
+    })
+    assert.equal(asked.length, 1, 'у Gutenberg в разделе есть книги — Викитеку не спрашиваем')
+    assert.equal(asked[0].hostname, 'www.gutenberg.org')
+    assert.equal(asked[0].searchParams.get('query'), 's.poetry l.ru !cat.audio', 'без аудиозаписей Gutenberg')
+    assert.equal(asked[0].searchParams.get('sort_order'), 'downloads')
+    assert.equal(asked[0].searchParams.get('start_index'), '26')
+    // «Популярное» — без темы; страниц не больше 40
+    asked.length = 0
+    body = await (await go('/api/books/list?kind=book&lang=en&page=99')).json()
+    assert.equal(asked[0].searchParams.get('query'), 'l.en !cat.audio')
+    assert.equal(asked[0].searchParams.get('start_index'), '976')
+    assert.equal(body.more, false)
+
+    // У Gutenberg на языке нет и страницы книг: к ним — категория раздела в Викитеке этого языка. Её название — из
+    // Wikidata (первый элемент раздела, у которого оно есть), энциклопедии и словари вычитаем; книги — по числу ссылок.
+    // Главы — к книге, сокращения словарей и неоднозначности — мимо
+    asked.length = 0
+    r = await go('/api/books/list?kind=book&lang=uk&section=fiction')
+    assert.match(r.headers.get('Cache-Control'), /max-age=21600/)
+    const shelfItems = [
+      { ref: "wikisource:uk:Кайдашева сім'я (Нечуй-Левицький)", source: 'wikisource', title: "Кайдашева сім'я", author: 'Нечуй-Левицький' },
+      { ref: 'wikisource:uk:Захар Беркут (Франко)', source: 'wikisource', title: 'Захар Беркут', author: 'Франко' },
+    ]
+    assert.deepEqual(await r.json(), {
+      items: [{ ref: 'gutenberg:2600', source: 'gutenberg', title: 'Кобзар', author: 'Шевченко, Тарас' }, ...shelfItems],
+      more: true,
+    })
+    assert.deepEqual(asked.map((u) => u.hostname), ['www.gutenberg.org', 'www.wikidata.org', 'uk.wikisource.org'])
+    assert.equal(asked[1].searchParams.get('ids'), [...SECTIONS.fiction.wikisource, 'Q5611832', 'Q7137948'].join('|'))
+    assert.equal(asked[1].searchParams.get('sitefilter'), 'ukwikisource')
+    assert.equal(asked[2].searchParams.get('gsrsearch'), 'deepcat:"Романи" -deepcat:"Енциклопедії"', 'словарей в этой Викитеке нет — не вычитаем')
+    assert.equal(asked[2].searchParams.get('gsrsort'), 'incoming_links_desc')
+    assert.deepEqual([asked[2].searchParams.get('gsrlimit'), asked[2].searchParams.get('gsroffset')], ['50', '0'])
+    // Вторая страница: у Gutenberg пусто — следующие 50 страниц Викитеки
+    asked.length = 0
+    body = await (await go('/api/books/list?kind=book&lang=uk&section=fiction&page=2')).json()
+    assert.deepEqual(body, { items: shelfItems, more: true })
+    assert.equal(asked.at(-1).searchParams.get('gsroffset'), '50')
+    // Категории раздела в Викитеке языка нет — только Gutenberg
+    asked.length = 0
+    body = await (await go('/api/books/list?kind=book&lang=uk&section=detective')).json()
+    assert.deepEqual([body.items.length, body.more], [1, false])
+    assert.deepEqual(asked.map((u) => u.hostname), ['www.gutenberg.org', 'www.wikidata.org'])
+    // Викитека не ответила: книги Gutenberg отдаём, но неполный список не кешируем; без книг Gutenberg — ошибка
+    const stored = []
+    globalThis.caches = { default: { match: async () => undefined, put: async (key) => void stored.push(key.url) } }
+    down.add('uk.wikisource.org')
+    r = await go('/api/books/list?kind=book&lang=uk&section=fiction')
+    assert.equal(r.status, 200)
+    assert.equal(r.headers.get('Cache-Control'), 'no-store')
+    assert.deepEqual((await r.json()).items.map((i) => i.ref), ['gutenberg:2600'])
+    assert.equal((await go('/api/books/list?kind=book&lang=uk&section=fiction&page=2')).status, 502)
+    assert.deepEqual(stored, [], 'ни неполный список, ни ошибку не кешируем')
+    down.clear()
+    await go('/api/books/list?kind=book&lang=uk&section=fiction')
+    assert.equal(stored.length, 1, 'полный список — в кеш')
+    delete globalThis.caches
+
+    // Поиск книги: Gutenberg и Викитека того же языка; главы — к книге, словари и неоднозначности — мимо
+    asked.length = 0
+    body = await (await go(`/api/books/list?kind=book&lang=ru&q=${encodeURIComponent('  Остров   сокровищ! ')}`)).json()
+    assert.equal(asked.find((u) => u.hostname === 'www.gutenberg.org').searchParams.get('query'), 'Остров сокровищ l.ru !cat.audio')
+    const wiki = asked.find((u) => u.hostname === 'ru.wikisource.org')
+    assert.equal(wiki.searchParams.get('gsrsearch'), 'Остров сокровищ')
+    assert.deepEqual(body.items.slice(3), [
+      { ref: 'wikisource:ru:Остров сокровищ (Стивенсон)', source: 'wikisource', title: 'Остров сокровищ', author: 'Стивенсон' },
+      { ref: 'wikisource:ru:Остров сокровищ (1883)', source: 'wikisource', title: 'Остров сокровищ (1883)', author: '' },
+    ])
+    // Вторая страница поиска — только Gutenberg
+    asked.length = 0
+    await go('/api/books/list?kind=book&lang=ru&q=Остров&page=2')
+    assert.deepEqual(asked.map((u) => u.hostname), ['www.gutenberg.org'])
+    // Gutenberg не ответил: в поиске и в разделе хватит Викитеки (но такой список не кешируем); на второй странице
+    // поиска и в разделе, где у Викитеки нет категории, — ошибка
+    down.add('www.gutenberg.org')
+    r = await go('/api/books/list?kind=book&lang=uk&section=fiction&page=2')
+    assert.equal(r.status, 200)
+    assert.equal(r.headers.get('Cache-Control'), 'no-store')
+    body = await r.json()
+    assert.deepEqual([body.items.map((i) => i.title), body.more], [["Кайдашева сім'я", 'Захар Беркут'], true])
+    r = await go('/api/books/list?kind=book&lang=ru&q=Остров')
+    assert.equal(r.headers.get('Cache-Control'), 'no-store')
+    body = await r.json()
+    assert.deepEqual([body.items.length, body.more], [2, false])
+    assert.equal((await go('/api/books/list?kind=book&lang=ru&q=Остров&page=2')).status, 502)
+    r = await go('/api/books/list?kind=book&lang=ru&section=fiction')
+    assert.equal(r.status, 502)
+    assert.equal(r.headers.get('Cache-Control'), null, 'ошибку не кешируем')
+    down.clear()
+    // Сбой на одном запросе — источник спрашиваем второй раз, человек получает список
+    asked.length = 0
+    once.add('www.gutenberg.org')
+    r = await go('/api/books/list?kind=book&lang=fr&section=drama')
+    assert.equal(r.status, 200)
+    assert.deepEqual(asked.map((u) => u.hostname), ['www.gutenberg.org', 'www.gutenberg.org'])
+
+    // Аудиокниги: LibriVox на archive.org — язык как его пишет archive.org, раздел — темы, «, by автор» убран
+    asked.length = 0
+    body = await (await go('/api/books/list?kind=audio&lang=de&section=detective')).json()
+    assert.equal(
+      asked[0].searchParams.get('q'),
+      'collection:librivoxaudio AND language:("ger" OR "deu" OR "German") AND subject:("mystery" OR "detective" OR "crime" OR "sherlock holmes")',
+    )
+    assert.equal(asked[0].searchParams.get('sort[]'), 'downloads desc')
+    assert.deepEqual(asked[0].searchParams.getAll('fl[]'), ['identifier', 'title', 'creator'])
+    assert.deepEqual(body, {
+      items: [{ ref: 'librivox:alice_librivox', source: 'librivox', title: "Alice's Adventures in Wonderland", author: 'Lewis Carroll, Reader' }],
+      more: true,
+    })
+    // Поиск аудио — по названию и автору; дефис в начале слова — не «без этого слова»
+    asked.length = 0
+    body = await (await go('/api/books/list?kind=audio&lang=en&q=-Sherlock&page=2')).json()
+    assert.equal(asked[0].searchParams.get('q'), 'collection:librivoxaudio AND language:("eng" OR "English") AND (title:(Sherlock) OR creator:(Sherlock))')
+    assert.equal(asked[0].searchParams.get('page'), '2')
+    assert.equal(body.more, false, '30 найдено — второй страницы хватит')
+
+    // Файл книги Gutenberg: EPUB без картинок через сервер; нет книги — 404; больше 30 МБ — 413
+    asked.length = 0
+    r = await go('/api/books/file?gutenberg=35')
+    assert.equal(r.status, 200)
+    assert.equal(asked[0].href, 'https://www.gutenberg.org/ebooks/35.epub.noimages')
+    assert.equal(r.headers.get('Content-Type'), 'application/epub+zip')
+    assert.deepEqual([...new Uint8Array(await r.arrayBuffer())], [80, 75, 3, 4])
+    assert.equal((await go('/api/books/file?gutenberg=99999')).status, 404)
+    assert.equal((await go('/api/books/file?gutenberg=36')).status, 413)
+    down.add('www.gutenberg.org')
+    assert.equal((await go('/api/books/file?gutenberg=35')).status, 502)
+  } finally {
+    globalThis.fetch = realFetch
+    delete globalThis.caches
+  }
+}
+
 // Доска проектов: два мода (их блокноты и сверка — mod/hooks/notes.js и desks.js) сверяются через настоящую Desk
 {
   const { Desk } = await import('../worker/desk.js')

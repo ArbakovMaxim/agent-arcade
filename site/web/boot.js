@@ -1,4 +1,5 @@
-// Загрузчик окна Arcade: берёт каталог с сервера и открывает библиотеку, игру (?game=…) или свою игру (#mine=…).
+// Загрузчик окна Arcade: берёт каталог с сервера и открывает библиотеку, игру (?game=…), свою игру (#mine=…),
+// книгу (?book=gutenberg:… или wikisource:…) или аудиокнигу (?audio=librivox:…) из открытых библиотек.
 // Своя игра — в части адреса после #: браузер не отправляет её на сервер, поэтому хеш и название файла
 // не попадают в запросы и логи.
 // Денди идёт в JSNES (game.js), Sega и PlayStation — в EmulatorJS (ejs.js, подгружается, только когда нужен).
@@ -11,6 +12,8 @@
   }
   const params = new URLSearchParams(location.search)
   const id = params.get('game')
+  const bookRef = params.get('book')
+  const audioRef = params.get('audio') || (id && /^my-audio-[a-z0-9]{4,24}$/.test(id) ? id : null)
   const local = new URLSearchParams(location.hash.slice(1))
   const mineId = local.get('mine')
   // Переход на другую свою игру меняет только часть после # — страницу надо открыть заново
@@ -160,7 +163,8 @@
     if (entry.console === 'nes') return window.ArcadeGame.startLocal(new Uint8Array(await entry.file.arrayBuffer()), entry.title)
     if (entry.console === 'books') {
       await loadReader()
-      return window.ArcadeReader.startMine(entry)
+      // Скачанная книга из открытой библиотеки уже разобрана; свой файл — разбираем
+      return entry.book ? window.ArcadeReader.startRef(entry.id) : window.ArcadeReader.startMine(entry)
     }
     await loadEJS()
     window.ArcadeEJS.startLocal(entry)
@@ -206,19 +210,19 @@
     if (entry) await play(entry)
     else if (local.get('console') && local.get('sha')) askForFile(local.get('console'), local.get('sha'), local.get('title') || T('свою игру'))
     else overlay(T('Игра не найдена'), T('В этом браузере её нет. Вернись в библиотеку и открой файл заново.'))
-  } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'book') {
-    // Книга каталога — в читалку
+  } else if (bookRef) {
+    // Книга открытой библиотеки: скачанная — из браузера, новая — скачать, собрать и положить в «Мои книги»
     await loadReader()
-    window.ArcadeReader.start(catalog, id)
-  } else if (id && (/^my-audio-[a-z0-9]{4,24}$/.test(id) || (catalog.games && catalog.games[id] && ['audio', 'audio-mine'].includes(catalog.games[id].kind)))) {
-    // Аудиокниги: книги LibriVox и свои файлы (хранятся только в браузере)
+    window.ArcadeReader.startRef(bookRef)
+  } else if (audioRef) {
+    // Аудиокниги: LibriVox с archive.org и свои файлы (хранятся только в браузере)
     await new Promise((resolve) => {
       const script = document.createElement('script')
       script.src = 'audio.js'
       script.onload = resolve
       document.body.appendChild(script)
     })
-    window.ArcadeAudio.start(catalog, id)
+    window.ArcadeAudio.startRef(audioRef)
   } else if (id && catalog.games && catalog.games[id] && catalog.games[id].kind === 'web') {
     // Браузерная игра — своя страница в рамке под полосой окна
     const game = catalog.games[id]
@@ -371,6 +375,11 @@
     // Денди с ?net=1 — сетевая игра на EmulatorJS (FCEUmm); без него — обычный JSNES
     await loadEJS()
     window.ArcadeEJS.start(catalog, id)
-  } else if (id) window.ArcadeGame.start(catalog, id)
-  else window.ArcadeLibrary.start(catalog, params.get('tab'), params.get('shelf'), params.get('genre'))
+  } else if (id && id !== 'my-audio') window.ArcadeGame.start(catalog, id)
+  else {
+    // Старая карточка «Мои аудиокниги» — теперь раздел вкладки аудиокниг
+    if (id === 'my-audio') history.replaceState(null, '', '?tab=audiobooks&section=mine')
+    const tab = id === 'my-audio' ? 'audiobooks' : params.get('tab')
+    window.ArcadeLibrary.start(catalog, tab, params.get('shelf'))
+  }
 })()

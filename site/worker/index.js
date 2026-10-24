@@ -6,6 +6,7 @@ import { discover, verify } from './discover.js'
 import { twitch } from './twitch.js'
 import { account, chatSocket, ticketName } from './account.js'
 import { report } from './reports.js'
+import { books } from './books.js'
 
 export { Discover } from './discover.js'
 export { Twitch } from './twitch.js'
@@ -85,6 +86,8 @@ export default {
     // Своя тема пользователя: поиск видео, статей и подкастов с кешем; проверка подписанных ссылок для /read и /listen
     if (url.pathname === '/api/discover') return discover(request, env, url)
     if (url.pathname === '/api/verify') return verify(env, url)
+    // Открытая библиотека: списки книг и аудиокниг по языку, разделу и поиску; файл книги Gutenberg (worker/books.js)
+    if (url.pathname.startsWith('/api/books/')) return books(request, url)
     // Twitch: кто из каналов человека и каталога Arcade сейчас в эфире
     if (url.pathname === '/api/twitch') return twitch(request, env, url)
     // Аккаунт: вход через GitHub по коду и настройки мода, общие для всех компьютеров человека

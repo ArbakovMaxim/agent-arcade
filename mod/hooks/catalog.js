@@ -77,29 +77,20 @@ export function parseCatalog(text) {
   const games = []
   for (const [id, g] of Object.entries(data.games)) {
     if (!ID.test(id) || !g || !ids.has(g.console)) continue
-    // У книги описание необязательно: в списке — автор и жанр
-    // У книги и аудиокниги описание необязательно: в списке — автор и жанр
-    if (![g.title, g.genre].every((s) => typeof s === 'string' && s) || (!['book', 'audio'].includes(g.kind) && !(typeof g.about === 'string' && g.about))) continue
+    if (![g.title, g.genre, g.about].every((s) => typeof s === 'string' && s)) continue
     const texts = aboutOf(g)
-    // Настольные игры (шахматы, шашки, реверси) — без ROM: только в окне браузера
     // Своя игра прямо в панели: движок из списка известных (сейчас — Flappy Arcade)
     if (g.kind === 'pane') {
       if (!['flappy'].includes(g.engine)) continue
       games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...texts, kind: 'pane', engine: g.engine, keys: typeof g.keys === 'string' ? g.keys : '', ...shelfOf(g) })
       continue
     }
-    // Аудиокниги (LibriVox) и «Мои аудиокниги» — проигрыватель в окне: панель Claude Code звук не играет
-    if (g.kind === 'audio' || g.kind === 'audio-mine') {
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...texts, kind: g.kind, ...shelfOf(g), ...(g.kind === 'audio' ? { author: String(g.author ?? '').slice(0, 80) } : {}) })
-      continue
-    }
-    if (g.kind === 'board' || g.kind === 'web' || g.kind === 'book') {
-      // У книги — ещё автор и путь к тексту: читалка в окне (а потом и в панели)
-      const book = g.kind === 'book' && typeof g.text === 'string' && /^books\/[\w-]+\/book\.json$/.test(g.text) ? { author: String(g.author ?? '').slice(0, 80), text: g.text } : {}
-      if (g.kind === 'book' && !book.text) continue
+    // Настольные игры (шахматы, шашки, реверси) и браузерные — без ROM: только в окне браузера. Книг в каталоге нет:
+    // их список мод берёт с сайта (hooks/books.js)
+    if (g.kind === 'board' || g.kind === 'web') {
       // Браузерный шутер (OpenArena) просит захваченную мышь — Desktop открывает его окном браузера
       const mouse = g.kind === 'web' && g.mouse === true ? { mouse: true } : {}
-      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: typeof g.about === 'string' ? g.about : '', ...texts, kind: g.kind, ...shelfOf(g), ...book, ...mouse })
+      games.push({ id, console: g.console, title: g.title, genre: g.genre, about: g.about, ...texts, kind: g.kind, ...shelfOf(g), ...mouse })
       continue
     }
     const rom = g.rom ?? {}
