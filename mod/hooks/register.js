@@ -10,8 +10,10 @@ import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readUrl, re
 import { SEARCH_SHOWS, feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from './search.js'
 import { MY_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from './twitch.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
-import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
-import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
+import { HANDLE, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseAvatar, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from './account.js'
+import { MAX_NAME, MAX_TEXT, cleanText, clock, day, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
+import { AVATAR_COUNT, avatarName, avatarSvg, letterColor, picSvg, validPic } from './avatars.js'
+import { avatarXaml, keepPopped, popupChats, popupCommand, restorePopped } from './popup.js'
 import { FIND_LIMIT, MIN_QUERY, find, restoreFavorites, toggleIn } from './find.js'
 import { COL_NAMES, MAX_APP, MAX_BODY, MAX_URL, NOTES_TOOL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, columnCards, columnOf, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from './notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from './desks.js'
@@ -208,8 +210,9 @@ let tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loadi
 // ticket — его подпись для сетевых игр (оба с сайта, только в памяти), naming — сайт проверяет новый ник, handleNote —
 // почему ник не взялся, claims — сколько раз ник сменили: ответ синхронизации, спрошенной до смены, ник не трогает;
 // friends и requests — сколько друзей и заявок человеку (для плитки «Друзья»), unread — непрочитанных в чатах;
-// role — 'admin' у админа: ему видны отчёты об ошибках
-let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0, unread: 0, role: '' }
+// role — 'admin' у админа: ему видны отчёты об ошибках; pic — номер своей аватарки или null, picking — сайт сохраняет
+// новую, picNote — почему не сохранилась, picks — сколько раз её меняли: синхронизация, спрошенная до смены, её не трогает
+let acct = { session: null, flow: null, starting: false, note: '', syncing: false, again: false, syncedAt: 0, confirmDelete: false, request: 0, handle: '', ticket: '', naming: false, handleNote: '', claims: 0, friends: 0, requests: 0, unread: 0, role: '', pic: null, picking: false, picNote: '', picks: 0 }
 // Друзья: list — { friends, incoming, outgoing } с сайта или null, пока не спрашивали; loading — спрашиваем список,
 // busy — какое действие ждёт ответа сайта, note — заметка под полем «Добавить друга» (bad — что-то не вышло);
 // request — номер последнего вопроса: ответ старого вопроса не нужен
@@ -223,8 +226,8 @@ let fr = { ...NO_FRIENDS, request: 0 }
 // приглашения уже ответили (from:at): отметка, ушедшая до ответа, их не вернёт
 const noOnline = () => ({ online: new Set(), invites: [], at: 0, pulsing: false, soon: false, told: new Set(), gone: new Set(), to: null, busy: '', note: '', bad: false })
 let ol = noOnline()
-// Чаты: list — чаты с сайта (новые сверху) или null, пока не спрашивали; names — ники по номерам аккаунтов; me — свой
-// номер; loading — спрашиваем список. Открытый чат: talk — его id, about — он сам с сайта (участники, хозяин группы),
+// Чаты: list — чаты с сайта (новые сверху) или null, пока не спрашивали; names — ники по номерам аккаунтов, pics —
+// номера их аватарок, online — номера друзей в сети (со списком чатов); me — свой номер; loading — спрашиваем список. Открытый чат: talk — его id, about — он сам с сайта (участники, хозяин группы),
 // messages — переписка по порядку номеров, first — с какого номера она видна человеку, shown — сколько последних
 // сообщений показать, opening — загружаем открытый чат, older — грузим более ранние, polling — спрашиваем новые.
 // busy — какое действие ждёт ответа сайта,
@@ -232,7 +235,7 @@ let ol = noOnline()
 // field — номер поля «Сообщение» (после отправки — новое, пустое), confirmLeave — «Выйти из группы» нажали один раз.
 // request — номер последнего вопроса: ответ старого не нужен
 const CHAT_SHOWN = 30 // сколько последних сообщений чата показывать сразу; «Раньше» — ещё столько же
-const NO_CHATS = { list: null, names: {}, me: '', loading: false, talk: '', about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: false, older: false, polling: false, busy: '', note: '', bad: false, groupName: '', field: 0, confirmLeave: false }
+const NO_CHATS = { list: null, names: {}, pics: {}, online: [], me: '', loading: false, talk: '', about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: false, older: false, polling: false, busy: '', note: '', bad: false, groupName: '', field: 0, confirmLeave: false }
 let ch = { ...NO_CHATS, picked: new Set(), request: 0 }
 let chatLink = '' // код ссылки на страницу чатов: его страница один раз обменяет на свой билет
 // Отчёт об ошибке: field — номер поля (после отправки — новое, пустое), sending — отчёт ждёт ответа сайта, note —
@@ -1592,6 +1595,7 @@ async function syncAccount($) {
   $.ui.invalidate('ui.render')
   try {
     const claims = acct.claims
+    const picks = acct.picks
     const me = parseMe(await accountFetch($, 'me', { token: session.token }))
     if (acct.session !== session) return
     if (me.error) return await syncFailed($, me.error)
@@ -1599,6 +1603,7 @@ async function syncAccount($) {
       acct.handle = me.handle
       acct.ticket = me.ticket
     }
+    if (acct.picks === picks) acct.pic = me.pic
     acct.friends = me.friends
     acct.requests = me.requests
     acct.unread = me.unread
@@ -1659,6 +1664,9 @@ async function forgetSession($, note) {
   acct.ticket = ''
   acct.naming = false
   acct.handleNote = ''
+  acct.pic = null
+  acct.picking = false
+  acct.picNote = ''
   acct.friends = 0
   acct.requests = 0
   acct.unread = 0
@@ -1773,6 +1781,28 @@ async function claimHandle($, text) {
     acct.claims++
     acct.handle = answer.handle
     acct.ticket = answer.ticket
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Аватарка — одна из AVATAR_COUNT картинок (n — номер, null — без неё, буква ника). Выбирается только здесь, в
+// аккаунте; чаты её просто показывают
+async function pickAvatar($, n) {
+  const session = acct.session
+  if (!session || acct.picking || n === acct.pic) return
+  acct.picking = true
+  acct.picNote = ''
+  $.ui.invalidate('ui.render')
+  const answer = parseAvatar(await accountFetch($, 'avatar', { method: 'PUT', body: { pic: n }, token: session.token }))
+  if (acct.session !== session) return
+  acct.picking = false
+  if (answer.error === 'auth') return forgetSession($, 'Вход на этом компьютере больше не действует — войди через GitHub заново.')
+  if (answer.error) acct.picNote = answer.error === 'often' || answer.error === 'limit' ? 'Аватарку меняли слишком часто — подожди минуту.' : accountNote(answer.error)
+  else {
+    acct.picks++
+    acct.pic = answer.pic
+    // В открытых чатах своя аватарка — сразу новая
+    if (ch.me) ch.pics = { ...withoutPics(ch.pics, [ch.me]), ...(validPic(answer.pic) ? { [ch.me]: answer.pic } : {}) }
   }
   $.ui.invalidate('ui.render')
 }
@@ -1970,6 +2000,25 @@ function chatPerson(id) {
 // Название чата: с другом — его @ник, группы — её название
 const chatTitle = (chat) => (chat.kind === 'dm' ? chatPerson(chat.with) : chat.name || tr('Группа', lang))
 
+// Аватарка человека: его картинка из AVATAR_COUNT; не выбрал — первая буква ника на цвете от ника, как на сайте
+function personSvg(id) {
+  const handle = ch.names[id] || (id && id === ch.me ? acct.handle : '')
+  return picSvg(ch.pics[id], handle || '?', handle || id)
+}
+
+// Картинка чата: с другом — его аватарка, группы — её картинка или буква названия на цвете от номера чата
+const chatSvg = (chat) => (chat.kind === 'dm' ? personSvg(chat.with) : picSvg(chat.pic, chat.name || tr('Группа', lang), chat.id))
+
+// Друг в сети: по отметке «в сети» мода или по списку чатов с сайта
+const isOnline = (id) => ol.online.has(id) || ch.online.includes(id)
+
+// Таблица аватарок без этих номеров
+const withoutPics = (pics, ids) => Object.fromEntries(Object.entries(pics).filter(([id]) => !ids.includes(id)))
+
+// Аватарки после ответа сайта: за кого он ответил (ники в names и сам человек) — как сказал он, убранная — убрана;
+// остальные — как были
+const mergePics = (pics, answer) => ({ ...withoutPics(pics, [...Object.keys(answer.names), answer.me]), ...answer.pics })
+
 // Служебное сообщение словами на языке интерфейса: шаблон переводится, ники и название группы — нет
 function serviceText(m) {
   const d = describe(m)
@@ -2013,12 +2062,21 @@ async function loadChats($, quiet = false) {
     ch.bad = true
     return $.ui.invalidate('ui.render')
   }
-  const before = JSON.stringify([ch.list, ch.names, acct.unread])
+  const changed = applyChats(answer)
+  if (!quiet || changed) $.ui.invalidate('ui.render')
+}
+
+// Список чатов с сайта — в мод; true — что-то поменялось
+function applyChats(answer) {
+  const seen = () => JSON.stringify([ch.list, ch.names, ch.pics, ch.online, acct.unread])
+  const before = seen()
   ch.list = answer.chats
   ch.names = { ...ch.names, ...answer.names }
+  ch.pics = mergePics(ch.pics, answer)
+  ch.online = answer.online
   ch.me = answer.me
   acct.unread = answer.unread
-  if (!quiet || JSON.stringify([ch.list, ch.names, acct.unread]) !== before) $.ui.invalidate('ui.render')
+  return seen() !== before
 }
 
 // Открыть чат: последние сообщения с сайта; сайт заодно отмечает их прочитанными
@@ -2045,6 +2103,7 @@ async function openChat($, id) {
     ch.messages = answer.messages
     ch.first = answer.first
     ch.names = { ...ch.names, ...answer.names }
+    ch.pics = mergePics(ch.pics, answer)
     acct.unread = answer.unread
     const entry = ch.list?.find((c) => c.id === id)
     if (entry) entry.unread = 0
@@ -2070,12 +2129,14 @@ async function pollChat($) {
     ch.bad = true
     return $.ui.invalidate('ui.render')
   }
-  const before = JSON.stringify([ch.about, ch.messages.length, ch.messages.at(-1)?.s, acct.unread])
+  const seen = () => JSON.stringify([ch.about, ch.messages.length, ch.messages.at(-1)?.s, ch.pics, acct.unread])
+  const before = seen()
   ch.messages = mergeMessages(ch.messages, answer.messages).slice(-CHAT_KEPT)
   ch.about = answer.chat
   ch.names = { ...ch.names, ...answer.names }
+  ch.pics = mergePics(ch.pics, answer)
   acct.unread = answer.unread
-  if (JSON.stringify([ch.about, ch.messages.length, ch.messages.at(-1)?.s, acct.unread]) !== before) $.ui.invalidate('ui.render')
+  if (seen() !== before) $.ui.invalidate('ui.render')
 }
 
 // Есть ли сообщения раньше показанных: уже загруженные или ещё на сайте
@@ -2101,6 +2162,7 @@ async function olderMessages($) {
   } else {
     ch.messages = mergeMessages(answer.messages, ch.messages)
     ch.names = { ...ch.names, ...answer.names }
+    ch.pics = mergePics(ch.pics, answer)
     ch.shown += CHAT_SHOWN
   }
   $.ui.invalidate('ui.render')
@@ -2252,6 +2314,115 @@ async function checkUnread($) {
   if (!answer || answer.error || answer.unread === acct.unread) return
   acct.unread = answer.unread
   $.ui.invalidate('ui.render')
+}
+
+// --- Всплывающие уведомления о сообщениях ---------------------------------------------------------------------------
+// Как у мессенджеров: новое сообщение — карточка внизу слева поверх всех окон, сама прячется; клик — этот чат в панели.
+// Сколько непрочитанных спрашиваем и при закрытой панели; список чатов — только когда это число поменялось
+const POPUP_POLL_MS = 20_000
+const POPUP_SLOTS = 3 // столько карточек сразу, одна над другой
+const POPUP_RUN_MS = 300_000 // карточка прячется сама; это — если PowerShell повис
+let msgNotify = true // всплывающие уведомления о сообщениях — настройка этого компьютера, на сайт не уходит
+// session — для какого входа; seen — сколько непрочитанных было в прошлый раз; started — первый список уже видели:
+// что пришло до запуска, не всплывает; waiting — карточкам не хватило места, спросить список ещё раз
+const noPopups = (session = null) => ({ session, seen: -1, started: false, waiting: false })
+let pop = noPopups()
+let popBusy = false // вопрос к сайту в пути
+const popSlots = new Set() // занятые места карточек: 0 — нижнее
+
+// Чат сейчас на экране — о нём не всплываем
+const chatOnScreen = (id) => paneOpen && view === 'library' && menu === 'chats:talk' && ch.talk === id
+
+// Карточка о чате: с другом — его ник и аватарка; группа — название и картинка, перед текстом — кто написал
+function popupFor(chat) {
+  const service = chat.last.k !== undefined
+  const text = service ? serviceText(chat.last) : chat.last.t
+  const windows = platform === 'windows'
+  if (chat.kind === 'dm') {
+    const handle = ch.names[chat.with] || ''
+    return { title: chatPerson(chat.with), text, pic: windows ? avatarXaml(ch.pics[chat.with], handle || '?', handle || chat.with) : '' }
+  }
+  const title = chatTitle(chat)
+  return { title, text: service ? text : `${chatPerson(chat.last.f)}: ${text}`, pic: windows ? avatarXaml(chat.pic, title, chat.id) : '' }
+}
+
+// Раз в POPUP_POLL_MS: пришло новое — карточка. В первый раз только запоминаем, что уже есть
+async function watchMessages($) {
+  const session = acct.session
+  if (!msgNotify || !session || !acct.handle || !platform || popBusy) return
+  if (pop.session !== session) pop = noPopups(session)
+  popBusy = true
+  try {
+    const count = await chatFetch($, 'unread', parseUnread)
+    if (!count || count.error || pop.session !== session) return
+    if (count.unread !== acct.unread) {
+      acct.unread = count.unread
+      $.ui.invalidate('ui.render')
+    }
+    const changed = count.unread !== pop.seen
+    pop.seen = count.unread
+    // Непрочитанных нет — всплывать не о чем; столько же, сколько было, — нового нет
+    if (count.unread === 0) Object.assign(pop, { started: true, waiting: false })
+    if (count.unread === 0 || (pop.started && !changed && !pop.waiting)) return
+    const answer = await chatFetch($, 'chats', parseChats)
+    if (!answer || answer.error || pop.session !== session) return
+    if (applyChats(answer)) $.ui.invalidate('ui.render')
+    await popChats($, answer)
+  } finally {
+    popBusy = false
+  }
+}
+
+// Карточки о новых сообщениях. Что всплыло, — сразу в $.store: другая сессия Claude Code о том же не всплывёт.
+// Места не хватило — остальные в следующий раз
+async function popChats($, answer) {
+  const popped = restorePopped(await $.store.get('chatPopups'))
+  const first = !pop.started
+  Object.assign(pop, { started: true, waiting: false })
+  const show = []
+  for (const chat of popupChats(answer.chats, answer.me, popped)) {
+    if (!first && !chatOnScreen(chat.id)) {
+      const slot = [...Array(POPUP_SLOTS).keys()].find((n) => !popSlots.has(n) && !show.some((s) => s.slot === n))
+      if (slot === undefined) {
+        pop.waiting = true
+        continue
+      }
+      show.push({ chat, slot })
+    }
+    popped[chat.id] = chat.at
+  }
+  await $.store.set('chatPopups', keepPopped(popped))
+  for (const { chat, slot } of show) showPopup($, chat, slot)
+}
+
+// Карточка на своём месте; клик по ней — этот чат в панели. Место освободилось, а кто-то ждёт, — спрашиваем сразу
+function showPopup($, chat, slot) {
+  const command = popupCommand(platform, { ...popupFor(chat), slot })
+  if (!command) return
+  popSlots.add(slot)
+  $.clock.after(0, async () => {
+    try {
+      const result = await $.process.run(command.argv, { env: command.env, timeoutMs: POPUP_RUN_MS })
+      if (result.stdout.includes('open')) await openFromPopup($, chat.id)
+    } catch (err) {
+      log(`уведомление о сообщении не показалось: ${err?.message ?? err}`)
+    } finally {
+      popSlots.delete(slot)
+      if (pop.waiting) watchMessages($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+    }
+  })
+}
+
+// Клик по карточке: панель Arcade на этом чате; «Назад» из него — к списку чатов
+async function openFromPopup($, id) {
+  if (!acct.session) return
+  if (view !== 'library') toLibrary()
+  menu = 'chats'
+  libraryNotice = ''
+  markPaneOpen()
+  await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+  await openChat($, id)
+  loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
 }
 
 // --- В сети и приглашения в игру ---------------------------------------------------------------------------------
@@ -3333,6 +3504,7 @@ export function register(on) {
       for (const key of SYNC_KEYS) if (applySetting(key, await $.store.get(key))) savedKeys.add(key)
       if (!savedKeys.has('lang')) lang = detectLang(await $.env.get('LC_ALL'), await $.env.get('LC_MESSAGES'), await $.env.get('LANG'))
       stamps = restoreStamps(await $.store.get('syncAt'))
+      msgNotify = (await $.store.get('msgNotify')) !== false
       acct.session = restoreAccount(await $.store.get('account'))
       mine = restoreMine(await $.store.get('mine'))
       notes = restoreNotes(await $.store.get('notes'))
@@ -3383,12 +3555,15 @@ export function register(on) {
         if (chatsOn() && menu === 'chats:talk') pollChat($).catch(chatError)
       })
       $.clock.every(CHATS_POLL_MS, () => {
-        if (chatsOn() && menu === 'chats') loadChats($, true).catch(chatError)
+        // Список — и в переписке: в Desktop слева от неё колонка чатов с непрочитанными
+        if (chatsOn() && (menu === 'chats' || menu === 'chats:talk')) loadChats($, true).catch(chatError)
       })
       // «В сети» — пока панель открыта на библиотеке: отметка раз в PULSE_MS, а когда просили — сразу
       $.clock.every(PULSE_SOON_MS, () => {
         if (chatsOn()) pulse($).catch(chatError)
       })
+      // Всплывающие уведомления о сообщениях — и при закрытой панели, пока они включены и человек вошёл
+      $.clock.every(POPUP_POLL_MS, () => watchMessages($).catch(chatError))
       // Доска проектов: открытую общую доску сверяем с сайтом, список общих досок на её экране — обновляем; свои правки,
       // не ушедшие в прошлый раз, — на сайт вскоре после старта
       $.clock.every(BOARD_POLL_MS, () => {
@@ -4005,6 +4180,27 @@ export function register(on) {
       const windowed = windowMode() || desktop
       // В Desktop заголовок раздела — крупно, с отступом сверху от раздела выше и снизу от своих плиток
       const section = (title) => (desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [Text({ size: 'heading', weight: 'semibold', children: [title] })] }) : Text({ bold: true, dimColor: true, children: [title] }))
+      // Картинки (аватарки, плитки) — везде, кроме терминала: там то же самое текстом
+      const pictures = !terminal
+      // Выбор одной из AVATAR_COUNT картинок: своя аватарка в «Аккаунте», картинка группы у её хозяина. Картинка и под ней
+      // название кнопкой, в терминале — одни названия; выбранная — главной кнопкой. Последняя — без картинки (снова буква)
+      const picGrid = (prefix, current, onPick, noneLabel) =>
+        Box({
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          columnGap: pictures ? 'sm' : 2,
+          rowGap: pictures ? 'sm' : 0,
+          alignItems: 'flex-end',
+          children: [
+            ...Array.from({ length: AVATAR_COUNT }, (_, n) => {
+              const name = avatarName(n, lang)
+              const button = keep(Button({ key: `${prefix}-${n}`, label: name, ...(n === current ? { variant: 'primary' } : {}), onPress: () => onPick(n) }))
+              if (!pictures) return button
+              return Box({ flexDirection: 'column', alignItems: 'center', children: [keep(Svg({ source: avatarSvg(n), alt: name, width: 40, height: 40 })), button] })
+            }),
+            Button({ key: `${prefix}-none`, label: noneLabel, ...(validPic(current) ? {} : { variant: 'primary' }), onPress: () => onPick(null) }),
+          ],
+        })
       // Своя тема в темах YouTube, статей и подкастов: поле ввода с подсказкой или заметкой, «Мои темы» плитками и
       // «Забыть мои темы». Названия своих тем — на языке интерфейса или как их написал человек (keep)
       const ownTopics = (kind, short, focus, hintText) => {
@@ -4066,9 +4262,6 @@ export function register(on) {
           .replace(/^desk-.+$/, 'boards')
           // Страница блокнота — иконкой блокнота
           .replace(/^note-.+$/, 'notes')
-          // Чат с другом — иконкой человека, группа — людей
-          .replace(/^chat-open-d.+$/, 'account')
-          .replace(/^chat-open-g.+$/, 'friends')
         const alts = { youtube: 'YouTube', articles: 'Статьи', podcasts: 'Подкасты', twitch: 'Twitch' }
         return Svg({ source: iconSvg(kind), alt: alts[kind] ?? (label || kind), width: 36, height: 36 })
       }
@@ -4263,6 +4456,19 @@ export function register(on) {
             ...(take ? [Button({ key: 'arcade-account-take', label: `Взять @${take}`, onPress: () => claimHandle($, take) })] : []),
             Input({ key: 'arcade-account-handle', label: acct.handle ? 'Сменить ник' : 'Свой ник', placeholder: 'латинские буквы, цифры и _, от 4 до 32 знаков', onSubmit: (value) => claimHandle($, value) }),
             ...(acct.naming ? [dim('Проверяю ник…')] : acct.handleNote ? [Text({ color: 'warning', children: [acct.handleNote] })] : []),
+            gap,
+            // Аватарку выбирают только здесь; чаты на сайте, в Desktop, VS Code и терминале её только показывают
+            Box({
+              flexDirection: 'row',
+              alignItems: 'center',
+              columnGap: 'sm',
+              children: [
+                ...(pictures ? [Svg({ source: picSvg(acct.pic, acct.handle || '?', acct.handle || '?'), alt: 'Аватарка', width: 56, height: 56 })] : []),
+                Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [Text({ children: ['Аватарка'] }), dim('Её видят друзья в чатах. Без неё — первая буква ника.')] }),
+              ],
+            }),
+            picGrid('arcade-avatar', acct.pic, (n) => pickAvatar($, n), 'Без аватарки'),
+            ...(acct.picking ? [dim('Сохраняю аватарку…')] : acct.picNote ? [Text({ color: 'warning', children: [acct.picNote] })] : []),
             gap,
             dim('Общие для всех компьютеров: язык, клавиши, уведомления, размер панели, что делать с игрой по сигналу агента, свои темы, каналы Twitch и рекорд Flappy Arcade.'),
             dim(acct.syncing ? 'Синхронизирую…' : acct.syncedAt ? 'Настройки синхронизированы.' : 'Настройки ещё не синхронизированы.'),
@@ -4556,6 +4762,22 @@ export function register(on) {
         })
         const pageButton = Button({ key: 'arcade-chats-page', label: ch.busy === 'page' ? 'Открываю…' : 'Открыть на странице', onPress: () => openChatPage($, e.surface) })
         const friends = fr.list?.friends ?? []
+        // Чат как в Telegram: аватарки, «в сети», непрочитанные значком, своё справа, чужое слева, время и ✓, дни.
+        // Картинки — везде, кроме терминала; там то же строение текстом
+        const avatar = (source, alt, size) => Svg({ source, alt, width: size, height: size })
+        const dot = () => Text({ color: 'success', children: ['●'] })
+        const badge = (n) => keep(Text({ backgroundColor: 'suggestion', color: 'inverseText', weight: 'semibold', children: [` ${n} `] }))
+        // Время в списке: сегодня — ЧЧ:ММ, вчера — «Вчера», раньше — дата
+        const stamp = (at) => {
+          const d = day(at, now)
+          return d === 'Сегодня' ? clock(at) : tr(d, lang)
+        }
+        // Под названием чата: друг в сети; у группы — сколько участников и сколько из них в сети
+        const status = (chat) => {
+          if (chat.kind === 'dm') return isOnline(chat.with) ? [Text({ color: 'success', children: ['в сети'] })] : []
+          const around = chat.members.filter((id) => id !== ch.me && isOnline(id)).length
+          return [dim(around ? `участники: ${chat.members.length}, в сети: ${around}` : `участники: ${chat.members.length}`)]
+        }
         if (!acct.session) {
           items = [
             back,
@@ -4606,7 +4828,22 @@ export function register(on) {
             toList,
             section('Написать'),
             ...(friends.length
-              ? [wrapRow(friends.map((p, k) => keep(Button({ key: `arcade-chat-dm-${p.id}`, label: `@${p.handle}`, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => openDm($, p.id) }))))]
+              ? [
+                  wrapRow(
+                    friends.map((p, k) =>
+                      Box({
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        columnGap: 1,
+                        children: [
+                          ...(pictures ? [avatar(picSvg(p.pic, p.handle, p.handle), `@${p.handle}`, 24)] : []),
+                          keep(Button({ key: `arcade-chat-dm-${p.id}`, label: `@${p.handle}`, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => openDm($, p.id) })),
+                          ...(isOnline(p.id) ? [dot()] : []),
+                        ],
+                      }),
+                    ),
+                  ),
+                ]
               : [
                   dim(fr.list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.'),
                   gap,
@@ -4668,49 +4905,91 @@ export function register(on) {
             ...hint,
           ]
         } else if (menu === 'chats:talk') {
-          // Переписка: последние ch.shown сообщений, «Раньше» — ещё; новые приходят по таймеру
+          // Переписка как в Telegram: шапка с аватаркой и «в сети», дни разделителями, своё справа, чужое слева, в группе —
+          // с аватаркой и ником автора. Последние ch.shown сообщений, «Раньше» — ещё; новые приходят по таймеру.
+          // В широкой панели Desktop и VS Code слева — колонка чатов с аватарками, как в Telegram
           const about = ch.about
           const listed = ch.list?.find((c) => c.id === ch.talk)
-          const title = about ? chatTitle(about) : listed ? chatTitle(listed) : ''
-          const line = (m) => {
-            const time = keep(dim(when(m.at, now)))
-            if (m.k) return row([time, Box({ flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(Text({ dimColor: true, wrap: 'wrap', children: [serviceText(m)] }))] })])
+          const chat = about ?? listed
+          const title = chat ? chatTitle(chat) : ''
+          const group = chat?.kind === 'group'
+          const membersButton = Button({
+            key: 'arcade-chat-members',
+            label: 'Участники',
+            onPress: () => {
+              ch.note = ''
+              ch.bad = false
+              ch.confirmLeave = false
+              open('chats:members')()
+              // Хозяину — список друзей: кого добавить
+              if (about.owner === ch.me) friendsCall($, 'friends')
+            },
+          })
+          // Под названием: друг в сети или сколько в группе людей; у группы — ещё кнопка «Участники»
+          const statusLine = [...(about ? status(about) : listed?.kind === 'dm' ? status(listed) : []), ...(about?.kind === 'group' ? [membersButton] : [])]
+          const header = Box({
+            flexDirection: 'row',
+            alignItems: 'center',
+            columnGap: 'sm',
+            children: [
+              ...(pictures && chat ? [avatar(chatSvg(chat), title, 40)] : []),
+              Box({ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [...(title ? [heading(title)] : []), ...(statusLine.length ? [row(statusLine)] : [])] }),
+            ],
+          })
+          // День: «Сегодня», «Вчера» или дата — посередине; в терминале — чертой
+          const dayLine = (at) => {
+            const d = tr(day(at, now), lang)
+            return Box({ flexDirection: 'row', justifyContent: 'center', children: [keep(dim(pictures ? d : `── ${d} ──`))] })
+          }
+          // Служебное (создал, добавил, переименовал) — посередине, тускло
+          const service = (m) => Box({ flexDirection: 'row', justifyContent: 'center', paddingX: 4, children: [keep(Text({ dimColor: true, wrap: 'wrap', children: [serviceText(m)] }))] })
+          // Сообщение. Под текстом — время, у своего ещё ✓: дошло до сайта (прочитано ли, Arcade не показывает).
+          // Где рисуют картинки — пузырём в рамке, своё — цветом акцента; в терминале — текст и время в строку.
+          // В группе у первого сообщения подряд от одного человека — его аватарка и ник цветом от ника
+          const message = (m, first) => {
+            const mine = m.f === ch.me
+            const author = group && !mine
+            const time = keep(Text({ dimColor: true, size: 'footnote', children: [mine ? `${clock(m.at)} ✓` : clock(m.at)] }))
+            const text = keep(Text({ wrap: 'wrap', children: [m.t] }))
+            const name = author && first ? [keep(Text({ weight: 'semibold', color: letterColor(ch.names[m.f] || m.f), children: [chatPerson(m.f)] }))] : []
+            const body = pictures
+              ? Box({
+                  flexDirection: 'column',
+                  flexShrink: 1,
+                  minWidth: 0,
+                  borderStyle: 'round',
+                  borderColor: mine ? 'suggestion' : 'subtle',
+                  backgroundColor: mine ? '#3a78b526' : '#8080801a',
+                  paddingX: 'sm',
+                  children: [...name, text, Box({ flexDirection: 'row', justifyContent: 'flex-end', children: [time] })],
+                })
+              : Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [...name, Box({ flexDirection: 'row', columnGap: 1, children: [Box({ flexShrink: 1, minWidth: 0, children: [text] }), time] })] })
+            // Место под аватарку — у каждого чужого сообщения группы, чтобы пузыри стояли ровно; сама она — у первого
+            const face = author && pictures ? [Box({ width: 5, flexShrink: 0, children: first ? [avatar(personSvg(m.f), chatPerson(m.f), 28)] : [] })] : []
             return Box({
               flexDirection: 'row',
-              columnGap: 1,
-              children: [
-                time,
-                keep(Text({ bold: true, ...(m.f === ch.me ? { color: 'suggestion' } : {}), children: [chatPerson(m.f)] })),
-                Box({ flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(Text({ wrap: 'wrap', children: [m.t] }))] }),
-              ],
+              justifyContent: mine ? 'flex-end' : 'flex-start',
+              ...(mine ? { paddingLeft: 8 } : { paddingRight: 8 }),
+              ...(name.length && !pictures ? { marginTop: 1 } : {}),
+              children: [...face, body],
             })
           }
-          items = [
-            toList,
-            gap,
-            ...(title ? [heading(title)] : []),
-            ...(about?.kind === 'group'
-              ? [
-                  row([
-                    dim(`участники: ${about.members.length}`),
-                    Button({
-                      key: 'arcade-chat-members',
-                      label: 'Участники',
-                      onPress: () => {
-                        ch.note = ''
-                        ch.bad = false
-                        ch.confirmLeave = false
-                        open('chats:members')()
-                        // Хозяину — список друзей: кого добавить
-                        if (about.owner === ch.me) friendsCall($, 'friends')
-                      },
-                    }),
-                  ]),
-                ]
-              : []),
+          // Подряд от одного человека в один день — без повторного ника и аватарки; новый день — разделитель
+          const shown = ch.messages.slice(-ch.shown)
+          const lines = shown.flatMap((m, k) => {
+            const before = shown[k - 1]
+            const newDay = !before || day(before.at, now) !== day(m.at, now)
+            return [...(newDay ? [dayLine(m.at)] : []), m.k ? service(m) : message(m, newDay || Boolean(before.k) || before.f !== m.f)]
+          })
+          const talk = [
+            header,
             gap,
             ...(olderShown() ? [Button({ key: 'arcade-chat-older', label: ch.older ? 'Загружаю…' : 'Раньше', onPress: () => olderMessages($) })] : []),
-            ...(ch.opening ? [dim('Загружаю переписку…')] : about && !ch.messages.length ? [dim('Здесь пока пусто — напиши первым.')] : ch.messages.slice(-ch.shown).map(line)),
+            ...(ch.opening
+              ? [dim('Загружаю переписку…')]
+              : about && !ch.messages.length
+                ? [dim('Здесь пока пусто — напиши первым.')]
+                : [Box({ flexDirection: 'column', rowGap: pictures ? 'xs' : 0, children: lines })]),
             ...(about
               ? [
                   gap,
@@ -4721,15 +5000,55 @@ export function register(on) {
             ...(ch.busy === 'send' ? [dim('Отправляю…')] : note),
             gap,
             pageButton,
+          ]
+          // Колонка чатов слева — где есть картинки, место и с кем ещё переписываться: аватарка, короткое название,
+          // непрочитанные; открытый чат подсвечен
+          const others = ch.list ?? []
+          const side =
+            pictures && others.length > 1 && (e.viewport?.columns ?? PANE_COLUMNS) >= 70
+              ? Box({
+                  flexDirection: 'column',
+                  width: 16,
+                  flexShrink: 0,
+                  rowGap: 'xs',
+                  children: others.slice(0, 30).map((c) =>
+                    Box({
+                      key: `chat-side-${c.id}`,
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      padding: 'xs',
+                      ...(c.id === ch.talk ? { backgroundColor: '#8080802e' } : {}),
+                      hover: { backgroundColor: '#8080801a' },
+                      children: [
+                        avatar(chatSvg(c), chatTitle(c), 36),
+                        Box({
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          columnGap: 1,
+                          children: [
+                            keep(Button({ key: `arcade-chat-side-${c.id}`, label: clip(chatTitle(c), 12), ...(c.id === ch.talk ? {} : { dimColor: true }), onPress: () => c.id !== ch.talk && openChat($, c.id) })),
+                            ...(c.unread && c.id !== ch.talk ? [badge(c.unread)] : []),
+                          ],
+                        }),
+                      ],
+                    }),
+                  ),
+                })
+              : null
+          items = [
+            toList,
+            gap,
+            ...(side ? [Box({ flexDirection: 'row', columnGap: 'md', children: [side, Box({ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minWidth: 0, children: talk })] })] : talk),
             ...noticeLines,
             ...hint,
           ]
         } else if (menu === 'chats:members') {
-          // Участники группы: хозяин переименовывает, добавляет друзей и убирает людей; выйти может любой
+          // Участники группы: хозяин переименовывает, ставит картинку, добавляет друзей и убирает людей; выйти может любой
           const about = ch.about
           const owner = Boolean(about) && about.owner === ch.me
           const members = about?.members ?? []
           const others = friends.filter((p) => !members.includes(p.id))
+          const current = validPic(about?.pic) ? about.pic : null
           items = [
             Button({
               key: 'arcade-back',
@@ -4743,18 +5062,34 @@ export function register(on) {
               },
             }),
             gap,
-            ...(about ? [heading(chatTitle(about))] : []),
+            ...(about
+              ? [
+                  Box({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    columnGap: 'sm',
+                    children: [...(pictures ? [avatar(chatSvg(about), chatTitle(about), 40)] : []), Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [heading(chatTitle(about)), ...status(about)] })],
+                  }),
+                ]
+              : []),
             // Подсказка в поле — нынешнее название группы, его не переводим
             ...(owner
               ? [gap, keep(Input({ key: `arcade-chat-rename-${ch.field}`, label: tr('Переименовать', lang), placeholder: about.name || tr('Название группы', lang), onSubmit: (value) => renameGroup($, value) }))]
               : []),
             section('Участники'),
             ...members.map((id) =>
-              row([
-                keep(Text({ children: [chatPerson(id)] })),
-                ...(id === about.owner ? [dim('управляет группой')] : []),
-                ...(owner && id !== ch.me ? [Button({ key: `arcade-chat-remove-${id}`, label: 'Убрать', onPress: () => changeMembers($, { remove: [id] }, 'Участник убран.') })] : []),
-              ]),
+              Box({
+                flexDirection: 'row',
+                alignItems: 'center',
+                columnGap: pictures ? 'sm' : 2,
+                children: [
+                  ...(pictures ? [avatar(personSvg(id), chatPerson(id), 28)] : []),
+                  keep(Text({ children: [chatPerson(id)] })),
+                  ...(id !== ch.me && isOnline(id) ? [Text({ color: 'success', children: ['в сети'] })] : []),
+                  ...(id === about.owner ? [dim('управляет группой')] : []),
+                  ...(owner && id !== ch.me ? [Button({ key: `arcade-chat-remove-${id}`, label: 'Убрать', onPress: () => changeMembers($, { remove: [id] }, 'Участник убран.') })] : []),
+                ],
+              }),
             ),
             ...(owner && others.length
               ? [
@@ -4762,13 +5097,18 @@ export function register(on) {
                   wrapRow(others.map((p) => keep(Button({ key: `arcade-chat-add-${p.id}`, label: `+ @${p.handle}`, onPress: () => changeMembers($, { add: [p.id] }, 'Участник добавлен.') })))),
                 ]
               : []),
+            // Картинку группы ставит хозяин; без неё — первая буква названия
+            ...(owner
+              ? [section('Картинка группы'), picGrid('arcade-chat-pic', current, (n) => n !== current && changeMembers($, { pic: n }, 'Картинка группы изменена.'), 'Без картинки')]
+              : []),
             ...(about ? [gap, Button({ key: 'arcade-chat-leave', label: ch.confirmLeave ? 'Точно выйти? Нажми ещё раз' : 'Выйти из группы', onPress: () => leaveGroup($) })] : []),
             ...(ch.busy === 'members' ? [dim('Сохраняю…')] : note),
             ...noticeLines,
             ...hint,
           ]
         } else {
-          // Список чатов: новые сверху, у каждого — последнее сообщение и непрочитанные
+          // Список чатов, новые сверху: аватарка, название, у друга в сети — ●, время последнего сообщения, под ним само
+          // сообщение в одну строку и непрочитанные значком
           const list = ch.list ?? []
           const fromTalk = menuFrom === 'chats:talk' || menuFrom === 'chats:members'
           const focusId = fromTalk ? ch.talk : menuFrom === 'chats:new' ? '' : list[0]?.id
@@ -4778,19 +5118,44 @@ export function register(on) {
             // Своё — «ты:», в группе — ник; в чате двоих чужое и так от друга. Служебное уже говорит, кто
             const who = last.t === undefined ? '' : last.f === ch.me ? tr('ты', lang) : c.kind === 'group' ? chatPerson(last.f) : ''
             const said = last.t === undefined ? serviceText(last) : who ? `${who}: ${last.t}` : last.t
-            return clip(`${c.at ? `${when(c.at, now)} · ` : ''}${said}`, 120)
+            return clip(said, 120)
           }
-          const chatTiles = list.flatMap((c) => [
-            keep(
-              Button({
-                key: `arcade-chat-open-${c.id}`,
-                label: `${chatTitle(c)}${c.unread ? ` (${c.unread})` : ''}`,
-                ...(c.id === focusId ? { autoFocus: true } : {}),
-                onPress: () => openChat($, c.id),
-              }),
-            ),
-            keep(dim(`  ${preview(c)}`)),
-          ])
+          const chatRow = (c) => {
+            const title = chatTitle(c)
+            const top = Box({
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              columnGap: 1,
+              children: [
+                Box({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  columnGap: 1,
+                  flexShrink: 1,
+                  minWidth: 0,
+                  children: [
+                    keep(Button({ key: `arcade-chat-open-${c.id}`, label: title, ...(c.id === focusId ? { autoFocus: true } : {}), onPress: () => openChat($, c.id) })),
+                    ...(c.kind === 'dm' && isOnline(c.with) ? [dot()] : []),
+                  ],
+                }),
+                ...(c.at ? [keep(dim(stamp(c.at)))] : []),
+              ],
+            })
+            const bottom = Box({
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              columnGap: 1,
+              children: [Box({ flexShrink: 1, minWidth: 0, children: [keep(Text({ dimColor: true, wrap: 'truncate-end', children: [preview(c)] }))] }), ...(c.unread ? [badge(c.unread)] : [])],
+            })
+            return Box({
+              key: `chat-row-${c.id}`,
+              flexDirection: 'row',
+              alignItems: 'center',
+              columnGap: 'sm',
+              ...(pictures ? { padding: 'xs', hover: { backgroundColor: '#8080801a' } } : {}),
+              children: [...(pictures ? [avatar(chatSvg(c), title, 40)] : []), Box({ flexDirection: 'column', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [top, bottom] })],
+            })
+          }
           items = [
             back,
             gap,
@@ -4814,7 +5179,7 @@ export function register(on) {
             ...(note.length ? [gap, ...note] : []),
             section('Чаты'),
             ...(list.length
-              ? [desktop ? tiles(chatTiles, 44) : Box({ flexDirection: 'column', children: chatTiles })]
+              ? [Box({ flexDirection: 'column', rowGap: pictures ? 'xs' : 0, children: list.map(chatRow) })]
               : [dim(ch.list ? 'Чатов пока нет. Нажми «Новый чат» и выбери друга.' : ch.loading ? 'Загружаю чаты…' : 'Список чатов не загрузился.')]),
             ...(!ch.list && !ch.loading ? [gap, Button({ key: 'arcade-chats-refresh', label: 'Обновить', onPress: () => loadChats($) })] : []),
             gap,
@@ -4979,6 +5344,16 @@ export function register(on) {
                   },
                 }),
                 dim('  системное уведомление со звуком, когда агент закончил или ждёт разрешения'),
+                Button({
+                  key: 'arcade-msg-notify',
+                  label: `Уведомления о сообщениях: ${msgNotify ? 'да' : 'нет'}`,
+                  onPress: async () => {
+                    msgNotify = !msgNotify
+                    $.ui.invalidate('ui.render')
+                    await $.store.set('msgNotify', msgNotify)
+                  },
+                }),
+                dim(platform === 'windows' ? '  всплывают внизу слева поверх всех окон; клик открывает чат' : '  системное уведомление, когда друг пишет в чат'),
               ]
             : []),
           // Проверка и назначение клавиш — только в терминале: в VS Code клавиши идут через строку 🎮, в Desktop поля нет

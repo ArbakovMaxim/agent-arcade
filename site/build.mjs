@@ -604,6 +604,12 @@ export function build({ root, out, now = new Date(), audiobooks = null }) {
     const code = fs.readFileSync(flappySource, 'utf8').replace(/^export \{[^}]*\}\s*$/m, '')
     fs.writeFileSync(path.join(out, 'flappy.js'), `// Собрано из mod/hooks/flappy.js\n;(() => {\n${code}\nwindow.ArcadeFlappy = { createFlappy, daySeed }\n})()\n`)
   }
+  // Аватарки чатов — тоже из мода: те же 24 картинки на странице чатов, в window.ArcadeAvatars
+  const avatars = fs.readFileSync(path.join(root, '..', 'mod', 'hooks', 'avatars.js'), 'utf8').replace(/^export \{[^}]*\}\s*$/m, '')
+  fs.writeFileSync(
+    path.join(out, 'avatars.js'),
+    `// Собрано из mod/hooks/avatars.js\n;(() => {\n${avatars}\nwindow.ArcadeAvatars = { AVATAR_COUNT, avatarName, avatarSvg, initial, letterColor, letterSvg, picSvg, validPic }\n})()\n`,
+  )
   for (const file of fs.readdirSync(path.join(root, 'web'))) {
     const from = path.join(root, 'web', file)
     if (fs.statSync(from).isDirectory()) continue // locales/ — вставляются в i18n.js ниже

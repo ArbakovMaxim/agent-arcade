@@ -133,6 +133,7 @@ La connexion est facultative : sans elle, tout le reste fonctionne comme avant.
 - **Amis.** Ajoutez un ami par son @pseudo exact : il accepte la demande de son côté, et vous apparaissez dans vos listes respectives. Il n’y a pas de suggestions pendant la saisie, donc personne ne peut parcourir qui utilise Arcade. Refuser et supprimer se font en silence.
 - **En ligne et invitations à jouer.** Tant que le menu d’Arcade est ouvert, vos amis vous voient *en ligne*, et vous les voyez ; pour rester invisible, désactivez *Montrer à mes amis que je suis en ligne* sur l’écran *Amis*. *Inviter* à côté d’un ami propose les jeux en réseau : un jeu de société ouvre une salle rien que pour vous deux, un jeu Doom son lobby. Le jeu s’ouvre aussitôt chez vous ; votre ami reçoit une notification et *Accepter* en haut du menu, et l’invitation est valable 10 minutes. On peut inviter là où les jeux en réseau s’ouvrent dans un navigateur : celui intégré à Desktop ou une fenêtre du navigateur.
 - **Discussions.** En tête-à-tête avec un ami, en groupe d’amis, ou un groupe avec tous vos amis en un clic. Écrivez directement dans le panneau Arcade ou ouvrez la page des discussions sur le site. Les messages sont stockés sur le site d’Arcade et ne sont pas chiffrés — n’y écrivez ni mots de passe ni clés.
+- **Avatars et notifications de messages.** Choisissez l’un des 24 avatars prêts à l’emploi dans *Compte* — les discussions ne font que l’afficher ; sans avatar, c’est la première lettre de votre @pseudo. L’image d’un groupe est choisie par son propriétaire parmi les mêmes 24. Votre image GitHub n’est jamais montrée aux autres. Quand un ami vous écrit, une carte apparaît en bas à gauche au-dessus de toutes les fenêtres (Windows) ou une notification système (macOS, Linux) ; un clic sur la carte ouvre cette discussion.
 - **Se déconnecter** arrête la synchronisation sur cet ordinateur ; **Supprimer le compte** (appuyez deux fois) fait oublier au site votre compte et vos paramètres.
 
 ## Carnet et tableaux de projets
@@ -166,6 +167,7 @@ Ouvrez **Paramètres** dans la section *Plus* du menu `/arcade` :
 - **À l’ouverture du navigateur** (Claude Desktop) — fermer le menu Arcade pour que le navigateur ait toute la hauteur, ou garder le menu au-dessus.
 - **L’agent a terminé pendant que vous regardez** (Claude Desktop) — fermer l’onglet qu’Arcade a ouvert pour une vidéo, un direct, TikTok, un article ou un épisode, pour que la discussion avec Claude soit de nouveau devant vous, ou seulement vous prévenir.
 - **Notifications pendant le jeu dans une fenêtre.**
+- **Notifications de messages** — une carte en bas à gauche quand un ami écrit dans une discussion (une notification système sous macOS et Linux).
 - **Test des touches et réattribution des touches** (terminal).
 
 ## Confidentialité

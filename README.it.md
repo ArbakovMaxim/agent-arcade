@@ -133,6 +133,7 @@ L’accesso è facoltativo: senza, tutto il resto funziona come prima.
 - **Amici.** Aggiungi un amico con il suo @nome esatto: la richiesta viene accettata dall’altra parte e comparite l’uno nell’elenco dell’altro. Durante la digitazione non ci sono suggerimenti, quindi nessuno può sfogliare chi usa Arcade. Rifiutare e rimuovere avvengono in silenzio.
 - **Online e inviti a giocare.** Finché il menu di Arcade è aperto, gli amici ti vedono *online*, e tu vedi loro; per non farti vedere, disattiva *Mostra agli amici che sono online* nella schermata *Amici*. *Invita* accanto a un amico propone i giochi in rete: un gioco da tavolo apre una stanza tutta vostra per due, un gioco Doom la sua lobby. Il gioco si apre subito per te; l’amico riceve una notifica e *Accetta* in cima al menu, e l’invito vale 10 minuti. Puoi invitare dove i giochi in rete si aprono in un browser: quello integrato in Desktop o una finestra del browser.
 - **Chat.** A due con un amico, gruppi di amici, oppure un gruppo con tutti i tuoi amici in un clic. Scrivi direttamente nel pannello di Arcade o apri la pagina delle chat sul sito. I messaggi sono conservati sul sito di Arcade e non sono cifrati — non scriverci password o chiavi.
+- **Avatar e notifiche dei messaggi.** Scegli uno dei 24 avatar pronti in *Account* — le chat lo mostrano soltanto; senza avatar, c’è la prima lettera del tuo @nome. L’immagine di un gruppo la sceglie il suo proprietario tra gli stessi 24. La tua immagine di GitHub non viene mai mostrata agli altri. Quando un amico ti scrive, in basso a sinistra sopra tutte le finestre compare una scheda (Windows) o una notifica di sistema (macOS, Linux); un clic sulla scheda apre quella chat.
 - **Esci** interrompe la sincronizzazione su questo computer; **Elimina account** (premi due volte) fa dimenticare al sito te e le tue impostazioni.
 
 ## Quaderno e bacheche dei progetti
@@ -166,6 +167,7 @@ Apri **Impostazioni** nella sezione *Altro* del menu `/arcade`:
 - **Quando si apre il browser** (Claude Desktop) — chiudere il menu di Arcade perché il browser abbia tutta l’altezza, o tenere il menu sopra.
 - **L’agente ha finito mentre guardi** (Claude Desktop) — chiudere la scheda che Arcade ha aperto per un video, una diretta, TikTok, un articolo o un episodio, così la chat con Claude torna davanti a te, oppure avvisarti soltanto.
 - **Notifiche mentre giochi in una finestra.**
+- **Notifiche dei messaggi** — una scheda in basso a sinistra quando un amico scrive in una chat (su macOS e Linux, una notifica di sistema).
 - **Test dei tasti e rimappatura** (terminale).
 
 ## Privacy

@@ -133,6 +133,7 @@ Die Anmeldung ist optional — ohne sie funktioniert alles andere wie bisher.
 - **Freunde.** Füge Freunde über ihren genauen @Namen hinzu: Die Anfrage wird auf der anderen Seite angenommen, und ihr erscheint gegenseitig in euren Listen. Beim Tippen gibt es keine Vorschläge, also kann niemand durchstöbern, wer Arcade nutzt. Ablehnen und Entfernen passieren still.
 - **Online und Einladungen zum Spielen.** Solange das Arcade-Menü offen ist, sehen deine Freunde dich *online* und du sie; willst du unsichtbar bleiben, schalte auf dem Bildschirm *Freunde* die Option *Freunden zeigen, dass ich online bin* aus. *Einladen* neben einem Freund bietet die Netzwerkspiele an: Ein Brettspiel öffnet einen eigenen Raum für zwei, ein Doom-Spiel seine Lobby. Das Spiel öffnet sich bei dir sofort; dein Freund bekommt eine Benachrichtigung und oben im Menü *Annehmen*, und die Einladung gilt 10 Minuten. Einladen kannst du dort, wo Netzwerkspiele im Browser öffnen — im eingebauten Browser von Desktop oder in einem Browserfenster.
 - **Chats.** Zu zweit mit einem Freund, Gruppen aus Freunden oder eine Gruppe mit allen deinen Freunden auf einen Klick. Schreib direkt im Arcade-Panel oder öffne die Chat-Seite auf der Website. Nachrichten werden auf Arcades Website gespeichert und sind nicht verschlüsselt — schreib dort keine Passwörter oder Schlüssel.
+- **Avatare und Benachrichtigungen bei Nachrichten.** Wähle unter *Konto* einen von 24 fertigen Avataren — die Chats zeigen ihn nur an; ohne Avatar steht dort der erste Buchstabe deines @Namens. Das Bild einer Gruppe wählt ihr Besitzer aus denselben 24. Dein GitHub-Bild sehen andere nie. Schreibt dir ein Freund, erscheint unten links über allen Fenstern eine Karte (Windows) oder eine Systembenachrichtigung (macOS, Linux); ein Klick auf die Karte öffnet diesen Chat.
 - **Abmelden** beendet die Synchronisierung auf diesem Computer; **Konto löschen** (zweimal drücken) lässt die Website dich und deine Einstellungen vergessen.
 
 ## Notizbuch und Projektboards
@@ -166,6 +167,7 @@ Füge nur Dateien hinzu, an denen du die Rechte hast.
 - **Wenn der Browser aufgeht** (Claude Desktop) — das Arcade-Menü schließen, damit der Browser die volle Höhe bekommt, oder das Menü darüber behalten.
 - **Agent fertig, während du schaust** (Claude Desktop) — den Tab schließen, den Arcade für ein Video, einen Stream, TikTok, einen Artikel oder eine Folge geöffnet hat, damit der Chat mit Claude wieder vor dir ist, oder nur Bescheid geben.
 - **Benachrichtigungen beim Spielen im Fenster.**
+- **Benachrichtigungen bei Nachrichten** — eine Karte unten links, wenn ein Freund im Chat schreibt (unter macOS und Linux eine Systembenachrichtigung).
 - **Tastentest und Tastenbelegung** (Terminal).
 
 ## Datenschutz

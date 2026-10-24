@@ -133,6 +133,7 @@ Entrar é opcional — sem isso, todo o resto funciona como antes.
 - **Amigos.** Adicione um amigo pelo @apelido exato: o pedido é aceito do outro lado, e vocês aparecem nas listas um do outro. Não há sugestões enquanto você digita, então ninguém consegue vasculhar quem usa o Arcade. Recusar e remover acontecem em silêncio.
 - **Online e convites para jogar.** Enquanto o menu do Arcade está aberto, seus amigos veem você *online*, e você a eles; para não aparecer, desative *Mostrar aos amigos que estou online* na tela *Amigos*. *Convidar* ao lado de um amigo oferece os jogos em rede: um jogo de tabuleiro abre uma sala só para vocês dois, um jogo de Doom o seu lobby. O jogo abre para você na hora; seu amigo recebe uma notificação e *Aceitar* no topo do menu, e o convite vale por 10 minutos. Dá para convidar onde os jogos em rede abrem em um navegador — o integrado do Desktop ou uma janela do navegador.
 - **Conversas.** A dois com um amigo, grupos de amigos, ou um grupo com todos os seus amigos em um clique. Escreva direto no painel do Arcade ou abra a página de conversas no site. As mensagens ficam guardadas no site do Arcade e não são criptografadas — não escreva senhas nem chaves nelas.
+- **Avatares e notificações de mensagens.** Escolha um dos 24 avatares prontos em *Conta* — as conversas só o mostram; sem avatar, aparece a primeira letra do seu @apelido. A imagem de um grupo é escolhida pelo dono entre os mesmos 24. Sua imagem do GitHub nunca é mostrada aos outros. Quando um amigo escreve, um cartão aparece no canto inferior esquerdo sobre todas as janelas (Windows) ou uma notificação do sistema (macOS, Linux); um clique no cartão abre essa conversa.
 - **Sair** interrompe a sincronização neste computador; **Excluir conta** (pressione duas vezes) faz o site esquecer você e suas configurações.
 
 ## Caderno e quadros de projetos
@@ -166,6 +167,7 @@ Abra **Configurações** na seção *Mais* do menu `/arcade`:
 - **Quando o navegador abrir** (Claude Desktop) — fechar o menu do Arcade para o navegador ocupar toda a altura, ou manter o menu acima dele.
 - **O agente terminou enquanto você assiste** (Claude Desktop) — fechar a aba que o Arcade abriu para um vídeo, uma transmissão, o TikTok, um artigo ou um episódio, para a conversa com o Claude voltar à sua frente, ou só avisar você.
 - **Notificações ao jogar em uma janela.**
+- **Notificações de mensagens** — um cartão no canto inferior esquerdo quando um amigo escreve em uma conversa (no macOS e no Linux, uma notificação do sistema).
 - **Teste de teclas e remapeamento** (terminal).
 
 ## Privacidade

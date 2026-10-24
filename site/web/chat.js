@@ -16,13 +16,17 @@
   const PING_MS = 30_000
   const KEY = 'arcade:chat'
   const lang = window.ArcadeI18n ? window.ArcadeI18n.lang : 'ru'
+  // 24 аватарки мода (avatars.js); не загрузились — кружков нет, остальное работает
+  const Avatars = window.ArcadeAvatars || null
   const root = document.getElementById('chat')
 
   let ticket = null
-  let me = null // { id, handle? }
+  let me = null // { id, handle?, pic? }
   let chats = [] // список из /api/me/chats, новые сверху
   let unread = 0
   const names = new Map() // номер → @ник без @
+  const pics = new Map() // номер → номер аватарки 0–23, кто её выбрал
+  let online = new Set() // друзья в сети — приходят со списком чатов
   let current = null // { id, chat, messages, first, gone }
   let panel = null // 'new' | 'members' — лист поверх переписки
   let friends = null // [{ id, handle }] — для нового чата и группы
@@ -44,6 +48,30 @@
     b.addEventListener('click', onClick)
     return b
   }
+
+  // --- Аватарки ------------------------------------------------------------------------------------------------
+  const validPic = (n) => Boolean(Avatars) && Avatars.validPic(n)
+  // Кружок: size — '' (список), 'small' или 'tiny'; on — зелёная точка «в сети»
+  function ava(svg, size, on) {
+    const span = el('span', { className: ['ava', size, on && 'on'].filter(Boolean).join(' ') })
+    paint(span, svg)
+    return span
+  }
+  function paint(span, svg) {
+    span.textContent = ''
+    if (svg) span.append(el('img', { src: `data:image/svg+xml,${encodeURIComponent(svg)}`, alt: '' }))
+  }
+  // Человек — его аватарка, иначе первая буква ника на круге цвета от ника
+  function personSvg(id) {
+    if (!Avatars) return ''
+    const self = Boolean(me && id === me.id)
+    const handle = names.get(id) || (self && me.handle) || ''
+    const pic = pics.has(id) ? pics.get(id) : self ? me.pic : undefined
+    return Avatars.picSvg(pic, handle || '?', handle || id)
+  }
+  // Группа — картинка, которую выбрал хозяин, иначе первая буква названия на круге цвета от номера чата
+  const groupSvg = (c) => (Avatars ? Avatars.picSvg(c.pic, c.name || T('Группа'), c.id) : '')
+  const chatSvg = (c) => (c.kind === 'group' ? groupSvg(c) : personSvg(c.with))
 
   // --- Билет ---------------------------------------------------------------------------------------------------
   function hashParams() {
@@ -98,9 +126,16 @@
     if (!response.ok) throw Object.assign(new Error(data.error || String(response.status)), { code: data.error || 'http' })
     return data
   }
+  // Имена приходят вместе с аватарками: у кого в ответе имя без аватарки — её убрали
   function absorb(data) {
     if (data.me && typeof data.me.id === 'string') me = data.me
-    for (const [id, handle] of Object.entries(data.names || {})) if (typeof handle === 'string') names.set(id, handle)
+    const given = data.pics && typeof data.pics === 'object' ? data.pics : {}
+    for (const [id, handle] of Object.entries(data.names || {})) {
+      if (typeof handle !== 'string') continue
+      names.set(id, handle)
+      if (validPic(given[id])) pics.set(id, given[id])
+      else pics.delete(id)
+    }
     if (Number.isSafeInteger(data.unread)) unread = data.unread
   }
   function problem(error) {
@@ -127,13 +162,14 @@
     return c.kind === 'group' ? c.name || T('Группа') : nameOf(c.with)
   }
   const fill = (form, values) => form.replace(/\{(\d)\}/g, (_, k) => values[k] ?? '')
-  // Служебное сообщение группы: кто создал, добавил, убрал, вышел, переименовал
+  // Служебное сообщение группы: кто создал, добавил, убрал, вышел, переименовал, сменил картинку
   function describe(m) {
     if (m.k === 'create') return fill(T('{0} создал(а) группу «{1}»'), [nameOf(m.f), m.n || ''])
     if (m.k === 'add') return fill(T('{0} добавил(а) {1}'), [nameOf(m.f), nameOf(m.o)])
     if (m.k === 'remove') return fill(T('{0} убрал(а) {1}'), [nameOf(m.f), nameOf(m.o)])
     if (m.k === 'leave') return fill(T('{0} вышел(а) из группы'), [nameOf(m.f)])
     if (m.k === 'name') return fill(T('{0} назвал(а) группу «{1}»'), [nameOf(m.f), m.n || ''])
+    if (m.k === 'pic') return fill(m.n !== undefined ? T('{0} сменил(а) картинку группы') : T('{0} убрал(а) картинку группы'), [nameOf(m.f)])
     return ''
   }
   function format(at, options) {
@@ -177,15 +213,16 @@
   function build() {
     root.textContent = ''
     const meName = el('span', { className: 'me' })
+    const meAva = ava('', 'small')
     const dot = el('span', { className: 'dot' })
     const list = el('div', { className: 'list' })
-    const side = el('aside', { className: 'side' }, [el('div', { className: 'top' }, [dot, meName, button(T('Новый чат'), () => showNew(), 'main')]), list])
+    const side = el('aside', { className: 'side' }, [el('div', { className: 'top' }, [meAva, meName, dot, button(T('Новый чат'), () => showNew(), 'main')]), list])
     const talk = el('section', { className: 'talk' })
     const notice = el('div', { className: 'notice' })
     notice.setAttribute('role', 'status')
     const app = el('div', { className: 'app' }, [side, talk])
     root.append(app)
-    parts = { app, meName, dot, list, talk, notice, feed: null, input: null, send: null, left: null }
+    parts = { app, meName, meAva, dot, list, talk, notice, feed: null, input: null, send: null, left: null }
     renderAll()
   }
 
@@ -197,6 +234,7 @@
 
   function renderSide() {
     parts.meName.textContent = me && me.handle ? `@${me.handle}` : ''
+    paint(parts.meAva, me ? personSvg(me.id) : '')
     parts.dot.classList.toggle('on', live)
     parts.dot.title = live ? T('Новые сообщения приходят сразу') : T('Новые сообщения — раз в 10 секунд')
     parts.list.textContent = ''
@@ -204,6 +242,7 @@
     for (const c of chats) {
       const last = c.last ? (c.last.k ? describe(c.last) : `${me && c.last.f === me.id ? `${T('Ты')}: ` : c.kind === 'group' ? `${nameOf(c.last.f)}: ` : ''}${c.last.t}`) : ''
       const item = el('button', { type: 'button', className: 'item' }, [
+        ava(chatSvg(c), '', c.kind === 'dm' && online.has(c.with)),
         el('span', { className: 'name', textContent: titleOf(c) }),
         el('span', { className: 'when', textContent: when(c.at) }),
         el('span', { className: 'last', textContent: last }),
@@ -219,28 +258,14 @@
   function renderTalk() {
     const talk = parts.talk
     talk.textContent = ''
-    parts.feed = parts.input = parts.send = parts.left = null
+    parts.feed = parts.input = parts.send = parts.left = parts.head = null
     parts.app.classList.toggle('open', Boolean(current || panel))
-    const back = button(T('← Чаты'), () => {
-      current = null
-      panel = null
-      address()
-      renderAll()
-    }, 'back')
-    if (panel === 'new') return talk.append(el('div', { className: 'head' }, [back]), parts.notice, sheetNew())
-    if (panel === 'members' && current && current.chat) return talk.append(el('div', { className: 'head' }, [back]), parts.notice, sheetMembers())
+    if (panel === 'new') return talk.append(el('div', { className: 'head' }, [back()]), parts.notice, sheetNew())
+    if (panel === 'members' && current && current.chat) return talk.append(el('div', { className: 'head' }, [back()]), parts.notice, sheetMembers())
     if (!current) return talk.append(parts.notice, el('div', { className: 'hint', textContent: T('Выбери чат слева или начни новый.') }))
-    const c = current.chat
-    const group = current.id.startsWith('g')
-    const sub = group && c ? fill(T('участники: {0}'), [c.members.length]) : ''
-    talk.append(
-      el('div', { className: 'head' }, [
-        back,
-        el('div', { className: 'title' }, [el('span', { className: 'name', textContent: c ? titleOf(c) : '' }), sub && el('span', { className: 'sub', textContent: sub })]),
-        group && c && button(T('Участники'), () => showMembers()),
-      ]),
-      parts.notice,
-    )
+    parts.head = el('div', { className: 'head' })
+    talk.append(parts.head, parts.notice)
+    renderHead()
     const feed = el('div', { className: 'feed' })
     parts.feed = feed
     talk.append(feed)
@@ -265,6 +290,35 @@
     counter()
   }
 
+  const back = () =>
+    button(T('← Чаты'), () => {
+      current = null
+      panel = null
+      address()
+      renderAll()
+    }, 'back')
+
+  // Заголовок переписки: аватарка, имя, под ним — друг в сети; у группы — сколько участников и сколько из них в сети.
+  // Перерисовывается отдельно от поля ввода, чтобы «в сети» не сбивал набор
+  function renderHead() {
+    const head = parts && parts.head
+    if (!head) return
+    const c = current.chat
+    const group = current.id.startsWith('g')
+    const around = group && c ? c.members.filter((id) => online.has(id)).length : 0
+    const here = Boolean(c && !group && online.has(c.with))
+    const sub = group && c ? (around ? fill(T('участники: {0}, в сети: {1}'), [c.members.length, around]) : fill(T('участники: {0}'), [c.members.length])) : here ? T('в сети') : ''
+    head.textContent = ''
+    head.append(
+      ...[
+        back(),
+        c && ava(chatSvg(c), 'small'),
+        el('div', { className: 'title' }, [el('span', { className: 'name', textContent: c ? titleOf(c) : '' }), sub && el('span', { className: here ? 'sub on' : 'sub', textContent: sub })]),
+        group && c && button(T('Участники'), () => showMembers()),
+      ].filter(Boolean),
+    )
+  }
+
   function counter() {
     if (!parts || !parts.input) return
     const rest = MAX_TEXT - parts.input.value.length
@@ -283,23 +337,24 @@
     if (list.length && list[0].s > current.first) feed.append(button(T('Раньше'), () => older(), 'more'))
     if (current.chat && !list.length && !current.gone) feed.append(el('div', { className: 'hint', textContent: T('Здесь пока пусто — напиши первым.') }))
     const group = current.id.startsWith('g')
-    let prev = null
-    for (const m of list) {
+    // Подряд от одного человека в один день: в группе имя — у первого сообщения, аватарка — у последнего
+    const run = (a, b) => Boolean(a && b && !a.k && !b.k && a.f === b.f && sameDay(a.at, b.at))
+    list.forEach((m, i) => {
+      const prev = list[i - 1]
       if (!prev || !sameDay(prev.at, m.at)) feed.append(el('div', { className: 'day', textContent: day(m.at) }))
-      prev = m
-      if (m.k) {
-        feed.append(el('div', { className: 'note', textContent: describe(m) }))
-        continue
-      }
+      if (m.k) return feed.append(el('div', { className: 'note', textContent: describe(m) }))
       const mine = Boolean(me && m.f === me.id)
-      feed.append(
-        el('div', { className: mine ? 'msg mine' : 'msg' }, [
-          group && !mine && el('div', { className: 'who', textContent: nameOf(m.f) }),
-          el('div', { className: 'text' }, rich(m.t)),
-          el('span', { className: 'at', textContent: clock(m.at) }),
-        ]),
-      )
-    }
+      // Одна галочка — сообщение на сайте; прочитано ли — сайт не знает
+      const tick = mine && el('span', { className: 'tick', textContent: '✓', title: T('Доставлено') })
+      const bubble = el('div', { className: mine ? 'msg mine' : 'msg' }, [
+        group && !mine && !run(prev, m) && el('div', { className: 'who', textContent: nameOf(m.f) }),
+        el('div', { className: 'text' }, rich(m.t)),
+        el('span', { className: 'at', textContent: clock(m.at) }, [tick]),
+      ])
+      if (!group || mine) return feed.append(bubble)
+      const face = run(m, list[i + 1]) ? el('span', { className: 'gap' }) : ava(personSvg(m.f), 'small')
+      feed.append(el('div', { className: 'line' }, [face, bubble]))
+    })
     feed.scrollTop = stick ? feed.scrollHeight : feed.scrollHeight - before
   }
 
@@ -319,7 +374,9 @@
       const box = el('input', { type: 'checkbox' })
       box.setAttribute('aria-label', fill(T('Позвать в группу: {0}'), [`@${f.handle}`]))
       box.addEventListener('change', () => (box.checked ? picked.add(f.id) : picked.delete(f.id)))
-      sheet.append(el('div', { className: 'row' }, [box, el('span', { className: 'person', textContent: `@${f.handle}` }), button(T('Написать'), () => startDm(f.id))]))
+      sheet.append(
+        el('div', { className: 'row' }, [box, ava(personSvg(f.id), 'tiny', online.has(f.id)), el('span', { className: 'person', textContent: `@${f.handle}` }), button(T('Написать'), () => startDm(f.id))]),
+      )
     }
     const name = el('input', { type: 'text', maxLength: 40, placeholder: T('Название группы') })
     name.setAttribute('aria-label', T('Название группы'))
@@ -335,7 +392,8 @@
     return sheet
   }
 
-  // Лист «Участники»: кто в группе; кто ей управляет — переименовывает, добавляет и убирает; выйти может любой
+  // Лист «Участники»: кто в группе; кто ей управляет — переименовывает, ставит картинку, добавляет и убирает; выйти
+  // может любой
   function sheetMembers() {
     const c = current.chat
     const owner = Boolean(me && c.owner === me.id)
@@ -345,9 +403,23 @@
       name.setAttribute('aria-label', T('Название группы'))
       sheet.append(el('div', { className: 'row' }, [name, button(T('Переименовать'), () => change({ name: name.value }))]))
     }
+    if (owner && Avatars) {
+      const grid = el('div', { className: 'pics' })
+      for (let n = 0; n < Avatars.AVATAR_COUNT; n++) {
+        const label = Avatars.avatarName(n, lang)
+        const pick = el('button', { type: 'button', className: c.pic === n ? 'pick active' : 'pick', title: label }, [ava(Avatars.avatarSvg(n))])
+        pick.setAttribute('aria-label', label)
+        pick.setAttribute('aria-pressed', String(c.pic === n))
+        pick.addEventListener('click', () => change({ pic: n }))
+        grid.append(pick)
+      }
+      sheet.append(el('h2', { textContent: T('Картинка группы') }), grid)
+      if (validPic(c.pic)) sheet.append(el('div', { className: 'actions' }, [button(T('Без картинки'), () => change({ pic: null }))]))
+    }
     for (const id of c.members) {
       sheet.append(
         el('div', { className: 'row' }, [
+          ava(personSvg(id), 'tiny', online.has(id)),
           el('span', { className: 'person', textContent: nameOf(id) }),
           id === c.owner && el('span', { className: 'mark', textContent: T('управляет группой') }),
           owner && id !== me.id && button(T('Убрать'), () => change({ remove: [id] }), 'warn'),
@@ -358,7 +430,11 @@
       const others = (friends || []).filter((f) => !c.members.includes(f.id))
       if (!friends) sheet.append(el('p', { textContent: T('Загружаю друзей…') }))
       else if (others.length) sheet.append(el('h2', { textContent: T('Добавить друзей') }))
-      for (const f of others) sheet.append(el('div', { className: 'row' }, [el('span', { className: 'person', textContent: `@${f.handle}` }), button(T('Добавить'), () => change({ add: [f.id] }))]))
+      for (const f of others) {
+        sheet.append(
+          el('div', { className: 'row' }, [ava(personSvg(f.id), 'tiny', online.has(f.id)), el('span', { className: 'person', textContent: `@${f.handle}` }), button(T('Добавить'), () => change({ add: [f.id] }))]),
+        )
+      }
     }
     sheet.append(
       el('div', { className: 'actions' }, [
@@ -382,7 +458,10 @@
       const data = await api('GET', 'chats')
       absorb(data)
       chats = Array.isArray(data.chats) ? data.chats.filter((c) => c && CHAT.test(c.id)) : []
+      online = new Set(Array.isArray(data.online) ? data.online.filter((id) => typeof id === 'string') : [])
       if (parts) renderSide()
+      // «в сети» в заголовке открытого чата
+      if (parts && current) renderHead()
     } catch (error) {
       if (error.code !== 'auth') say(problem(error))
     }
@@ -506,7 +585,11 @@
     try {
       const data = await api('GET', 'friends')
       friends = (Array.isArray(data.friends) ? data.friends : []).filter((f) => f && typeof f.id === 'string' && typeof f.handle === 'string')
-      for (const f of friends) names.set(f.id, f.handle)
+      for (const f of friends) {
+        names.set(f.id, f.handle)
+        if (validPic(f.pic)) pics.set(f.id, f.pic)
+        else pics.delete(f.id)
+      }
     } catch (error) {
       if (error.code !== 'auth') say(problem(error))
     }
@@ -562,7 +645,11 @@
     try {
       const data = await api('POST', 'chats/members', { chat: id, ...body })
       if (!current || current.id !== id) return
-      if (data.chat) current.chat = { ...current.chat, ...data.chat }
+      if (data.chat) {
+        current.chat = { ...current.chat, ...data.chat }
+        // Картинку убрали — в ответе её просто нет
+        if (!validPic(data.chat.pic)) delete current.chat.pic
+      }
       say('')
       await newer()
       renderTalk()
@@ -609,6 +696,8 @@
     chats = []
     unread = 0
     names.clear()
+    pics.clear()
+    online = new Set()
     current = null
     panel = null
     friends = null
