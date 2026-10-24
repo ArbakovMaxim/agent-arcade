@@ -1,5 +1,12 @@
 # Changelog · Список изменений
 
+## 0.32.1 — доска проектов в Desktop: в колонке можно вписать карточку, поля колонок ровные, действия — плитками · project board in Desktop: a card can be typed in a column, the column fields line up, actions are tiles
+
+- In a board column the “New card” field has no label on its left any more — the hint is inside the field, so it takes the column's whole width instead of a couple of letters · в колонке доски у поля «Новая карточка» больше нет подписи слева — подсказка в самом поле, и оно занимает всю ширину колонки, а не пару букв
+- “Columns”: each column's field and its “Remove the column” button are in one row, the fields one under another; “New column” is a field with the hint inside · «Колонки»: поле каждой колонки и кнопка «Убрать колонку» — в одной строке, поля ровно друг под другом; «Новая колонка» — поле с подсказкой внутри
+- “Give to Claude” and “Delete the board”, and in “Sharing” signing in, taking a @handle, sharing, inviting and deleting from the site or leaving, are tiles with their own icons and descriptions, like everywhere in the menu · «Отдать Claude» и «Удалить доску», а в «Общем доступе» вход, @ник, «Поделиться», «Позвать» и «Удалить с сайта» или «Выйти с доски» — плитки со своими иконками и описанием, как везде в меню
+- New descriptions are translated into all 13 languages · новые описания переведены на все 13 языков
+
 ## 0.32.0 — настройки плитками, как всё меню, по группам «Разделы главного меню», «Где открывать», «Панель и язык», «Уведомления» и «Клавиши»; любой раздел главного меню, кроме «Ещё», можно убрать целиком и вернуть в настройках · settings as tiles like the rest of the menu, in groups “Main menu sections”, “Where to open”, “Pane and language”, “Notifications” and “Keys”; any main-menu section except “More” can be hidden entirely and brought back in the settings
 
 - “Main menu sections” come first in Settings: Play, Read & listen, Watch, Social and Work, each a tile with the section's icon and what's inside; a press switches between “shown” and “hidden”, and a hidden section's icon turns gray · «Разделы главного меню» — первыми в настройках: Играть, Читать и слушать, Смотреть, Общение и Работа, у каждого плитка с иконкой раздела и тем, что в нём; нажатие переключает «показан» и «скрыт», у скрытого иконка серая
