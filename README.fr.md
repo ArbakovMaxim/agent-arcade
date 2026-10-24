@@ -87,7 +87,7 @@ Dans PowerShell : `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin 
 | **Travail** | Carnet, Tableau de projets |
 | **Plus** | Fenêtre Arcade, Paramètres, 🌐 langue, 🐞 Signaler un bug, ☕ Soutenir le projet |
 
-Cliquez sur le titre d’une section pour la replier ou la déplier. Une section repliée affiche `▸` et le nombre de tuiles qu’elle contient, et *Social* affiche aussi les nouveaux messages 💬 et les demandes d’ami 👥. Arcade se souvient des sections repliées. Une fois connecté, l’en-tête du menu affiche votre @pseudo avec les mêmes compteurs.
+Cliquez sur le titre d’une section pour la replier ou la déplier. Une section repliée affiche `▸` et le nombre de tuiles qu’elle contient, et *Social* affiche aussi les nouveaux messages 💬 et les demandes d’ami 👥. Arcade se souvient des sections repliées. Une section dont vous n’avez pas besoin peut être masquée dans les **Paramètres** : elle disparaît complètement du menu, titre et tuiles compris ; *Plus*, qui contient les paramètres, reste toujours. Une fois connecté, l’en-tête du menu affiche votre @pseudo avec les mêmes compteurs.
 
 La **recherche** démarre dès deux lettres et trouve un titre ou un genre, sans tenir compte de la casse ni des accents. Les résultats sont regroupés par section et par genre, par exemple *Jeux · Jeux de tir*. L’étoile ☆ à côté d’un jeu l’ajoute aux **★ Favoris** (jusqu’à 100), classés par section et par genre, les plus récents en premier. Les livres et les livres audio ont leur propre recherche, par titre ou par auteur.
 
@@ -138,7 +138,7 @@ La fiche de chaque jeu renvoie à sa licence et à son code source.
 La connexion est facultative : sans elle, tout le reste fonctionne comme avant.
 
 - **Se connecter avec GitHub** (dans *Social*) : Arcade affiche un code que vous saisissez sur la page de GitHub dans votre navigateur habituel. Arcade ne connaît que le nom et l’image de votre profil GitHub — pas d’e-mail, aucun accès aux dépôts.
-- **Synchronisation.** Votre langue, vos touches, vos notifications, la taille du panneau, ce qu’il faut faire du jeu quand l’agent signale, les options du navigateur dans Desktop, vos sujets, vos chaînes Twitch, vos favoris, les sections repliées et votre record à Flappy Arcade deviennent identiques sur tous vos ordinateurs. Vos propres jeux, le navigateur et le mode graphique restent propres à chaque ordinateur.
+- **Synchronisation.** Votre langue, vos touches, vos notifications, la taille du panneau, ce qu’il faut faire du jeu quand l’agent signale, les options du navigateur dans Desktop, vos sujets, vos chaînes Twitch, vos favoris, les sections repliées et masquées, et votre record à Flappy Arcade deviennent identiques sur tous vos ordinateurs. Vos propres jeux, le navigateur et le mode graphique restent propres à chaque ordinateur.
 - **@pseudo.** Reprenez votre nom GitHub en un clic ou inventez-en un : de 4 à 32 caractères — lettres latines, chiffres et `_`. Vous pouvez le changer jusqu’à 5 fois par jour.
 - **Amis.** Ajoutez un ami par son @pseudo exact : il accepte la demande de son côté, et vous apparaissez dans vos listes respectives. Il n’y a pas de suggestions pendant la saisie, donc personne ne peut parcourir qui utilise Arcade. Refuser et supprimer se font en silence.
 - **En ligne et invitations à jouer.** Tant que le menu d’Arcade est ouvert, vos amis vous voient *en ligne*, et vous les voyez ; pour rester invisible, désactivez *Montrer à mes amis que je suis en ligne* sur l’écran *Amis*. *Inviter* à côté d’un ami propose les jeux en réseau : un jeu de société ouvre une salle rien que pour vous deux, un jeu Doom son lobby. Le jeu s’ouvre aussitôt chez vous ; votre ami reçoit une notification et *Accepter* en haut du menu, et l’invitation est valable 10 minutes. On peut inviter là où les jeux en réseau s’ouvrent dans un navigateur : celui intégré à Desktop ou une fenêtre du navigateur.
@@ -168,6 +168,7 @@ N’ajoutez que des fichiers sur lesquels vous avez des droits.
 
 Ouvrez **Paramètres** dans la section *Plus* du menu `/arcade` :
 
+- **Sections du menu principal** — afficher ou masquer n’importe quelle section sauf *Plus* ; une section masquée disparaît complètement du menu jusqu’à ce que vous la rétablissiez ici.
 - **Langue** — l’une des 13 (aussi directement dans le menu : 🌐).
 - **Ouvrir les jeux** — ici dans le panneau, dans une fenêtre de navigateur ou dans un navigateur précis ; dans Claude Desktop — dans le navigateur intégré de Claude ou dans une fenêtre de navigateur.
 - **Graphismes** (terminal) — pixels dans les terminaux qui affichent des images (kitty, Ghostty, Rio), blocs de texte partout ailleurs.

@@ -87,7 +87,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Work** | Notebook, Project board |
 | **More** | Arcade window, Settings, 🌐 language, 🐞 Report a bug, ☕ Support the project |
 
-Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. Signed in, the menu header shows your @handle with the same counters.
+Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. A section you don't need can be hidden in **Settings**: it is gone from the menu entirely, title and tiles; *More*, which holds the settings, always stays. Signed in, the menu header shows your @handle with the same counters.
 
 **Search** starts from two letters and matches a title or a genre, ignoring case and accents. Results are grouped by section and genre, like *Games · Shooter*. The ☆ star next to a game adds it to **★ Favorites** (up to 100), laid out by section and genre with the latest first. Books and audiobooks have their own search by title or author.
 
@@ -138,7 +138,7 @@ Each game's card links to its license and source code.
 Signing in is optional — without it everything else works as before.
 
 - **Sign in with GitHub** (in *Social*): Arcade shows a code, you enter it on GitHub's page in your regular browser. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
-- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
+- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded and hidden sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
 - **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
 - **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
 - **Online and game invitations.** While the Arcade menu is open, your friends see you as *online*, and you see them; to stay unseen, turn off *Show friends that I am online* on the *Friends* screen. *Invite* next to a friend offers the online games: a board game opens a private room for two, a Doom game its lobby. The game opens for you at once; your friend gets a notification and *Accept* at the top of the menu, and the invitation is valid for 10 minutes. You can invite where online games open in a browser — the built-in one in Desktop or a browser window.
@@ -168,6 +168,7 @@ Only add files you have the rights to.
 
 Open **Settings** in the *More* section of the `/arcade` menu:
 
+- **Main menu sections** — show or hide any section except *More*; a hidden section is gone from the menu entirely until you bring it back here.
 - **Language** — one of 13 (also right in the menu: 🌐).
 - **Open games** — here in the panel, in a browser window, or in a specific browser; in Claude Desktop — in Claude's built-in browser or in a browser window.
 - **Graphics** (terminal) — pixels in terminals that show images (kitty, Ghostty, Rio), text blocks everywhere.

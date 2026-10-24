@@ -116,11 +116,31 @@ let langReturn = 'main' // куда вернуться из выбора язы�
 let menuFrom = null // откуда вернулись в главное меню — туда ставим фокус
 let lastGame = 'thwaite'
 let played = false // во что-то уже играли (или читали, слушали) — тогда первой плиткой главного меню идёт «Продолжить»
-// Разделы главного меню, которые можно свернуть, и какие свёрнуты; избранное — id игр, книг и аудиокниг по порядку
-// добавления. И то и другое общее для всех компьютеров (SYNC_KEYS)
+// Разделы главного меню, которые можно свернуть, и какие свёрнуты; какие убраны из меню совсем; избранное — id игр,
+// книг и аудиокниг по порядку добавления. Всё это общее для всех компьютеров (SYNC_KEYS)
 const SECTIONS = ['play', 'read', 'watch', 'talk', 'work', 'more']
+// Убрать можно любой, кроме «Ещё»: в нём сами настройки, где раздел возвращают
+const HIDEABLE = ['play', 'read', 'watch', 'talk', 'work']
+// Плитки разделов в настройках: подпись — показан раздел или убран (целиком, чтобы словарь перевёл), описание и
+// иконка — как у главной плитки раздела
+const SECTION_SWITCH = {
+  play: ['Играть: показан', 'Играть: скрыт'],
+  read: ['Читать и слушать: показан', 'Читать и слушать: скрыт'],
+  watch: ['Смотреть: показан', 'Смотреть: скрыт'],
+  talk: ['Общение: показан', 'Общение: скрыт'],
+  work: ['Работа: показан', 'Работа: скрыт'],
+}
+const SECTION_NOTES = {
+  play: 'приставки, игры в браузере и твои ROM',
+  read: 'книги, аудиокниги, статьи и подкасты',
+  watch: 'YouTube, Twitch и TikTok',
+  talk: 'друзья, чаты и аккаунт',
+  work: 'блокнот и доска проектов',
+}
+const SECTION_ICONS = { play: 'games', read: 'books', watch: 'youtube', talk: 'friends', work: 'boards' }
 const FAV_LIMIT = 100
 let collapsed = []
+let hidden = []
 let favorites = []
 // Поиск: query — что вписано. Поле рисуется заново (field — его номер) с тем, что было вписано (seed), когда экран
 // поиска открывают снова: само поле, пока его нет на экране, вписанное не помнит. shown — экран поиска сейчас на виду
@@ -278,9 +298,11 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f' }
-function iconSvg(kind) {
-  const c = ICON_COLORS[kind] ?? '#6e56cf'
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f', opener: '#3e63dd', 'keep-menu': '#12a594', 'back-on-done': '#f76b15', wide: '#8e4ec6', 'on-done': '#30a46c', 'on-permission': '#ffb224', notify: '#e5484d', 'msg-notify': '#0090ff' }
+// Серая иконка — у раздела, убранного из главного меню
+const OFF_COLOR = '#8b8d98'
+function iconSvg(kind, color) {
+  const c = color ?? ICON_COLORS[kind] ?? '#6e56cf'
   const shapes = {
     pad: `<rect x="6" y="15" width="36" height="18" rx="9" fill="${c}"/><rect x="12" y="21" width="9" height="3" fill="#fff"/><rect x="15" y="18" width="3" height="9" fill="#fff"/><circle cx="32" cy="22" r="2.4" fill="#fff"/><circle cx="37" cy="26" r="2.4" fill="#fff"/>`,
     disc: `<circle cx="24" cy="24" r="17" fill="${c}"/><circle cx="24" cy="24" r="5" fill="#111"/><path d="M24 9a15 15 0 0 1 13 7.5" stroke="#fff" stroke-width="2.5" fill="none" opacity=".7"/>`,
@@ -317,8 +339,16 @@ function iconSvg(kind) {
     dice: `<rect x="10" y="10" width="28" height="28" rx="6" fill="${c}"/><circle cx="18" cy="18" r="3" fill="#fff"/><circle cx="24" cy="24" r="3" fill="#fff"/><circle cx="30" cy="30" r="3" fill="#fff"/>`,
     // Доска проектов: три колонки с карточками
     kanban: `<rect x="8" y="9" width="9" height="30" rx="2" fill="${c}"/><rect x="19.5" y="9" width="9" height="22" rx="2" fill="${c}"/><rect x="31" y="9" width="9" height="14" rx="2" fill="${c}"/><path d="M10.5 15h4M10.5 21h4M10.5 27h4M22 15h4M22 21h4M33.5 15h4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
+    // Настройки: меню над браузером, стрелка назад к разговору, панель во всю ширину, галочка, восклицательный знак,
+    // колокольчик
+    stack: `<rect x="8" y="8" width="32" height="11" rx="3" fill="${c}"/><rect x="8" y="22" width="32" height="18" rx="3" fill="${c}" opacity=".6"/><path d="M13 13.5h12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
+    back: `<path d="M19 11l-9 9 9 9" stroke="${c}" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 20h17a9 9 0 0 1 0 18h-6" stroke="${c}" stroke-width="5" fill="none" stroke-linecap="round"/>`,
+    widen: `<rect x="6" y="11" width="36" height="26" rx="4" fill="none" stroke="${c}" stroke-width="3"/><path d="M14 24h20" stroke="${c}" stroke-width="3"/><path d="M18 19l-5 5 5 5M30 19l5 5-5 5" stroke="${c}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+    check: `<circle cx="24" cy="24" r="16" fill="${c}"/><path d="M16 24.5l6 6 11-12" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+    alert: `<circle cx="24" cy="24" r="16" fill="${c}"/><rect x="22" y="13" width="4" height="14" rx="2" fill="#fff"/><circle cx="24" cy="33" r="2.5" fill="#fff"/>`,
+    bell: `<path d="M24 8a10 10 0 0 0-10 10v8l-4 6h28l-4-6v-8A10 10 0 0 0 24 8z" fill="${c}"/><path d="M20 35a4 4 0 0 0 8 0" fill="${c}"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban', opener: 'window', 'keep-menu': 'stack', 'back-on-done': 'back', wide: 'widen', 'on-done': 'check', 'on-permission': 'alert', notify: 'bell', 'msg-notify': 'bubble' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -1543,6 +1573,9 @@ function applySetting(key, value) {
   } else if (key === 'collapsed') {
     if (!Array.isArray(value)) return false
     collapsed = SECTIONS.filter((id) => value.includes(id))
+  } else if (key === 'hidden') {
+    if (!Array.isArray(value)) return false
+    hidden = HIDEABLE.filter((id) => value.includes(id))
   } else if (key === 'favorites') {
     const list = restoreFavorites(value, FAV_LIMIT)
     if (!list) return false
@@ -1553,7 +1586,7 @@ function applySetting(key, value) {
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, backOnDone, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, favorites, hideOnline }[key]
+  return { lang, keys: keymap, notify: osNotify, wide, keepMenu, backOnDone, onDone, onPermission, myTopics, twitchChannels: tw.channels, flappyBest, collapsed, hidden, favorites, hideOnline }[key]
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
@@ -1571,6 +1604,13 @@ async function toggleSection($, id) {
   collapsed = collapsed.includes(id) ? collapsed.filter((x) => x !== id) : SECTIONS.filter((x) => x === id || collapsed.includes(x))
   $.ui.invalidate('ui.render')
   await saveSetting($, 'collapsed', collapsed)
+}
+
+// Убрать раздел из главного меню совсем или вернуть его — из настроек
+async function toggleHidden($, id) {
+  hidden = hidden.includes(id) ? hidden.filter((x) => x !== id) : HIDEABLE.filter((x) => x === id || hidden.includes(x))
+  $.ui.invalidate('ui.render')
+  await saveSetting($, 'hidden', hidden)
 }
 
 // Отметить игру, книгу или аудиокнигу звёздочкой — или снять отметку
@@ -4310,6 +4350,9 @@ export function register(on) {
         // Плитка языка (arcade-lang-de) — флажком, подпись — название языка на нём самом
         const flag = /^arcade-lang-([a-z]{2})$/.exec(key)?.[1]
         if (FLAGS[flag]) return Svg({ source: flagSvg(flag), alt: LANG_NAMES[flag], width: 36, height: 36 })
+        // Раздел главного меню в настройках (arcade-show-play) — иконкой его главной плитки, убранный — серой
+        const shown = /^arcade-show-([a-z]+)$/.exec(key)?.[1]
+        if (SECTION_ICONS[shown]) return Svg({ source: iconSvg(SECTION_ICONS[shown], hidden.includes(shown) ? OFF_COLOR : undefined), alt: label, width: 36, height: 36 })
         // arcade-menu-shelf-racing → racing, arcade-lang-main → lang, arcade-support → support. Язык книг — глобусом,
         // «Мои книги» — папкой, разделы книг (arcade-bk-sec-…) и аудиокниг (arcade-ab-…) — иконкой своего раздела.
         // Темы YouTube (arcade-yt-topic-…), статей (ar-) и подкастов (pc-) — иконкой раздела; их названия придумала
@@ -5292,16 +5335,27 @@ export function register(on) {
         }
       } else if (menu === 'settings') {
         const field = FIELD
-        items = [
-          back,
-          gap,
-          // Desktop: встроенный браузер приложения или окно браузера; Денди там всегда в панели, графика — картинкой
+        // Настройки — плитками по группам, как главное меню. Фокус — на первой плитке, а вернулись с выбора языка — на «Язык»
+        const focusKey = menuFrom === 'lang' || menuFrom === 'settings' ? 'arcade-lang' : `arcade-show-${HIDEABLE[0]}`
+        const focus = (key) => (key === focusKey ? { autoFocus: true } : {})
+        const group = (title, list, after = []) => (list.length ? [section(title), tiles(list, 40), ...after] : [])
+        // Разделы главного меню: убранного раздела в меню нет совсем — ни заголовка, ни плиток; вернуть — здесь же
+        const sectionTiles = HIDEABLE.flatMap((id) => [
+          Button({
+            key: `arcade-show-${id}`,
+            label: SECTION_SWITCH[id][hidden.includes(id) ? 1 : 0],
+            ...focus(`arcade-show-${id}`),
+            onPress: () => toggleHidden($, id),
+          }),
+          dim(`  ${SECTION_NOTES[id]}`),
+        ])
+        // Desktop: встроенный браузер приложения или окно браузера; Денди там всегда в панели, графика — картинкой
+        const openTiles = [
           ...(e.surface === 'desktop' && platform
             ? [
                 Button({
                   key: 'arcade-opener',
                   label: desktopLabel(),
-                  autoFocus: true,
                   onPress: async () => {
                     const options = desktopOptions()
                     const current = options.findIndex((o) =>
@@ -5321,7 +5375,6 @@ export function register(on) {
                     ? '  рядом с разговором; в авто-режиме игру открывает Claude — он прервётся и вернётся к работе'
                     : '  игра откроется в браузере; пауза, пока окно не в фокусе; прогресс сохраняется',
                 ),
-                ...(builtinBrowser(e.surface) ? [dim(`  ${MOUSE_NOTE}`)] : []),
               ]
             : []),
           // Desktop сам ставит встроенный браузер под панель Arcade: рядом их не поставить, поэтому — закрыть или оставить
@@ -5355,7 +5408,6 @@ export function register(on) {
                 Button({
                   key: 'arcade-opener',
                   label: openerLabel(),
-                  autoFocus: true,
                   onPress: async () => {
                     const options = openerOptions()
                     const current = options.findIndex((o) =>
@@ -5384,7 +5436,6 @@ export function register(on) {
                 Button({
                   key: 'arcade-graphics',
                   label: graphicsLabel(),
-                  ...(platform ? {} : { autoFocus: true }),
                   onPress: async () => {
                     graphics = GRAPHICS[(GRAPHICS.indexOf(graphics) + 1) % GRAPHICS.length]
                     pixelsFailed = false // «авто» заново проверит, умеет ли терминал картинки
@@ -5395,14 +5446,18 @@ export function register(on) {
                 }),
                 dim('  пиксели — в терминалах с картинками (kitty, Ghostty, Rio), символы — везде'),
               ]),
+        ]
+        const paneTiles = [
           Button({
             key: 'arcade-lang',
             label: `Язык: ${LANG_NAMES[lang] ?? lang}`,
+            ...focus('arcade-lang'),
             onPress: () => {
               langReturn = 'settings'
               open('lang')()
             },
           }),
+          dim('  язык интерфейса — 13 на выбор'),
           Button({
             key: 'arcade-wide',
             label: `Размер панели: ${wide ? 'во всю ширину' : 'обычный'}`,
@@ -5415,6 +5470,10 @@ export function register(on) {
             },
           }),
           dim('  во всю ширину разговор с агентом сжимается в узкую полосу; поправить ширину можно мышью'),
+        ]
+        // Сигналы агента: у каждой плитки своё описание — плитка берёт только описание сразу под кнопкой
+        const signalNote = '  для игры в панели Claude; в окне браузера — системное уведомление'
+        const notifyTiles = [
           Button({
             key: 'arcade-on-done',
             label: `Когда агент закончил: ${SIGNAL_LABELS[onDone]}`,
@@ -5424,6 +5483,7 @@ export function register(on) {
               await saveSetting($, 'onDone', onDone)
             },
           }),
+          dim(signalNote),
           Button({
             key: 'arcade-on-permission',
             label: `Когда агент ждёт разрешения: ${SIGNAL_LABELS[onPermission]}`,
@@ -5433,7 +5493,7 @@ export function register(on) {
               await saveSetting($, 'onPermission', onPermission)
             },
           }),
-          dim('  для игры в панели Claude; в окне браузера — системное уведомление'),
+          dim(signalNote),
           ...(platform
             ? [
                 Button({
@@ -5458,8 +5518,10 @@ export function register(on) {
                 dim(platform === 'windows' ? '  всплывают внизу слева поверх всех окон; клик открывает чат' : '  системное уведомление, когда друг пишет в чат'),
               ]
             : []),
-          // Проверка и назначение клавиш — только в терминале: в VS Code клавиши идут через строку 🎮, в Desktop поля нет
-          ...(e.surface === 'terminal'
+        ]
+        // Проверка и назначение клавиш — только в терминале: в VS Code клавиши идут через строку 🎮, в Desktop поля нет
+        const keyTiles =
+          e.surface === 'terminal'
             ? [
                 gameButton(field, false),
                 dim(`  ${field.note}`),
@@ -5474,7 +5536,16 @@ export function register(on) {
                 }),
                 dim('  мод попросит нажать клавиши по очереди: вверх, вниз, влево, вправо, A, B, Start, Select'),
               ]
-            : []),
+            : []
+        items = [
+          back,
+          ...group('Разделы главного меню', sectionTiles),
+          dim('Убранного раздела нет в главном меню совсем; «Ещё» с настройками остаётся всегда.'),
+          // Подсказка про мышь — строкой под плитками: у плитки одно описание
+          ...group('Где открывать', openTiles, builtinBrowser(e.surface) ? [gap, dim(MOUSE_NOTE)] : []),
+          ...group('Панель и язык', paneTiles),
+          ...group('Уведомления', notifyTiles),
+          ...group('Клавиши', keyTiles),
           ...noticeLines,
           ...hint,
         ]
@@ -6886,8 +6957,9 @@ export function register(on) {
             ...(acct.requests ? [keep(Button({ key: 'arcade-head-friends', label: `👥 ${acct.requests}`, plain: true, onPress: toFriends }))] : []),
           ]
         // Раздел главного меню сворачивается: заголовок — кнопка ▾ / ▸, у свёрнутого — сколько в нём плиток. Что
-        // свёрнуто — в настройках, со входом — на всех компьютерах
+        // свёрнуто — в настройках, со входом — на всех компьютерах. Убранного в настройках раздела нет совсем
         const foldable = (id, title, list, badge = '') => {
+          if (hidden.includes(id)) return []
           const shut = collapsed.includes(id)
           const count = list.filter((x) => x?.type === 'Button').length
           const label = `${shut ? '▸' : '▾'} ${tr(title, lang)}${shut ? ` · ${count}${badge}` : ''}`

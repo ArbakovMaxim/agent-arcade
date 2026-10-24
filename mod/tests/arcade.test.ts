@@ -286,6 +286,11 @@ const MENU_OF: Record<string, string> = {
   'arcade-on-done': 'settings',
   'arcade-on-permission': 'settings',
   'arcade-lang': 'settings',
+  'arcade-show-play': 'settings',
+  'arcade-show-read': 'settings',
+  'arcade-show-watch': 'settings',
+  'arcade-show-talk': 'settings',
+  'arcade-show-work': 'settings',
 }
 
 // Дойти по меню до кнопки и нажать её
@@ -1239,7 +1244,8 @@ test('Desktop: «Когда открывается браузер» — толь
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-menu-settings' })
   expect(await ui.find({ key: 'arcade-keep-menu' })).toMatchObject({ props: { label: 'Когда открывается браузер: закрывать меню' } })
-  expect(await ui.find({ type: 'Text', text: '  закрывать — браузер во всю высоту; оставлять — браузер встаёт под меню Arcade' })).toBeDefined()
+  // В Desktop описание — в карточке настройки
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-keep-menu' }))).toContain('закрывать — браузер во всю высоту')
   await ui.press({ key: 'arcade-keep-menu' })
   expect(await ui.find({ key: 'arcade-keep-menu' })).toMatchObject({ props: { label: 'Когда открывается браузер: оставлять меню' } })
   expect(saved.get('keepMenu')).toBe(true)
@@ -1357,7 +1363,7 @@ test('Desktop: «В окне» на плашке для шутера — окн�
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-menu-settings' })
   expect(await ui.find({ key: 'arcade-opener' })).toMatchObject({ props: { label: 'Открывать: встроенный браузер Claude' } })
-  expect(await ui.find({ type: 'Text', text: `  ${MOUSE_NOTE}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: MOUSE_NOTE })).toBeDefined() // строкой под плитками «Где открывать»
   await ui.unmount()
 })
 
@@ -3584,7 +3590,7 @@ test('Desktop: «Агент закончил, пока смотришь» — т
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-menu-settings' })
   expect(await ui.find({ key: 'arcade-back-on-done' })).toMatchObject({ props: { label: 'Агент закончил, пока смотришь: только сообщить' } })
-  expect(await ui.find({ type: 'Text', text: '  видео, TikTok, Twitch, статьи и подкасты; закрыть — вкладка закрывается, и перед тобой снова разговор с Claude' })).toBeDefined()
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-back-on-done' }))).toContain('видео, TikTok, Twitch, статьи и подкасты')
   await ui.press({ key: 'arcade-back-on-done' })
   expect(await ui.find({ key: 'arcade-back-on-done' })).toMatchObject({ props: { label: 'Агент закончил, пока смотришь: закрыть вкладку' } })
   expect(saved.get('backOnDone')).toBe(true)
@@ -4008,7 +4014,7 @@ test('account.js: ответы сайта про вход и настройки,
   expect(restoreStamps({ lang: 5, wide: 'x', junk: 3, notify: -1, keys: 0 })).toEqual({ lang: 5 })
   expect(restoreStamps(null)).toEqual({})
   // Встреча: сайт новее — оттуда; здесь новее — туда; на сайте нет — туда; не менял здесь (нет отметки) — с сайта
-  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'favorites', 'hideOnline'])
+  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'hidden', 'favorites', 'hideOnline'])
   expect(
     syncPlan(
       { lang: 'ru', wide: true, notify: false, onDone: 'pause' },
@@ -5770,6 +5776,97 @@ test('главное меню: свёрнутое с прошлого раза �
   expect(await ui.find({ key: 'arcade-fold-more' })).toMatchObject({ props: { label: '▸ Ещё · 4' } }) // настройки, язык, отчёт об ошибке, поддержка
   expect(await ui.find({ key: 'arcade-menu-settings' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('настройки: раздел убирается из главного меню целиком и возвращается; убранное помнится и уходит на сайт', HEAVY, async ($, on) => {
+  const me = { user: OCTO, settings: {}, handle: 'octocat', ticket: ticketOf('octocat'), friends: 0, requests: 0, unread: 0 }
+  const { api, remote } = accountSite({}, { 'GET api/me': () => ({ json: me }) })
+  const { clock, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  // Разделы — первая группа настроек, фокус на первом; «Ещё» не убрать: в нём сами настройки
+  expect(await ui.find({ type: 'Text', text: 'Разделы главного меню' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-show-play' })).toMatchObject({ props: { label: 'Играть: показан', autoFocus: true } })
+  for (const id of ['read', 'watch', 'talk', 'work']) expect(await ui.find({ key: `arcade-show-${id}` })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-show-more' })).toBeUndefined()
+  await ui.press({ key: 'arcade-show-work' })
+  await ui.press({ key: 'arcade-show-play' })
+  expect(await ui.find({ key: 'arcade-show-play' })).toMatchObject({ props: { label: 'Играть: скрыт' } })
+  expect(saved.get('hidden')).toEqual(['play', 'work']) // в порядке меню, а не нажатий
+  // На сайт — через пару секунд, как другие настройки
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(remote.hidden).toMatchObject({ v: ['play', 'work'] })
+  // В главном меню убранного нет совсем: ни заголовка, ни плиток; остальное на месте
+  await ui.press({ key: 'arcade-back' })
+  for (const key of ['arcade-fold-play', 'arcade-menu-nes', 'arcade-fold-work', 'arcade-menu-notes', 'arcade-menu-boards']) expect(await ui.find({ key })).toBeUndefined()
+  for (const key of ['arcade-fold-read', 'arcade-fold-watch', 'arcade-menu-twitch', 'arcade-fold-talk', 'arcade-menu-settings', 'arcade-menu-search'])
+    expect(await ui.find({ key })).toBeDefined()
+  // Вернули — раздел снова в меню
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-show-play' })
+  expect(await ui.find({ key: 'arcade-show-play' })).toMatchObject({ props: { label: 'Играть: показан' } })
+  expect(saved.get('hidden')).toEqual(['work'])
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-menu-notes' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('главное меню: убранное с прошлого раза так и убрано; «Ещё» не убирается, непонятное в настройке не берём', async ($, on) => {
+  stubs(on, { stored: { hidden: ['more', 'junk', 'watch'] } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-fold-watch' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-menu-twitch' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-fold-more' })).toMatchObject({ props: { label: '▾ Ещё' } })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-show-watch' })).toMatchObject({ props: { label: 'Смотреть: скрыт' } })
+  expect(await ui.find({ key: 'arcade-show-read' })).toMatchObject({ props: { label: 'Читать и слушать: показан' } })
+  await ui.unmount()
+})
+
+test('Desktop: настройки — плитки с иконками под заголовками групп; у убранного раздела иконка серая', async ($, on) => {
+  const { clock } = stubs(on, { env: WINDOWS, browser: 'ok', stored: { hidden: ['talk'] } })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  for (const title of ['Разделы главного меню', 'Где открывать', 'Панель и язык', 'Уведомления'])
+    expect(await ui.find({ type: 'Text', text: title })).toMatchObject({ props: { size: 'heading' } })
+  expect(await ui.find({ type: 'Text', text: 'Клавиши' })).toBeUndefined() // в Desktop поля клавиш нет
+  expect(await ui.find({ key: 'arcade-show-play' })).toMatchObject({ props: { autoFocus: true } })
+  // Плитка раздела — с той же иконкой, что в главном меню, и описанием раздела
+  const play = JSON.stringify(await ui.find({ key: 'card-arcade-show-play' }))
+  expect(play).toContain('"alt":"Играть: показан"')
+  expect(play).toContain('приставки, игры в браузере и твои ROM')
+  expect(play).not.toContain('#8b8d98')
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-show-talk' }))).toContain('#8b8d98')
+  // У настроек свои иконки, а не джойстик по умолчанию
+  for (const key of ['arcade-opener', 'arcade-keep-menu', 'arcade-back-on-done', 'arcade-wide', 'arcade-on-done', 'arcade-on-permission', 'arcade-notify', 'arcade-msg-notify'])
+    expect(JSON.stringify(await ui.find({ key: `card-${key}` }))).toContain('"alt"')
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-lang' }))).toContain('<ellipse')
+  // Вернулись с выбора языка — фокус на «Язык»
+  await ui.press({ key: 'arcade-lang' })
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-lang' })).toMatchObject({ props: { autoFocus: true } })
+  expect((await ui.find({ key: 'arcade-show-play' })).props.autoFocus).toBeUndefined()
+  await ui.unmount()
+})
+
+test('настройки на английском: разделы и группы переведены', async ($, on) => {
+  stubs(on, { env: { LANG: 'en_US.UTF-8' }, uname: 'Linux', stored: { hidden: ['read'] } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-fold-read' })).toBeUndefined()
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ type: 'Text', text: 'Main menu sections' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-show-read' })).toMatchObject({ props: { label: 'Read & listen: hidden' } })
+  expect(await ui.find({ key: 'arcade-show-play' })).toMatchObject({ props: { label: 'Play: shown' } })
+  expect(await ui.find({ type: 'Text', text: /consoles, browser games and your ROMs/ })).toBeDefined()
   await ui.unmount()
 })
 
