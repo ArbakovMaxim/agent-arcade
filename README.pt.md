@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · **Português** · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Alfa (0.26).** O Arcade funciona e é usado todos os dias, mas é uma versão inicial: algo pode quebrar, e as configurações ou o catálogo podem mudar entre atualizações. Relatos de erros são muito bem-vindos — veja [Feedback](#feedback).
+> **Beta (0.33).** Tudo o que está descrito aqui funciona e é usado todos os dias; daqui em diante, mudam principalmente os detalhes. Relatos de erros são muito bem-vindos — veja [Feedback](#feedback).
 
 O Arcade é um plugin para o [Claude Code](https://claude.com/claude-code) que preenche a espera enquanto seu agente trabalha. Quando o agente fica ocupado por mais de 10 segundos, um pequeno *«jogar?»* aparece acima do prompt. Jogue alguma coisa — NES, Sega, PlayStation, Doom, xadrez e mais —, leia um livro, ouça um audiolivro ou um podcast, ou assista a um vídeo sobre o assunto em que o agente está trabalhando. O Arcade avisa assim que o agente termina ou precisa da sua permissão — você não perde nada.
 
@@ -16,7 +16,7 @@ Tudo no catálogo é gratuito: os jogos têm licenças abertas, os livros e audi
 
 - **Aparece sozinho.** Depois de 10 segundos de trabalho do agente, o Arcade oferece um jogo acima do prompt; ele nunca toma o foco a menos que você peça.
 - **Sabe o que o agente está fazendo.** Quando o agente termina ou pede permissão, um aviso aparece sobre o jogo — continue jogando, pause ou volte direto ao agente (você escolhe o comportamento nas configurações). No Claude Desktop ele também pode fechar a aba que você está assistindo, para a conversa voltar à sua frente.
-- **Um menu, seis seções.** *Jogar*, *Ler e ouvir*, *Assistir*, *Social*, *Trabalho* e *Mais* — recolha as que você não precisa. No topo: *Continuar* o último jogo, *Buscar* e *Favoritos*.
+- **Um menu, seis seções.** *Jogar*, *Ler e ouvir*, *Assistir*, *Social*, *Trabalho* e *Mais* — recolha as que você não precisa. No topo: *Continuar* o último jogo, *Buscar* e *Favoritos*. Na primeira vez que você abre o Arcade, escolhe quais seções mostrar.
 - **61 jogos gratuitos** para NES (Dendy), Sega Mega Drive, Master System, PlayStation e uma aba *Jogos* com jogos de arcade, tiro, corrida, estratégia, aventuras e jogos de tabuleiro.
 - **Ler e ouvir.** Clássicos e audiolivros do LibriVox em 30 idiomas, direto do Project Gutenberg, do Wikisource e do LibriVox, além de artigos e episódios recentes de podcasts sobre o assunto do trabalho do agente.
 - **Assistir.** Vídeos recentes do YouTube sobre o assunto do trabalho do agente, Twitch: seus próprios canais e transmissões ao vivo sobre programação, tecnologia, ciência e jogos retrô, e TikTok: o feed *Para você* e a busca no próprio site do TikTok, onde você entra por conta própria.
@@ -168,7 +168,7 @@ Adicione apenas arquivos sobre os quais você tem direitos.
 
 Abra **Configurações** na seção *Mais* do menu `/arcade`:
 
-- **Seções do menu principal** — mostrar ou ocultar qualquer seção, menos *Mais*; uma seção oculta some do menu por completo até você trazê-la de volta aqui.
+- **Seções do menu principal** — mostrar ou ocultar qualquer seção, menos *Mais*; uma seção oculta some do menu por completo até você trazê-la de volta aqui. A mesma escolha aparece na primeira vez que você abre o Arcade.
 - **Idioma** — um dos 13 (também direto no menu: 🌐).
 - **Abrir jogos** — aqui no painel, em uma janela do navegador ou em um navegador específico; no Claude Desktop — no navegador integrado do Claude ou em uma janela do navegador.
 - **Gráficos** (terminal) — pixels nos terminais que mostram imagens (kitty, Ghostty, Rio), blocos de texto em todos os outros.
@@ -180,6 +180,18 @@ Abra **Configurações** na seção *Mais* do menu `/arcade`:
 - **Notificações ao jogar em uma janela.**
 - **Notificações de mensagens** — um cartão no canto inferior esquerdo quando um amigo escreve em uma conversa (no macOS e no Linux, uma notificação do sistema).
 - **Teste de teclas e remapeamento** (terminal).
+
+## O que o plugin faz no seu computador
+
+O Arcade roda dentro do Claude Code com o acesso que o Claude Code dá aos plugins. Todo o código está neste repositório, e `claude plugin validate ./mod` lista cada evento a que ele se conecta e cada chamada que faz. Em resumo:
+
+- **As ferramentas do agente.** O Arcade vê quando uma ferramenta começa e termina e quando o agente pede permissão — é assim que sabe quando mostrar o aviso. Ele nunca altera nem bloqueia as chamadas de ferramentas do agente. Por conta própria, aprova só dois tipos de chamada, e só onde o Claude Code perguntaria a você: `mcp__arcade__notes`, que só altera o caderno e não apaga nada, e abrir um jogo no navegador integrado do Desktop depois que você o escolhe no painel. Suas regras de permitir e negar valem como estão.
+- **Interromper o agente.** Só no Claude Desktop, quando você abre algo no navegador integrado enquanto o agente trabalha: o Desktop não deixa um plugin abrir o navegador sozinho. O Arcade espera a ferramenta atual terminar (depois de 10 segundos ele a corta, mas espera enquanto houver um pedido de permissão na tela), interrompe o agente e pede ao Claude que abra a página e volte ao trabalho. Para evitar isso, escolha uma janela do navegador em *Configurações → Abrir jogos*.
+- **Sua conversa.** Para os temas, o Haiku na sua própria sessão recebe o final da conversa, alguns milhares de caracteres; isso conta no seu uso do Claude. O site do Arcade nunca vê a conversa. O Arcade escreve na caixa de mensagem ou a envia só quando você pede — por exemplo, *Passar ao Claude* no caderno — ou para abrir uma página como descrito acima.
+- **Programas.** Seu navegador para a janela do Arcade (no Windows, com um perfil próprio em `%LOCALAPPDATA%\claude-arcade`); notificações — PowerShell no Windows, `osascript` no macOS, `notify-send` no Linux; uma verificação de quais navegadores estão instalados (Windows) ou de qual é o sistema (`uname`).
+- **Arquivos.** Ele grava só as ROMs que você adiciona com `/arcade-add`, em `~/.claude/arcade/roms`, e lê só o arquivo que você indica, essas cópias e os próprios arquivos. Configurações, caderno e favoritos ficam no armazenamento de plugins do Claude Code.
+- **Variáveis de ambiente.** Lê `HOME` ou `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` e `OS`, e não altera nenhuma.
+- **Rede.** O próprio plugin só se comunica com o site do Arcade (`agent-arcade.fefaodessa.workers.dev`), com os feeds RSS dos canais do YouTube e com os feeds dos blogs e podcasts que mostra. As imagens do painel do Desktop, como os avatares da Twitch, carregam direto desses serviços. Jogos, livros e vídeos são carregados pela página que você abre no navegador.
 
 ## Privacidade
 
@@ -195,7 +207,7 @@ Abra **Configurações** na seção *Mais* do menu `/arcade`:
 
 ## Plataformas e status
 
-O Arcade está em **alfa** e em desenvolvimento ativo — veja o [histórico de mudanças](CHANGELOG.md).
+O Arcade está em **beta**: os recursos estão no lugar, e o trabalho continua nos detalhes — veja o [histórico de mudanças](CHANGELOG.md).
 
 - Testado na prática no Windows, macOS e Linux.
 - Funciona no terminal, no VS Code e no Claude Desktop.

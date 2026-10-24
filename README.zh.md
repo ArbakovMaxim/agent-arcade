@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · **中文** · [한국어](README.ko.md)
 
-> **Alpha 版（0.26）。** Arcade 可以正常运行，每天都有人在用，但它仍是早期版本：可能会出问题，设置和目录也可能在更新之间发生变化。非常欢迎报告错误 — 见[反馈](#反馈)。
+> **Beta 版（0.33）。** 这里介绍的一切都能正常使用，每天都有人在用；之后的变化主要在细节上。非常欢迎报告错误 — 见[反馈](#反馈)。
 
 Arcade 是一个 [Claude Code](https://claude.com/claude-code) 插件，帮你打发智能体工作时的等待时间。当智能体忙碌超过 10 秒，提示符上方会出现一行小字 *“玩一会儿吗？”*。你可以玩游戏 — NES、Sega、PlayStation、Doom、国际象棋等等 — 读一本书，听有声书或播客，或者观看与智能体当前工作主题相关的视频。智能体一完成工作或需要你授权，Arcade 就会立刻告诉你，什么都不会错过。
 
@@ -16,7 +16,7 @@ Arcade 是一个 [Claude Code](https://claude.com/claude-code) 插件，帮你�
 
 - **自动出现。** 智能体工作 10 秒后，Arcade 会在提示符上方推荐一款游戏；除非你要求，它绝不会抢走焦点。
 - **了解智能体的状态。** 当智能体完成工作或请求授权时，游戏上方会出现横幅 — 继续玩、暂停，或直接返回智能体（具体行为在设置中选择）。在 Claude Desktop 中，它还可以关闭你正在观看的标签页，让对话重新回到你面前。
-- **一个菜单，六个分区。** *开始游戏*、*阅读与收听*、*观看*、*社交*、*工作* 和 *更多* — 不需要的分区可以折叠。最上方是：*继续* 上一款游戏、*搜索* 和 *收藏*。
+- **一个菜单，六个分区。** *开始游戏*、*阅读与收听*、*观看*、*社交*、*工作* 和 *更多* — 不需要的分区可以折叠。最上方是：*继续* 上一款游戏、*搜索* 和 *收藏*。第一次打开 Arcade 时，你可以选择要显示哪些分区。
 - **61 款免费游戏**，涵盖 NES（Dendy）、Sega Mega Drive、Master System、PlayStation，以及包含街机、射击、竞速、策略、冒险和棋类游戏的 *游戏* 标签页。
 - **阅读与收听。** 30 种语言的经典书籍和 LibriVox 有声书，直接来自 Project Gutenberg、Wikisource 和 LibriVox；还有与智能体工作主题相关的最新文章和播客节目。
 - **观看。** 与智能体工作主题相关的最新 YouTube 视频，以及 Twitch：你自己的频道，和关于编程、科技、科学与复古游戏的直播。还有 TikTok：TikTok 官网上的 *“推荐”信息流* 和搜索（需要你自己登录）。
@@ -168,7 +168,7 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 
 在 `/arcade` 菜单的 *更多* 分区中打开 **设置**：
 
-- **主菜单分区** — 显示或隐藏除 *更多* 以外的任意分区；隐藏的分区会从菜单中完全消失，直到你在这里把它恢复。
+- **主菜单分区** — 显示或隐藏除 *更多* 以外的任意分区；隐藏的分区会从菜单中完全消失，直到你在这里把它恢复。第一次打开 Arcade 时也会让你做同样的选择。
 - **语言** — 13 种之一（也可以直接在菜单中通过 🌐 切换）。
 - **游戏打开方式** — 在这里（面板中）、在浏览器窗口中，或在指定的浏览器中；在 Claude Desktop 中 — Claude 的内置浏览器或浏览器窗口。
 - **画面**（终端） — 在能显示图片的终端（kitty、Ghostty、Rio）中使用像素，其他地方使用文本块。
@@ -180,6 +180,18 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 - **在窗口中游戏时通知。**
 - **消息通知** — 好友在聊天中发消息时，左下角弹出卡片（macOS 和 Linux 上为系统通知）。
 - **按键测试和按键重映射**（终端）。
+
+## 插件在你的电脑上做什么
+
+Arcade 在 Claude Code 内部运行，拥有 Claude Code 给插件的权限。它的全部代码都在这个仓库里，`claude plugin validate ./mod` 会列出它挂接的每个事件和发出的每个调用。简单来说：
+
+- **智能体的工具。** Arcade 能看到工具何时开始和结束、智能体何时请求授权 — 这样它才知道什么时候显示横幅。它从不修改或拦截智能体的工具调用。它自己只批准两类调用，而且只在 Claude Code 本来会询问你的时候：只修改笔记本、不删除任何内容的 `mcp__arcade__notes`，以及在你于面板中按下游戏后，在 Desktop 的内置浏览器中打开它。你的允许和拒绝规则照常生效。
+- **中断智能体。** 仅在 Claude Desktop 中、智能体工作时你在内置浏览器里打开内容才会发生：Desktop 不允许插件自己打开浏览器。Arcade 会等当前工具结束（10 秒后会中断它，但只要屏幕上有授权请求就一直等），然后中断智能体，请 Claude 打开页面后继续工作。如果想避免这种情况，请在 *设置 → 游戏打开方式* 中选择浏览器窗口。
+- **你的对话。** 为了推荐主题，你自己会话中的 Haiku 会收到对话的最后几千个字符；这会计入你的 Claude 用量。Arcade 的网站永远看不到对话。只有在你要求时（例如笔记本中的 *交给 Claude*），或者如上所述为了打开页面，Arcade 才会在输入框中写入或提交内容。
+- **启动的程序。** 用于 Arcade 窗口的浏览器（在 Windows 上使用 `%LOCALAPPDATA%\claude-arcade` 中的独立配置文件）；通知 — Windows 上用 PowerShell，macOS 上用 `osascript`，Linux 上用 `notify-send`；检查装了哪些浏览器（Windows）或是什么系统（`uname`）。
+- **文件。** 它只写入你用 `/arcade-add` 添加的 ROM，位置是 `~/.claude/arcade/roms`；只读取你指定的文件、这些副本和它自己的文件。设置、笔记本和收藏保存在 Claude Code 的插件存储中。
+- **环境变量。** 读取 `HOME` 或 `USERPROFILE`、`LANG`、`LC_ALL`、`LC_MESSAGES`、`LOCALAPPDATA` 和 `OS`，不修改任何一个。
+- **网络。** 插件本身只与 Arcade 的网站（`agent-arcade.fefaodessa.workers.dev`）、YouTube 频道的 RSS 订阅源，以及它展示的博客和播客的订阅源通信。Desktop 面板中的图片（例如 Twitch 头像）直接从这些服务加载。游戏、书籍和视频由你在浏览器中打开的页面加载。
 
 ## 隐私
 
@@ -195,7 +207,7 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 
 ## 平台与状态
 
-Arcade 处于 **alpha** 阶段，正在积极开发中 — 见[更新日志](CHANGELOG.md)。
+Arcade 处于 **beta** 阶段：功能已经齐全，工作继续集中在细节上 — 见[更新日志](CHANGELOG.md)。
 
 - 已在 Windows、macOS 和 Linux 上实际验证。
 - 可在终端、VS Code 和 Claude Desktop 中运行。
