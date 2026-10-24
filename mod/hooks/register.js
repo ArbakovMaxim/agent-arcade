@@ -298,7 +298,7 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f', opener: '#3e63dd', 'keep-menu': '#12a594', 'back-on-done': '#f76b15', wide: '#8e4ec6', 'on-done': '#30a46c', 'on-permission': '#ffb224', notify: '#e5484d', 'msg-notify': '#0090ff', 'account-sync': '#0090ff', 'account-logout': '#8b8d98', 'account-delete': '#e5484d' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f', opener: '#3e63dd', 'keep-menu': '#12a594', 'back-on-done': '#f76b15', wide: '#8e4ec6', 'on-done': '#30a46c', 'on-permission': '#ffb224', notify: '#e5484d', 'msg-notify': '#0090ff', 'account-sync': '#0090ff', 'account-logout': '#8b8d98', 'account-delete': '#e5484d', 'board-send': '#d97757', 'board-delete': '#e5484d', 'board-login': '#46a758', 'board-handle': '#46a758', 'board-share': '#e93d82', 'board-invite': '#e93d82', 'board-friends': '#e93d82', 'board-off': '#8b8d98' }
 // Серая иконка — у раздела, убранного из главного меню
 const OFF_COLOR = '#8b8d98'
 function iconSvg(kind, color) {
@@ -350,9 +350,11 @@ function iconSvg(kind, color) {
     // Аккаунт: две стрелки по кругу — синхронизация, дверь со стрелкой наружу — выход, корзина — удалить
     sync: `<path d="M36.2 19.6A13 13 0 0 0 11 24M11.8 28.4A13 13 0 0 0 37 24" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M6.5 20l4.5 5.5 4.5-5.5M32.5 28l4.5-5.5 4.5 5.5" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
     exit: `<path d="M22 9H13a4 4 0 0 0-4 4v22a4 4 0 0 0 4 4h9" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M19 24h19" stroke="${c}" stroke-width="4" stroke-linecap="round"/><path d="M31 16l8 8-8 8" stroke="${c}" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+    // Доска: «Отдать Claude» — бумажный самолётик
+    send: `<path d="M6 23l35-15-9 33-8-12z" fill="${c}"/><path d="M24 29l17-21" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".7"/>`,
     trash: `<path d="M9 13h30" stroke="${c}" stroke-width="4" stroke-linecap="round"/><path d="M19 12V8h10v4" stroke="${c}" stroke-width="3" fill="none"/><path d="M13 17h22l-2 21a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3z" fill="${c}"/><path d="M20.5 22v13M27.5 22v13" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban', opener: 'window', 'keep-menu': 'stack', 'back-on-done': 'back', wide: 'widen', 'on-done': 'check', 'on-permission': 'alert', notify: 'bell', 'msg-notify': 'bubble', 'account-sync': 'sync', 'account-logout': 'exit', 'account-delete': 'trash' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban', opener: 'window', 'keep-menu': 'stack', 'back-on-done': 'back', wide: 'widen', 'on-done': 'check', 'on-permission': 'alert', notify: 'bell', 'msg-notify': 'bubble', 'account-sync': 'sync', 'account-logout': 'exit', 'account-delete': 'trash', 'board-send': 'send', 'board-delete': 'trash', 'board-login': 'person', 'board-handle': 'person', 'board-share': 'people', 'board-invite': 'people', 'board-friends': 'people', 'board-off': 'exit' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -5839,10 +5841,10 @@ export function register(on) {
                 return [cardButton(card), ...(total ? [keep(dim(`  ☑ ${done}/${total}`))] : [])]
               }),
               ...(cards.length ? [] : [dim('пусто')]),
+              // В Desktop колонка узкая: без подписи слева поле занимает всю её ширину, подсказка — в самом поле
               Input({
                 key: `arcade-card-new-${c.id}-${nb.field}`,
-                label: 'Новая карточка',
-                placeholder: 'что сделать',
+                ...(desktop ? { placeholder: 'Новая карточка' } : { label: 'Новая карточка', placeholder: 'что сделать' }),
                 submitLabel: tr('Добавить', lang),
                 ...focusOn(`new-${c.id}`),
                 onSubmit: (value) => createCard($, id, c.id, value),
@@ -5878,47 +5880,65 @@ export function register(on) {
                 ]),
               ]
             : [dim('Нажми на карточку, чтобы выбрать её и переносить стрелками; ещё раз — открыть.')]
-          // Общий доступ: войти, взять @ник, поделиться с друзьями; у общей — участники, позвать ещё, удалить или выйти
+          // Общий доступ: войти, взять @ник, поделиться с друзьями; у общей — участники, позвать ещё, удалить или выйти.
+          // Действия — плитками с описанием, как в настройках; друзья галочками — над плиткой «Поделиться» или «Позвать»
           let shareItems
           if (!acct.session)
             shareItems = [
-              dim('Войди через GitHub — и сможешь вести доску вместе с друзьями.'),
-              Button({
-                key: 'arcade-board-login',
-                label: acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
-                onPress: () => {
-                  acct.confirmDelete = false
-                  leave('account')()
-                  startLogin($)
-                },
-              }),
+              tiles(
+                [
+                  Button({
+                    key: 'arcade-board-login',
+                    label: acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
+                    onPress: () => {
+                      acct.confirmDelete = false
+                      leave('account')()
+                      startLogin($)
+                    },
+                  }),
+                  dim('Войди через GitHub — и сможешь вести доску вместе с друзьями.'),
+                ],
+                40,
+              ),
             ]
           else if (!share && !acct.handle)
-            shareItems = [dim('Звать друзей на доску можно, когда у тебя есть @ник.'), Button({ key: 'arcade-board-handle', label: 'Взять @ник', onPress: leave('account') })]
+            shareItems = [tiles([Button({ key: 'arcade-board-handle', label: 'Взять @ник', onPress: leave('account') }), dim('Звать друзей на доску можно, когда у тебя есть @ник.')], 40)]
           else if (!share && friends.length)
             shareItems = [
               dim('Отметь друзей и нажми «Поделиться» — доска станет общей: карточки, колонки и название у всех одни.'),
               pickFriends(friends),
-              Button({ key: 'arcade-board-share', label: dk.busy === 'share' ? 'Делюсь…' : 'Поделиться', onPress: () => shareBoard($, id) }),
+              tiles(
+                [
+                  Button({ key: 'arcade-board-share', label: dk.busy === 'share' ? 'Делюсь…' : 'Поделиться', onPress: () => shareBoard($, id) }),
+                  dim('  Отмеченные друзья увидят доску у себя и смогут её вести.'),
+                ],
+                40,
+              ),
             ]
           else if (!share)
             shareItems = [
-              dim(fr.list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.'),
-              Button({
-                key: 'arcade-board-friends',
-                label: 'Друзья',
-                onPress: () => {
-                  fr.note = ''
-                  fr.bad = false
-                  leave('friends')()
-                  friendsCall($, 'friends').catch(modError)
-                },
-              }),
+              tiles(
+                [
+                  Button({
+                    key: 'arcade-board-friends',
+                    label: 'Друзья',
+                    onPress: () => {
+                      fr.note = ''
+                      fr.bad = false
+                      leave('friends')()
+                      friendsCall($, 'friends').catch(modError)
+                    },
+                  }),
+                  dim(fr.list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.'),
+                ],
+                40,
+              ),
             ]
           else if (!base || !me) shareItems = [dim('Сверяю доску с сайтом Arcade…')]
           else {
             const others = friends.filter((p) => !base.members.includes(p.id))
             const people = [base.owner, ...base.members.filter((m) => m !== base.owner)].filter(Boolean)
+            const invite = isOwner && others.length && base.members.length < MAX_MEMBERS
             shareItems = [
               ...people.map((m) =>
                 m === base.owner
@@ -5927,40 +5947,44 @@ export function register(on) {
                     ? row([keep(Text({ children: [deskPerson(m, base)] })), Button({ key: `arcade-desk-drop-${m}`, label: 'Убрать', onPress: () => boardMembers($, share, { remove: [m] }, 'Участник убран.') })])
                     : keep(Text({ children: [deskPerson(m, base)] })),
               ),
-              ...(isOwner && others.length && base.members.length < MAX_MEMBERS
-                ? [
-                    gap,
-                    dim('Позвать ещё:'),
-                    pickFriends(others),
-                    Button({
-                      key: 'arcade-board-invite',
-                      label: dk.busy === 'add' ? 'Зову…' : 'Позвать',
-                      onPress: () => (dk.picked.size ? boardMembers($, share, { add: [...dk.picked] }, 'Друзья позваны.') : say('Отметь хотя бы одного друга.')),
-                    }),
-                  ]
-                : []),
+              ...(invite ? [gap, dim('Позвать ещё:'), pickFriends(others)] : []),
               gap,
-              Button({
-                key: 'arcade-board-off',
-                label:
-                  dk.confirm === `off-${share}`
-                    ? isOwner
-                      ? 'Нажми ещё раз — удалить с сайта'
-                      : 'Нажми ещё раз — выйти с доски'
-                    : isOwner
-                      ? 'Удалить с сайта'
-                      : 'Выйти с доски',
-                onPress: () => unshareBoard($, share),
-              }),
-              dim(isOwner ? '  У тебя и у друзей доска останется — каждому своя копия.' : '  У тебя останется своя копия доски, у друзей — общая.'),
+              tiles(
+                [
+                  ...(invite
+                    ? [
+                        Button({
+                          key: 'arcade-board-invite',
+                          label: dk.busy === 'add' ? 'Зову…' : 'Позвать',
+                          onPress: () => (dk.picked.size ? boardMembers($, share, { add: [...dk.picked] }, 'Друзья позваны.') : say('Отметь хотя бы одного друга.')),
+                        }),
+                        dim('  Отмеченные друзья увидят доску у себя и смогут её вести.'),
+                      ]
+                    : []),
+                  Button({
+                    key: 'arcade-board-off',
+                    label:
+                      dk.confirm === `off-${share}`
+                        ? isOwner
+                          ? 'Нажми ещё раз — удалить с сайта'
+                          : 'Нажми ещё раз — выйти с доски'
+                        : isOwner
+                          ? 'Удалить с сайта'
+                          : 'Выйти с доски',
+                    onPress: () => unshareBoard($, share),
+                  }),
+                  dim(isOwner ? '  У тебя и у друзей доска останется — каждому своя копия.' : '  У тебя останется своя копия доски, у друзей — общая.'),
+                ],
+                40,
+              ),
             ]
           }
-          // Удалить доску можно, пока она не общая: общую сначала удаляют с сайта или выходят с неё
+          // Удалить доску можно, пока она не общая: общую сначала удаляют с сайта или выходят с неё. Плитка — рядом
+          // с «Отдать Claude»
           const deleteItems =
             share && acct.session
               ? []
               : [
-                  gap,
                   Button({
                     key: 'arcade-board-delete',
                     label: dk.confirm === `delete-${id}` ? 'Нажми ещё раз — удалить навсегда' : 'Удалить доску',
@@ -5983,6 +6007,7 @@ export function register(on) {
                       $.ui.invalidate('ui.render')
                     },
                   }),
+                  dim('  Доска удалится вместе с колонками и карточками.'),
                 ]
           items = [
             Button({
@@ -6012,14 +6037,22 @@ export function register(on) {
               },
             }),
             gap,
-            Button({ key: 'arcade-board-send', label: 'Отдать Claude', onPress: () => sendBoard($, id) }),
-            dim('  Claude получит доску с карточками и сможет добавлять, править и переносить их.'),
+            tiles(
+              [
+                Button({ key: 'arcade-board-send', label: 'Отдать Claude', onPress: () => sendBoard($, id) }),
+                dim('  Claude получит доску с карточками и сможет добавлять, править и переносить их.'),
+                ...deleteItems,
+              ],
+              40,
+            ),
             section('Колонки'),
-            ...board.board.cols.flatMap((c) => [
-              keep(
+            // В Desktop у полей колонок нет подписи слева (название и так в поле): подписи разной длины сдвигали поля
+            // и кнопки вразнобой. «Убрать колонку» — в той же строке, что и поле
+            ...board.board.cols.flatMap((c) => {
+              const name = keep(
                 Input({
                   key: `arcade-col-name-${c.id}-${field}`,
-                  label: colName(c),
+                  ...(desktop ? {} : { label: colName(c) }),
                   value: colName(c),
                   submitLabel: tr('Сохранить', lang),
                   onSubmit: (value) => {
@@ -6034,31 +6067,32 @@ export function register(on) {
                     )
                   },
                 }),
-              ),
-              ...(board.board.cols.length > 1
-                ? [
-                    Button({
-                      key: `arcade-col-drop-${c.id}`,
-                      label: 'Убрать колонку',
-                      onPress: () =>
-                        editBoard(
-                          $,
-                          (list, at) => {
-                            const done = removeColumn(list, id, c.id, at)
-                            if (done.error === 'busy') return 'В колонке есть карточки — сначала перенеси их.'
-                            if (done.error === 'last') return 'Последнюю колонку не убрать.'
-                            return done.error ? list : done.notes
-                          },
-                          'Колонка убрана.',
-                        ),
-                    }),
-                  ]
-                : []),
-            ]),
+              )
+              const drop =
+                board.board.cols.length > 1
+                  ? [
+                      Button({
+                        key: `arcade-col-drop-${c.id}`,
+                        label: 'Убрать колонку',
+                        onPress: () =>
+                          editBoard(
+                            $,
+                            (list, at) => {
+                              const done = removeColumn(list, id, c.id, at)
+                              if (done.error === 'busy') return 'В колонке есть карточки — сначала перенеси их.'
+                              if (done.error === 'last') return 'Последнюю колонку не убрать.'
+                              return done.error ? list : done.notes
+                            },
+                            'Колонка убрана.',
+                          ),
+                      }),
+                    ]
+                  : []
+              return desktop ? [Box({ key: `col-row-${c.id}`, flexDirection: 'row', alignItems: 'center', columnGap: 'sm', children: [name, ...drop] })] : [name, ...drop]
+            }),
             Input({
               key: `arcade-col-new-${field}`,
-              label: 'Новая колонка',
-              placeholder: 'название: проверка, на паузе…',
+              ...(desktop ? { placeholder: 'Новая колонка' } : { label: 'Новая колонка', placeholder: 'название: проверка, на паузе…' }),
               submitLabel: tr('Добавить', lang),
               ...focusOn('col-new'),
               onSubmit: (value) => {
@@ -6071,7 +6105,6 @@ export function register(on) {
             }),
             section('Общий доступ'),
             ...shareItems,
-            ...deleteItems,
             ...noticeLines,
             ...hint,
           ]

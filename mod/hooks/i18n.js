@@ -309,6 +309,8 @@ const EXACT = {
   '  У тебя останется своя копия доски, у друзей — общая.': '  You keep your own copy of the board, friends keep the shared one.',
   'Удалить доску': 'Delete the board',
   'Доска удалена.': 'The board is deleted.',
+  '  Доска удалится вместе с колонками и карточками.': '  The board is deleted with its columns and cards.',
+  '  Отмеченные друзья увидят доску у себя и смогут её вести.': '  Ticked friends get the board too and can work on it with you.',
   '← Доски': '← Boards',
   'Доска': 'Board',
   '  Claude получит доску с карточками и сможет добавлять, править и переносить их.': '  Claude gets the board with its cards and can add, edit and move them.',
