@@ -18,14 +18,14 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 - **Ajanın ne yaptığını bilir.** Ajan bitirdiğinde ya da izin istediğinde oyunun üstünde bir bildirim çıkar — oynamaya devam et, duraklat ya da doğrudan ajana dön (davranışı ayarlardan seçersin). Claude Desktop’ta izlediğin sekmeyi de kapatabilir, böylece sohbet yeniden önüne gelir.
 - **Tek menü, altı bölüm.** *Oyna*, *Oku ve dinle*, *İzle*, *Sosyal*, *İş* ve *Diğer* — ihtiyacın olmayanları daralt. En üstte: son oyuna *Devam et*, *Ara* ve *Favoriler*.
 - **61 ücretsiz oyun:** NES (Dendy), Sega Mega Drive, Master System, PlayStation ve arcade oyunları, nişancı, yarış, strateji, macera ve masa oyunları içeren bir *Oyunlar* sekmesi.
-- **Oku ve dinle.** 136 kamu malı kitap, LibriVox sesli kitapları, ajanın üzerinde çalıştığı konuyla ilgili yeni makaleler ve podcast bölümleri.
+- **Oku ve dinle.** 30 dilde klasikler ve LibriVox sesli kitapları, doğrudan Project Gutenberg, Vikikaynak ve LibriVox’tan; ayrıca ajanın üzerinde çalıştığı konuyla ilgili yeni makaleler ve podcast bölümleri.
 - **İzle.** Ajanın üzerinde çalıştığı konuyla ilgili yeni YouTube videoları, Twitch: kendi kanalların ile programlama, teknoloji, bilim ve retro oyunlar üzerine canlı yayınlar ve TikTok: girişi kendin yaptığın TikTok’un kendi sitesinde *Sana Özel* akışı ve arama.
 - **NES ve Flappy Arcade doğrudan Claude Code içinde** — terminalde, VS Code’da ve Claude Desktop’ta. Geri kalan her şey bir tarayıcı penceresinde açılır; Claude Desktop’ta varsayılan olarak Claude’un yerleşik tarayıcısında (nişancı oyunları yine de tarayıcı penceresinde açılır: yerleşik tarayıcı fareyi yakalayamaz).
 - **Çevrim içi oyun.** Ağ üzerinden iki kişilik konsol oyunları, Doom’da deathmatch ve co-op, insanlara ya da bilgisayara karşı satranç, go, dama ve reversi.
 - **«Çevrim içi kim bekliyor».** Biri oyun arkadaşı beklediğinde Arcade bunu Claude Code’da bir *Katıl* düğmesiyle gösterir.
 - **Arkadaşlar ve sohbetler.** İsteğe bağlı GitHub girişi ayarlarını tüm bilgisayarlarında aynı tutar ve sana bir @takma ad verir; arkadaşlarını tam takma adlarıyla ekle, kimin çevrimiçi olduğunu gör, onları oyuna davet et, ikili ya da grup halinde sohbet et.
 - **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri; Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı. Sütunlu ve kartlı panolar — birini arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın.
-- **Arama ve favoriler.** Oyunlar, kitaplar, sesli kitaplar ve Twitch kanallarında tek bir arama, bölüme ve türe göre gruplanmış; *★ Favoriler*’de tutmak için herhangi bir şeyi ☆ ile işaretle.
+- **Arama ve favoriler.** Oyunlarda ve Twitch kanallarında tek bir arama, bölüme ve türe göre gruplanmış; *★ Favoriler*’de tutmak için bir oyunu ☆ ile işaretle.
 - **Kendi oyunların.** Sahip olduğun ROM’ları ekle; bilgisayarında kalırlar.
 - **13 arayüz dili:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — sistem ya da tarayıcı diline göre, varsayılan İngilizce.
 
@@ -89,7 +89,7 @@ PowerShell’de: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 
 Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltılmış bölüm `▸` ve içindeki kutucuk sayısını gösterir; *Sosyal* ayrıca yeni mesajları 💬 ve arkadaşlık isteklerini 👥 gösterir. Arcade hangi bölümlerin daraltıldığını hatırlar. Giriş yaptıktan sonra menü başlığı @takma adını aynı sayaçlarla gösterir.
 
-**Arama** iki harften itibaren başlar ve büyük-küçük harf ile aksanlara bakmadan başlık, yazar ya da tür bulur. Sonuçlar bölüme ve türe göre gruplanır, örneğin *Kitaplar · Polisiye* ya da *Oyunlar · Nişancı*. Bir oyun, kitap ya da sesli kitabın yanındaki ☆ yıldızı onu **★ Favoriler**’e ekler (en fazla 100); favoriler bölüme ve türe göre sıralanır, en yeniler önce.
+**Arama** iki harften itibaren başlar ve büyük-küçük harf ile aksanlara bakmadan başlık ya da tür bulur. Sonuçlar bölüme ve türe göre gruplanır, örneğin *Oyunlar · Nişancı*. Bir oyunun yanındaki ☆ yıldızı onu **★ Favoriler**’e ekler (en fazla 100); favoriler bölüme ve türe göre sıralanır, en yeniler önce. Kitapların ve sesli kitapların başlığa ya da yazara göre kendi araması var.
 
 ### Ne nerede açılır
 
@@ -115,8 +115,8 @@ Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya
 | **Oyunlar → Strateji** | OpenTTD — ulaşım imparatorluğu (GPL-2.0); Micropolis — 1989’un klasik şehir kurma oyununun açık kaynak kodu, şehrin tarayıcıda kaydedilir (micropolisJS, ek koşullarla GPL-3.0 ve Micropolis Public Name License); Warzone 2100 — kampanyası ve bilgisayara karşı çatışması olan gerçek zamanlı strateji, birliklerini kendin tasarlarsın, kayıtlar tarayıcıda kalır (GPL-2.0-or-later) |
 | **Oyunlar → Macera** | ScummVM’de (GPL-3.0-or-later) 90’ların dört ücretsiz klasik macera oyunu: Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress ve Nippon Safes, Inc. — izinle dağıtılabilen freeware oyun verileri; F5 ile istediğin an kaydet |
 | **Oyunlar → Masa oyunları** | Satranç — insanlara ya da bilgisayara karşı (Stockfish, 1–10 seviye), çevrim içi saatli; 9×9, 13×13 ve 19×19 tahtalarda go; Rus daması, reversi; hepsinde *Terk et* |
-| **Kitaplar** | Dil raflarında, türe göre dizilmiş 136 kamu malı klasik: 98’i İngilizce (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, çeviride Tolstoy ve Dostoyevski…) ve 38’i Ukraynaca (Franko, Lesya Ukrainka, Kotsyubynsky, Kotlyarevsky, Kulish…). Ayraç kendiliğinden konur: kitabı yeniden aç, kaldığın yerden devam edersin. Kendi EPUB, FB2 ve TXT dosyaların Arcade penceresinde açılır |
-| **Sesli kitaplar** | Dil raflarında, türe göre dizilmiş LibriVox’un kamu malı kayıtları: İngilizce Oscar Wilde ve O. Henry, Ukraynaca Gogol. Arcade penceresindeki oynatıcı kaldığın yeri hatırlar; kendi MP3, M4A, M4B, OGG ve Opus dosyaların da orada açılır ve tarayıcında kalır |
+| **Kitaplar** | 30 dilde kamu malı klasikler — dili sen seçersin (başta arayüzün dili). Bölümler her dilde aynı: Popüler, Kurmaca, Şiir, Tiyatro, Macera, Polisiye ve diğerleri; başlığa ya da yazara göre arama yapılır. Liste istek üzerine Project Gutenberg ve Vikikaynak’tan gelir — Arcade’in kendi kitabı yoktur; açtığın kitap tarayıcındaki *Kitaplarım* bölümünde kalır. Ayraç kendiliğinden konur: kitabı yeniden aç, kaldığın yerden devam edersin. Kendi EPUB, FB2 ve TXT dosyaların da Arcade penceresinde açılır |
+| **Sesli kitaplar** | Aynı dillerde ve bölümlerde LibriVox kayıtları, aramayla birlikte: doğrudan archive.org’dan çevrim içi dinle ya da çevrim dışı dinlemek için kitabı tarayıcına indir. Arcade penceresindeki oynatıcı kaldığın bölümü, yeri ve hızı hatırlar; kendi MP3, M4A, M4B, OGG ve Opus dosyaların da orada açılır ve tarayıcında kalır |
 | **Makaleler** | Seçilmiş 106 İngilizce blog ve yayından yeni makaleler — Simon Willison, InfoQ, The Cloudflare Blog, Ars Technica, Krebs on Security ve diğerleri |
 | **Podcast’ler** | 65 İngilizce podcast’in yeni bölümleri — Software Engineering Daily, Security Now, Talk Python To Me, Darknet Diaries ve diğerleri; her bölüm kaldığın yeri hatırlar |
 | **YouTube** | Yapay zekâ, web ve DevOps’tan bilime, uzaya ve retro bilgisayarlara kadar 24 alanda seçilmiş 153 kanaldan yeni videolar |
@@ -184,6 +184,7 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 
 - Reklam yok, analiz yok, takip yok. Analiz koduyla gelen oyunlar bundan arındırıldı (her oyunun `NOTICE` dosyasına bak).
 - Kendi ROM’ların, WAD’ların, kitapların ve ses dosyaların bilgisayarından ya da tarayıcından asla çıkmaz.
+- Kitap ve sesli kitap listeleri ile Project Gutenberg kitapları Arcade sitesi üzerinden gelir: site bunları Project Gutenberg, Vikikaynak ve archive.org’dan alır ve yalnızca Cloudflare önbelleğinde tutar — listeleri altı saat, bir kitabı bir hafta. Vikikaynak sayfalarını ve LibriVox kayıtlarını pencere doğrudan bu sitelerden yükler.
 - Çevrim içi oyun Cloudflare üzerindeki Arcade sunucusundan geçer: mesajlar bir odadaki oyuncular arasında aktarılır ve saklanmaz — geri dönebilmen için tutulan masa oyunu hamleleri hariç; bir ay boyunca dokunulmayan oyun silinir.
 - Konuları kendi Claude Code oturumunda Haiku önerir; Arcade sitesi sohbetini asla görmez — *Kendi konun*’u kullandığında yalnızca kısa bir İngilizce arama sorgusu gider. Bir makalenin adresi `#` işaretinden sonra gelir, bu yüzden Arcade sunucusuna asla ulaşmaz.
 - Giriş yaptıktan sonra site eşitlenen ayarlarını, favorilerini, @takma adını, arkadaşlarını, sohbetlerini ve ortak panolarını saklar; oyun davetlerini ise 10 dakika tutar. Kimin çevrimiçi olduğunu yalnızca bellekte, bir buçuk dakika tutar. Oturum anahtarı yalnızca Arcade sitesine gönderilir.
@@ -201,7 +202,7 @@ Arcade **alfa** aşamasında ve aktif olarak geliştiriliyor — bkz. [değişik
 ## Lisanslar
 
 - **Oyunlar:** her oyunun kendi özgür lisansı var (MIT, GPL, BSD, Apache, Creative Commons ve diğerleri) — lisans metni ve kaynak kodu oyunun yanında durur ve kartından bağlantı verilir.
-- **Kitaplar ve sesli kitaplar:** kamu malı — İngilizce kitaplar Project Gutenberg’den, Ukraynaca kitaplar Vikikaynak’tan, kayıtlar LibriVox’tan; her kitabın kaynağını belirten bir `LICENSE.txt` dosyası var.
+- **Kitaplar ve sesli kitaplar:** kamu malı; Arcade bunları saklamaz — kitaplar Project Gutenberg ve Vikikaynak’tan, kayıtlar LibriVox’tan (archive.org) sen açtığın anda gelir.
 - **Emülatörler ve motorlar:** JSNES (Apache-2.0), çekirdekleriyle EmulatorJS (GPL-3.0), PrBoom (GPL-2.0), Cloudflare’in doom-wasm’ı ve Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (ek koşullarla GPL-3.0), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — satranç rakibi. Sega ve Master System için kullanılan Genesis Plus GX çekirdeği yalnızca ticari olmayan kullanım içindir.
 - **Arcade’in kendi kodu** (eklenti ve site) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Onu özgürce kullanabilir, inceleyebilir ve değiştirebilirsin. Değiştirilmiş bir sürümü dağıtırsan — ya da başkaları için çevrim içi hizmet olarak çalıştırırsan —, tüm kaynak kodunu aynı lisansla yayımlaman ve telif hakkı bildirimlerini koruman gerekir. Üçüncü taraf bileşenler kendi lisanslarını korur.
 
@@ -222,7 +223,7 @@ Pull request’ler memnuniyetle karşılanır. Bir tane gönderdiğinde katkın�
 ```
 mod/     Claude Code eklentisi (hook'lar, panel arayüzü, testler)
 site/    Cloudflare Workers üzerindeki site: katalog, Arcade penceresi, ağ odaları, hesaplar, arkadaşlar, sohbetler, hata raporları
-tools/   derleme araçları: kitaplar, sesli kitaplar, çeviriler, heretic-wasm
+tools/   derleme araçları: çeviriler, heretic-wasm
 .github/ doom-wasm, heretic-wasm, OpenTTD ve ScummVM'i tarayıcı için derleyen GitHub Actions
 ```
 
@@ -230,7 +231,6 @@ tools/   derleme araçları: kitaplar, sesli kitaplar, çeviriler, heretic-wasm
 - Eklenti testleri: `claude plugin validate ./mod`, ardından `mod/` içinde `claude plugin test`
 - Site testleri: `site/` içinde `npm test`; derleme: `node build.mjs`; dağıtım `main` dalından Cloudflare Workers Builds ile otomatik yapılır.
 - Çalışmalar `main` dalında yapılır, pull request'ler de oraya açılır. Varsayılan dal `plugin`, `site/` olmadan `main` dalının bir kopyasıdır ve her push'ta bir GitHub Action tarafından güncellenir: eklenti marketplace’i tüm depo yerine bu dalı indirir.
-- Kitaplar: `node tools/books/build.mjs` katalogdaki kitapları indirir ve temizler (liste — `tools/books/books.json`).
 - Çeviriler: `node tools/i18n/collect.mjs`, ardından `node tools/i18n/check.mjs` — bkz. [tools/i18n/README.md](tools/i18n/README.md).
 
 Ayrıntılı belgeler (Rusça): [mod/README.md](mod/README.md) — eklenti, [site/README.md](https://github.com/ArbakovMaxim/agent-arcade/tree/main/site/README.md) — site, oyun ekleme ve ağ üzerinden oyun.

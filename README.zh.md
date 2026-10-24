@@ -18,14 +18,14 @@ Arcade 是一个 [Claude Code](https://claude.com/claude-code) 插件，帮你�
 - **了解智能体的状态。** 当智能体完成工作或请求授权时，游戏上方会出现横幅 — 继续玩、暂停，或直接返回智能体（具体行为在设置中选择）。在 Claude Desktop 中，它还可以关闭你正在观看的标签页，让对话重新回到你面前。
 - **一个菜单，六个分区。** *开始游戏*、*阅读与收听*、*观看*、*社交*、*工作* 和 *更多* — 不需要的分区可以折叠。最上方是：*继续* 上一款游戏、*搜索* 和 *收藏*。
 - **61 款免费游戏**，涵盖 NES（Dendy）、Sega Mega Drive、Master System、PlayStation，以及包含街机、射击、竞速、策略、冒险和棋类游戏的 *游戏* 标签页。
-- **阅读与收听。** 136 本公有领域书籍、LibriVox 有声书，以及与智能体工作主题相关的最新文章和播客节目。
+- **阅读与收听。** 30 种语言的经典书籍和 LibriVox 有声书，直接来自 Project Gutenberg、Wikisource 和 LibriVox；还有与智能体工作主题相关的最新文章和播客节目。
 - **观看。** 与智能体工作主题相关的最新 YouTube 视频，以及 Twitch：你自己的频道，和关于编程、科技、科学与复古游戏的直播。还有 TikTok：TikTok 官网上的 *“推荐”信息流* 和搜索（需要你自己登录）。
 - **NES 和 Flappy Arcade 直接在 Claude Code 里运行** — 终端、VS Code 和 Claude Desktop 都可以。其他内容在浏览器窗口中打开；在 Claude Desktop 中默认使用 Claude 的内置浏览器（射击游戏仍在浏览器窗口中打开：内置浏览器无法捕获鼠标）。
 - **联网对战。** 通过网络进行的双人主机游戏、Doom 死亡竞赛和合作模式，以及与真人或电脑对弈的国际象棋、围棋、跳棋和黑白棋。
 - **“谁在线等待”。** 有人在等待对手时，Arcade 会在 Claude Code 中显示，并附带 *加入* 按钮。
 - **好友与聊天。** 可选的 GitHub 登录让你在所有电脑上保持相同的设置，并获得一个 @用户名；通过准确的用户名添加好友，查看谁在线，邀请他们一起玩，进行一对一或群组聊天。
 - **笔记本与项目看板。** 页面、子页面和清单，Claude 也能帮你记；通过 Claude 的连接器把页面发送到 Notion 或其他应用，或从那里导入；在 Claude 输入框中听写，再把文字移到页面上。带列和卡片的看板 — 与好友共享，大家就在同一块看板上协作。
-- **搜索与收藏。** 一次搜索即可覆盖游戏、书籍、有声书和 Twitch 频道，结果按分区和类型分组；用 ☆ 标记任何内容，即可保存到 *★ 收藏*。
+- **搜索与收藏。** 一次搜索即可覆盖游戏和 Twitch 频道，结果按分区和类型分组；用 ☆ 标记游戏，即可保存到 *★ 收藏*。
 - **你自己的游戏。** 添加你拥有的 ROM；它们只保存在你的电脑上。
 - **13 种界面语言：** English、Русский、Українська、Español、Français、Deutsch、Português、Italiano、Polski、Türkçe、日本語、中文、한국어 — 根据系统或浏览器语言自动选择，默认英语。
 
@@ -89,7 +89,7 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 
 点击分区标题即可折叠或展开。折叠的分区会显示 `▸` 和其中的磁贴数量，*社交* 还会显示新消息 💬 和好友请求 👥 的数量。Arcade 会记住你折叠了哪些分区。登录后，菜单顶部会显示你的 @用户名和同样的计数。
 
-**搜索** 从两个字符开始，匹配标题、作者或类型，不区分大小写和重音符号。结果按分区和类型分组，例如 *书籍 · 侦探* 或 *游戏 · 射击*。游戏、书籍或有声书旁边的 ☆ 星标可将其加入 **★ 收藏**（最多 100 项），按分区和类型排列，最新添加的在前。
+**搜索** 从两个字符开始，匹配标题或类型，不区分大小写和重音符号。结果按分区和类型分组，例如 *游戏 · 射击*。游戏旁边的 ☆ 星标可将其加入 **★ 收藏**（最多 100 项），按分区和类型排列，最新添加的在前。书籍和有声书有自己的搜索，可按书名或作者查找。
 
 ### 在哪里打开
 
@@ -115,8 +115,8 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 | **游戏 → 策略** | OpenTTD — 运输大亨（GPL-2.0）；Micropolis — 1989 年经典城市建造游戏的开源代码，城市保存在浏览器中（micropolisJS，带附加条款的 GPL-3.0 和 Micropolis Public Name License）；Warzone 2100 — 即时战略游戏，有战役和对战电脑的遭遇战，单位由你自己设计，存档保存在浏览器中（GPL-2.0-or-later） |
 | **游戏 → 冒险** | 在 ScummVM（GPL-3.0-or-later）中运行的四款 90 年代免费经典冒险游戏：Beneath a Steel Sky、Flight of the Amazon Queen、Lure of the Temptress 和 Nippon Safes, Inc. — 允许再分发的免费游戏数据；随时按 F5 存档 |
 | **游戏 → 棋类** | 国际象棋 — 与真人或电脑（Stockfish，1–10 级）对弈，联网对局带棋钟；9×9、13×13 和 19×19 棋盘的围棋；俄罗斯跳棋、黑白棋；全部支持 *认输* |
-| **书籍** | 136 部公有领域经典作品，按语言分书架、按类型排列：英语 98 部（奥斯汀、狄更斯、马克·吐温、柯南·道尔、威尔斯、雪莱，以及译本形式的托尔斯泰和陀思妥耶夫斯基……），乌克兰语 38 部（弗兰科、莱霞·乌克兰卡、科秋宾斯基、科特利亚列夫斯基、库利什……）。书签自动保存：再次打开书，就会回到上次停下的地方。你自己的 EPUB、FB2 和 TXT 可以在 Arcade 窗口中打开 |
-| **有声书** | 来自 LibriVox 的公有领域录音，按语言分书架、按类型排列：英语有奥斯卡·王尔德和欧·亨利，乌克兰语有果戈理。Arcade 窗口中的播放器会记住你停在哪里；你自己的 MP3、M4A、M4B、OGG 和 Opus 文件也能在那里打开，并且只保留在你的浏览器中 |
+| **书籍** | 30 种语言的公有领域经典作品——语言由你选择（默认是界面语言）。各语言的分区相同：热门、小说、诗歌、戏剧、冒险、侦探等；可按书名或作者搜索。列表按需从 Project Gutenberg 和 Wikisource 获取——Arcade 自己不存储任何书籍；打开过的书会保留在你浏览器的 *我的书籍* 中。书签自动保存：再次打开书，就会回到上次停下的地方。你自己的 EPUB、FB2 和 TXT 也可以在 Arcade 窗口中打开 |
+| **有声书** | 同样语言和分区的 LibriVox 录音，并支持搜索：可以直接从 archive.org 在线收听，也可以把书下载到浏览器离线收听。Arcade 窗口中的播放器会记住章节、位置和播放速度；你自己的 MP3、M4A、M4B、OGG 和 Opus 文件也能在那里打开，并且只保留在你的浏览器中 |
 | **文章** | 来自 106 个精选英语博客和媒体的最新文章 — Simon Willison、InfoQ、The Cloudflare Blog、Ars Technica、Krebs on Security 等 |
 | **播客** | 65 档英语播客的最新节目 — Software Engineering Daily、Security Now、Talk Python To Me、Darknet Diaries 等；每一集都会记住你停在哪里 |
 | **YouTube** | 来自 153 个精选频道的最新视频，涵盖 24 个方向，从 AI、Web 和 DevOps 到科学、太空和复古计算 |
@@ -184,6 +184,7 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 
 - 没有广告，没有分析，没有追踪。原本带有分析功能的游戏已将其移除（见每款游戏的 `NOTICE`）。
 - 你自己的 ROM、WAD、书籍和音频文件绝不会离开你的电脑或浏览器。
+- 书籍和有声书列表以及 Project Gutenberg 的书籍经由 Arcade 网站获取：网站从 Project Gutenberg、Wikisource 和 archive.org 取来，只保存在 Cloudflare 缓存中——列表六小时，书籍一周。Wikisource 页面和 LibriVox 录音由窗口直接从这些网站加载。
 - 联网对战通过 Arcade 在 Cloudflare 上的服务器进行：消息只在房间内的玩家之间转发，不会保存 — 棋类游戏的走法除外，保存它们是为了让你可以回来继续；一个月无人动过的对局会被删除。
 - 主题由 Haiku 在你自己的 Claude Code 会话中推荐；Arcade 的网站永远看不到你的对话 — 只有在你使用 *自定义主题* 时，才会收到一条简短的英语搜索查询。文章地址放在 `#` 之后，因此永远不会到达 Arcade 的服务器。
 - 登录后，网站会保存你同步的设置、收藏、@用户名、好友、聊天和共享看板，游戏邀请保存 10 分钟。谁在线只保存在内存中，持续一分半钟。会话密钥只发送到 Arcade 的网站。
@@ -201,7 +202,7 @@ Arcade 处于 **alpha** 阶段，正在积极开发中 — 见[更新日志](CHA
 ## 许可证
 
 - **游戏：** 每款游戏都有自己的自由许可证（MIT、GPL、BSD、Apache、Creative Commons 等） — 许可证文本和源代码与游戏放在一起，并从其卡片链接。
-- **书籍和有声书：** 公有领域 — 英语书籍来自 Project Gutenberg，乌克兰语书籍来自 Wikisource，录音来自 LibriVox；每本书都附有注明来源的 `LICENSE.txt`。
+- **书籍和有声书：** 公有领域；Arcade 不存储它们——书籍在你打开时从 Project Gutenberg 和 Wikisource 获取，录音来自 LibriVox（archive.org）。
 - **模拟器和引擎：** JSNES（Apache-2.0）、EmulatorJS（GPL-3.0）及其核心、PrBoom（GPL-2.0）、Cloudflare 的 doom-wasm 和 Chocolate Doom/Heretic（GPL-2.0）、OpenTTD（GPL-2.0）、micropolisJS（带附加条款的 GPL-3.0）、ScummVM（GPL-3.0-or-later）、国际象棋电脑对手 Stockfish（GPL-3.0）。用于 Sega 和 Master System 的 Genesis Plus GX 核心仅限非商业用途。
 - **Arcade 自己的代码**（插件和网站） — **GNU AGPL-3.0**（[LICENSE](LICENSE)），© 2026 Max Arbakov。你可以自由使用、研究和修改它。如果你分发修改后的版本 — 或将其作为在线服务提供给他人 — 必须以相同许可证公开你的全部源代码，并保留版权声明。第三方组件保留各自的许可证。
 
@@ -222,7 +223,7 @@ Arcade 是免费的。如果它让你的等待更有趣，你可以请项目喝�
 ```
 mod/     Claude Code 插件（钩子、面板界面、测试）
 site/    运行在 Cloudflare Workers 上的网站：目录、Arcade 窗口、联网房间、账户、好友、聊天、错误报告
-tools/   构建辅助工具：书籍、有声书、翻译、heretic-wasm
+tools/   构建辅助工具：翻译、heretic-wasm
 .github/ 为浏览器构建 doom-wasm、heretic-wasm、OpenTTD 和 ScummVM 的 GitHub Actions
 ```
 
@@ -230,7 +231,6 @@ tools/   构建辅助工具：书籍、有声书、翻译、heretic-wasm
 - 插件测试：`claude plugin validate ./mod`，然后在 `mod/` 中运行 `claude plugin test`
 - 网站测试：在 `site/` 中运行 `npm test`；构建：`node build.mjs`；通过 Cloudflare Workers Builds 从 `main` 自动部署。
 - 开发在 `main` 上进行，Pull Request 也请提交到 `main`。默认分支 `plugin` 是去掉 `site/` 的 `main` 副本，每次推送时由 GitHub Action 更新：插件市场下载的是这个分支，而不是整个仓库。
-- 书籍：`node tools/books/build.mjs` 下载并清理目录中的书籍（列表 — `tools/books/books.json`）。
 - 翻译：`node tools/i18n/collect.mjs`，然后 `node tools/i18n/check.mjs` — 见 [tools/i18n/README.md](tools/i18n/README.md)。
 
 详细文档（俄语）：[mod/README.md](mod/README.md) — 插件，[site/README.md](https://github.com/ArbakovMaxim/agent-arcade/tree/main/site/README.md) — 网站、添加游戏和联网对战。

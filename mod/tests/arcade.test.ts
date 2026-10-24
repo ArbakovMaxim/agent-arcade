@@ -20,6 +20,7 @@ import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, 
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
+import { BOOK_LANGS, BOOK_SECTIONS, bookLang, bookQuery, booksPath, parseBooks } from '../hooks/books.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
@@ -2402,31 +2403,120 @@ test('Desktop: языки — плитками с флажками, текущи
   await ui.unmount()
 })
 
-test('книги: мод знает книги каталога, «Книги» — после «Игр», книга открывается в окне', async ($, on) => {
-  const site = JSON.parse(siteCatalog())
-  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'books', title: 'Книги' })
-  site.groups = [{ id: 'games', title: 'Игры' }]
-  site.shelves = [{ id: 'shooters', title: 'Шутеры' }]
-  const sha = 'f'.repeat(64)
-  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
-  site.games.mumu = { console: 'books', kind: 'book', text: 'books/mumu/book.json', title: 'Муму', author: 'Иван Тургенев', genre: 'рассказ', about: 'Герасим и его собака.', keys: '…' }
-  site.games.bad = { console: 'books', kind: 'book', text: '../secret.json', title: 'Плохая', author: 'x', genre: 'x', about: 'x', keys: '…' }
-  site.games.kobzar = { console: 'books', kind: 'book', text: 'books/kobzar/book.json', title: 'Кобзар', author: 'Тарас Шевченко', genre: 'поэзия', about: '', keys: '…' }
-  const parsed = parseCatalog(JSON.stringify(site))
-  expect(parsed.games.find((g: any) => g.id === 'mumu')).toMatchObject({ kind: 'book', author: 'Иван Тургенев', text: 'books/mumu/book.json' })
-  expect(parsed.games.find((g: any) => g.id === 'bad')).toBeUndefined() // путь к тексту — только books/<id>/book.json
-  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
-  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+test('книги: адрес списка на сайте, разбор ответа, язык книг и запрос поиска', () => {
+  expect(booksPath('book', 'de', { section: 'popular' })).toBe('api/books/list?kind=book&lang=de&section=popular&page=1')
+  expect(booksPath('audio', 'ru', { q: 'Толстой Л', page: 3 })).toBe(`api/books/list?kind=audio&lang=ru&q=${encodeURIComponent('Толстой Л')}&page=3`)
+  expect(booksPath('book', 'en')).toBe('api/books/list?kind=book&lang=en&section=popular&page=1')
+  const answer = (data: any, status = 200) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
+  const list = {
+    items: [
+      { ref: 'gutenberg:1342', title: '  Pride and\nPrejudice ', author: 'Jane Austen' },
+      { ref: 'wikisource:ru:Муму (Тургенев)', title: 'Муму', author: 'Иван Тургенев' },
+      { ref: 'librivox:happy_prince', title: 'The Happy Prince' }, // аудио в списке книг — мимо
+      { ref: 'gutenberg:../etc', title: 'x' },
+      { ref: 'gutenberg:12', title: '   ' }, // без названия — мимо
+      { ref: 'gutenberg:7', title: 'T'.repeat(300), author: null },
+    ],
+    more: true,
+  }
+  const books = parseBooks('book', answer(list))
+  expect(books.more).toBe(true)
+  expect(books.items.map((x: any) => x.ref)).toEqual(['gutenberg:1342', 'wikisource:ru:Муму (Тургенев)', 'gutenberg:7'])
+  expect(books.items[0]).toEqual({ ref: 'gutenberg:1342', source: 'gutenberg', title: 'Pride and Prejudice', author: 'Jane Austen' })
+  expect(books.items[1].source).toBe('wikisource')
+  expect([books.items[2].title.length, books.items[2].author]).toEqual([200, ''])
+  expect(parseBooks('audio', answer(list)).items.map((x: any) => x.ref)).toEqual(['librivox:happy_prince'])
+  expect(parseBooks('book', answer({ items: [] })).more).toBe(false)
+  // Беды: нет связи, код ответа, своя причина сервера, не тот ответ
+  expect(parseBooks('book', null)).toEqual({ error: 'нет связи' })
+  expect(parseBooks('book', answer('not found', 404))).toEqual({ error: 'сервер ответил 404' })
+  expect(parseBooks('book', answer({ error: 'gutenberg is not answering' }, 502))).toEqual({ error: 'gutenberg is not answering' })
+  expect(parseBooks('book', answer({ list: [] }))).toEqual({ error: 'не тот ответ' })
+  expect(parseBooks('book', answer('<html>'))).toEqual({ error: 'не тот ответ' })
+  // Язык книг: выбранный, иначе язык интерфейса, иначе английский
+  expect([bookLang('de', 'ru'), bookLang(undefined, 'uk'), bookLang('xx', 'ru'), bookLang(null, 'zz')]).toEqual(['de', 'uk', 'ru', 'en'])
+  expect(Object.keys(BOOK_LANGS)).toHaveLength(30)
+  expect(Object.keys(BOOK_SECTIONS)[0]).toBe('popular')
+  // Запрос: буквы любых языков, цифры, дефис и апостроф; остальное — пробел; до 80 знаков
+  expect(bookQuery('  Война   и мир!!! ')).toBe('Война и мир')
+  expect(bookQuery("O'Brien <script>")).toBe("O'Brien script")
+  expect(bookQuery('a'.repeat(100))).toHaveLength(80)
+  expect(bookQuery(undefined)).toBe('')
+})
+
+test('книги: язык книг выбирает человек, разделы и «Ещё», ошибка с повтором, поиск, книга и «Мои книги» — в окне', HEAVY, async ($, on) => {
+  const page1 = { items: [{ ref: 'gutenberg:1342', title: 'Pride and Prejudice', author: 'Jane Austen' }, { ref: 'wikisource:de:Faust I', title: 'Faust', author: 'Goethe' }], more: true }
+  const page2 = { items: [{ ref: 'gutenberg:1342', title: 'Pride and Prejudice', author: 'Jane Austen' }, { ref: 'gutenberg:2229', title: 'Faust 2', author: 'Goethe' }], more: false }
+  const files: any = {
+    [booksPath('book', 'de', { section: 'popular' })]: JSON.stringify(page1),
+    [booksPath('book', 'de', { section: 'popular', page: 2 })]: JSON.stringify(page2),
+    [booksPath('book', 'de', { q: 'Austen' })]: JSON.stringify({ items: [page1.items[0]], more: false }),
+  }
+  const { clock, launches, saved, fetches } = stubs(on, { env: WINDOWS, files })
+  await start($)
   await clock.advance(2_500)
-  await $.command.run({ command: 'arcade', args: '' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  const labels = (await drawnTexts(ui)).filter((x) => ['Денди', 'Игры', 'Книги'].includes(x))
-  expect(labels).toEqual(['Денди', 'Игры', 'Книги'])
+  expect(await ui.find({ type: 'Text', text: '  язык интерфейса — 13 на выбор' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  классика на любом языке: разделы и поиск' })).toBeDefined()
   await ui.press({ key: 'arcade-menu-books' })
-  expect(await ui.find({ type: 'Text', text: '  Иван Тургенев · рассказ — Герасим и его собака.' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  Тарас Шевченко · поэзия' })).toBeDefined() // без описания — без висящего тире
-  await ui.press({ key: 'arcade-game-mumu' })
-  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=mumu`)
+  // Сначала язык книг — язык интерфейса; разделы — плитками, «Популярное» под фокусом
+  expect(await ui.find({ key: 'arcade-bk-lang' })).toMatchObject({ props: { label: 'Язык книг: Русский' } })
+  expect(await ui.find({ key: 'arcade-bk-sec-popular' })).toMatchObject({ props: { label: 'Популярное', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-bk-sec-travel' })).toMatchObject({ props: { label: 'Путешествия' } })
+  expect(fetches.some((u: string) => u.includes('api/books'))).toBe(false) // до раздела — ничего не загружаем
+  await ui.press({ key: 'arcade-bk-lang' })
+  expect(JSON.stringify(await ui.find({ key: 'arcade-bk-lang-ru' }))).toContain('Русский ✓')
+  expect(await ui.find({ key: 'arcade-bk-lang-ru' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-bk-lang-de' })
+  expect(saved.get('booksLang')).toBe('de')
+  expect(await ui.find({ key: 'arcade-bk-lang' })).toMatchObject({ props: { label: 'Язык книг: Deutsch', autoFocus: true } })
+  // Раздел: список с сайта на языке книг, названия и авторы — как у источника
+  await ui.press({ key: 'arcade-bk-sec-popular' })
+  await clock.settle()
+  expect(fetches.at(-1)).toBe(`${SITE}/${booksPath('book', 'de', { section: 'popular' })}`)
+  expect(await ui.find({ type: 'Text', text: 'Популярное' })).toBeDefined()
+  expect(JSON.stringify(await ui.find({ key: 'arcade-bk-item-0' }))).toContain('Pride and Prejudice')
+  expect(await ui.find({ type: 'Text', text: '  Jane Austen · Project Gutenberg' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  Goethe · Викитека' })).toBeDefined()
+  // «Ещё» — следующая страница к показанной, без повторов
+  await ui.press({ key: 'arcade-bk-more' })
+  await clock.settle()
+  expect(JSON.stringify(await ui.find({ key: 'arcade-bk-item-2' }))).toContain('Faust 2')
+  expect(await ui.find({ key: 'arcade-bk-item-3' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-bk-more' })).toBeUndefined()
+  // Книга — в окне Arcade по ссылке на источник
+  await ui.press({ key: 'arcade-bk-item-1' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?book=${encodeURIComponent('wikisource:de:Faust I')}`)
+  // Тот же раздел снова — уже загруженный список, без нового запроса
+  const asked = fetches.length
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-bk-sec-popular' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-bk-sec-popular' })
+  await clock.settle()
+  expect(fetches.length).toBe(asked)
+  // Сайт не ответил — причина и «Ещё раз»
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-bk-sec-poetry' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Список не загрузился: сервер ответил 404' })).toBeDefined()
+  files[booksPath('book', 'de', { section: 'poetry' })] = JSON.stringify({ items: [{ ref: 'gutenberg:2000', title: 'Gedichte', author: 'Heine' }], more: false })
+  await ui.press({ key: 'arcade-bk-retry' })
+  await clock.settle()
+  expect(JSON.stringify(await ui.find({ key: 'arcade-bk-item-0' }))).toContain('Gedichte')
+  expect(await ui.find({ key: 'arcade-bk-retry' })).toBeUndefined()
+  // Поиск: от двух букв, знаки — мимо; заголовок — запрос как есть
+  await ui.press({ key: 'arcade-back' })
+  await ui.input({ key: 'arcade-bk-find', text: 'x', kind: 'submit' })
+  expect(await ui.find({ type: 'Text', text: 'Напиши хотя бы две буквы.' })).toBeDefined()
+  await ui.input({ key: 'arcade-bk-find', text: ' Austen!! ', kind: 'submit' })
+  await clock.settle()
+  expect(fetches.at(-1)).toBe(`${SITE}/${booksPath('book', 'de', { q: 'Austen' })}`)
+  expect(await ui.find({ type: 'Text', text: 'Поиск: Austen' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-bk-item-1' })).toBeUndefined()
+  // «Мои книги» — скачанные в окне, с языком книг
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-bk-mine' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=books&section=mine&book-lang=de`)
   await ui.unmount()
 })
 
@@ -2449,46 +2539,6 @@ test('другие языки — поверх английского: точн�
     LOCALES.de = saved
     resetLocaleCache()
   }
-})
-
-test('книги по языкам и жанрам: «Книги» → полка-язык → книги под разделителями жанров', async ($, on) => {
-  const site = JSON.parse(siteCatalog())
-  site.consoles.push({ id: 'books', title: 'Книги', group: 'reading' })
-  site.groups = [{ id: 'reading', title: 'Книги' }]
-  site.shelves = [{ id: 'books-en', title: 'English' }, { id: 'books-uk', title: 'Українська' }]
-  const book = (id, title, genre, lang) => ({ console: 'books', kind: 'book', shelf: `books-${lang}`, text: `books/${id}/book.json`, title, author: 'Автор', genre, about: '', keys: '…' })
-  site.games.emma = book('emma', 'Emma', 'роман', 'en')
-  site.games.dracula = book('dracula', 'Dracula', 'ужасы', 'en')
-  site.games.jane = book('jane', 'Jane Eyre', 'роман', 'en')
-  site.games.khmary = book('khmary', 'Хмари', 'роман', 'uk')
-  const { clock } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
-  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
-  await clock.advance(2_500)
-  await $.command.run({ command: 'arcade', args: '' })
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: '  4 книги' })).toBeDefined() // у книг — «книги», а не «игры»
-  expect(await ui.find({ type: 'Text', text: '  язык интерфейса — 13 на выбор' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  4 книги' })).toBeDefined() // у книг — «книги», а не «игры»
-  expect(await ui.find({ type: 'Text', text: '  язык интерфейса — 13 на выбор' })).toBeDefined()
-  expect(tr('136 книг', 'en')).toBe('136 books')
-  await ui.press({ key: 'arcade-menu-reading' })
-  expect(await ui.find({ key: 'arcade-menu-shelf-books-en' })).toMatchObject({ props: { label: 'English' } })
-  expect(await ui.find({ key: 'arcade-menu-shelf-books-uk' })).toMatchObject({ props: { label: 'Українська' } })
-  expect(await ui.find({ type: 'Text', text: '  3 книги' })).toBeDefined() // у полки языка — «книги», а не «игры»
-  await ui.press({ key: 'arcade-menu-shelf-books-en' })
-  // на полке — плитки жанров с числом книг, жанр с заглавной буквы
-  expect(await ui.find({ key: 'arcade-genre-0' })).toMatchObject({ props: { label: 'Роман' } })
-  expect(await ui.find({ key: 'arcade-genre-1' })).toMatchObject({ props: { label: 'Ужасы' } })
-  expect(await ui.find({ type: 'Text', text: '  2 книги' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-game-emma' })).toBeUndefined() // книги — уже внутри жанра
-  await ui.press({ key: 'arcade-genre-0' })
-  expect(await ui.find({ key: 'arcade-game-emma' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-game-jane' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-game-dracula' })).toBeUndefined()
-  expect(await ui.find({ key: 'arcade-game-khmary' })).toBeUndefined()
-  await ui.press({ key: 'arcade-back' })
-  expect(await ui.find({ key: 'arcade-genre-1' })).toBeDefined() // «Назад» — к жанрам
-  await ui.unmount()
 })
 
 test('дизайн главного меню: разделы «Играть» и «Ещё», плитки в рамках — кнопка с подписью вместе, значок агента цветом', async ($, on) => {
@@ -2600,40 +2650,49 @@ test('кто ждёт по вариантам: контроль времени �
   await ui.unmount()
 })
 
-test('аудиокниги: своя группа — полки языков и «Мои аудиокниги», жанры плитками, открываются в окне', async ($, on) => {
-  const site = JSON.parse(siteCatalog())
-  site.consoles.push({ id: 'books', title: 'Книги', group: 'reading' }, { id: 'audiobooks', title: 'Аудиокниги', group: 'listening' })
-  site.groups = [{ id: 'reading', title: 'Книги' }, { id: 'listening', title: 'Аудиокниги' }]
-  site.shelves = [{ id: 'books-en', title: 'English' }, { id: 'audio-en', title: 'English' }, { id: 'audio-mine', title: 'Мои аудиокниги' }]
-  site.games.emma = { console: 'books', kind: 'book', shelf: 'books-en', text: 'books/emma/book.json', title: 'Emma', author: 'Jane Austen', genre: 'роман', about: '', keys: '…' }
-  const audio = (id: string, title: string, genre: string) => ({ console: 'audiobooks', kind: 'audio', shelf: 'audio-en', title, author: 'Автор', genre, about: '', keys: '…', chapters: [{ title: '1', url: 'https://archive.org/download/x/1.mp3' }] })
-  site.games['happy-prince'] = audio('happy-prince', 'The Happy Prince', 'сказки')
-  site.games['selfish-giant'] = audio('selfish-giant', 'The Selfish Giant', 'сказки')
-  site.games['gift-of-the-magi'] = audio('gift-of-the-magi', 'The Gift of the Magi', 'рассказы')
-  site.games['my-audio'] = { console: 'audiobooks', kind: 'audio-mine', shelf: 'audio-mine', title: 'Мои аудиокниги', genre: 'свои файлы', about: 'Свои MP3 — только в этом браузере.', keys: '…' }
-  const { clock, launches } = stubs(on, { env: WINDOWS, site: JSON.stringify(site) })
-  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+test('аудиокниги: свой экран — язык книг с прошлого раза, раздел, проигрыватель и «Мои аудиокниги» в окне; переводы', HEAVY, async ($, on) => {
+  const files: any = {
+    [booksPath('audio', 'en', { section: 'fairy' })]: JSON.stringify({
+      items: [
+        { ref: 'librivox:happy_prince_0904_librivox', title: 'The Happy Prince', author: 'Oscar Wilde' },
+        { ref: 'gutenberg:902', title: 'The Happy Prince (text)' }, // текст в списке аудио — мимо
+      ],
+      more: false,
+    }),
+  }
+  const { clock, launches, fetches } = stubs(on, { env: WINDOWS, files, stored: { booksLang: 'en' } })
+  await start($)
   await clock.advance(2_500)
-  await $.command.run({ command: 'arcade', args: '' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: 'Читать и слушать' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: '  4 аудиокниги' })).toBeDefined() // плитка «Аудиокниги» на главной
-  await ui.press({ key: 'arcade-menu-listening' })
-  expect(await ui.find({ key: 'arcade-menu-shelf-audio-en' })).toMatchObject({ props: { label: 'English' } })
-  expect(await ui.find({ key: 'arcade-menu-shelf-audio-mine' })).toMatchObject({ props: { label: 'Мои аудиокниги' } })
-  await ui.press({ key: 'arcade-menu-shelf-audio-en' })
-  // как у книг: на полке языка — жанры плитками с числом аудиокниг
-  expect(await ui.find({ key: 'arcade-genre-0' })).toMatchObject({ props: { label: 'Сказки' } })
-  expect(await ui.find({ type: 'Text', text: '  2 аудиокниги' })).toBeDefined()
-  await ui.press({ key: 'arcade-genre-0' })
-  await ui.press({ key: 'arcade-game-happy-prince' })
-  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?game=happy-prince`)
-  expect(tr('2 аудиокниги', 'en')).toBe('2 audiobooks')
-  expect(tr('Читать и слушать', 'en')).toBe('Read & listen')
-  // группа, полка и жанр «Моих аудиокниг» приходят с сайта по-русски
-  expect(['Аудиокниги', 'Мои аудиокниги', 'свои файлы'].map((s) => tr(s, 'en'))).toEqual(['Audiobooks', 'My audiobooks', 'your files'])
-  expect(['Аудиокниги', 'Мои аудиокниги', 'свои файлы'].map((s) => tr(s, 'de'))).toEqual(['Hörbücher', 'Meine Hörbücher', 'eigene Dateien'])
+  expect(await ui.find({ type: 'Text', text: '  LibriVox: слушать сразу или скачать' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-audiobooks' })
+  expect(await ui.find({ key: 'arcade-ab-lang' })).toMatchObject({ props: { label: 'Язык книг: English' } })
+  expect(await ui.find({ key: 'arcade-ab-mine' })).toMatchObject({ props: { label: 'Мои аудиокниги' } })
+  await ui.press({ key: 'arcade-ab-sec-fairy' })
+  await clock.settle()
+  expect(fetches.at(-1)).toBe(`${SITE}/${booksPath('audio', 'en', { section: 'fairy' })}`)
+  expect(await ui.find({ type: 'Text', text: 'Сказки' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  Oscar Wilde · LibriVox' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-ab-item-1' })).toBeUndefined()
+  expect((await drawnTexts(ui)).some((x) => x.startsWith('Аудиокниги открываются в окне браузера по умолчанию'))).toBe(true)
+  await ui.press({ key: 'arcade-ab-item-0' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?audio=${encodeURIComponent('librivox:happy_prince_0904_librivox')}`)
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-ab-mine' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/?tab=audiobooks&section=mine&book-lang=en`)
   await ui.unmount()
+  // Переводы экранов книг
+  expect(tr('Читать и слушать', 'en')).toBe('Read & listen')
+  expect(['Аудиокниги', 'Мои аудиокниги'].map((s) => tr(s, 'en'))).toEqual(['Audiobooks', 'My audiobooks'])
+  expect(['Аудиокниги', 'Мои аудиокниги'].map((s) => tr(s, 'de'))).toEqual(['Hörbücher', 'Meine Hörbücher'])
+  expect(tr('Язык книг: Deutsch', 'en')).toBe('Book language: Deutsch')
+  expect(tr('Язык книг: Deutsch', 'de')).toBe('Sprache der Bücher: Deutsch')
+  expect(tr('Список не загрузился: сервер ответил 404', 'en')).toBe("The list didn't load: the server answered 404")
+  expect(tr('Arcade · Аудиокниги', 'de')).toBe('Arcade · Hörbücher')
+  expect(tr('Викитека', 'en')).toBe('Wikisource')
+  expect(Object.values(BOOK_SECTIONS).map((s) => tr(s, 'en'))).not.toContain(undefined)
+  expect(Object.values(BOOK_SECTIONS).filter((s) => /[А-Яа-яЁё]/.test(tr(s, 'en')))).toEqual([])
 })
 
 test('Desktop: главное меню — карточки с иконками, подсветкой при наведении и крупными заголовками', async ($, on) => {
@@ -5714,51 +5773,53 @@ test('главное меню: свёрнутое с прошлого раза �
   await ui.unmount()
 })
 
-// Каталог с группами «Игры» и «Книги»: шутер и три книги на английской полке
+// Каталог с группами «Игры» и «Квесты»: шутер, два детективных квеста и головоломка
 function libraryCatalog() {
   const site = JSON.parse(siteCatalog())
-  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'books', title: 'Книги', group: 'reading' })
-  site.groups = [{ id: 'games', title: 'Игры' }, { id: 'reading', title: 'Книги' }]
-  site.shelves = [{ id: 'shooters', title: 'Шутеры' }, { id: 'books-en', title: 'English' }]
+  site.consoles.push({ id: 'doom', title: 'Шутеры', group: 'games' }, { id: 'quests', title: 'Квесты', group: 'quests' })
+  site.groups = [{ id: 'games', title: 'Игры' }, { id: 'quests', title: 'Квесты' }]
+  site.shelves = [{ id: 'shooters', title: 'Шутеры' }, { id: 'quests', title: 'Квесты' }]
   const sha = 'e'.repeat(64)
-  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
-  const book = (id: string, title: string, author: string, genre: string) => ({ console: 'books', kind: 'book', shelf: 'books-en', text: `books/${id}/book.json`, title, author, genre, about: '', keys: '…' })
-  site.games.hound = book('hound', 'The Hound of the Baskervilles', 'Arthur Conan Doyle', 'детектив')
-  site.games.study = book('study', 'A Study in Scarlet', 'Arthur Conan Doyle', 'детектив')
-  site.games.emma = book('emma', 'Émma', 'Jane Austen', 'роман')
+  site.games.freedm = { console: 'doom', net: 'doom', shelf: 'shooters', title: 'FreeDM', genre: 'шутер', about: 'сеть', about_en: 'online', keys: '…', rom: { url: `files/${sha}.wad`, base64: `files/${sha}.wad.b64`, sha256: sha, size: 1 } }
+  const web = (title: string, genre: string, about: string) => ({ console: 'quests', kind: 'web', shelf: 'quests', title, genre, about, keys: '…' })
+  site.games.hound = web('The Hound of the Baskervilles', 'квест', 'Sherlock Holmes')
+  site.games.study = web('A Study in Scarlet', 'квест', 'Sherlock Holmes')
+  site.games.emma = web('Émma', 'головоломка', 'Tiles')
   return JSON.stringify(site)
 }
 
-test('поиск: от двух букв, без регистра и диакритики, по названию, автору и жанру — разделами; каналы Twitch; ☆ прямо в найденном', async ($, on) => {
+test('поиск: от двух букв, без регистра и диакритики, по названию и жанру — разделами; каналы Twitch; ☆ прямо в найденном', async ($, on) => {
   const { clock, saved } = stubs(on, { env: WINDOWS, site: libraryCatalog(), stored: { twitchChannels: [{ login: 'tsoding', name: 'Tsoding' }] } })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
   await clock.advance(2_500)
   await $.command.run({ command: 'arcade', args: '' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
-  const short = 'От двух букв: название, автор или жанр. Ищу в играх, книгах, аудиокнигах и каналах Twitch.'
+  const short = 'От двух букв: название или жанр. Ищу в играх и каналах Twitch.'
   await ui.press({ key: 'arcade-menu-search' })
   expect(await ui.find({ type: 'Text', text: 'Arcade · поиск' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-search-1' })).toMatchObject({ props: { label: 'Найти', value: '', autoFocus: true } })
   expect(await ui.find({ type: 'Text', text: short })).toBeDefined()
   await ui.input({ key: 'arcade-search-1', text: 'd', kind: 'change' })
   expect(await ui.find({ type: 'Text', text: short })).toBeDefined()
-  // Автор: обе книги Дойла — под «Книги · Детектив»
-  await ui.input({ key: 'arcade-search-1', text: 'DOYLE', kind: 'change' })
-  expect(await ui.find({ type: 'Text', text: 'найдено: 2' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Книги · Детектив' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-game-hound' })).toBeDefined()
+  // Без регистра: квест — под «Квесты · Квест»
+  await ui.input({ key: 'arcade-search-1', text: 'SCARLET', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'найдено: 1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Квесты · Квест' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-game-study' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-game-emma' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-game-hound' })).toBeUndefined()
   // Без диакритики; слова — в любом порядке
   await ui.input({ key: 'arcade-search-1', text: 'emma', kind: 'change' })
   expect(await ui.find({ key: 'arcade-game-emma' })).toBeDefined()
   await ui.input({ key: 'arcade-search-1', text: 'baskervilles hound', kind: 'change' })
   expect(await ui.find({ key: 'arcade-game-hound' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-game-study' })).toBeUndefined()
-  // Жанр; игры — своим разделом
+  // Жанр; у каждой группы — свой раздел
   await ui.input({ key: 'arcade-search-1', text: 'шутер', kind: 'change' })
   expect(await ui.find({ type: 'Text', text: 'Игры · Шутер' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-game-freedm' })).toBeDefined()
+  await ui.input({ key: 'arcade-search-1', text: 'головол', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'Квесты · Головоломка' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-game-emma' })).toBeDefined()
   // Каналы Twitch — свои и из каталога сайта
   await ui.input({ key: 'arcade-search-1', text: 'tsod', kind: 'change' })
   expect(await ui.find({ key: 'arcade-tw-find-tsoding' })).toMatchObject({ props: { label: 'Tsoding' } })
@@ -5781,7 +5842,7 @@ test('поиск: от двух букв, без регистра и диакр�
   await ui.unmount()
 })
 
-test('избранное: ☆ у игр и книг, «★ Избранное» в группе и среди жанров полки, всё отмеченное — разделами; не больше 100', async ($, on) => {
+test('избранное: ☆ у игр, «★ Избранное» в группе, всё отмеченное — разделами; не больше 100', async ($, on) => {
   const gone = Array.from({ length: 97 }, (_, i) => `gone-${i}`) // отмечено на другом компьютере, а в каталоге этого нет
   const { clock, saved } = stubs(on, { env: WINDOWS, site: libraryCatalog(), stored: { favorites: [...gone, 'freedm'] } })
   await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
@@ -5793,37 +5854,32 @@ test('избранное: ☆ у игр и книг, «★ Избранное» 
     return labels.map((x) => texts.indexOf(x))
   }
   expect(await ui.find({ type: 'Text', text: '  отмечено: 1' })).toBeDefined()
-  // Книги: «★ Избранное» — первой плиткой группы и первой среди жанров полки
-  await ui.press({ key: 'arcade-menu-reading' })
-  expect(await ui.find({ key: 'arcade-menu-favorites-reading' })).toMatchObject({ props: { label: '★ Избранное' } })
+  // Квесты: «★ Избранное» — первой плиткой группы
+  await ui.press({ key: 'arcade-menu-quests' })
+  expect(await ui.find({ key: 'arcade-menu-favorites-quests' })).toMatchObject({ props: { label: '★ Избранное' } })
   expect(await ui.find({ type: 'Text', text: '  отмечай ☆ — соберётся здесь' })).toBeDefined()
-  await ui.press({ key: 'arcade-menu-shelf-books-en' })
-  expect(await ui.find({ key: 'arcade-genre-fav' })).toMatchObject({ props: { label: '★ Избранное' } })
-  await ui.press({ key: 'arcade-genre-0' })
+  await ui.press({ key: 'arcade-menu-shelf-quests' })
   await ui.press({ key: 'arcade-fav-hound' })
   await ui.press({ key: 'arcade-fav-study' })
   expect(await ui.find({ key: 'arcade-fav-hound' })).toMatchObject({ props: { label: '★' } })
   expect((saved.get('favorites') as string[]).slice(-3)).toEqual(['freedm', 'hound', 'study'])
   // Сотая отметка — последняя
-  await ui.press({ key: 'arcade-back' })
-  expect(await ui.find({ type: 'Text', text: '  отмечено: 2' })).toBeDefined()
-  await ui.press({ key: 'arcade-genre-1' })
   await ui.press({ key: 'arcade-fav-emma' })
   expect(await ui.find({ type: 'Text', text: 'В избранном уже 100 — сними звёздочку с чего-нибудь.' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-fav-emma' })).toMatchObject({ props: { label: '☆' } })
   expect((saved.get('favorites') as string[]).length).toBe(100)
-  // Избранное полки: только её книги, отмеченное последним — первым
+  // Избранное группы: только её игры, отмеченное последним — первым
   await ui.press({ key: 'arcade-back' })
-  await ui.press({ key: 'arcade-genre-fav' })
-  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ English' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  отмечено: 2' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-favorites-quests' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ Квесты' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-game-freedm' })).toBeUndefined()
   const [study, hound] = await order('A Study in Scarlet', 'The Hound of the Baskervilles')
   expect(study).toBeGreaterThan(-1)
   expect(hound).toBeGreaterThan(study)
   await ui.press({ key: 'arcade-back' })
-  expect(await ui.find({ key: 'arcade-genre-fav' })).toMatchObject({ props: { autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-menu-favorites-quests' })).toMatchObject({ props: { autoFocus: true } })
   // Группа «Игры»: своё избранное
-  await ui.press({ key: 'arcade-back' })
   await ui.press({ key: 'arcade-back' })
   await ui.press({ key: 'arcade-menu-games' })
   expect(await ui.find({ type: 'Text', text: '  отмечено: 1' })).toBeDefined()
@@ -5836,9 +5892,9 @@ test('избранное: ☆ у игр и книг, «★ Избранное» 
   await ui.press({ key: 'arcade-back' })
   await ui.press({ key: 'arcade-menu-favorites' })
   expect(await ui.find({ type: 'Text', text: 'Arcade · избранное' })).toBeDefined()
-  const [books, shooters] = await order('Книги · Детектив', 'Игры · Шутер')
-  expect(books).toBeGreaterThan(-1)
-  expect(shooters).toBeGreaterThan(books)
+  const [quests, shooters] = await order('Квесты · Квест', 'Игры · Шутер')
+  expect(quests).toBeGreaterThan(-1)
+  expect(shooters).toBeGreaterThan(quests)
   await ui.press({ key: 'arcade-fav-study' })
   expect(await ui.find({ key: 'arcade-game-study' })).toBeUndefined()
   expect((saved.get('favorites') as string[]).slice(-2)).toEqual(['freedm', 'hound'])
@@ -5855,14 +5911,14 @@ test('избранное пустое — подсказка; поиск и из
   expect(await ui.find({ key: 'arcade-fold-talk' })).toMatchObject({ props: { label: '▾ Social' } })
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-menu-favorites' })
-  expect(await ui.find({ type: 'Text', text: 'Nothing here yet. Mark games, books and audiobooks with the ☆ star — they gather here.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Nothing here yet. Mark games with the ☆ star — they gather here.' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-back' })
   await ui.press({ key: 'arcade-menu-search' })
   expect(await cyrillic()).toEqual([])
-  await ui.input({ key: 'arcade-search-1', text: 'detective', kind: 'change' })
-  expect(await ui.find({ type: 'Text', text: 'Books · Detective' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'found: 2' })).toBeDefined()
+  await ui.input({ key: 'arcade-search-1', text: 'baskervilles', kind: 'change' })
+  expect(await ui.find({ type: 'Text', text: 'Adventures · Adventure' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'found: 1' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-fav-hound' })
   await ui.press({ key: 'arcade-back' })
@@ -5870,9 +5926,9 @@ test('избранное пустое — подсказка; поиск и из
   expect(await ui.find({ type: 'Text', text: 'Arcade · favorites' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-back' })
-  await ui.press({ key: 'arcade-menu-reading' })
-  await ui.press({ key: 'arcade-menu-favorites-reading' })
-  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ Books' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-quests' })
+  await ui.press({ key: 'arcade-menu-favorites-quests' })
+  expect(await ui.find({ type: 'Text', text: 'Arcade · ★ Adventures' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })

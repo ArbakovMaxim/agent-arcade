@@ -18,14 +18,14 @@ Arcade는 에이전트가 일하는 동안의 기다림을 채워 주는 [Claude
 - **에이전트의 상황을 압니다.** 에이전트가 작업을 마치거나 권한을 요청하면 게임 위에 배너가 나타납니다. 계속 플레이하기, 일시 정지, 곧바로 에이전트로 돌아가기 중에서 설정으로 고를 수 있습니다. Claude Desktop에서는 보고 있던 탭을 닫아 대화를 다시 눈앞에 띄울 수도 있습니다.
 - **메뉴 하나, 섹션 여섯 개.** *플레이*, *읽기·듣기*, *시청*, *소통*, *업무*, *더 보기* — 필요 없는 섹션은 접어 두세요. 맨 위에는 마지막 게임 *계속하기*, *검색*, *즐겨찾기*가 있습니다.
 - **무료 게임 61개.** NES(Dendy), Sega 메가 드라이브, 마스터 시스템, PlayStation, 그리고 아케이드·슈팅·레이싱·전략·어드벤처·보드게임을 모은 *게임* 탭.
-- **읽기와 듣기.** 퍼블릭 도메인 책 136권, LibriVox 오디오북, 에이전트 작업 주제에 맞춘 최신 아티클과 팟캐스트 에피소드.
+- **읽기와 듣기.** 30개 언어의 고전과 LibriVox 오디오북(Project Gutenberg, Wikisource, LibriVox에서 바로), 에이전트 작업 주제에 맞춘 최신 아티클과 팟캐스트 에피소드.
 - **시청.** 에이전트 작업 주제에 맞춘 최신 YouTube 영상과 Twitch: 내 채널, 그리고 코딩·기술·과학·레트로 게임 라이브 방송. TikTok도 있습니다: TikTok 공식 사이트의 *「추천」 피드*와 검색(로그인은 직접 합니다).
 - **NES와 Flappy Arcade는 Claude Code 안에서 바로** — 터미널, VS Code, Claude Desktop 모두에서 실행됩니다. 나머지는 브라우저 창에서 열리며, Claude Desktop에서는 기본적으로 Claude 내장 브라우저에서 열립니다(슈팅 게임은 내장 브라우저가 마우스를 캡처할 수 없어 브라우저 창에서 열립니다).
 - **온라인 플레이.** 네트워크로 즐기는 2인용 콘솔 게임, Doom 데스매치와 협동 플레이, 사람이나 컴퓨터를 상대로 하는 체스, 바둑, 체커, 리버시.
 - **「온라인 대기 중인 사람」.** 누군가 상대를 기다리고 있으면 Arcade가 Claude Code에 *참가* 버튼과 함께 보여 줍니다.
 - **친구와 채팅.** 선택 사항인 GitHub 로그인으로 모든 컴퓨터에서 같은 설정을 쓰고 @닉네임을 가질 수 있습니다. 정확한 닉네임으로 친구를 추가하고, 누가 온라인인지 보고, 게임에 초대하고, 1:1이나 그룹으로 채팅하세요.
 - **노트와 프로젝트 보드.** Claude도 함께 쓰는 페이지, 하위 페이지, 체크리스트. Claude의 커넥터를 통해 페이지를 Notion이나 다른 앱으로 보내거나 거기서 가져올 수 있고, Claude 입력창에 받아쓴 텍스트를 페이지로 옮길 수도 있습니다. 열과 카드가 있는 보드는 친구와 공유하면 모두가 같은 보드에서 작업합니다.
-- **검색과 즐겨찾기.** 게임, 책, 오디오북, Twitch 채널을 한 번에 검색하고, 결과는 섹션과 장르별로 묶입니다. ☆로 표시한 항목은 *★ 즐겨찾기*에 담깁니다.
+- **검색과 즐겨찾기.** 게임과 Twitch 채널을 한 번에 검색하고, 결과는 섹션과 장르별로 묶입니다. ☆로 표시한 게임은 *★ 즐겨찾기*에 담깁니다.
 - **내 게임.** 직접 소유한 ROM을 추가할 수 있습니다. ROM은 내 컴퓨터 밖으로 나가지 않습니다.
 - **인터페이스 언어 13개:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — 시스템이나 브라우저 언어에 맞춰 선택되며, 기본값은 영어입니다.
 
@@ -89,7 +89,7 @@ PowerShell에서는 `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugi
 
 섹션 제목을 누르면 접거나 펼칠 수 있습니다. 접힌 섹션에는 `▸`와 그 안의 타일 수가 표시되고, *소통*에는 새 메시지 💬와 친구 요청 👥 수도 표시됩니다. 어떤 섹션을 접었는지 Arcade가 기억합니다. 로그인하면 메뉴 머리글에 @닉네임과 같은 카운터가 표시됩니다.
 
-**검색**은 두 글자부터 시작하며, 대소문자와 악센트를 구분하지 않고 제목, 저자, 장르를 찾습니다. 결과는 *책 · 추리*나 *게임 · 슈팅*처럼 섹션과 장르별로 묶입니다. 게임, 책, 오디오북 옆의 ☆을 누르면 **★ 즐겨찾기**에 추가되며(최대 100개), 섹션과 장르별로 최근 항목부터 정렬됩니다.
+**검색**은 두 글자부터 시작하며, 대소문자와 악센트를 구분하지 않고 제목과 장르를 찾습니다. 결과는 *게임 · 슈팅*처럼 섹션과 장르별로 묶입니다. 게임 옆의 ☆을 누르면 **★ 즐겨찾기**에 추가되며(최대 100개), 섹션과 장르별로 최근 항목부터 정렬됩니다. 책과 오디오북에는 제목이나 저자로 찾는 별도의 검색이 있습니다.
 
 ### 어디서 열리나요
 
@@ -115,8 +115,8 @@ PowerShell에서는 `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugi
 | **게임 → 전략** | OpenTTD — 운송 회사 경영(GPL-2.0). Micropolis — 1989년 고전 도시 건설 게임의 오픈 소스 코드로, 도시는 브라우저에 저장됩니다(micropolisJS, 추가 조항이 붙은 GPL-3.0과 Micropolis Public Name License). Warzone 2100 — 캠페인과 컴퓨터 상대 전투가 있는 실시간 전략 게임으로, 유닛을 직접 설계하고 저장은 브라우저에 남습니다(GPL-2.0-or-later) |
 | **게임 → 어드벤처** | ScummVM(GPL-3.0-or-later)으로 즐기는 90년대 무료 고전 어드벤처 4편: Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress, Nippon Safes, Inc. — 재배포가 허용된 프리웨어 게임 데이터. 언제든 F5로 저장 |
 | **게임 → 보드게임** | 체스 — 사람이나 컴퓨터(Stockfish, 레벨 1–10)와 대국, 온라인 대국은 시계 포함. 9×9, 13×13, 19×19 바둑. 러시아식 체커, 리버시. 모든 게임에 *기권* |
-| **책** | 퍼블릭 도메인 고전 136권을 언어별 서가에 장르별로 정리: 영어 98권(오스틴, 디킨스, 트웨인, 코넌 도일, 웰스, 셸리, 번역본으로 톨스토이와 도스토옙스키…), 우크라이나어 38권(프랑코, 레샤 우크라인카, 코추빈스키, 코틀랴렙스키, 쿨리시…). 책갈피는 자동으로 꽂혀서, 책을 다시 열면 멈춘 곳부터 이어집니다. 내 EPUB, FB2, TXT는 Arcade 창에서 열 수 있습니다 |
-| **오디오북** | LibriVox의 퍼블릭 도메인 녹음을 언어별 서가에 장르별로 정리: 영어로는 오스카 와일드와 오 헨리, 우크라이나어로는 고골. Arcade 창의 플레이어가 멈춘 위치를 기억합니다. 내 MP3, M4A, M4B, OGG, Opus 파일도 거기서 열 수 있으며 브라우저 밖으로 나가지 않습니다 |
+| **책** | 퍼블릭 도메인 고전을 30개 언어로: 언어는 직접 고릅니다(처음에는 인터페이스 언어). 섹션은 모든 언어에서 같습니다: 인기, 소설, 시, 희곡, 모험, 추리 등. 제목이나 저자로 검색할 수 있습니다. 목록은 필요할 때 Project Gutenberg와 Wikisource에서 가져오며, Arcade는 책을 따로 보관하지 않습니다. 연 책은 브라우저의 *내 책*에 남습니다. 책갈피는 자동으로 꽂혀서, 책을 다시 열면 멈춘 곳부터 이어집니다. 내 EPUB, FB2, TXT도 Arcade 창에서 열 수 있습니다 |
+| **오디오북** | 같은 언어와 섹션의 LibriVox 녹음을 검색과 함께: archive.org에서 바로 온라인으로 듣거나, 책을 브라우저에 내려받아 오프라인으로 들을 수 있습니다. Arcade 창의 플레이어가 챕터, 위치, 속도를 기억합니다. 내 MP3, M4A, M4B, OGG, Opus 파일도 거기서 열 수 있으며 브라우저 밖으로 나가지 않습니다 |
 | **아티클** | 엄선한 영어 블로그와 매체 106곳의 최신 글 — Simon Willison, InfoQ, The Cloudflare Blog, Ars Technica, Krebs on Security 등 |
 | **팟캐스트** | 영어 팟캐스트 65개의 최신 에피소드 — Software Engineering Daily, Security Now, Talk Python To Me, Darknet Diaries 등. 에피소드마다 멈춘 위치를 기억합니다 |
 | **YouTube** | AI, 웹, DevOps부터 과학, 우주, 레트로 컴퓨팅까지 24개 분야, 엄선한 153개 채널의 최신 영상 |
@@ -184,6 +184,7 @@ PowerShell에서는 `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugi
 
 - 광고, 분석, 추적이 없습니다. 분석 기능이 들어 있던 게임은 그 기능을 제거했습니다(각 게임의 `NOTICE` 참고).
 - 내 ROM, WAD, 책, 오디오 파일은 내 컴퓨터나 브라우저 밖으로 나가지 않습니다.
+- 책과 오디오북 목록, 그리고 Project Gutenberg 책은 Arcade 사이트를 거칩니다. 사이트는 이를 Project Gutenberg, Wikisource, archive.org에서 가져와 Cloudflare 캐시에만 둡니다(목록은 6시간, 책은 1주일). Wikisource 페이지와 LibriVox 녹음은 창이 해당 사이트에서 바로 불러옵니다.
 - 온라인 플레이는 Cloudflare에 있는 Arcade 서버를 거칩니다. 메시지는 방 안의 플레이어 사이에서 전달될 뿐 저장되지 않습니다 — 다만 나중에 돌아올 수 있도록 보드게임의 수는 저장되며, 한 달 동안 아무도 두지 않은 대국은 삭제됩니다.
 - 주제는 내 Claude Code 세션 안에서 Haiku가 제안합니다. Arcade 사이트는 대화를 볼 수 없으며, *나만의 주제*를 쓸 때 짧은 영어 검색어만 받습니다. 아티클 주소는 `#` 뒤에 붙기 때문에 Arcade 서버에 전달되지 않습니다.
 - 로그인하면 사이트는 동기화된 설정, 즐겨찾기, @닉네임, 친구, 채팅, 공유 보드를 보관하고, 게임 초대는 10분 동안 보관합니다. 누가 온라인인지는 메모리에만 1분 30초 동안 둡니다. 세션 키는 Arcade 사이트로만 전송됩니다.
@@ -201,7 +202,7 @@ Arcade는 **알파** 단계이며 활발히 개발 중입니다 — [변경 내�
 ## 라이선스
 
 - **게임:** 각 게임에는 고유한 자유 라이선스(MIT, GPL, BSD, Apache, Creative Commons 등)가 있습니다. 라이선스 전문과 소스 코드는 게임 옆에 있으며 카드에서 연결됩니다.
-- **책과 오디오북:** 퍼블릭 도메인 — 영어 책은 Project Gutenberg, 우크라이나어 책은 Wikisource, 녹음은 LibriVox에서 가져왔습니다. 각 책에는 출처를 적은 `LICENSE.txt`가 있습니다.
+- **책과 오디오북:** 퍼블릭 도메인. Arcade는 이를 보관하지 않으며, 열 때 책은 Project Gutenberg와 Wikisource에서, 녹음은 LibriVox(archive.org)에서 가져옵니다.
 - **에뮬레이터와 엔진:** JSNES(Apache-2.0), 코어를 포함한 EmulatorJS(GPL-3.0), PrBoom(GPL-2.0), Cloudflare의 doom-wasm과 Chocolate Doom/Heretic(GPL-2.0), OpenTTD(GPL-2.0), micropolisJS(추가 조항이 붙은 GPL-3.0), ScummVM(GPL-3.0-or-later), 체스 컴퓨터 상대인 Stockfish(GPL-3.0). Sega와 마스터 시스템에 쓰이는 Genesis Plus GX 코어는 비상업적 용도로만 사용할 수 있습니다.
 - **Arcade 자체 코드**(플러그인과 사이트) — **GNU AGPL-3.0**([LICENSE](LICENSE)), © 2026 Max Arbakov. 자유롭게 사용하고, 연구하고, 수정할 수 있습니다. 수정한 버전을 배포하거나 다른 사람을 위한 온라인 서비스로 운영한다면, 전체 소스 코드를 같은 라이선스로 공개하고 저작권 고지를 유지해야 합니다. 서드파티 구성 요소는 각자의 라이선스를 따릅니다.
 
@@ -222,7 +223,7 @@ Arcade는 무료입니다. 기다리는 시간이 더 즐거워졌다면 프로�
 ```
 mod/     Claude Code 플러그인(훅, 패널 UI, 테스트)
 site/    Cloudflare Workers 기반 사이트: 카탈로그, Arcade 창, 네트워크 방, 계정, 친구, 채팅, 오류 신고
-tools/   빌드 도구: 책, 오디오북, 번역, heretic-wasm
+tools/   빌드 도구: 번역, heretic-wasm
 .github/ 브라우저용 doom-wasm, heretic-wasm, OpenTTD, ScummVM을 빌드하는 GitHub Actions
 ```
 
@@ -230,7 +231,6 @@ tools/   빌드 도구: 책, 오디오북, 번역, heretic-wasm
 - 플러그인 테스트: `claude plugin validate ./mod`, 그다음 `mod/`에서 `claude plugin test`
 - 사이트 테스트: `site/`에서 `npm test`. 빌드: `node build.mjs`. 배포는 Cloudflare Workers Builds를 통해 `main`에서 자동으로 이루어집니다.
 - 작업은 `main`에서 하고 풀 리퀘스트도 `main`으로 보내 주세요. 기본 브랜치 `plugin`은 `site/`를 뺀 `main`의 복사본으로, 푸시할 때마다 GitHub Action이 갱신합니다. 플러그인 마켓플레이스는 저장소 전체 대신 이 브랜치를 내려받습니다.
-- 책: `node tools/books/build.mjs`로 카탈로그 책을 내려받아 정리합니다(목록 — `tools/books/books.json`).
 - 번역: `node tools/i18n/collect.mjs`, 그다음 `node tools/i18n/check.mjs` — [tools/i18n/README.md](tools/i18n/README.md) 참고.
 
 자세한 문서(러시아어): [mod/README.md](mod/README.md) — 플러그인, [site/README.md](https://github.com/ArbakovMaxim/agent-arcade/tree/main/site/README.md) — 사이트, 게임 추가, 네트워크 플레이.

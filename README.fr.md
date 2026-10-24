@@ -18,14 +18,14 @@ Tout le catalogue est gratuit : les jeux sont sous licences libres, les livres e
 - **Sait ce que fait l’agent.** Quand l’agent a fini ou demande une autorisation, un bandeau s’affiche sur le jeu — continuez à jouer, mettez en pause ou retournez directement à l’agent (le comportement se choisit dans les paramètres). Dans Claude Desktop, il peut aussi fermer l’onglet que vous regardez, pour que la conversation soit de nouveau devant vous.
 - **Un menu, six sections.** *Jouer*, *Lire et écouter*, *Regarder*, *Social*, *Travail* et *Plus* — repliez celles dont vous n’avez pas besoin. En haut : *Continuer* la dernière partie, *Rechercher* et *Favoris*.
 - **61 jeux gratuits** sur NES (Dendy), Sega Mega Drive, Master System, PlayStation et un onglet *Jeux* avec des jeux d’arcade, de tir, de course, de stratégie, d’aventure et de société.
-- **Lire et écouter.** 136 livres du domaine public, des livres audio LibriVox, des articles et des épisodes de podcasts récents sur le sujet du travail de l’agent.
+- **Lire et écouter.** Des classiques et des livres audio LibriVox en 30 langues, directement depuis Project Gutenberg, Wikisource et LibriVox, ainsi que des articles et des épisodes de podcasts récents sur le sujet du travail de l’agent.
 - **Regarder.** Des vidéos YouTube récentes sur le sujet du travail de l’agent, Twitch : vos propres chaînes et des directs sur le code, la tech, la science et le rétrogaming, et TikTok : le fil *Pour toi* et la recherche sur le site même de TikTok, où vous vous connectez vous-même.
 - **NES et Flappy Arcade directement dans Claude Code** — dans le terminal, VS Code et Claude Desktop. Tout le reste s’ouvre dans une fenêtre de navigateur ; dans Claude Desktop, par défaut dans le navigateur intégré de Claude (les jeux de tir s’ouvrent quand même dans une fenêtre de navigateur : le navigateur intégré ne peut pas capturer la souris).
 - **Jeu en ligne.** Jeux console à deux en réseau, deathmatch et coopération dans Doom, échecs, go, dames et reversi contre des personnes ou contre l’ordinateur.
 - **« Qui attend en ligne ».** Arcade indique dans Claude Code quand quelqu’un attend un partenaire, avec un bouton *Rejoindre*.
 - **Amis et discussions.** Une connexion GitHub facultative garde vos paramètres identiques sur tous vos ordinateurs et vous donne un @pseudo ; ajoutez des amis par leur pseudo exact, voyez qui est en ligne, invitez-les à jouer et discutez en tête-à-tête ou en groupe.
 - **Carnet et tableaux de projets.** Des pages, des sous-pages et des checklists que Claude tient aussi ; envoyez une page vers Notion ou une autre application, ou importez-en une, via les connecteurs de Claude ; dictez dans la zone de saisie de Claude et déplacez le texte sur une page. Des tableaux avec des colonnes et des cartes — partagez-en un avec vos amis, et tout le monde travaille sur le même tableau.
-- **Recherche et favoris.** Une seule recherche dans les jeux, livres, livres audio et chaînes Twitch, regroupée par section et par genre ; marquez n’importe quoi d’une ☆ pour le garder dans *★ Favoris*.
+- **Recherche et favoris.** Une seule recherche dans les jeux et les chaînes Twitch, regroupée par section et par genre ; marquez un jeu d’une ☆ pour le garder dans *★ Favoris*.
 - **Vos propres jeux.** Ajoutez les ROM que vous possédez ; elles restent sur votre machine.
 - **13 langues d’interface :** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — d’après la langue du système ou du navigateur, anglais par défaut.
 
@@ -89,7 +89,7 @@ Dans PowerShell : `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin 
 
 Cliquez sur le titre d’une section pour la replier ou la déplier. Une section repliée affiche `▸` et le nombre de tuiles qu’elle contient, et *Social* affiche aussi les nouveaux messages 💬 et les demandes d’ami 👥. Arcade se souvient des sections repliées. Une fois connecté, l’en-tête du menu affiche votre @pseudo avec les mêmes compteurs.
 
-La **recherche** démarre dès deux lettres et trouve un titre, un auteur ou un genre, sans tenir compte de la casse ni des accents. Les résultats sont regroupés par section et par genre, par exemple *Livres · Policier* ou *Jeux · Jeux de tir*. L’étoile ☆ à côté d’un jeu, d’un livre ou d’un livre audio l’ajoute aux **★ Favoris** (jusqu’à 100), classés par section et par genre, les plus récents en premier.
+La **recherche** démarre dès deux lettres et trouve un titre ou un genre, sans tenir compte de la casse ni des accents. Les résultats sont regroupés par section et par genre, par exemple *Jeux · Jeux de tir*. L’étoile ☆ à côté d’un jeu l’ajoute aux **★ Favoris** (jusqu’à 100), classés par section et par genre, les plus récents en premier. Les livres et les livres audio ont leur propre recherche, par titre ou par auteur.
 
 ### Où s’ouvre quoi
 
@@ -115,8 +115,8 @@ La fenêtre de navigateur est une fenêtre Arcade séparée (votre navigateur pa
 | **Jeux → Stratégie** | OpenTTD — magnat du transport (GPL-2.0) ; Micropolis — le code ouvert du célèbre jeu de construction de ville de 1989, votre ville est enregistrée dans le navigateur (micropolisJS, GPL-3.0 avec conditions supplémentaires et la Micropolis Public Name License) ; Warzone 2100 — stratégie en temps réel avec campagne et escarmouche contre l’ordinateur, vous concevez vos propres unités, les sauvegardes restent dans le navigateur (GPL-2.0-or-later) |
 | **Jeux → Aventures** | Quatre aventures classiques gratuites des années 90 dans ScummVM (GPL-3.0-or-later) : Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress et Nippon Safes, Inc. — données de jeu freeware redistribuables avec autorisation ; sauvegarde à tout moment avec F5 |
 | **Jeux → Jeux de société** | Échecs — contre des personnes ou l’ordinateur (Stockfish, niveaux 1 à 10), en ligne avec pendule ; go sur plateaux 9×9, 13×13 et 19×19 ; dames russes, reversi ; *Abandonner* dans tous |
-| **Livres** | 136 classiques du domaine public sur des étagères par langue, rangés par genre : 98 en anglais (Austen, Dickens, Twain, Conan Doyle, Wells, Shelley, Tolstoï et Dostoïevski en traduction…) et 38 en ukrainien (Franko, Lessia Oukraïnka, Kotsioubynsky, Kotliarevsky, Koulich…). Le marque-page se place tout seul : rouvrez un livre et vous reprenez là où vous vous étiez arrêté. Vos propres EPUB, FB2 et TXT s’ouvrent dans la fenêtre Arcade |
-| **Livres audio** | Enregistrements LibriVox du domaine public sur des étagères par langue, rangés par genre : Oscar Wilde et O. Henry en anglais, Gogol en ukrainien. Le lecteur de la fenêtre Arcade retient où vous vous êtes arrêté ; vos fichiers MP3, M4A, M4B, OGG et Opus s’y ouvrent aussi et restent dans votre navigateur |
+| **Livres** | Des classiques du domaine public en 30 langues — c’est vous qui choisissez la langue (au départ, celle de l’interface). Les sections sont les mêmes dans toutes les langues : Populaires, Romans, Poésie, Théâtre, Aventure, Policiers et d’autres ; la recherche se fait par titre ou par auteur. La liste arrive à la demande depuis Project Gutenberg et Wikisource — Arcade ne stocke aucun livre ; un livre ouvert reste dans *Mes livres* de votre navigateur. Le marque-page se place tout seul : rouvrez un livre et vous reprenez là où vous vous étiez arrêté. Vos propres EPUB, FB2 et TXT s’ouvrent aussi dans la fenêtre Arcade |
+| **Livres audio** | Des enregistrements LibriVox dans les mêmes langues et les mêmes sections, avec recherche : écoutez en ligne directement depuis archive.org, ou téléchargez un livre dans votre navigateur pour l’écouter hors ligne. Le lecteur de la fenêtre Arcade retient le chapitre, la position et la vitesse ; vos fichiers MP3, M4A, M4B, OGG et Opus s’y ouvrent aussi et restent dans votre navigateur |
 | **Articles** | Articles récents de 106 blogs et publications anglophones sélectionnés — Simon Willison, InfoQ, The Cloudflare Blog, Ars Technica, Krebs on Security et d’autres |
 | **Podcasts** | Épisodes récents de 65 podcasts anglophones — Software Engineering Daily, Security Now, Talk Python To Me, Darknet Diaries et d’autres ; chaque épisode retient où vous vous êtes arrêté |
 | **YouTube** | Vidéos récentes de 153 chaînes sélectionnées dans 24 domaines, de l’IA, du web et du DevOps à la science, à l’espace et au rétro-informatique |
@@ -184,6 +184,7 @@ Ouvrez **Paramètres** dans la section *Plus* du menu `/arcade` :
 
 - Pas de publicité, pas d’analytique, pas de pistage. Les jeux livrés avec de l’analytique en ont été débarrassés (voir le `NOTICE` de chaque jeu).
 - Vos ROM, WAD, livres et fichiers audio ne quittent jamais votre machine ni votre navigateur.
+- Les listes de livres et de livres audio, ainsi que les livres de Project Gutenberg, passent par le site d’Arcade, qui les demande à Project Gutenberg, Wikisource et archive.org et ne les garde que dans le cache de Cloudflare — les listes six heures, un livre une semaine. Les pages de Wikisource et les enregistrements LibriVox, la fenêtre les charge directement depuis ces sites.
 - Le jeu en ligne passe par le serveur d’Arcade sur Cloudflare : les messages sont relayés entre les joueurs d’une salle et ne sont pas stockés — sauf les coups des jeux de société, conservés pour que vous puissiez revenir ; une partie inactive pendant un mois est supprimée.
 - Les sujets sont proposés par Haiku dans votre propre session Claude Code ; le site d’Arcade ne voit jamais votre conversation — seulement une courte requête de recherche en anglais quand vous utilisez *Votre sujet*. L’adresse d’un article passe après `#`, elle n’atteint donc jamais le serveur d’Arcade.
 - Une fois connecté, le site conserve vos paramètres synchronisés, vos favoris, votre @pseudo, vos amis, vos discussions et vos tableaux partagés, ainsi que les invitations à jouer pendant 10 minutes. Qui est en ligne, il ne le garde qu’en mémoire, une minute et demie. La clé de session n’est envoyée qu’au site d’Arcade.
@@ -201,7 +202,7 @@ Arcade est en **alpha** et en développement actif — voir le [journal des modi
 ## Licences
 
 - **Jeux :** chaque jeu a sa propre licence libre (MIT, GPL, BSD, Apache, Creative Commons et d’autres) — le texte de la licence et le code source se trouvent à côté du jeu et sont liés depuis sa fiche.
-- **Livres et livres audio :** domaine public — livres anglais de Project Gutenberg, ukrainiens de Wikisource, enregistrements de LibriVox ; chaque livre a un `LICENSE.txt` indiquant sa source.
+- **Livres et livres audio :** domaine public ; Arcade ne les stocke pas — les livres viennent de Project Gutenberg et de Wikisource, les enregistrements de LibriVox (archive.org), au moment où vous les ouvrez.
 - **Émulateurs et moteurs :** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) avec ses cœurs, PrBoom (GPL-2.0), doom-wasm de Cloudflare et Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 avec conditions supplémentaires), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — l’adversaire aux échecs. Le cœur Genesis Plus GX utilisé pour Sega et Master System est réservé à un usage non commercial.
 - **Le code d’Arcade** (le plugin et le site) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Vous êtes libre de l’utiliser, de l’étudier et de le modifier. Si vous distribuez une version modifiée — ou la faites tourner comme service en ligne pour d’autres personnes —, vous devez publier l’intégralité de votre code source sous la même licence et conserver les mentions de droits d’auteur. Les composants tiers gardent leurs propres licences.
 
@@ -222,7 +223,7 @@ Les pull requests sont les bienvenues. En en envoyant une, vous acceptez que vot
 ```
 mod/     le plugin Claude Code (hooks, interface du panneau, tests)
 site/    le site sur Cloudflare Workers : catalogue, fenêtre Arcade, salles réseau, comptes, amis, discussions, rapports de bug
-tools/   outils de construction : livres, livres audio, traductions, heretic-wasm
+tools/   outils de construction : traductions, heretic-wasm
 .github/ GitHub Actions qui compilent doom-wasm, heretic-wasm, OpenTTD et ScummVM pour le navigateur
 ```
 
@@ -230,7 +231,6 @@ tools/   outils de construction : livres, livres audio, traductions, heretic-was
 - Tests du plugin : `claude plugin validate ./mod`, puis `claude plugin test` dans `mod/`
 - Tests du site : `npm test` dans `site/` ; build : `node build.mjs` ; le déploiement se fait automatiquement depuis `main` via Cloudflare Workers Builds.
 - Le travail se fait dans `main`, et les pull requests y vont aussi. La branche par défaut `plugin` est une copie de `main` sans `site/`, mise à jour par une GitHub Action à chaque push : la marketplace de plugins télécharge cette branche plutôt que tout le dépôt.
-- Livres : `node tools/books/build.mjs` télécharge et nettoie les livres du catalogue (liste — `tools/books/books.json`).
 - Traductions : `node tools/i18n/collect.mjs`, puis `node tools/i18n/check.mjs` — voir [tools/i18n/README.md](tools/i18n/README.md).
 
 Documentation détaillée (en russe) : [mod/README.md](mod/README.md) — le plugin, [site/README.md](https://github.com/ArbakovMaxim/agent-arcade/tree/main/site/README.md) — le site, l’ajout de jeux et le jeu en réseau.
