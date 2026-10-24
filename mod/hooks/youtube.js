@@ -1,6 +1,6 @@
 // YouTube в Arcade: свежие видео по теме работы агента. Список каналов — с сайта Arcade (channels.json; копия в
 // hooks/channels.js — на случай без сайта), видео — из открытых RSS-лент каналов: без ключа и квот. Темы предлагает
-// и видео выбирает haiku. Здесь нет вызовов Claude Code — сеть, модель и хранилище в hooks/register.js.
+// и видео выбирает haiku. Здесь нет вызовов Claude Code — сеть, модель и хранилище в hooks/app/watch.js.
 import { SITE } from './catalog.js'
 import CHANNELS from './channels.js'
 import { LANGS } from './i18n.js'
