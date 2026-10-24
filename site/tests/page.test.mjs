@@ -1522,9 +1522,12 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   function site() {
     const now = Date.now()
     return {
-      me: { id: '1', handle: 'alice' },
+      // Алиса выбрала кота (0 — тоже аватарка), Боб — осьминога (7), у Кэрол аватарки нет — буква; Боб в сети
+      me: { id: '1', handle: 'alice', pic: 0 },
       names: { 1: 'alice', 2: 'bob', 3: 'carol' },
-      friends: [{ id: '2', handle: 'bob' }, { id: '3', handle: 'carol' }],
+      pics: { 1: 0, 2: 7 },
+      online: ['2'],
+      friends: [{ id: '2', handle: 'bob', pic: 7 }, { id: '3', handle: 'carol' }],
       chats: {
         'd1-2': { meta: { id: 'd1-2', kind: 'dm', members: ['1', '2'] }, with: '2', unread: 2, messages: [
           { s: 1, f: '1', t: 'привет', at: now - 3 * 86_400_000 },
@@ -1596,15 +1599,15 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
         if (data.fail[route]) return reply(400, { error: data.fail[route] })
         const chat = data.chats[u.searchParams.get('chat') ?? body?.chat]
         if (route === 'chats') {
-          const list = Object.values(data.chats).map((c) => ({ id: c.meta.id, kind: c.meta.kind, ...(c.with ? { with: c.with } : { name: c.meta.name }), unread: c.unread, at: c.messages.at(-1)?.at ?? 0, ...(c.messages.length ? { last: c.messages.at(-1) } : {}) }))
-          return reply(200, { me: data.me, chats: list.sort((a, b) => b.at - a.at), names: data.names, unread: total() })
+          const list = Object.values(data.chats).map((c) => ({ id: c.meta.id, kind: c.meta.kind, ...(c.with ? { with: c.with } : { name: c.meta.name, ...(c.meta.pic !== undefined ? { pic: c.meta.pic } : {}) }), unread: c.unread, at: c.messages.at(-1)?.at ?? 0, ...(c.messages.length ? { last: c.messages.at(-1) } : {}) }))
+          return reply(200, { me: data.me, chats: list.sort((a, b) => b.at - a.at), names: data.names, pics: data.pics, online: data.online, unread: total() })
         }
         if (route === 'chats/messages') {
           if (!chat) return reply(404, { error: 'gone' })
           const after = Number(u.searchParams.get('after') ?? -1)
           const before = Number(u.searchParams.get('before') ?? Infinity)
           if (!u.searchParams.has('before')) chat.unread = 0
-          return reply(200, { me: data.me, chat: summary(chat), messages: chat.messages.filter((m) => m.s > after && m.s < before), first: 1, names: data.names, unread: total() })
+          return reply(200, { me: data.me, chat: summary(chat), messages: chat.messages.filter((m) => m.s > after && m.s < before), first: 1, names: data.names, pics: data.pics, unread: total() })
         }
         if (route === 'chats/send') {
           const msg = { s: (chat.messages.at(-1)?.s ?? 0) + 1, f: '1', t: body.text, at: Date.now() }
@@ -1629,9 +1632,13 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
             return reply(200, {})
           }
           if (body.name) chat.meta.name = body.name
+          if (body.pic === null) delete chat.meta.pic
+          else if (body.pic !== undefined) chat.meta.pic = body.pic
           for (const id of body.remove ?? []) chat.meta.members = chat.meta.members.filter((m) => m !== id)
           for (const id of body.add ?? []) chat.meta.members.push(id)
-          chat.messages.push({ s: chat.messages.at(-1).s + 1, f: '1', k: body.name ? 'name' : body.add ? 'add' : 'remove', ...(body.name ? { n: body.name } : { o: (body.add ?? body.remove)[0] }), at: Date.now() })
+          const k = body.name ? 'name' : body.pic !== undefined ? 'pic' : body.add ? 'add' : 'remove'
+          const about = k === 'name' ? { n: body.name } : k === 'pic' ? (body.pic === null ? {} : { n: body.pic }) : { o: (body.add ?? body.remove)[0] }
+          chat.messages.push({ s: chat.messages.at(-1).s + 1, f: '1', k, ...about, at: Date.now() })
           return reply(200, { chat: summary(chat) })
         }
         return reply(404, { error: 'not found' })
@@ -1639,7 +1646,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
     }
     ctx.window = ctx
     vm.createContext(ctx)
-    for (const file of ['i18n.js', 'chat.js']) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
+    for (const file of ['i18n.js', 'avatars.js', 'chat.js']) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
     page.ctx = ctx
     page.wait = () => new Promise((r) => setTimeout(r, 5))
     // Таймеры страницы идут по команде теста
@@ -1689,18 +1696,33 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.deepEqual([...page.sockets[0].protocols], ['arcade-chat', TICKET])
   // Список: свежие сверху, превью с автором в группе; открытый чат прочитан
   assert.equal(page.one('me').textContent, '@alice')
-  assert.deepEqual(page.items().map((i) => i.children[0].textContent), ['@bob', 'Squad'])
-  assert.equal(page.items()[0].children[2].textContent, 'ну как?')
-  assert.equal(page.items()[1].children[2].textContent, '@carol: всем привет')
+  assert.deepEqual(page.items().map((i) => i.children[1].textContent), ['@bob', 'Squad'])
+  assert.equal(page.items()[0].children[3].textContent, 'ну как?')
+  assert.equal(page.items()[1].children[3].textContent, '@carol: всем привет')
   assert.ok(page.items()[0].classList.contains('active'))
-  assert.equal(page.items()[0].children[3].textContent, '', 'прочитанный чат — без счётчика')
+  assert.equal(page.items()[0].children[4].textContent, '', 'прочитанный чат — без счётчика')
+  // Аватарки: картинка SVG в img; у друга — его осьминог и точка «в сети», у группы без картинки — буква названия,
+  // у себя наверху — кот (номер 0 — тоже аватарка)
+  const A = page.ctx.ArcadeAvatars
+  const svg = (ava) => (ava.children[0].src.startsWith('data:image/svg+xml,') ? decodeURIComponent(ava.children[0].src.slice(19)) : '')
+  assert.equal(svg(page.items()[0].children[0]), A.avatarSvg(7))
+  assert.equal(page.items()[0].children[0].className, 'ava on')
+  assert.equal(svg(page.items()[1].children[0]), A.letterSvg('Squad', GROUP))
+  assert.equal(page.items()[1].children[0].className, 'ava')
+  assert.equal(svg(page.one('top').children[0]), A.avatarSvg(0))
   assert.equal(page.ctx.document.title, 'Чаты · Arcade')
   // Переписка: дни, свои справа, ссылки — только http(s)
-  assert.equal(page.one('head').children[1].textContent, '@bob')
+  assert.equal(page.one('head').children[2].textContent, '@bobв сети')
+  assert.equal(svg(page.one('head').children[1]), A.avatarSvg(7))
+  assert.equal(page.one('sub').className, 'sub on')
   assert.deepEqual(page.all('day').map((d) => d.textContent).slice(1), ['Сегодня'])
   assert.equal(page.messages().length, 3)
   assert.ok(page.messages()[0].className.includes('mine') && !page.messages()[1].className.includes('mine'))
   assert.equal(page.all('who').length, 0, 'в чате на двоих автора не подписываем')
+  assert.equal(page.all('line').length, 0, 'и аватарку у сообщений не ставим')
+  // Своё — с галочкой «доставлено»; у чужих её нет
+  assert.deepEqual(page.all('tick').map((t) => t.textContent), ['✓'])
+  assert.match(page.all('at')[0].textContent, /^\d\d:\d\d✓$/)
   const text = page.all('text')[1]
   assert.equal(text.children[1].tagName, 'a')
   assert.equal(text.children[1].href, 'https://example.com/a?b=1')
@@ -1737,8 +1759,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   page.data.chats[GROUP].unread = 1
   page.sockets[0].fire('message', { data: JSON.stringify({ type: 'note', chat: GROUP }) })
   await page.flush()
-  assert.equal(page.items()[0].children[0].textContent, 'Squad')
-  assert.equal(page.items()[0].children[3].textContent, '1')
+  assert.equal(page.items()[0].children[1].textContent, 'Squad')
+  assert.equal(page.items()[0].children[4].textContent, '1')
   assert.equal(page.ctx.document.title, '(1) Чаты · Arcade')
   page.sockets[0].fire('message', { data: 'pong' })
   page.sockets[0].fire('message', { data: '{"type":"note","chat":"../x"}' })
@@ -1749,10 +1771,32 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(page.replaced, `/chat#c=${GROUP}`)
   assert.equal(page.all('note')[0].textContent, '@alice создал(а) группу «Squad»')
   assert.deepEqual(page.all('who').map((w) => w.textContent), ['@carol', '@bob'])
-  assert.equal(page.one('sub').textContent, 'участники: 3')
+  assert.equal(page.one('sub').textContent, 'участники: 3, в сети: 1')
+  // Чужие сообщения в группе — с аватаркой автора: у Кэрол буква, у Боба осьминог
+  assert.deepEqual(page.all('line').map((l) => svg(l.children[0])), [A.letterSvg('carol', 'carol'), A.avatarSvg(7)])
+  // Подряд от одного человека: имя — у первого, аватарка — у последнего
+  page.data.chats[GROUP].messages.push({ s: 4, f: '2', t: 'кто тут', at: Date.now() + 2000 })
+  await page.flush()
+  page.sockets[0].fire('message', { data: JSON.stringify({ type: 'note', chat: GROUP }) })
+  await page.wait()
+  assert.deepEqual(page.all('who').map((w) => w.textContent), ['@carol', '@bob'])
+  assert.deepEqual(page.all('line').map((l) => l.children[0].className), ['ava small', 'gap', 'ava small'])
   // Участники: хозяйка группы переименовывает, убирает и добавляет; выйти — двумя нажатиями
   page.button('Участники').fire('click')
   await page.wait()
+  // Картинку группы выбирает хозяйка — одну из 24; убрать — «Без картинки»
+  assert.equal(page.all('pick').length, 24)
+  assert.equal(page.all('pick')[7].attributes['aria-label'], 'осьминог')
+  assert.equal(page.button('Без картинки'), undefined, 'картинки ещё нет')
+  page.all('pick')[5].fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.filter((f) => f.route === 'chats/members').at(-1).body, { chat: GROUP, pic: 5 })
+  assert.equal(page.all('pick')[5].className, 'pick active')
+  assert.equal(page.all('pick')[5].attributes['aria-pressed'], 'true')
+  page.button('Без картинки').fire('click')
+  await page.wait()
+  assert.deepEqual(page.fetched.filter((f) => f.route === 'chats/members').at(-1).body, { chat: GROUP, pic: null })
+  assert.equal(page.all('pick').filter((p) => p.className === 'pick active').length, 0)
   assert.ok(page.all('mark').length === 1 && page.all('mark')[0].textContent === 'управляет группой')
   assert.equal(page.all('person').map((p) => p.textContent).join(' '), '@alice @bob @carol')
   page.button('Убрать').fire('click')
@@ -1763,7 +1807,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   await page.wait()
   assert.deepEqual(page.fetched.find((f) => f.route === 'chats/members' && f.body.add).body, { chat: GROUP, add: ['2'] })
   page.button('Закрыть').fire('click')
-  assert.deepEqual(page.all('note').slice(-2).map((n) => n.textContent), ['@alice убрал(а) @bob', '@alice добавил(а) @bob'])
+  assert.deepEqual(page.all('note').slice(-4).map((n) => n.textContent), ['@alice сменил(а) картинку группы', '@alice убрал(а) картинку группы', '@alice убрал(а) @bob', '@alice добавил(а) @bob'])
   page.button('Участники').fire('click')
   await page.wait()
   page.button('Выйти из группы').fire('click')
@@ -1773,7 +1817,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   await page.wait()
   assert.deepEqual(page.fetched.at(-1).body, { chat: GROUP, leave: true })
   assert.equal(page.replaced, '/chat')
-  assert.deepEqual(page.items().map((i) => i.children[0].textContent), ['@bob'])
+  assert.deepEqual(page.items().map((i) => i.children[1].textContent), ['@bob'])
 
   // Новый чат: друзья с сайта; «Написать» открывает чат на двоих, группа — из отмеченных или со всеми
   page.button('Новый чат').fire('click')
@@ -1781,7 +1825,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(page.all('person').map((p) => p.textContent).join(' '), '@bob @carol')
   page.button('Создать группу').fire('click')
   assert.equal(page.notice(), 'Отметь хотя бы одного друга.')
-  page.all('row')[1].children[2].fire('click')
+  assert.deepEqual(page.all('row').map((r) => r.children[1].className), ['ava tiny on', 'ava tiny'])
+  page.all('row')[1].children[3].fire('click')
   await page.wait()
   assert.deepEqual(page.fetched.find((f) => f.route === 'chats/open').body, { with: '3' })
   assert.equal(page.replaced, '/chat#c=d1-3')
@@ -1792,7 +1837,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   await page.wait()
   assert.deepEqual(page.fetched.find((f) => f.route === 'chats/group').body, { name: 'Все друзья', all: true })
   assert.equal(page.replaced, '/chat#c=gzyxwvutsrqponmlk')
-  assert.equal(page.one('sub').textContent, 'участники: 3')
+  assert.equal(page.one('sub').textContent, 'участники: 3, в сети: 1')
 
   // Чата больше нет (выгнали из группы) — переписка остаётся, писать некуда
   page.sockets[0].fire('message', { data: JSON.stringify({ type: 'gone', chat: 'gzyxwvutsrqponmlk' }) })
@@ -1842,10 +1887,14 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
 
   // По-английски
   const en = await chatPage({ hash: `#t=${TICKET}&c=${GROUP}`, search: '?lang=en' })
-  assert.equal(en.one('sub').textContent, 'members: 3')
+  assert.equal(en.one('sub').textContent, 'members: 3, online: 1')
   assert.equal(en.all('note')[0].textContent, '@alice created the group “Squad”')
   assert.equal(en.button('New chat').textContent, 'New chat')
   assert.equal(en.ctx.document.title, '(2) Chats · Arcade', 'чат с Бобом не прочитан')
+  en.button('Members').fire('click')
+  await en.wait()
+  assert.equal(en.all('pick')[7].attributes['aria-label'], 'octopus')
+  assert.ok(en.one('sheet').children.some((c) => c.textContent === 'Group picture'))
   assert.match((await chatPage({ search: '?lang=en' })).root.textContent, /^Chats open from Arcade/)
 }
 

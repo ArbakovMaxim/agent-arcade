@@ -13,10 +13,12 @@ import { bundledChannels, choose, contextFrom, feedUrl, parseChannels, parseFeed
 import { bundledFeeds, durationSeconds, durationText, hostOf, itemStats, listenUrl, parseFeeds, parseItems, readUrl, readsPrompt } from '../hooks/rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, searchUrl, showFeed } from '../hooks/search.js'
 import { MY_CHANNELS, PAGE_CHANNELS, TOPIC_TITLES, liveFirst, liveStatus, liveUrl, parseTwitch, rememberChannel, restoreTwitch, twitchLogin, twitchUrl } from '../hooks/twitch.js'
-import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from '../hooks/chats.js'
+import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, clock as chatClock, day, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, picsFrom, when } from '../hooks/chats.js'
+import { AVATAR_COUNT, avatarName, avatarSvg, initial, letterColor, letterSvg, picSvg, validPic } from '../hooks/avatars.js'
+import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, svgToXaml } from '../hooks/popup.js'
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
-import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
+import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 
@@ -86,7 +88,7 @@ async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, web = {}, api }: any = {}) {
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, web = {}, api, popupAnswer = '' }: any = {}) {
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
@@ -114,6 +116,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   const fetches: string[] = []
   const requests: any[] = []
   const notifies: any[] = []
+  const popups: any[] = [] // карточки о сообщениях
   const widths: any[] = []
   const closed: any[] = []
   const opened: string[] = []
@@ -125,6 +128,12 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   mock.env(on, 'LANG' in env || 'LC_ALL' in env || 'LC_MESSAGES' in env ? env : { ...env, LANG: 'ru_RU.UTF-8' })
   on('process.run', ($: any, e: any) => {
     if (e.argv[0] === 'uname') return { value: { exitCode: 0, stdout: `${uname}\n`, stderr: '' } }
+    // Карточка о сообщении: Windows — PowerShell с ARCADE_POPUP_*, Linux и macOS — уведомление от имени Arcade.
+    // Ответ — что напечатала карточка: 'open' — по ней кликнули
+    if (e.init?.env?.ARCADE_POPUP_TITLE !== undefined || e.argv.includes('--app-name=Arcade') || e.argv.some((a: string) => a.includes('subtitle "Arcade"'))) {
+      popups.push({ argv: e.argv, env: e.init?.env ?? {} })
+      return { value: { exitCode: 0, stdout: typeof popupAnswer === 'function' ? popupAnswer() : popupAnswer, stderr: '' } }
+    }
     if (e.init?.env?.ARCADE_TEXT || e.argv[0] === 'notify-send' || e.argv[0] === 'osascript') {
       notifies.push({ argv: e.argv, env: e.init?.env ?? {} })
       return { value: { exitCode: 0, stdout: '', stderr: '' } }
@@ -249,7 +258,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches, requests, notifies, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered }
+  return { saved, opened, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered }
 }
 
 const BASH_MS = 2_000
@@ -3909,8 +3918,25 @@ test('account.js: ответы сайта про вход и настройки,
   // Настройки сайта: только общие ключи с отметкой времени
   const settings = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 }, junk: { v: 1, at: 1 }, notify: { v: false }, keys: 'нет' }
   const clean = { lang: { v: 'en', at: 5 }, wide: { v: true, at: 7 } }
-  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, role: '', error: '' })
-  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, role: '', error: 'auth' })
+  expect(parseMe(reply(200, { user, settings }))).toEqual({ user, settings: clean, handle: '', ticket: '', pic: null, friends: 0, requests: 0, unread: 0, role: '', error: '' })
+  expect(parseMe(reply(401, { error: 'auth' }))).toEqual({ user: null, settings: {}, handle: '', ticket: '', pic: null, friends: 0, requests: 0, unread: 0, role: '', error: 'auth' })
+  // Аватарка: номер 0–23 из своих картинок; другое — нет аватарки
+  expect(parseMe(reply(200, { user, pic: 5 })).pic).toBe(5)
+  expect(parseMe(reply(200, { user, pic: 24 })).pic).toBeNull()
+  expect(parseMe(reply(200, { user, pic: 'https://avatars.githubusercontent.com/u/1' })).pic).toBeNull()
+  // Ответ про смену аватарки: сайт подтвердил номер или убрал; часто — подожди
+  expect(parseAvatar(reply(200, { pic: 0 }))).toEqual({ pic: 0, error: '' })
+  expect(parseAvatar(reply(200, {}))).toEqual({ pic: null, error: '' })
+  expect(parseAvatar(reply(200, { pic: 99 }))).toEqual({ pic: null, error: 'down' })
+  expect(parseAvatar(reply(400, { error: 'invalid' }))).toEqual({ pic: null, error: 'invalid' })
+  expect(parseAvatar(reply(429, { error: 'often' })).error).toBe('often')
+  expect(parseAvatar(reply(429, {})).error).toBe('limit')
+  expect(parseAvatar(reply(401, { error: 'auth' })).error).toBe('auth')
+  // Человек из списка друзей: номер, ник и аватарка, если выбрал
+  expect(personFrom({ id: 7, handle: 'octo_pal', pic: 3 })).toEqual({ id: '7', handle: 'octo_pal', pic: 3 })
+  expect(personFrom({ id: '7', handle: 'octo_pal', pic: -1 })).toEqual({ id: '7', handle: 'octo_pal' })
+  expect(personFrom({ id: 'x', handle: 'octo_pal' })).toBeNull()
+  expect(personFrom({ id: '7', handle: 'Bad Name' })).toBeNull()
   // Роль: только «admin» от сайта, остальное — обычный человек
   expect(parseMe(reply(200, { user, role: 'admin' })).role).toBe('admin')
   expect(parseMe(reply(200, { user, role: 'root' })).role).toBe('')
@@ -4590,7 +4616,8 @@ test('в сети: отметка по таймеру, друг в сети, п�
   const { api, circle, live } = onlineSite()
   circle.incoming = []
   live.invites = [CHESS_INVITE]
-  const { clock, requests, launches, toasts, saved } = stubs(on, { env: WINDOWS, site: netCatalog(), api, stored: { account: { token: TOKEN, user: OCTO } } })
+  // уведомления о сообщениях спрашивают непрочитанные сами, раз в 20 секунд, — здесь считаем только отметку
+  const { clock, requests, launches, toasts, saved } = stubs(on, { env: WINDOWS, site: netCatalog(), api, stored: { account: { token: TOKEN, user: OCTO }, msgNotify: false } })
   await start($)
   await clock.advance(3_200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4755,28 +4782,38 @@ test('chats.js: ответы сайта про чаты, чистка текст
   // Список: чаты как надо; у чата двоих друг — из номера чата; название группы — одной строкой; ники — только как надо
   const me = { id: '583231' }
   const dm = { id: DM, kind: 'dm', with: '7', unread: 2, at: 5, last: { f: '7', t: 'hi\u001b[2J\nthere' } }
-  const club = { id: CLUB, kind: 'group', name: '  chess\nclub  ', unread: 0, at: 4, last: { f: '583231', k: 'create', n: 'chess club' } }
+  const club = { id: CLUB, kind: 'group', name: '  chess\nclub  ', pic: 11, unread: 0, at: 4, last: { f: '583231', k: 'create', n: 'chess club' } }
   const broken = [{ id: 'd8-9', kind: 'dm', with: '7' }, { id: 'g1', kind: 'group' }, { id: DM, kind: 'group' }, { id: DM, kind: 'dm', with: 'x' }, null, 'g0000000000000002']
   const names = { 7: 'octo_pal', 583231: 'octocat', x: 'bad_id', 9: 'Bad Name', 10: 5 }
-  expect(parseChats(reply(200, { me, chats: [dm, club, ...broken], names, unread: 2 }))).toEqual({
+  // Аватарки: свою сайт кладёт в me, чужие — в pics; кривые номера и картинки — мимо. В сети — только номера, без повторов
+  const pics = { 7: 4, 21: 23, x: 1, 9: 24, 10: 'https://avatars.githubusercontent.com/u/10', 11: -1, 12: 1.5 }
+  const online = ['7', 7, 'x', '21', null]
+  expect(parseChats(reply(200, { me: { ...me, pic: 0 }, chats: [dm, club, ...broken], names, pics, online, unread: 2 }))).toEqual({
     me: '583231',
     chats: [
       { id: DM, kind: 'dm', with: '7', unread: 2, at: 5, last: { f: '7', t: 'hi[2J there' } },
-      { id: CLUB, kind: 'group', name: 'chess club', unread: 0, at: 4, last: { f: '583231', k: 'create', n: 'chess club' } },
+      { id: CLUB, kind: 'group', name: 'chess club', pic: 11, unread: 0, at: 4, last: { f: '583231', k: 'create', n: 'chess club' } },
     ],
     names: { 7: 'octo_pal', 583231: 'octocat' },
+    pics: { 7: 4, 21: 23, 583231: 0 },
+    online: ['7', '21'],
     unread: 2,
     error: '',
   })
   expect(parseChats(reply(200, { me, chats: [{ ...dm, last: { f: '7', t: 'x'.repeat(500) } }] })).chats[0].last.t.length).toBe(200)
   expect(parseChats(reply(200, { chats: [] })).error).toBe('down')
   expect(parseChats(reply(200, { me, chats: 'no' })).error).toBe('down')
-  expect(parseChats(reply(401, { error: 'auth' }))).toEqual({ me: '', chats: [], names: {}, unread: 0, error: 'auth' })
+  expect(parseChats(reply(200, { me, chats: [{ ...club, pic: 'x' }] })).chats[0]).not.toHaveProperty('pic')
+  expect(parseChats(reply(200, { me, chats: [{ ...dm, pic: 3 }] })).chats[0]).not.toHaveProperty('pic') // у чата двоих — аватарка друга, не своя
+  expect(parseChats(reply(200, { me, chats: [], online: 'all' })).online).toEqual([])
+  expect(parseChats(reply(401, { error: 'auth' }))).toEqual({ me: '', chats: [], names: {}, pics: {}, online: [], unread: 0, error: 'auth' })
+  expect(picsFrom({ 7: 0, 8: 23, 9: 24, x: 1 })).toEqual({ 7: 0, 8: 23 })
+  expect([picsFrom(null), picsFrom([1, 2]), picsFrom('7')]).toEqual([{}, {}, {}])
   expect(parseChats(reply(503, { error: 'off' })).error).toBe('off')
   expect(parseChats(reply(404, 'not found')).error).toBe('down') // сайт без чатов
   expect(parseChats(null).error).toBe('down')
   // Переписка: по порядку номеров, кривые и непонятные служебные — мимо; участники — без повторов
-  const about = { id: CLUB, kind: 'group', name: 'chess club', owner: '583231', members: ['583231', '7', '7', 'x', 21] }
+  const about = { id: CLUB, kind: 'group', name: 'chess club', pic: 2, owner: '583231', members: ['583231', '7', '7', 'x', 21] }
   const messages = [
     { s: 3, at: 30, f: '7', t: 'b' },
     { s: 1, at: 10, f: '583231', k: 'create', n: 'chess club' },
@@ -4786,9 +4823,9 @@ test('chats.js: ответы сайта про чаты, чистка текст
     { s: 5, at: 'x', f: '7', t: 'y' },
     { s: 6, at: 60, f: 'x', t: 'z' },
   ]
-  expect(parseMessages(reply(200, { me, chat: about, messages, first: 1, names, unread: 1 }))).toEqual({
+  expect(parseMessages(reply(200, { me, chat: about, messages, first: 1, names, pics: { 7: 4 }, unread: 1 }))).toEqual({
     me: '583231',
-    chat: { id: CLUB, kind: 'group', name: 'chess club', owner: '583231', members: ['583231', '7', '21'] },
+    chat: { id: CLUB, kind: 'group', name: 'chess club', pic: 2, owner: '583231', members: ['583231', '7', '21'] },
     messages: [
       { s: 1, at: 10, f: '583231', k: 'create', n: 'chess club' },
       { s: 2, at: 20, f: '583231', k: 'add', o: '7' },
@@ -4796,6 +4833,7 @@ test('chats.js: ответы сайта про чаты, чистка текст
     ],
     first: 1,
     names: { 7: 'octo_pal', 583231: 'octocat' },
+    pics: { 7: 4 },
     unread: 1,
     error: '',
   })
@@ -4849,12 +4887,23 @@ test('chats.js: ответы сайта про чаты, чистка текст
   expect(when(new Date(2026, 9, 22, 23, 59).getTime(), now)).toBe('22.10 23:59')
   expect(when(new Date(2025, 11, 31, 23, 59).getTime(), now)).toBe('31.12.2025')
   expect(when(NaN, now)).toBe('')
+  // Часы у пузыря и разделители дней в переписке
+  expect(chatClock(new Date(2026, 9, 23, 9, 5).getTime())).toBe('09:05')
+  expect(chatClock(NaN)).toBe('')
+  expect(day(new Date(2026, 9, 23, 0, 1).getTime(), now)).toBe('Сегодня')
+  expect(day(new Date(2026, 9, 22, 23, 59).getTime(), now)).toBe('Вчера')
+  expect(day(new Date(2026, 9, 1, 12).getTime(), now)).toBe('01.10')
+  expect(day(new Date(2025, 9, 22, 12).getTime(), now)).toBe('22.10.2025')
+  expect(day(new Date(2026, 0, 1, 12).getTime(), new Date(2026, 0, 2, 9).getTime())).toBe('Вчера')
+  expect(day(new Date(2025, 11, 31, 12).getTime(), new Date(2026, 0, 1, 9).getTime())).toBe('Вчера')
+  expect(day(NaN, now)).toBe('')
 })
 
 // Сайт с чатами octocat (583231): друзья octo_pal (7) и new_pal (21); чат с octo_pal (два непрочитанных) и группа
 // «club», которой управляет octo_pal. Вопросы с ?chat=… сайт разбирает по пути без них. state.unfriended — octo_pal
-// больше не друг: писать ему нельзя; state.gone — вход больше не действует
-function chatsSite() {
+// больше не друг: писать ему нельзя; state.gone — вход больше не действует. Аватарка у octo_pal — 4, в сети — он;
+// своя — state.pic (PUT api/me/avatar), state.avatarBusy — сайт отвечает «часто»
+function chatsSite({ pulse = false } = {}) {
   const ME = OCTO.id
   const names: Record<string, string> = { [ME]: 'octocat', 7: 'octo_pal', 21: 'new_pal' }
   const friends = ['7', '21']
@@ -4875,11 +4924,14 @@ function chatsSite() {
     { id: CLUB, kind: 'group', name: 'club', owner: '7', members: ['7', ME], messages: [{ s: 1, at: T - 60_000, f: '7', k: 'create', n: 'club' }], unread: 0 },
   ]
   let groups = 1
-  const state = { gone: false, unfriended: false }
+  const state = { gone: false, unfriended: false, pic: null as number | null, avatarBusy: false }
+  const pics = () => ({ 7: 4, ...(state.pic === null ? {} : { [ME]: state.pic }) })
+  const online = ['7']
+  const myself = () => ({ id: ME, ...(state.pic === null ? {} : { pic: state.pic }) })
   const mine = () => chats.filter((c) => c.members.includes(ME))
   const find = (id: string) => mine().find((c) => c.id === id)
   const total = () => mine().reduce((n, c) => n + c.unread, 0)
-  const about = (c: any) => ({ id: c.id, kind: c.kind, ...(c.kind === 'dm' ? { with: c.with } : { name: c.name, owner: c.owner }), members: c.members })
+  const about = (c: any) => ({ id: c.id, kind: c.kind, ...(c.kind === 'dm' ? { with: c.with } : { name: c.name, owner: c.owner, ...(c.pic === undefined ? {} : { pic: c.pic }) }), members: c.members })
   const at = (c: any) => c.messages.at(-1)?.at ?? 0
   const post = (c: any, m: any) => {
     const msg = { s: (c.messages.at(-1)?.s ?? 0) + 1, at: T + 3_600_000, ...m }
@@ -4889,15 +4941,23 @@ function chatsSite() {
   const gone = { status: 404, json: { error: 'gone' } }
   const guard = (fn: (request: any) => any) => (request: any) => (state.gone ? { status: 401, json: { error: 'auth' } } : fn(request))
   const routes: Record<string, (request: any) => any> = {
-    'GET api/me': () => ({ json: { user: OCTO, settings: {}, handle: 'octocat', ticket: ticketOf('octocat'), friends: friends.length, unread: total() } }),
+    'GET api/me': () => ({ json: { user: OCTO, settings: {}, handle: 'octocat', ticket: ticketOf('octocat'), ...(state.pic === null ? {} : { pic: state.pic }), friends: friends.length, unread: total() } }),
+    'PUT api/me/avatar': guard(({ body }) => {
+      if (state.avatarBusy) return { status: 429, json: { error: 'often' } }
+      if (body.pic !== null && !validPic(body.pic)) return { status: 400, json: { error: 'invalid' } }
+      state.pic = body.pic
+      return { json: body.pic === null ? {} : { pic: body.pic } }
+    }),
     'GET api/me/friends': guard(() => ({ json: { friends: friends.map((id) => ({ id, handle: names[id] })), incoming: [], outgoing: [] } })),
     'GET api/me/chats': guard(() => ({
       json: {
-        me: { id: ME },
+        me: myself(),
         chats: mine()
           .sort((a, b) => at(b) - at(a))
           .map((c) => ({ ...about(c), unread: c.unread, at: at(c), ...(c.messages.length ? { last: c.messages.at(-1) } : {}) })),
         names,
+        pics: pics(),
+        online,
         unread: total(),
       },
     })),
@@ -4908,7 +4968,7 @@ function chatsSite() {
       c.unread = 0
       const after = query.after ? Number(query.after) : 0
       const before = query.before ? Number(query.before) : Infinity
-      return { json: { me: { id: ME }, chat: about(c), messages: c.messages.filter((m: any) => m.s > after && m.s < before), first: 1, names, unread: total() } }
+      return { json: { me: myself(), chat: about(c), messages: c.messages.filter((m: any) => m.s > after && m.s < before), first: 1, names, pics: pics(), unread: total() } }
     }),
     'POST api/me/chats/send': guard(({ body }) => {
       const c = find(body.chat)
@@ -4950,11 +5010,18 @@ function chatsSite() {
         c.name = body.name
         post(c, { f: ME, k: 'name', n: body.name })
       }
+      if (body.pic !== undefined) {
+        if (body.pic === null) delete c.pic
+        else c.pic = body.pic
+        post(c, { f: ME, k: 'pic', ...(body.pic === null ? {} : { n: body.pic }) })
+      }
       return { json: { chat: about(c) } }
     }),
     'POST api/me/chats/ticket': guard(({ body }) => (body?.link === true ? { json: { link: LINK_CODE } } : { status: 400, json: { error: 'invalid' } })),
     'GET api/me/chats/unread': guard(() => ({ json: { unread: total() } })),
   }
+  // pulse — сайт знает отметку «в сети» и сам приносит непрочитанные; без неё мод спрашивает их по-старому
+  if (pulse) routes['POST api/me/pulse'] = guard(() => ({ json: { online, invites: [], unread: total(), requests: 0 } }))
   const { api: account } = accountSite()
   const api = (path: string, request: any) => {
     const [bare, query = ''] = path.split('?')
@@ -5002,6 +5069,7 @@ test('чаты без своего ника: экран просит взять 
 test('чаты: список, переписка, отправка, новые сообщения по таймеру, чат с другом, страница по коду ссылки', HEAVY, async ($, on) => {
   const { api, chats, state, post } = chatsSite()
   const { clock, requests, saved, launches } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  const T = Date.UTC(2026, 9, 23, 12)
   await start($)
   await clock.advance(3_200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -5021,18 +5089,26 @@ test('чаты: список, переписка, отправка, новые �
   expect(await text('  непрочитанных: 2')).toBeDefined()
   await press('arcade-menu-chats')
   expect(sent(requests, 'api/me/chats', 'GET').map((r) => r.headers.Authorization)).toEqual([`Bearer ${TOKEN}`])
-  // Список: новые сверху, у чата — непрочитанные и последнее сообщение; служебное — словами
-  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal (2)' } })
+  // Список: новые сверху, у чата — непрочитанные значком, под названием — последнее сообщение; служебное — словами;
+  // друг в сети — ●
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal' } })
   expect(await ui.find({ key: `arcade-chat-open-${CLUB}` })).toMatchObject({ props: { label: 'club' } })
-  expect(await text(/ · hi! a game tonight\?$/)).toBeDefined()
-  expect(await text(/ · @octo_pal создал\(а\) группу «club»$/)).toBeDefined()
+  expect((await ui.findAll({ type: 'Button' })).map((b: any) => b.key).filter((k: string) => k.startsWith('arcade-chat-open-'))).toEqual([`arcade-chat-open-${DM}`, `arcade-chat-open-${CLUB}`])
+  expect(await text(/^ 2 $/)).toBeDefined()
+  expect(await text(/^●$/)).toBeDefined()
+  expect(await text(/^hi! a game tonight\?$/)).toBeDefined()
+  expect(await text(/^@octo_pal создал\(а\) группу «club»$/)).toBeDefined()
   expect(await text('Переписка хранится на сайте Arcade и не шифруется — не пиши туда пароли и ключи.')).toBeDefined()
-  // Переписка: сайт отмечает прочитанным; своё — от своего ника
+  // Переписка: сайт отмечает прочитанным; под своим — время и ✓ (дошло до сайта), под чужим — только время; в шапке —
+  // друг в сети
   await press(`arcade-chat-open-${DM}`)
   expect(messages().at(-1).path).toBe(`api/me/chats/messages?chat=${DM}`)
   expect(await text('hi! a game tonight?')).toBeDefined()
   expect(await text('ready?')).toBeDefined()
-  expect(await text('@octocat')).toBeDefined()
+  expect(await text(new RegExp(`^${chatClock(T)} ✓$`))).toBeDefined()
+  expect(await text(new RegExp(`^${chatClock(T + 120_000)}$`))).toBeDefined()
+  expect(await text(/^в сети$/)).toBeDefined()
+  expect(await text(/^── (Сегодня|Вчера|\d\d\.\d\d(\.\d{4})?) ──$/)).toBeDefined()
   expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Сообщение', submitLabel: 'Отправить' } })
   expect(await text('Переписка не шифруется — не пиши сюда пароли и ключи.')).toBeDefined()
   // Отправить: без пробелов по краям; поле — новое
@@ -5057,9 +5133,11 @@ test('чаты: список, переписка, отправка, новые �
   await write('still there?')
   expect(await text('Писать можно только друзьям.')).toBeDefined()
   state.unfriended = false
-  // Назад к списку: непрочитанных больше нет
+  // Назад к списку: непрочитанных больше нет; последнее своё — с «ты:»
   await press('arcade-chats-back')
   expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal' } })
+  expect(await text(/^ \d+ $/)).toBeUndefined()
+  expect(await text(/^see you there$/)).toBeDefined()
   await press('arcade-back')
   expect(await text('  с друзьями: один на один и группы')).toBeDefined()
   // Новый чат с другом: сайт заводит его, переписка пустая
@@ -5175,7 +5253,11 @@ test('Desktop: чаты открываются на странице во вст
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-menu-chats' })
   await clock.settle()
-  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal (2)' } })
+  expect(await ui.find({ key: `arcade-chat-open-${DM}` })).toMatchObject({ props: { label: '@octo_pal' } })
+  // Картинки: у друга — его аватарка, у группы без картинки — буква названия
+  const sources = (await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)
+  expect(sources).toContain(avatarSvg(4))
+  expect(sources).toContain(letterSvg('club', CLUB))
   await ui.press({ key: 'arcade-chats-page' })
   await clock.settle()
   expect(browserCalls.length).toBe(1)
@@ -5201,7 +5283,7 @@ test('чаты по-английски: экраны, служебные соо�
   expect(await ui.find({ type: 'Text', text: '  unread: 2' })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await press('arcade-menu-chats')
-  expect(await ui.find({ type: 'Text', text: / · @octo_pal created the group “club”$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^@octo_pal created the group “club”$/ })).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await press(`arcade-chat-open-${DM}`)
   expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Message', submitLabel: 'Send' } })
@@ -5218,6 +5300,289 @@ test('чаты по-английски: экраны, служебные соо�
   expect(await ui.find({ type: 'Text', text: 'members: 3' })).toBeDefined()
   await press('arcade-chat-members')
   expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+test('avatars.js: 24 картинки, номер — целое 0–23, буква и цвет от ника, подписи на двух языках', () => {
+  expect(AVATAR_COUNT).toBe(24)
+  expect([0, 23].every(validPic)).toBe(true)
+  expect([-1, 24, 1.5, '3', null, undefined, NaN].some(validPic)).toBe(false)
+  // Каждая — свой SVG-документ в круге, без скриптов и ссылок наружу
+  const all = Array.from({ length: AVATAR_COUNT }, (_, n) => avatarSvg(n))
+  expect(new Set(all).size).toBe(AVATAR_COUNT)
+  for (const svg of all) {
+    expect(svg.startsWith('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"')).toBe(true)
+    expect(svg).not.toMatch(/<script|href=|on\w+=/i)
+  }
+  expect(avatarSvg(99)).toBe(avatarSvg(0))
+  // Буква: без @, заглавная; нет букв — «?»; разметка в нике не ломает картинку
+  expect([initial('@octocat'), initial('  fefa'), initial(''), initial(null), initial('😀x')]).toEqual(['O', 'F', '?', '?', '😀'])
+  expect(letterColor('octocat')).toBe(letterColor('octocat'))
+  expect(letterColor('octocat')).toMatch(/^#[0-9A-F]{6}$/)
+  expect(letterSvg('<b>&"x')).toContain('>&#60;</text>')
+  expect(letterSvg('<b>&"x')).not.toContain('<b>')
+  expect(picSvg(5, 'octocat', 'octocat')).toBe(avatarSvg(5))
+  expect(picSvg(null, 'octocat', 'octocat')).toBe(letterSvg('octocat'))
+  expect(picSvg(24, 'club', CLUB)).toBe(letterSvg('club', CLUB))
+  expect([avatarName(0, 'ru'), avatarName(0, 'en'), avatarName(0, 'de'), avatarName(24, 'ru')]).toEqual(['кот', 'cat', 'cat', ''])
+  expect(Array.from({ length: AVATAR_COUNT }, (_, n) => avatarName(n, 'en')).every(Boolean)).toBe(true)
+})
+
+test('popup.js: карточка о сообщении — XAML аватарок, команда для Windows, macOS и Linux, о чём уже всплывало', () => {
+  // Все 24 переводятся в XAML; непонятное в SVG — null, тогда буква
+  for (let n = 0; n < AVATAR_COUNT; n++) expect(svgToXaml(avatarSvg(n))).toMatch(/^<Viewbox|^<Grid|^<Canvas/)
+  expect(svgToXaml('<svg><script>x</script></svg>')).toBeNull()
+  expect(svgToXaml('<svg><image href="x"/></svg>')).toBeNull()
+  expect(avatarXaml(3, 'octo_pal')).toBe(svgToXaml(avatarSvg(3)))
+  expect(avatarXaml(null, 'octo_pal')).toBe(letterXaml('octo_pal'))
+  expect(letterXaml('<x>&"', 'g1')).toContain('Text="&#60;"')
+  expect(letterXaml('club', CLUB)).toContain(`Fill="${letterColor(CLUB)}"`)
+  // Windows: своё окно поверх всех, текст — через переменные окружения, не в команде
+  const win = popupCommand('windows', { title: '@octo_pal', text: 'hi\u0007 there', pic: letterXaml('octo_pal'), slot: 1 })!
+  expect(win.argv.slice(0, 2)).toEqual(['powershell.exe', '-NoProfile'])
+  expect(win.argv.join(' ')).not.toContain('octo_pal')
+  expect(win.env).toEqual({ ARCADE_POPUP_TITLE: '@octo_pal', ARCADE_POPUP_TEXT: 'hi  there', ARCADE_POPUP_PIC: letterXaml('octo_pal'), ARCADE_POPUP_SLOT: '1' })
+  expect(POPUP_SCRIPT_TEXT).toContain('Topmost')
+  expect(POPUP_SCRIPT_TEXT).toContain('$env:ARCADE_POPUP_TITLE')
+  // Длинное — обрезано с «…»
+  const long = popupCommand('windows', { title: 'x'.repeat(200), text: 'й'.repeat(500) })!
+  expect([...long.env.ARCADE_POPUP_TITLE].length).toBe(POPUP_TITLE_MAX)
+  expect([...long.env.ARCADE_POPUP_TEXT].length).toBe(POPUP_TEXT_MAX)
+  expect(long.env.ARCADE_POPUP_TEXT.endsWith('…')).toBe(true)
+  expect(long.env.ARCADE_POPUP_SLOT).toBe('0')
+  // macOS и Linux — системное уведомление от имени Arcade, текст — отдельными аргументами
+  expect(popupCommand('mac', { title: '@octo_pal', text: 'hi' })).toEqual({
+    argv: ['osascript', '-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv) subtitle "Arcade" sound name "Glass"', '-e', 'end run', '@octo_pal', 'hi'],
+    env: {},
+  })
+  expect(popupCommand('linux', { title: 'club', text: '@octo_pal: hi' })).toEqual({ argv: ['notify-send', '--app-name=Arcade', 'club', '@octo_pal: hi'], env: {} })
+  expect(popupCommand('', { title: 'x', text: 'y' })).toBeNull()
+  // О чём уже всплывало: только номера чатов и время; не больше POPPED_KEPT — самые свежие
+  expect(restorePopped({ [DM]: 5, [CLUB]: 'x', nope: 1 })).toEqual({ [DM]: 5 })
+  expect([restorePopped(null), restorePopped([1]), restorePopped('x')]).toEqual([{}, {}, {}])
+  const many = Object.fromEntries(Array.from({ length: POPPED_KEPT + 20 }, (_, k) => [`g${String(k).padStart(16, '0')}`, k]))
+  const kept = keepPopped(many)
+  expect(Object.keys(kept).length).toBe(POPPED_KEPT)
+  expect(Math.min(...Object.values(kept))).toBe(20)
+  // Пора всплыть: непрочитанное, последнее — не своё и новее того, о котором всплывало; по порядку прихода
+  const list = [
+    { id: 'd1-2', unread: 1, at: 30, last: { f: '2', t: 'a' } },
+    { id: 'd1-3', unread: 1, at: 10, last: { f: '3', t: 'b' } },
+    { id: 'd1-4', unread: 0, at: 40, last: { f: '4', t: 'c' } },
+    { id: 'd1-5', unread: 1, at: 50, last: { f: '1', t: 'mine' } },
+    { id: 'd1-6', unread: 2, at: 20, last: { f: '6', t: 'old' } },
+    { id: 'd1-7', unread: 1, at: 60 },
+  ]
+  expect(popupChats(list, '1', { 'd1-6': 20 }).map((c: any) => c.id)).toEqual(['d1-3', 'd1-2'])
+})
+
+test('аватарка: выбирают только в «Аккаунте» — номер уходит на сайт; чаты её только показывают', HEAVY, async ($, on) => {
+  const { api, state } = chatsSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const avatars = () => sent(requests, 'api/me/avatar', 'PUT')
+  await press('arcade-menu-account')
+  // 24 картинки с подписями и «Без аватарки»; пока не выбрал — отмечено «без», рядом с «Аватарка» — буква ника
+  expect(await ui.find({ type: 'Text', text: /^Аватарка$/ })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-avatar-0' })).toMatchObject({ props: { label: 'кот' } })
+  expect(await ui.find({ key: 'arcade-avatar-23' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-avatar-24' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-avatar-none' })).toMatchObject({ props: { label: 'Без аватарки', variant: 'primary' } })
+  expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)).toContain(letterSvg('octocat'))
+  // Выбрал — номер на сайт с ключом сессии; та же ещё раз — сайт не спрашиваем
+  await press('arcade-avatar-5')
+  expect(avatars().map((r) => [r.body, r.headers.Authorization])).toEqual([[{ pic: 5 }, `Bearer ${TOKEN}`]])
+  expect(await ui.find({ key: 'arcade-avatar-5' })).toMatchObject({ props: { variant: 'primary' } })
+  expect((await ui.find({ key: 'arcade-avatar-none' }))!.props.variant).toBeUndefined()
+  await press('arcade-avatar-5')
+  expect(avatars().length).toBe(1)
+  // Сайт: «слишком часто» — так и говорим, выбранная остаётся
+  state.avatarBusy = true
+  await press('arcade-avatar-6')
+  expect(await ui.find({ type: 'Text', text: 'Аватарку меняли слишком часто — подожди минуту.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-avatar-5' })).toMatchObject({ props: { variant: 'primary' } })
+  state.avatarBusy = false
+  // Чаты: своей аватарки там не выбрать, а показывается она — у себя среди участников группы
+  await press('arcade-back')
+  await press('arcade-menu-chats')
+  expect((await ui.findAll({})).some((x: any) => x.key?.startsWith('arcade-avatar-'))).toBe(false)
+  await press(`arcade-chat-open-${CLUB}`)
+  await press('arcade-chat-members')
+  expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)).toEqual(expect.arrayContaining([avatarSvg(5), avatarSvg(4)]))
+  expect((await ui.findAll({})).some((x: any) => x.key?.startsWith('arcade-avatar-'))).toBe(false)
+  // Не хозяин группы — и её картинку не выбрать
+  expect(await ui.find({ key: 'arcade-chat-pic-0' })).toBeUndefined()
+  expect(avatars().length).toBe(2)
+  await ui.unmount()
+})
+
+test('картинка группы: ставит и убирает только хозяин, в переписке — служебной строкой', HEAVY, async ($, on) => {
+  const { api, chats } = chatsSite()
+  const { clock, requests } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const text = (t: string | RegExp) => ui.find({ type: 'Text', text: t })
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const members = () => sent(requests, 'api/me/chats/members', 'POST').map((r) => r.body)
+  // Своя группа: создал — хозяин
+  await press('arcade-menu-chats')
+  await press('arcade-chat-new')
+  await press('arcade-chat-pick-7')
+  await ui.input({ key: (await ui.find({ type: 'Input' }))!.key!, text: 'club 2', kind: 'change' })
+  await press('arcade-chat-create')
+  const group = chats.at(-1).id
+  await press('arcade-chat-members')
+  expect(await text(/^Картинка группы$/)).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chat-pic-none' })).toMatchObject({ props: { label: 'Без картинки', variant: 'primary' } })
+  await press('arcade-chat-pic-3')
+  expect(members().at(-1)).toEqual({ chat: group, pic: 3 })
+  expect(await text('Картинка группы изменена.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-chat-pic-3' })).toMatchObject({ props: { variant: 'primary' } })
+  // Та же ещё раз — сайт не спрашиваем; «Без картинки» — убрать
+  await press('arcade-chat-pic-3')
+  expect(members().length).toBe(1)
+  await press('arcade-chat-pic-none')
+  expect(members().at(-1)).toEqual({ chat: group, pic: null })
+  expect(await ui.find({ key: 'arcade-chat-pic-none' })).toMatchObject({ props: { variant: 'primary' } })
+  await press('arcade-back')
+  expect(await text(/^@octocat сменил\(а\) картинку группы$/)).toBeDefined()
+  expect(await text(/^@octocat убрал\(а\) картинку группы$/)).toBeDefined()
+  // Группа с картинкой — она в шапке и в списке; чужая группа — картинку не выбрать
+  await press('arcade-chat-members')
+  await press('arcade-chat-pic-7')
+  await press('arcade-back')
+  expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)).toContain(avatarSvg(7))
+  await ui.input({ key: (await ui.find({ type: 'Input' }))!.key!, text: 'hi all', kind: 'submit' })
+  await clock.settle()
+  // В списке: картинка группы, под названием своё — с «ты:»
+  await press('arcade-chats-back')
+  expect((await ui.findAll({ type: 'Svg' })).map((s: any) => s.props.source)).toContain(avatarSvg(7))
+  expect(await text(/^ты: hi all$/)).toBeDefined()
+  await press(`arcade-chat-open-${CLUB}`)
+  await press('arcade-chat-members')
+  expect(await ui.find({ key: 'arcade-chat-pic-0' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-chat-pic-none' })).toBeUndefined()
+  expect(members().length).toBe(3)
+  await ui.unmount()
+})
+
+test('уведомления о сообщениях: первый раз — только запомнить, новое — карточка, клик открывает чат; открытый чат и уже всплывшее — нет; выключаются в «Настройках»', HEAVY, async ($, on) => {
+  const { api, chats, post } = chatsSite({ pulse: true })
+  const T = Date.UTC(2026, 9, 23, 12)
+  let answer = ''
+  const { clock, requests, popups, saved, opened } = stubs(on, { env: WINDOWS, api, popupAnswer: () => answer, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  // Наблюдатель — раз в 20 с; карточка запускается следующим тиком часов
+  const poll = async () => {
+    await clock.advance(20_000)
+    await clock.settle()
+    await clock.advance(1)
+    await clock.settle()
+  }
+  const lists = () => sent(requests, 'api/me/chats', 'GET').length
+  const counts = () => sent(requests, 'api/me/chats/unread', 'GET').length
+  const say = (k: number, at: number, t: string) => {
+    post(chats[k], { at, f: '7', t })
+    chats[k].unread++
+  }
+  // Первый раз: два непрочитанных уже были — запомнить, не всплывать
+  await poll()
+  expect(counts()).toBe(1)
+  expect(lists()).toBe(1)
+  expect(popups).toEqual([])
+  expect(saved.get('chatPopups')).toEqual({ [DM]: T + 120_000 })
+  // Столько же непрочитанных — список чатов не спрашиваем
+  await poll()
+  expect(counts()).toBe(2)
+  expect(lists()).toBe(1)
+  // Новое в группе — карточка: название группы, ник автора и текст, буква названия; места — снизу вверх
+  say(1, T + 7_200_000, 'who is in for chess?')
+  await poll()
+  expect(popups.length).toBe(1)
+  expect(popups[0].env).toEqual({ ARCADE_POPUP_TITLE: 'club', ARCADE_POPUP_TEXT: '@octo_pal: who is in for chess?', ARCADE_POPUP_PIC: letterXaml('club', CLUB), ARCADE_POPUP_SLOT: '0' })
+  expect(popups[0].argv[0]).toBe('powershell.exe')
+  expect(saved.get('chatPopups')).toEqual({ [DM]: T + 120_000, [CLUB]: T + 7_200_000 })
+  // Новое от друга — его ник и аватарка; клик по карточке открывает панель на этом чате
+  answer = 'open'
+  say(0, T + 7_300_000, 'are you there?')
+  await poll()
+  expect(popups.length).toBe(2)
+  expect(popups[1].env).toMatchObject({ ARCADE_POPUP_TITLE: '@octo_pal', ARCADE_POPUP_TEXT: 'are you there?', ARCADE_POPUP_PIC: avatarXaml(4, 'octo_pal') })
+  expect(opened.at(-1)).toBe('arcade')
+  expect(sent(requests, `api/me/chats/messages?chat=${DM}`, 'GET').length).toBe(1)
+  answer = ''
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^are you there\?$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Input' })).toMatchObject({ props: { label: 'Сообщение' } })
+  // Чат открыт на экране — о нём не всплываем
+  say(0, T + 7_400_000, 'hello?')
+  await poll()
+  expect(popups.length).toBe(2)
+  // Уже всплыло в другой сессии Claude Code ($.store) — не повторяем
+  saved.set('chatPopups', { ...(saved.get('chatPopups') as any), [CLUB]: T + 7_500_000 })
+  say(1, T + 7_500_000, 'anyone?')
+  await poll()
+  expect(popups.length).toBe(2)
+  // Выключил в «Настройках» — карточек нет
+  await ui.press({ key: 'arcade-chats-back' })
+  await clock.settle()
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-msg-notify' })).toMatchObject({ props: { label: 'Уведомления о сообщениях: да' } })
+  expect(await ui.find({ type: 'Text', text: '  всплывают внизу слева поверх всех окон; клик открывает чат' })).toBeDefined()
+  await ui.press({ key: 'arcade-msg-notify' })
+  expect(await ui.find({ key: 'arcade-msg-notify' })).toMatchObject({ props: { label: 'Уведомления о сообщениях: нет' } })
+  expect(saved.get('msgNotify')).toBe(false)
+  await ui.unmount()
+  say(1, T + 7_600_000, 'last call')
+  await poll()
+  expect(popups.length).toBe(2)
+})
+
+test('уведомления о сообщениях: выключенные с прошлого раза так и остаются — сайт о непрочитанных не спрашиваем', HEAVY, async ($, on) => {
+  const { api } = chatsSite({ pulse: true })
+  const { clock, requests, popups } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO }, msgNotify: false } })
+  await start($)
+  await clock.advance(3_200)
+  await clock.advance(60_000)
+  await clock.settle()
+  expect(sent(requests, 'api/me/chats/unread', 'GET')).toEqual([])
+  expect(popups).toEqual([])
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-msg-notify' })).toMatchObject({ props: { label: 'Уведомления о сообщениях: нет' } })
+  await ui.unmount()
+})
+
+test('уведомления о сообщениях по-английски и на Linux: системное уведомление от имени Arcade', HEAVY, async ($, on) => {
+  const { api, chats, post } = chatsSite()
+  const { clock, popups } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, uname: 'Linux', api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  await clock.advance(20_000)
+  await clock.settle()
+  post(chats[1], { at: Date.UTC(2026, 9, 23, 15), f: '7', t: 'chess?' })
+  chats[1].unread = 1
+  await clock.advance(20_000)
+  await clock.settle()
+  await clock.advance(1)
+  await clock.settle()
+  expect(popups.map((p) => p.argv)).toEqual([['notify-send', '--app-name=Arcade', 'club', '@octo_pal: chess?']])
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-msg-notify' })).toMatchObject({ props: { label: 'Message notifications: on' } })
+  expect(await ui.find({ type: 'Text', text: 'a system notification when a friend writes in a chat' })).toBeDefined()
   await ui.unmount()
 })
 

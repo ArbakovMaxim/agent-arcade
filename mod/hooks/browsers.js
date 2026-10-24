@@ -104,7 +104,7 @@ export function encodePowerShell(script) {
   return bytes.toBase64()
 }
 
-function powershell(script) {
+export function powershell(script) {
   return ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodePowerShell(script)]
 }
 

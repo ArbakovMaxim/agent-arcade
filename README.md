@@ -133,6 +133,7 @@ Signing in is optional — without it everything else works as before.
 - **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
 - **Online and game invitations.** While the Arcade menu is open, your friends see you as *online*, and you see them; to stay unseen, turn off *Show friends that I am online* on the *Friends* screen. *Invite* next to a friend offers the online games: a board game opens a private room for two, a Doom game its lobby. The game opens for you at once; your friend gets a notification and *Accept* at the top of the menu, and the invitation is valid for 10 minutes. You can invite where online games open in a browser — the built-in one in Desktop or a browser window.
 - **Chats.** One-on-one with a friend, groups of friends, or a group with all your friends in one press. Write right in the Arcade panel or open the chats page on the site. Messages are stored on Arcade's site and are not encrypted — don't write passwords or keys there.
+- **Avatars and message notifications.** Pick one of 24 ready-made avatars in *Account* — chats only show it; without one, the first letter of your @handle. A group’s owner picks its picture from the same 24. Your GitHub picture is never shown to others. When a friend writes, a card pops up in the bottom left on top of all windows (Windows) or a system notification appears (macOS, Linux); a click on the card opens that chat.
 - **Sign out** stops syncing on this computer; **Delete account** (press twice) makes the site forget you and your settings.
 
 ## Notebook and project boards
@@ -166,6 +167,7 @@ Open **Settings** in the *More* section of the `/arcade` menu:
 - **When the browser opens** (Claude Desktop) — close the Arcade menu so the browser gets the full height, or keep the menu above it.
 - **Agent finished while you watch** (Claude Desktop) — close the tab Arcade opened for a video, a stream, TikTok, an article or an episode, so the chat with Claude is in front of you again, or just let you know.
 - **Notifications while playing in the window.**
+- **Message notifications** — a card in the bottom left when a friend writes in a chat (a system notification on macOS and Linux).
 - **Key test and key remapping** (terminal).
 
 ## Privacy

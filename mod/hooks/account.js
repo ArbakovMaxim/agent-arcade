@@ -4,7 +4,8 @@
 // GitHub мод не видит. Настройки на сайте — { ключ: { v, at } }: у каждого ключа побеждает более позднее изменение,
 // у рекорда Flappy Arcade — больший счёт. Ещё у аккаунта бывает свой @ник — подпись в сетевых играх. Здесь нет вызовов
 // Claude Code — сеть и хранилище в hooks/register.js. С ником можно звать друзей: заявка по точному нику, друг
-// принимает её у себя.
+// принимает её у себя. Аватарка — номер одной из 24 картинок hooks/avatars.js, выбирается здесь же, в аккаунте.
+import { validPic } from './avatars.js'
 import { siteUrl } from './catalog.js'
 import { jsonFrom } from './youtube.js'
 
@@ -21,10 +22,10 @@ const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer' }
+const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', avatar: 'api/me/avatar', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer' }
 
-// Адрес сайта для шага входа, настроек, ника, друзей, чатов или отчётов об ошибках: start, poll, logout, me, settings,
-// handle, friends, accept, unfriend, chats, messages, unread, send, opendm, group, members, chatticket, report (без
+// Адрес сайта для шага входа, настроек, ника, аватарки, друзей, чатов или отчётов об ошибках: start, poll, logout, me,
+// settings, handle, avatar, friends, accept, unfriend, chats, messages, unread, send, opendm, group, members, chatticket, report (без
 // входа), myReport (со входом), reports, closeReport (только админу), общих досок: boards, boardsync, boardnew,
 // boardmembers, boarddelete, «в сети» и приглашений в игру: pulse, invite, answer
 export function accountUrl(name) {
@@ -105,16 +106,16 @@ function handleFrom(data) {
 // Сколько друзей, заявок или непрочитанных: целое от 0
 export const count = (n) => (Number.isInteger(n) && n > 0 ? Math.min(n, 9999) : 0)
 
-// Ответ /api/me → { user, settings, handle, ticket, friends, requests, unread, role, error }: friends — сколько друзей,
-// requests — сколько заявок ждут ответа человека, unread — сколько непрочитанных сообщений во всех чатах, role —
-// 'admin' у админа (ему видны отчёты об ошибках), у остальных ''
+// Ответ /api/me → { user, settings, handle, ticket, pic, friends, requests, unread, role, error }: pic — номер
+// аватарки или null, friends — сколько друзей, requests — сколько заявок ждут ответа человека, unread — сколько
+// непрочитанных сообщений во всех чатах, role — 'admin' у админа (ему видны отчёты об ошибках), у остальных ''
 export function parseMe(response) {
   const data = jsonFrom(response?.text)
   const error = trouble(response, data)
-  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', friends: 0, requests: 0, unread: 0, role: '', error: e })
+  const none = (e) => ({ user: null, settings: {}, handle: '', ticket: '', pic: null, friends: 0, requests: 0, unread: 0, role: '', error: e })
   if (error) return none(error)
   const user = parseUser(data.user)
-  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), friends: count(data.friends), requests: count(data.requests), unread: count(data.unread), role: data.role === 'admin' ? 'admin' : '', error: '' } : none('down')
+  return user ? { user, settings: settingsFrom(data.settings), ...handleFrom(data), pic: validPic(data.pic) ? data.pic : null, friends: count(data.friends), requests: count(data.requests), unread: count(data.unread), role: data.role === 'admin' ? 'admin' : '', error: '' } : none('down')
 }
 
 // Что человек ввёл как ник → ник строчными, без @ и пробелов по краям
@@ -142,13 +143,27 @@ export function parseHandle(response) {
   return named.handle ? { ...named, error: '' } : none('down')
 }
 
-// Человек из списка друзей: { id, handle } — номер аккаунта и ник; не сходится — null
+// Ответ PUT /api/me/avatar → { pic, error }: pic — номер аватарки или null (убрана). error, кроме общих: 'invalid' —
+// номер не тот, 'often' — меняли слишком часто
+export function parseAvatar(response) {
+  const data = jsonFrom(response?.text)
+  const none = (e) => ({ pic: null, error: e })
+  if (response?.status === 400) return none('invalid')
+  if (response?.status === 429) return none(data?.error === 'often' ? 'often' : 'limit')
+  const error = trouble(response, data)
+  if (error) return none(error)
+  if (data.pic !== undefined && !validPic(data.pic)) return none('down')
+  return { pic: data.pic ?? null, error: '' }
+}
+
+// Человек из списка друзей: { id, handle, pic? } — номер аккаунта, ник и номер аватарки; не сходится — null
 export function personFrom(p) {
-  return p && typeof p === 'object' && /^\d{1,20}$/.test(String(p.id ?? '')) && HANDLE.test(p.handle ?? '') ? { id: String(p.id), handle: p.handle } : null
+  if (!p || typeof p !== 'object' || !/^\d{1,20}$/.test(String(p.id ?? '')) || !HANDLE.test(p.handle ?? '')) return null
+  return { id: String(p.id), handle: p.handle, ...(validPic(p.pic) ? { pic: p.pic } : {}) }
 }
 
 // Ответ про друзей (список, заявка, принять, удалить) → { status, friends, incoming, outgoing, error }. Списки — из
-// { id, handle }: друзья, заявки человеку и его заявки. status заявки — 'sent' (отправлена) или 'friends' (уже друзья:
+// { id, handle, pic? }: друзья, заявки человеку и его заявки. status заявки — 'sent' (отправлена) или 'friends' (уже друзья:
 // тот звал сам). error, кроме общих: 'invalid' — ник не того вида, 'self' — свой ник, 'nobody' — ник ничей, 'gone' —
 // заявки уже нет, 'nohandle' — у человека нет ника, 'full' — друзей и заявок слишком много, 'busy' — у того слишком
 // много заявок, 'often' — заявок сегодня слишком много. Сайт без друзей отвечает 404 — это 'down'

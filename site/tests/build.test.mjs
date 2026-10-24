@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import vm from 'node:vm'
 import { build, download, checkChannels, checkFeeds, checkTwitch } from '../build.mjs'
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
@@ -410,6 +411,15 @@ assert.throws(broken((d) => { d.games.find((g) => g.id === 'openarena').mouse = 
   assert.deepEqual([built.games.flappy.kind, built.games.flappy.engine, built.games.flappy.shelf], ['pane', 'flappy', 'arcade'])
   const flappyJs = fs.readFileSync(path.join(dir, 'flappy.js'), 'utf8')
   assert.ok(flappyJs.includes('window.ArcadeFlappy') && !/^export /m.test(flappyJs), 'flappy.js в окне — без export, движок в window.ArcadeFlappy')
+  // Аватарки чатов — из мода, в window.ArcadeAvatars; сколько их — столько же принимает сервер
+  const avatarsJs = fs.readFileSync(path.join(dir, 'avatars.js'), 'utf8')
+  assert.ok(!/^export /m.test(avatarsJs), 'avatars.js на странице — без export')
+  const page = { window: {} }
+  vm.runInNewContext(avatarsJs, page)
+  const { AVATAR_COUNT } = await import('../worker/chat.js')
+  assert.equal(page.window.ArcadeAvatars.AVATAR_COUNT, AVATAR_COUNT)
+  assert.equal(AVATAR_COUNT, 24)
+  assert.match(page.window.ArcadeAvatars.avatarSvg(7), /^<svg /)
   // книга — на полке своего языка
   for (const g of Object.values(built.games).filter((x) => x.kind === 'book')) assert.equal(g.shelf, `books-${g.lang}`)
   assert.equal(built.games.hexgl.shelf, 'racing')

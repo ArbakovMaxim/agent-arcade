@@ -2,6 +2,7 @@
 // сайте и не зашифрована: мод только показывает её и отправляет новые сообщения. Чужой текст (сообщения, ники,
 // названия групп) приходит с сайта — здесь из него убираются управляющие знаки: терминал принял бы их за команды
 import { HANDLE, count, trouble } from './account.js'
+import { validPic } from './avatars.js'
 import { jsonFrom } from './youtube.js'
 
 // Чат двоих — d<меньший номер>-<больший>, группа — g и 16 знаков
@@ -13,7 +14,7 @@ export const MAX_TEXT = 2000 // знаков в сообщении
 export const MAX_MEMBERS = 50 // людей в группе вместе с хозяином
 export const MAX_NAME = 40 // знаков в названии группы
 const MAX_MESSAGES = 300 // сообщений в одном ответе — больше сайт не отдаёт
-const KINDS = ['create', 'name', 'add', 'remove', 'leave']
+const KINDS = ['create', 'name', 'add', 'remove', 'leave', 'pic']
 
 const id = (value) => (typeof value === 'string' || Number.isSafeInteger(value) ? String(value) : '')
 const accountId = (value) => (ACCOUNT_ID.test(id(value)) ? id(value) : '')
@@ -50,12 +51,14 @@ export function chatFailure(response, data) {
 }
 
 // Сообщение без номера и времени: { f, t } — текст, { f, k, o?, n? } — служебное: 'create' — создал группу n,
-// 'add' и 'remove' — добавил и убрал o, 'leave' — вышел, 'name' — назвал группу n. Не сходится — null
+// 'add' и 'remove' — добавил и убрал o, 'leave' — вышел, 'name' — назвал группу n, 'pic' — поставил картинку группы
+// номер n (без n — убрал). Не сходится — null
 function bodyFrom(m, limit) {
   const f = accountId(m?.f)
   if (!f) return null
   if (typeof m.t === 'string') return { f, t: cut(cleanText(m.t), limit) }
   if (!KINDS.includes(m.k)) return null
+  if (m.k === 'pic') return { f, k: 'pic', ...(validPic(m.n) ? { n: m.n } : {}) }
   const o = accountId(m.o)
   const n = typeof m.n === 'string' ? cut(oneLine(m.n), MAX_NAME) : ''
   return { f, k: m.k, ...(o ? { o } : {}), ...(n ? { n } : {}) }
@@ -78,8 +81,18 @@ export function namesFrom(raw) {
   )
 }
 
-// Чат из списка: { id, kind, with (номер друга) | name (название группы), unread, at, last? } — last — последнее
-// сообщение коротко; не сходится — null
+// Аватарки по номерам аккаунтов: { номер: 0–23 }; кто не выбрал — того нет
+export function picsFrom(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  return Object.fromEntries(
+    Object.entries(raw)
+      .slice(0, 1000)
+      .filter(([k, v]) => ACCOUNT_ID.test(k) && validPic(v)),
+  )
+}
+
+// Чат из списка: { id, kind, with (номер друга) | name (название группы) и pic? (её картинка), unread, at, last? } —
+// last — последнее сообщение коротко; не сходится — null
 function chatFrom(c) {
   if (!c || typeof c !== 'object' || typeof c.id !== 'string' || !CHAT_ID.test(c.id)) return null
   const kind = c.id.startsWith('d') ? 'dm' : 'group'
@@ -90,7 +103,7 @@ function chatFrom(c) {
   return {
     id: c.id,
     kind,
-    ...(kind === 'dm' ? { with: other } : { name: typeof c.name === 'string' ? cut(oneLine(c.name), MAX_NAME) : '' }),
+    ...(kind === 'dm' ? { with: other } : { name: typeof c.name === 'string' ? cut(oneLine(c.name), MAX_NAME) : '', ...(validPic(c.pic) ? { pic: c.pic } : {}) }),
     unread: count(c.unread),
     at: Number.isFinite(c.at) ? c.at : 0,
     ...(last ? { last: last.t !== undefined ? { ...last, t: oneLine(last.t) } : last } : {}),
@@ -108,23 +121,37 @@ function aboutFrom(c) {
 
 const meFrom = (me) => accountId(me?.id)
 
-// Ответ GET /api/me/chats → { me, chats, names, unread, error }: me — свой номер, chats — чаты, новые сверху,
-// unread — сколько непрочитанных всего
+// Своя аватарка приходит в me, чужие — в pics: вместе — одна таблица
+function allPics(data, me) {
+  return { ...picsFrom(data.pics), ...(validPic(data.me?.pic) ? { [me]: data.me.pic } : {}) }
+}
+
+// Ответ GET /api/me/chats → { me, chats, names, pics, online, unread, error }: me — свой номер, chats — чаты, новые
+// сверху, pics — аватарки, online — номера друзей в сети, unread — сколько непрочитанных всего
 export function parseChats(response) {
   const data = jsonFrom(response?.text)
-  const none = (e) => ({ me: '', chats: [], names: {}, unread: 0, error: e })
+  const none = (e) => ({ me: '', chats: [], names: {}, pics: {}, online: [], unread: 0, error: e })
   const error = chatFailure(response, data)
   if (error) return none(error)
   const me = meFrom(data.me)
   if (!me || !Array.isArray(data.chats)) return none('down')
-  return { me, chats: data.chats.slice(0, 200).map(chatFrom).filter(Boolean), names: namesFrom(data.names), unread: count(data.unread), error: '' }
+  const online = Array.isArray(data.online) ? [...new Set(data.online.slice(0, 200).map(accountId).filter(Boolean))] : []
+  return {
+    me,
+    chats: data.chats.slice(0, 200).map(chatFrom).filter(Boolean),
+    names: namesFrom(data.names),
+    pics: allPics(data, me),
+    online,
+    unread: count(data.unread),
+    error: '',
+  }
 }
 
-// Ответ GET /api/me/chats/messages → { me, chat, messages, first, names, unread, error }: messages — по порядку
+// Ответ GET /api/me/chats/messages → { me, chat, messages, first, names, pics, unread, error }: messages — по порядку
 // номеров, first — с какого номера человеку видна переписка (раньше — ничего нет)
 export function parseMessages(response) {
   const data = jsonFrom(response?.text)
-  const none = (e) => ({ me: '', chat: null, messages: [], first: 0, names: {}, unread: 0, error: e })
+  const none = (e) => ({ me: '', chat: null, messages: [], first: 0, names: {}, pics: {}, unread: 0, error: e })
   const error = chatFailure(response, data)
   if (error) return none(error)
   const me = meFrom(data.me)
@@ -136,7 +163,7 @@ export function parseMessages(response) {
     .filter(Boolean)
     .sort((a, b) => a.s - b.s)
   const first = Number.isSafeInteger(data.first) && data.first >= 0 ? data.first : 0
-  return { me, chat, messages, first, names: namesFrom(data.names), unread: count(data.unread), error: '' }
+  return { me, chat, messages, first, names: namesFrom(data.names), pics: allPics(data, me), unread: count(data.unread), error: '' }
 }
 
 // Ответ POST /api/me/chats/send → { msg, error }
@@ -182,6 +209,7 @@ export function describe(m) {
   if (m.k === 'add') return { text: '{0} добавил(а) {1}', values: [m.f, m.o ?? ''] }
   if (m.k === 'remove') return { text: '{0} убрал(а) {1}', values: [m.f, m.o ?? ''] }
   if (m.k === 'leave') return { text: '{0} вышел(а) из группы', values: [m.f] }
+  if (m.k === 'pic') return { text: m.n === undefined ? '{0} убрал(а) картинку группы' : '{0} сменил(а) картинку группы', values: [m.f] }
   return { text: '{0} назвал(а) группу «{1}»', values: [m.f, m.n ?? ''] }
 }
 
@@ -201,4 +229,25 @@ export function when(at, now) {
   if (d.getFullYear() !== today.getFullYear()) return `${date}.${d.getFullYear()}`
   if (d.getMonth() === today.getMonth() && d.getDate() === today.getDate()) return time
   return `${date} ${time}`
+}
+
+const two = (n) => String(n).padStart(2, '0')
+const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString()
+
+// Часы и минуты сообщения — ЧЧ:ММ, по местному времени
+export function clock(at) {
+  const d = new Date(at)
+  return Number.isFinite(d.getTime()) ? `${two(d.getHours())}:${two(d.getMinutes())}` : ''
+}
+
+// Разделитель дней в переписке: 'Сегодня', 'Вчера' (их переводит словарь), иначе ДД.ММ, в другом году — ДД.ММ.ГГГГ
+export function day(at, now) {
+  const d = new Date(at)
+  if (!Number.isFinite(d.getTime())) return ''
+  if (sameDay(at, now)) return 'Сегодня'
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (sameDay(at, yesterday.getTime())) return 'Вчера'
+  const date = `${two(d.getDate())}.${two(d.getMonth() + 1)}`
+  return d.getFullYear() === new Date(now).getFullYear() ? date : `${date}.${d.getFullYear()}`
 }

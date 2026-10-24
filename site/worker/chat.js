@@ -11,6 +11,9 @@ export const PAGE = 50 // сообщений за один раз
 const TRIM = 100
 export const CHAT_ID = /^(?:d\d{1,20}-\d{1,20}|g[A-Za-z0-9_-]{16})$/
 const ACCOUNT_ID = /^\d{1,20}$/
+// Аватарки — 24 готовые картинки (mod/hooks/avatars.js): сайт хранит только номер 0–23
+export const AVATAR_COUNT = 24
+export const validPic = (n) => Number.isInteger(n) && n >= 0 && n < AVATAR_COUNT
 
 // Чат двоих: меньший номер первым — у обоих один и тот же
 export function dmId(a, b) {
@@ -34,20 +37,22 @@ const refuse = (error, status) => Response.json({ error }, { status })
 const has = (members, id) => Object.hasOwn(members, id)
 const ids = (list) => (Array.isArray(list) ? [...new Set(list.filter((id) => typeof id === 'string' && ACCOUNT_ID.test(id)))] : [])
 
-// Что о чате знают участники: участники, хозяин и название группы, номер последнего сообщения
+// Что о чате знают участники: участники, хозяин, название и картинка группы, номер последнего сообщения
 const summary = (meta) => ({
   id: meta.id,
   kind: meta.kind,
   ...(meta.name ? { name: meta.name } : {}),
+  ...(validPic(meta.pic) ? { pic: meta.pic } : {}),
   ...(meta.owner ? { owner: meta.owner } : {}),
   members: Object.keys(meta.members),
   last: meta.last,
 })
 
-// meta — { id, kind: 'dm' | 'group', name?, owner?, members: { номер: с какого сообщения он видит переписку },
+// meta — { id, kind: 'dm' | 'group', name?, pic? (номер картинки группы), owner?, members: { номер: с какого сообщения он видит переписку },
 // first, last — номера самого старого и последнего сообщения, created }. Сообщение m:<номер> — { s, f, t, at }:
 // номер, кто написал, текст, когда; служебное — { s, f, k, o?, n?, at }: 'create' — создал группу n, 'add' и
-// 'remove' — добавил и убрал o, 'leave' — вышел, 'name' — назвал группу n
+// 'remove' — добавил и убрал o, 'leave' — вышел, 'name' — назвал группу n, 'pic' — поставил картинку группы n (без n —
+// убрал её)
 export class Chat {
   constructor(ctx, env) {
     this.ctx = ctx
@@ -125,10 +130,10 @@ export class Chat {
     return Response.json({ chat: summary(meta), messages, first: from })
   }
 
-  // Группа: хозяин добавляет и убирает участников и меняет название, выйти может любой. Вышел хозяин — группа
+  // Группа: хозяин добавляет и убирает участников, меняет название и картинку (pic: номер или null), выйти может любой. Вышел хозяин — группа
   // переходит к тому, кто в ней дольше всех; вышли все — группы больше нет. Участникам — одно уведомление с последним
   // служебным сообщением, убранным и вышедшим — что чата у них больше нет
-  async members(meta, { by, add, remove, name, leave }) {
+  async members(meta, { by, add, remove, name, pic, leave }) {
     if (meta.kind !== 'group') return refuse('bad request', 400)
     const gone = []
     let msg = null
@@ -150,6 +155,11 @@ export class Chat {
       if (typeof name === 'string' && name && name !== meta.name) {
         meta.name = name
         msg = await this.append(meta, { f: by, k: 'name', n: name })
+      }
+      if ((pic === null || validPic(pic)) && pic !== (validPic(meta.pic) ? meta.pic : null)) {
+        if (pic === null) delete meta.pic
+        else meta.pic = pic
+        msg = await this.append(meta, { f: by, k: 'pic', ...(pic === null ? {} : { n: pic }) })
       }
       for (const id of removing) {
         delete meta.members[id]
@@ -174,10 +184,11 @@ export class Chat {
     return Response.json({ ok: true })
   }
 
-  // Каждому участнику — в его экземпляр Account: в чате новое сообщение. Кто не ответил, узнает при следующем
+  // Каждому участнику — в его экземпляр Account: в чате новое сообщение. Кто не ответил, узнает при следующем.
+  // Про группу — название и картинка: так списки чатов у всех узнают, что их поменяли
   async notify(meta, msg) {
     const people = Object.keys(meta.members)
-    const about = (id) => (meta.kind === 'dm' ? { with: people.find((other) => other !== id) } : { name: meta.name })
+    const about = (id) => (meta.kind === 'dm' ? { with: people.find((other) => other !== id) } : { name: meta.name, ...(validPic(meta.pic) ? { pic: meta.pic } : {}) })
     await Promise.allSettled(people.map(async (id) => this.account(id, '/chatnote', { chat: meta.id, kind: meta.kind, ...about(id), msg })))
   }
 

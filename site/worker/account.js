@@ -9,7 +9,7 @@
 // список его общих досок проектов (сами доски — в worker/desk.js) и приглашения в игру от друзей; экземпляр 'online' —
 // кто сейчас в сети.
 import { sign, signed } from './discover.js'
-import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName } from './chat.js'
+import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName, validPic } from './chat.js'
 import { addReport, admins, askReports, cleanReport } from './reports.js'
 import { BOARD_ID, MAX_MEMBERS as BOARD_MEMBERS, MAX_OPS, cleanCols, cleanTitle } from './desk.js'
 
@@ -37,6 +37,7 @@ export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 export const HANDLE_HOLD_MS = 30 * DAY // сменённый ник месяц держится за прежним хозяином: никто другой его не возьмёт
 export const HANDLE_CHANGES = 5 // смен ника в сутки — чтобы не занимать чужие ники пачкой
 export const TICKET_MS = 12 * 60 * MINUTE // сколько живёт подпись ника для сетевых игр
+export const PICKS_PER_MINUTE = 10 // смен аватарки в минуту: каждая — запись в реестр
 // Друзья: друзей вместе со своими заявками — не больше MAX_FRIENDS, заявок тебе — не больше MAX_INCOMING, заявок в
 // сутки — REQUESTS_DAILY (и ник с опечаткой — тоже заявка: перебирать чужие ники незачем). Отклонённый месяц не может
 // позвать снова: его заявка молча не доходит
@@ -94,6 +95,7 @@ const ROUTES = {
   'DELETE /api/me': ['user', '/delete'],
   'PUT /api/me/settings': ['user', '/settings'],
   'PUT /api/me/handle': ['user', '/handle'],
+  'PUT /api/me/avatar': ['user', '/avatar'],
   'GET /api/me/friends': ['user', '/friends'],
   'POST /api/me/friends': ['user', '/befriend'],
   'POST /api/me/friends/accept': ['user', '/accept'],
@@ -137,28 +139,31 @@ async function readBody(request, limit) {
 // --- Маршрут Worker'а -----------------------------------------------------------------------------------------
 // POST /api/auth/start → { device, code, url, interval, expires }: код для github.com/login/device
 // POST /api/auth/poll { device } → { status: 'pending' | 'expired' | 'denied' } или { status: 'ok', token, user }
-// GET /api/me → { user, settings, handle?, ticket?, friends?, requests?, unread?, role? } (сколько друзей, заявок тебе
-// и непрочитанных сообщений; role: 'admin' — у админа),
+// GET /api/me → { user, settings, handle?, ticket?, pic?, friends?, requests?, unread?, role? } (pic — номер своей
+// аватарки; сколько друзей, заявок тебе и непрочитанных сообщений; role: 'admin' — у админа),
 // PUT /api/me/settings { settings } → { settings },
-// PUT /api/me/handle { handle } → { handle, ticket? }, POST /api/auth/logout, DELETE /api/me — с ключом сессии.
+// PUT /api/me/handle { handle } → { handle, ticket? }, PUT /api/me/avatar { pic: 0–23 | null } → { pic? } — аватарка
+// из 24 готовых (null — без неё), POST /api/auth/logout, DELETE /api/me — с ключом сессии.
 // 401 — ключа нет или он не подходит ({ error: 'auth' }), 503 — вход не настроен ({ error: 'off' }) или GitHub не
 // принял приложение ({ error: 'app' }), 429 — лимит адреса, 502 — GitHub не ответил. Ник: 400 — не того вида
 // ({ error: 'invalid' }) или запрещён ({ error: 'reserved' }), 409 — занят ({ error: 'taken' }), 429 — слишком
-// часто меняли ({ error: 'often' }).
-// Друзья: GET /api/me/friends → { friends, incoming, outgoing } — списки { id, handle } (друзья, заявки тебе, твои
-// заявки); POST /api/me/friends { handle } — заявка по точному нику, POST /api/me/friends/accept { id } — принять,
+// часто меняли ({ error: 'often' }). Аватарка: 400 — не номер 0–23 и не null ({ error: 'invalid' }), 429 — слишком
+// часто ({ error: 'often' }).
+// Друзья: GET /api/me/friends → { friends, incoming, outgoing } — списки { id, handle, pic? } (друзья, заявки тебе,
+// твои заявки); POST /api/me/friends { handle } — заявка по точному нику, POST /api/me/friends/accept { id } — принять,
 // POST /api/me/friends/remove { id } — удалить друга, отклонить заявку или отменить свою; отвечают тем же списком,
 // заявка — ещё и status: 'sent' | 'friends'. 400 — ник не того вида ({ error: 'invalid' }) или свой ({ error: 'self' }),
 // 404 — такого ника нет ({ error: 'nobody' }) или заявки уже нет ({ error: 'gone' }), 409 — сначала возьми свой ник
 // ({ error: 'nohandle' }), друзей и заявок уже много ({ error: 'full' }) или у него слишком много заявок
 // ({ error: 'busy' }), 429 — заявок за сутки много ({ error: 'often' })
-// Чаты (worker/chat.js): GET /api/me/chats → { me, chats, names, unread } — чаты, новые сверху, { id, kind: 'dm' |
-// 'group', with? (друг) | name? (группа), unread, at, last? (последнее сообщение коротко) }, и ники по номерам;
-// GET /api/me/chats/messages?chat=&after=&before= → { me, chat, messages, first, names, unread } — без before чат
+// Чаты (worker/chat.js): GET /api/me/chats → { me, chats, names, pics?, online?, unread } — чаты, новые сверху, { id,
+// kind: 'dm' | 'group', with? (друг) | name? и pic? (группа), unread, at, last? (последнее сообщение коротко) }, ники
+// и номера аватарок по номерам аккаунтов и кто из друзей в сети;
+// GET /api/me/chats/messages?chat=&after=&before= → { me, chat, messages, first, names, pics?, unread } — без before чат
 // становится прочитанным; GET /api/me/chats/unread → { unread }; POST /api/me/chats/send { chat, text } → { msg };
 // POST /api/me/chats/open { with } → { chat } — чат с другом; POST /api/me/chats/group { name, members | all: true }
-// → { chat } — группа из друзей или со всеми друзьями; POST /api/me/chats/members { chat, add?, remove?, name? } →
-// { chat } или { chat, leave: true } → { ok } — выйти; POST /api/me/chats/ticket → { ticket, until } — билет для
+// → { chat } — группа из друзей или со всеми друзьями; POST /api/me/chats/members { chat, add?, remove?, name?, pic? }
+// → { chat } (pic — номер картинки группы или null) или { chat, leave: true } → { ok } — выйти; POST /api/me/chats/ticket → { ticket, until } — билет для
 // страницы чата: с заголовком Authorization: Chat <билет> можно только чаты и список друзей; с телом { link: true } —
 // { link, until }: код ссылки, который страница один раз обменяет на билет тем же адресом с Authorization: Link <код>. 400 — пустое ('empty')
 // или длинное ('long') сообщение, пустое название ('name'), 403 — не друг ('friend') или не хозяин группы ('owner'),
@@ -277,7 +282,7 @@ const gameInvite = (game, room) => typeof game === 'string' && GAME_ID.test(game
 // Последнее сообщение для списка чатов: начало текста одной строкой или служебное целиком
 function preview(msg) {
   if (typeof msg.t === 'string') return { f: msg.f, t: [...msg.t.replace(/\s+/g, ' ')].slice(0, PREVIEW).join('') }
-  return { f: msg.f, k: msg.k, ...(msg.o ? { o: msg.o } : {}), ...(msg.n ? { n: msg.n } : {}) }
+  return { f: msg.f, k: msg.k, ...(msg.o ? { o: msg.o } : {}), ...(msg.n !== undefined ? { n: msg.n } : {}) }
 }
 
 // Чатов в списке больше MAX_CHATS — забываются самые тихие, кроме keep. Забытая группа вернётся со следующим
@@ -319,11 +324,12 @@ function randomKey() {
 }
 
 // Экземпляр 'auth': коды GitHub, выдача ключей сессии и реестр ников — handle:<ник> → { id, until? } (чей ник и, если
-// его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle, changes } (ник
-// человека и когда его меняли). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля), sessions (хеши
-// ключей сессии), settings, handle, seen — когда человек последний раз заходил, circle — его друзей и заявки, chats —
-// его чаты и made — когда он создавал группы за последние сутки, boards — его общие доски и boardsMade — когда он их
-// заводил, invites — приглашения в игру от друзей. Экземпляр 'online' помнит отметки «в сети» только в памяти.
+// его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle?, changes, pic? }
+// (ник человека, когда его меняли, и номер аватарки). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля
+// GitHub — её другим не показываем), sessions (хеши ключей сессии), settings, handle, pic (номер аватарки), seen —
+// когда человек последний раз заходил, circle — его друзей и заявки, chats — его чаты и made — когда он создавал группы
+// за последние сутки, boards — его общие доски и boardsMade — когда он их заводил, invites — приглашения в игру от
+// друзей. Экземпляр 'online' помнит отметки «в сети» только в памяти.
 // Отчёты об ошибках — в своём объекте (worker/reports.js)
 export class Account {
   constructor(ctx, env) {
@@ -334,6 +340,7 @@ export class Account {
     this.syncs = [] // когда он сверял доски за последнюю минуту
     this.pulses = [] // когда мод отмечался «в сети» за последнюю минуту
     this.calls = [] // когда он звал друзей в игру за последнюю минуту
+    this.picks = [] // когда он менял аватарку за последнюю минуту
     this.seen = new Map() // экземпляр 'online': номер → { at, friends } — когда отмечался и кого числит в друзьях
     this.pruned = 0
     // На 'ping' страницы чата отвечает сама платформа: объект ради этого не просыпается
@@ -350,6 +357,7 @@ export class Account {
       if (path === '/login') return await this.login(await request.json())
       if (path === '/claim') return await this.claim(await request.json())
       if (path === '/release') return await this.release(await request.json())
+      if (path === '/pic') return await this.savePic(await request.json())
       if (path === '/lookup') return await this.lookup(await request.json())
       if (path === '/names') return await this.names(await request.json())
       // От экземпляров других людей: заявка, ответ на свою заявку, «забудь меня»
@@ -371,6 +379,7 @@ export class Account {
       if (path === '/me') return await this.me()
       if (path === '/settings') return await this.saveSettings(await request.text())
       if (path === '/handle') return await this.setHandle(await request.text())
+      if (path === '/avatar') return await this.setAvatar(await request.text())
       if (path === '/logout') return await this.logout(who.hash)
       if (path === '/delete') return await this.remove()
       if (path === '/friends') return await this.list()
@@ -545,6 +554,7 @@ export class Account {
   async me() {
     const { id, login, avatar } = (await this.ctx.storage.get('user')) ?? {}
     const handle = await this.ctx.storage.get('handle')
+    const pic = await this.ctx.storage.get('pic')
     const circle = await this.circle()
     const friends = Object.keys(circle.friends).length
     const requests = Object.keys(circle.incoming).filter((other) => !circle.friends[other]).length
@@ -553,6 +563,7 @@ export class Account {
       user: { id, login, ...(avatar ? { avatar } : {}) },
       settings: (await this.ctx.storage.get('settings')) ?? {},
       ...(await this.named(handle)),
+      ...(validPic(pic) ? { pic } : {}),
       ...(friends ? { friends } : {}),
       ...(requests ? { requests } : {}),
       ...(unread ? { unread } : {}),
@@ -590,6 +601,22 @@ export class Account {
     return Response.json(await this.named(handle))
   }
 
+  // Аватарка — номер одной из 24 готовых картинок или null (без неё): в реестр, чтобы её видели друзья, и к себе
+  async setAvatar(text) {
+    const pic = parsed(text).pic
+    if (pic !== null && !validPic(pic)) return refuse('invalid', 400)
+    const now = Date.now()
+    this.picks = this.picks.filter((t) => now - t < MINUTE)
+    if (this.picks.length >= PICKS_PER_MINUTE) return refuse('often', 429)
+    this.picks.push(now)
+    const { id } = (await this.ctx.storage.get('user')) ?? {}
+    const answer = await this.registry('/pic', { id, pic })
+    if (!answer.ok) throw new Error(`registry: ${answer.status}`)
+    if (pic === null) await this.ctx.storage.delete('pic')
+    else await this.ctx.storage.put('pic', pic)
+    return Response.json(pic === null ? {} : { pic })
+  }
+
   // Реестр: ник свободен, держится за этим же человеком или его месяц прошёл — ник его; прежний ник держится месяц
   async claim({ id, handle }) {
     const now = Date.now()
@@ -602,7 +629,7 @@ export class Account {
     if (changes.length >= HANDLE_CHANGES) return Response.json({ error: 'often' }, { status: 429 })
     await this.ctx.storage.put({
       [`handle:${handle}`]: { id },
-      [`owner:${id}`]: { handle, changes: [...changes, now] },
+      [`owner:${id}`]: { ...owner, handle, changes: [...changes, now] },
       ...(owner.handle ? { [`handle:${owner.handle}`]: { id, until: now + HANDLE_HOLD_MS } } : {}),
     })
     return Response.json({ handle })
@@ -616,6 +643,15 @@ export class Account {
     return Response.json({ ok: true })
   }
 
+  // Реестр: номер аватарки человека рядом с его ником; null — без аватарки
+  async savePic({ id, pic }) {
+    if (typeof id !== 'string' || !ACCOUNT_ID.test(id) || (pic !== null && !validPic(pic))) return refuse('bad request', 400)
+    const owner = { ...((await this.ctx.storage.get(`owner:${id}`)) ?? { changes: [] }), pic }
+    if (pic === null) delete owner.pic
+    await this.ctx.storage.put(`owner:${id}`, owner)
+    return Response.json({ ok: true })
+  }
+
   // Реестр: чей это ник сейчас. Сменённый или отпущенный ник, пока держится за прежним хозяином, — ничей
   async lookup({ handle }) {
     const record = typeof handle === 'string' && HANDLE.test(handle) ? await this.ctx.storage.get(`handle:${handle}`) : null
@@ -623,16 +659,22 @@ export class Account {
     return Response.json({ id: record.id })
   }
 
-  // Реестр: ники по номерам — для списка друзей; у удалённого аккаунта ника нет. Хранилище отдаёт не больше 128
-  // ключей за раз
+  // Реестр: ники и номера аватарок по номерам — для списка друзей; у удалённого аккаунта ника нет. Хранилище отдаёт
+  // не больше 128 ключей за раз
   async names({ ids }) {
     if (!Array.isArray(ids) || ids.length > MAX_FRIENDS + MAX_INCOMING || !ids.every((id) => typeof id === 'string' && ACCOUNT_ID.test(id))) return refuse('bad request', 400)
     const names = {}
+    const pics = {}
     for (let i = 0; i < ids.length; i += 128) {
       const owners = await this.ctx.storage.get(ids.slice(i, i + 128).map((id) => `owner:${id}`))
-      for (const [key, owner] of owners) if (owner?.handle) names[key.slice('owner:'.length)] = owner.handle
+      for (const [key, owner] of owners) {
+        if (!owner?.handle) continue
+        const id = key.slice('owner:'.length)
+        names[id] = owner.handle
+        if (validPic(owner.pic)) pics[id] = owner.pic
+      }
     }
-    return Response.json({ names })
+    return Response.json({ names, pics })
   }
 
   // --- Друзья ---------------------------------------------------------------------------------------------------
@@ -662,10 +704,13 @@ export class Account {
     let circle = await this.circle()
     const ids = [...new Set([...Object.keys(circle.friends), ...Object.keys(circle.incoming), ...Object.keys(circle.outgoing)])]
     let names = {}
+    let pics = {}
     if (ids.length) {
       const answer = await this.registry('/names', { ids })
       if (!answer.ok) throw new Error(`registry: ${answer.status}`)
-      names = (await answer.json()).names ?? {}
+      const found = await answer.json()
+      names = found.names ?? {}
+      pics = found.pics ?? {}
     }
     const gone = ids.filter((id) => !names[id])
     if (gone.length) {
@@ -677,7 +722,7 @@ export class Account {
       Object.entries(map)
         .filter(([id]) => names[id] && !skip.some((other) => other[id]))
         .sort((a, b) => a[1] - b[1])
-        .map(([id]) => ({ id, handle: names[id] }))
+        .map(([id]) => ({ id, handle: names[id], ...(validPic(pics[id]) ? { pic: pics[id] } : {}) }))
     const friends = people(circle.friends, []).sort((a, b) => a.handle.localeCompare(b.handle))
     return Response.json({ ...(status ? { status } : {}), friends, incoming: people(circle.incoming, [circle.friends]), outgoing: people(circle.outgoing, [circle.friends, circle.incoming]) })
   }
@@ -852,7 +897,7 @@ export class Account {
     if (this.env.DESK) await Promise.allSettled(Object.keys(await this.boards()).map((board) => this.desk(board, '/members', { leave: true })))
     const others = new Set([...Object.keys(circle.friends), ...Object.keys(circle.incoming), ...Object.keys(circle.outgoing)])
     await Promise.allSettled([...others].map((other) => this.person(other, '/drop', { id })))
-    if (await this.ctx.storage.get('handle')) {
+    if ((await this.ctx.storage.get('handle')) || (await this.ctx.storage.get('pic')) !== undefined) {
       const answer = await this.registry('/release', { id })
       if (!answer.ok) throw new Error(`registry: ${answer.status}`)
     }
@@ -884,8 +929,8 @@ export class Account {
   }
 
   // --- Чаты -----------------------------------------------------------------------------------------------------
-  // Список чатов человека — chats: { чат: { kind, with? (с кем чат двоих), name? (название группы), last (номер
-  // последнего сообщения), read (до какого прочитано), at (когда было последнее), p? (оно само, коротко) } }. Сами
+  // Список чатов человека — chats: { чат: { kind, with? (с кем чат двоих), name? и pic? (название и картинка группы),
+  // last (номер последнего сообщения), read (до какого прочитано), at (когда было последнее), p? (оно само, коротко) } }. Сами
   // переписки — в объектах Chat; они сообщают сюда о каждом новом сообщении, отсюда — открытым страницам чата
   async chats() {
     return (await this.ctx.storage.get('chats')) ?? {}
@@ -898,32 +943,44 @@ export class Account {
     return space.get(space.idFromName(id)).fetch(new Request(`https://chat${path}`, { method: 'POST', body: JSON.stringify({ ...body, chat: id, by }) }))
   }
 
-  // Ники по номерам — из реестра, пачками; у удалённого аккаунта ника нет
-  async handles(list) {
+  // Ники и номера аватарок по номерам — из реестра, пачками; у удалённого аккаунта ника нет
+  async people(list) {
     const ids = [...new Set(list.filter((id) => typeof id === 'string' && ACCOUNT_ID.test(id)))]
     const names = {}
+    const pics = {}
     for (let i = 0; i < ids.length; i += MAX_FRIENDS + MAX_INCOMING) {
       const answer = await this.registry('/names', { ids: ids.slice(i, i + MAX_FRIENDS + MAX_INCOMING) })
       if (!answer.ok) throw new Error(`registry: ${answer.status}`)
-      Object.assign(names, (await answer.json()).names ?? {})
+      const found = await answer.json()
+      Object.assign(names, found.names ?? {})
+      Object.assign(pics, found.pics ?? {})
     }
-    return names
+    return { names, pics }
   }
 
-  // Кто я: номер и ник — странице чата и окну, чтобы отличать свои сообщения
-  async whoami() {
+  // Только ники
+  async handles(list) {
+    return (await this.people(list)).names
+  }
+
+  // Кто я: номер и ник — странице чата и окну, чтобы отличать свои сообщения; чатам — ещё и аватарка
+  async whoami(withPic = false) {
     const handle = await this.ctx.storage.get('handle')
-    return { id: await this.myId(), ...(handle ? { handle } : {}) }
+    const pic = withPic ? await this.ctx.storage.get('pic') : undefined
+    return { id: await this.myId(), ...(handle ? { handle } : {}), ...(validPic(pic) ? { pic } : {}) }
   }
 
   // Чат сообщает о новом сообщении. Чата ещё нет в списке — появляется, непрочитанное — с этого сообщения; своё
   // сообщение сразу прочитано. Аккаунта уже нет — 404, и ничего не записываем
-  async chatnote({ chat, kind, with: other, name, msg }) {
+  async chatnote({ chat, kind, with: other, name, pic, msg }) {
     const me = await this.myId()
     if (!me) return refuse('nobody', 404)
     if (typeof chat !== 'string' || !CHAT_ID.test(chat) || !['dm', 'group'].includes(kind) || !Number.isSafeInteger(msg?.s)) return refuse('bad request', 400)
     const chats = await this.chats()
     const entry = { ...(chats[chat] ?? { last: 0, read: msg.s - 1, at: 0 }), kind, ...(typeof other === 'string' ? { with: other } : {}), ...(typeof name === 'string' ? { name } : {}) }
+    // Картинка группы приходит с каждым сообщением: её нет — значит, её убрали
+    if (kind === 'group' && validPic(pic)) entry.pic = pic
+    else delete entry.pic
     if (msg.s >= entry.last) Object.assign(entry, { last: msg.s, at: msg.at, p: preview(msg) })
     if (msg.f === me) entry.read = Math.max(entry.read, msg.s)
     await this.ctx.storage.put('chats', trimmed({ ...chats, [chat]: entry }, chat))
@@ -945,14 +1002,23 @@ export class Account {
     if (chats[chat]) await this.ctx.storage.put('chats', without(chats, chat))
   }
 
-  // Чаты, новые сверху, с никами собеседников и авторов последних сообщений
+  // Чаты, новые сверху, с никами и аватарками собеседников и авторов последних сообщений и с тем, кто из друзей в
+  // сети. Страница чата только смотрит, кто в сети: сама она человека «в сети» не отмечает — это делает мод
   async chatList() {
     const chats = await this.chats()
     const list = Object.entries(chats)
       .sort((a, b) => b[1].at - a[1].at)
-      .map(([id, c]) => ({ id, kind: c.kind, ...(c.with ? { with: c.with } : {}), ...(c.name ? { name: c.name } : {}), unread: Math.max(0, c.last - c.read), at: c.at, ...(c.p ? { last: c.p } : {}) }))
-    const names = await this.handles(list.flatMap((c) => [c.with, c.last?.f, c.last?.o]))
-    return Response.json({ me: await this.whoami(), chats: list, names, unread: unreadOf(chats) })
+      .map(([id, c]) => ({ id, kind: c.kind, ...(c.with ? { with: c.with } : {}), ...(c.name ? { name: c.name } : {}), ...(validPic(c.pic) ? { pic: c.pic } : {}), unread: Math.max(0, c.last - c.read), at: c.at, ...(c.p ? { last: c.p } : {}) }))
+    const { names, pics } = await this.people(list.flatMap((c) => [c.with, c.last?.f, c.last?.o]))
+    const online = await this.onlineFriends(Object.keys((await this.circle()).friends), { peek: true }).catch(() => [])
+    return Response.json({
+      me: await this.whoami(true),
+      chats: list,
+      names,
+      ...(Object.keys(pics).length ? { pics } : {}),
+      ...(online.length ? { online } : {}),
+      unread: unreadOf(chats),
+    })
   }
 
   // Переписка: последние сообщения, раньше before или новые после after. Без before чат становится прочитанным, а
@@ -968,18 +1034,22 @@ export class Account {
     }
     if (!answer.ok) throw new Error(`chat: ${answer.status}`)
     const { chat: about, messages, first } = await answer.json()
-    const me = await this.whoami()
+    const me = await this.whoami(true)
     const other = about.kind === 'dm' ? about.members.find((id) => id !== me.id) : undefined
     let chats = await this.chats()
     const entry = chats[chat]
-    if (before === undefined && (!entry || entry.read < about.last || (about.name && entry.name !== about.name))) {
+    const pic = validPic(about.pic) ? about.pic : undefined
+    if (before === undefined && (!entry || entry.read < about.last || (about.name && entry.name !== about.name) || (about.kind === 'group' && entry.pic !== pic))) {
       const last = messages.at(-1)
       const fresh = entry ?? { kind: about.kind, ...(other ? { with: other } : {}), at: last?.at ?? Date.now(), ...(last ? { p: preview(last) } : {}) }
-      chats = trimmed({ ...chats, [chat]: { ...fresh, ...(about.name ? { name: about.name } : {}), last: Math.max(fresh.last ?? 0, about.last), read: about.last } }, chat)
+      const next = { ...fresh, ...(about.name ? { name: about.name } : {}), last: Math.max(fresh.last ?? 0, about.last), read: about.last }
+      if (pic === undefined) delete next.pic
+      else next.pic = pic
+      chats = trimmed({ ...chats, [chat]: next }, chat)
       await this.ctx.storage.put('chats', chats)
     }
-    const names = await this.handles([...about.members, ...messages.flatMap((m) => [m.f, m.o])])
-    return Response.json({ me, chat: { ...about, ...(other ? { with: other } : {}) }, messages, first, names, unread: unreadOf(chats) })
+    const { names, pics } = await this.people([...about.members, ...messages.flatMap((m) => [m.f, m.o])])
+    return Response.json({ me, chat: { ...about, ...(other ? { with: other } : {}) }, messages, first, names, ...(Object.keys(pics).length ? { pics } : {}), unread: unreadOf(chats) })
   }
 
   // Написать в чат. В чат двоих — только другу; чата ещё нет — открывается
@@ -1060,7 +1130,8 @@ export class Account {
     return Response.json({ chat: (await answer.json()).chat })
   }
 
-  // Группа: хозяин добавляет друзей, убирает участников и переименовывает её; выйти может любой
+  // Группа: хозяин добавляет друзей, убирает участников, переименовывает её и ставит картинку (номер или null — без
+  // неё); выйти может любой
   async changeMembers(text) {
     const body = parsed(text)
     const chat = body.chat
@@ -1076,7 +1147,8 @@ export class Account {
       }
       const name = body.name === undefined ? '' : groupName(body.name)
       if (body.name !== undefined && !name) return refuse('name', 400)
-      change = { add, remove, ...(name ? { name } : {}) }
+      if (body.pic !== undefined && body.pic !== null && !validPic(body.pic)) return refuse('bad request', 400)
+      change = { add, remove, ...(name ? { name } : {}), ...(body.pic !== undefined ? { pic: body.pic } : {}) }
     }
     const answer = await this.chat(chat, '/members', change)
     const data = await answer.json().catch(() => ({}))
@@ -1255,16 +1327,19 @@ export class Account {
   // --- В сети и приглашения в игру -------------------------------------------------------------------------------
   // Экземпляр 'online': отметка человека id с его друзьями. Отметки живут только в памяти: объект уснул — они пропали и
   // за полминуты соберутся снова. Друг в сети, если отмечался за последние ONLINE_MS и сам числит id в друзьях: дружба
-  // взаимная, и тот, кто удалил человека, его больше не видит. hidden — сам не показывается, но других видит
-  online({ id, hidden, friends }) {
+  // взаимная, и тот, кто удалил человека, его больше не видит. hidden — сам не показывается, но других видит; peek —
+  // только посмотреть, свою отметку не трогать (страница чата)
+  online({ id, hidden, peek, friends }) {
     if (typeof id !== 'string' || !ACCOUNT_ID.test(id) || !Array.isArray(friends) || friends.length > MAX_FRIENDS || !friends.every((other) => typeof other === 'string')) return refuse('bad request', 400)
     const now = Date.now()
     if (now - this.pruned >= ONLINE_MS) {
       for (const [other, mark] of this.seen) if (now - mark.at >= ONLINE_MS) this.seen.delete(other)
       this.pruned = now
     }
-    if (hidden === true) this.seen.delete(id)
-    else this.seen.set(id, { at: now, friends: new Set(friends) })
+    if (peek !== true) {
+      if (hidden === true) this.seen.delete(id)
+      else this.seen.set(id, { at: now, friends: new Set(friends) })
+    }
     const online = friends.filter((other) => {
       const mark = this.seen.get(other)
       return mark && now - mark.at < ONLINE_MS && mark.friends.has(id)
@@ -1280,6 +1355,17 @@ export class Account {
     return live
   }
 
+  // Кто из друзей в сети — у экземпляра 'online'; fields — hidden или peek. Без друзей его не спрашиваем: показываться
+  // некому
+  async onlineFriends(friends, fields) {
+    if (!friends.length) return []
+    const space = this.env.ACCOUNT
+    const body = JSON.stringify({ id: await this.myId(), ...fields, friends })
+    const answer = await space.get(space.idFromName('online')).fetch(new Request('https://account/online', { method: 'POST', body }))
+    if (!answer.ok) throw new Error(`online: ${answer.status}`)
+    return (await answer.json()).online ?? []
+  }
+
   // Отметка мода: человек в сети (или прячется). Ответ — кто из друзей в сети, кто из них зовёт в игру, сколько
   // непрочитанных сообщений и заявок в друзья. Без друзей экземпляр 'online' не спрашиваем: показываться некому
   async pulse(text) {
@@ -1288,15 +1374,7 @@ export class Account {
     if (this.pulses.length >= PULSES_PER_MINUTE) return refuse('often', 429)
     this.pulses.push(now)
     const circle = await this.circle()
-    const friends = Object.keys(circle.friends)
-    let online = []
-    if (friends.length) {
-      const space = this.env.ACCOUNT
-      const body = JSON.stringify({ id: await this.myId(), hidden: parsed(text).hidden === true, friends })
-      const answer = await space.get(space.idFromName('online')).fetch(new Request('https://account/online', { method: 'POST', body }))
-      if (!answer.ok) throw new Error(`online: ${answer.status}`)
-      online = (await answer.json()).online ?? []
-    }
+    const online = await this.onlineFriends(Object.keys(circle.friends), { hidden: parsed(text).hidden === true })
     const invites = Object.entries(await this.invites(now))
       .filter(([from]) => circle.friends[from])
       .sort((a, b) => b[1].at - a[1].at)

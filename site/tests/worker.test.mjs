@@ -737,8 +737,8 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE } = await import('../worker/account.js')
-  const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, dmId, cleanText, groupName } = await import('../worker/chat.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE, PICKS_PER_MINUTE } = await import('../worker/account.js')
+  const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, AVATAR_COUNT, dmId, cleanText, groupName } = await import('../worker/chat.js')
   const { Reports, cleanReport, admins, MAX_REPORT, PER_SENDER_DAILY, DAILY, KEEP: REPORTS_KEEP } = await import('../worker/reports.js')
   const { Desk, DEFAULT_COLS, MAX_CARDS, MAX_TOTAL, MAX_TITLE, MAX_OPS, KEEP_GONE, MAX_MEMBERS: DESK_MEMBERS, cleanTitle, cleanCols } = await import('../worker/desk.js')
   const KEY = 'a'.repeat(43)
@@ -977,6 +977,27 @@ try {
     assert.equal((await nick('octo_more')).status, 200)
     assert.equal((await go('GET', '/api/me', { token: other.body.token })).body.handle, 'octo_cat')
 
+    // Аватарка — номер одной из AVATAR_COUNT готовых картинок или null (без неё): у себя и в реестре рядом с ником
+    const avatar = (pic, token = tokens.at(-1)) => go('PUT', '/api/me/avatar', { body: { pic }, token })
+    assert.deepEqual(await go('PUT', '/api/me/avatar', { body: { pic: 3 } }), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('GET', '/api/me/avatar', { token: tokens.at(-1) }), { status: 405, body: { error: 'method' } })
+    for (const bad of [-1, AVATAR_COUNT, 1.5, '3', true, undefined]) assert.deepEqual(await avatar(bad), { status: 400, body: { error: 'invalid' } }, String(bad))
+    assert.deepEqual(await go('PUT', '/api/me/avatar', { body: '{', token: tokens.at(-1) }), { status: 400, body: { error: 'invalid' } })
+    assert.deepEqual(await avatar(0), { status: 200, body: { pic: 0 } }, 'ноль — тоже аватарка')
+    assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).body.pic, 0)
+    assert.equal(registry.get('owner:42').pic, 0)
+    assert.deepEqual(await avatar(7), { status: 200, body: { pic: 7 } })
+    assert.equal(registry.get('owner:42').pic, 7)
+    assert.deepEqual(await avatar(null), { status: 200, body: {} })
+    assert.equal((await go('GET', '/api/me', { token: tokens.at(-1) })).body.pic, undefined)
+    assert.ok(!('pic' in registry.get('owner:42')))
+    assert.equal(registry.get('owner:42').handle, 'octo_more', 'ник на месте')
+    // Не больше PICKS_PER_MINUTE смен в минуту
+    account42.object.picks = Array(PICKS_PER_MINUTE).fill(Date.now())
+    assert.deepEqual(await avatar(5), { status: 429, body: { error: 'often' } })
+    assert.equal(registry.get('owner:42').pic, undefined)
+    account42.object.picks = []
+
     // Друзья: заявка по точному нику, принять, отклонить, отменить, удалить; у 42 ник octo_more, у 7 — octo_cat
     const t42 = tokens.at(-1)
     const t7 = other.body.token
@@ -1021,6 +1042,11 @@ try {
     assert.equal((await accept('42', t7)).status, 200, 'принять ещё раз — ничего не меняется')
     // Сменил ник — дружба на месте, в списке новый ник
     assert.equal((await nick('octo_renamed', t42)).status, 200)
+    assert.deepEqual((await friendsOf(t7)).body.friends, [{ id: '42', handle: 'octo_renamed' }])
+    // Аватарка друга — в его строке списка
+    assert.equal((await avatar(7, t42)).status, 200)
+    assert.deepEqual((await friendsOf(t7)).body.friends, [{ id: '42', handle: 'octo_renamed', pic: 7 }])
+    assert.equal((await avatar(null, t42)).status, 200)
     assert.deepEqual((await friendsOf(t7)).body.friends, [{ id: '42', handle: 'octo_renamed' }])
     assert.equal((await nick('octo_more', t42)).status, 200)
 
@@ -1184,6 +1210,25 @@ try {
     assert.equal((await say(dm, 'Отлично', t7)).body.msg.s, 2)
     assert.deepEqual((await read(dm, t42, '&after=1')).body.messages.map((m) => [m.s, m.f, m.t]), [[2, '7', 'Отлично']])
     assert.equal(listOf(42)[dm].read, 2)
+    // Аватарки: своя — в me, собеседников и авторов — в pics; номер 0 — тоже аватарка
+    assert.equal((await avatar(0, t7)).status, 200)
+    assert.equal((await avatar(7, t42)).status, 200)
+    const withPics = (await chatsOf(t7)).body
+    assert.deepEqual([withPics.me, withPics.pics], [{ ...p7, pic: 0 }, { 7: 0, 42: 7 }], 'последнее в чате — от самого 7')
+    const readPics = (await read(dm, t42)).body
+    assert.deepEqual([readPics.me, readPics.pics], [{ ...p42, pic: 7 }, { 7: 0, 42: 7 }])
+    assert.equal((await avatar(null, t7)).status, 200)
+    assert.equal((await avatar(null, t42)).status, 200)
+    assert.equal((await chatsOf(t7)).body.pics, undefined, 'аватарок нет — поля нет')
+    // Кто из друзей в сети — в списке чатов; страница только смотрит, сама человека «в сети» не отмечает
+    const marks = objects.get('online').object.seen
+    marks.clear()
+    assert.equal((await chatsOf(t7)).body.online, undefined, 'никого нет — поля нет')
+    assert.equal(marks.size, 0)
+    marks.set('42', { at: Date.now(), friends: new Set(['7']) })
+    assert.deepEqual((await chatsOf(t7)).body.online, ['42'])
+    assert.deepEqual([...marks.keys()], ['42'])
+    marks.clear()
     // Пустое, длинное, не того вида, не друг, чужой чат
     assert.deepEqual(await say(dm, ` \n${rlo} `, t42), { status: 400, body: { error: 'empty' } })
     assert.deepEqual(await say(dm, 42, t42), { status: 400, body: { error: 'empty' } })
@@ -1261,6 +1306,20 @@ try {
     assert.deepEqual(await change({ chat: club, add: ['12345'] }, t42), { status: 403, body: { error: 'friend' } })
     assert.deepEqual((await change({ chat: club, name: 'Клуб' }, t42)).body.chat, { id: club, kind: 'group', name: 'Клуб', owner: '42', members: ['7', '9', '42'], last: 3 })
     assert.equal(listOf(7)[club].name, 'Клуб')
+    // Картинка группы — одна из AVATAR_COUNT, ставит хозяин; у всех в списке, в переписке — служебное сообщение
+    assert.deepEqual(await change({ chat: club, pic: 3 }, t9), { status: 403, body: { error: 'owner' } })
+    for (const bad of [-1, AVATAR_COUNT, '3', 1.5]) assert.deepEqual(await change({ chat: club, pic: bad }, t42), { status: 400, body: { error: 'bad request' } }, String(bad))
+    assert.deepEqual((await change({ chat: club, pic: 3 }, t42)).body.chat, { id: club, kind: 'group', name: 'Клуб', owner: '42', members: ['7', '9', '42'], last: 4, pic: 3 })
+    assert.equal(listOf(7)[club].pic, 3)
+    assert.equal((await chatsOf(t9)).body.chats.find((c) => c.id === club).pic, 3)
+    const pictured = (await read(club, t7)).body
+    assert.deepEqual([pictured.chat.pic, { ...pictured.messages.at(-1), at: 0 }], [3, { s: 4, f: '42', k: 'pic', n: 3, at: 0 }])
+    assert.equal((await change({ chat: club, pic: 3 }, t42)).body.chat.last, 4, 'та же картинка — без сообщения')
+    // Убрать — null: снова буква названия
+    const plain = (await change({ chat: club, pic: null }, t42)).body.chat
+    assert.deepEqual([plain.pic, plain.last], [undefined, 5])
+    assert.equal(listOf(7)[club].pic, undefined)
+    assert.deepEqual({ ...(await read(club, t7)).body.messages.at(-1), at: 0 }, { s: 5, f: '42', k: 'pic', at: 0 })
     // Убрал — у того чата больше нет; вернул — он видит переписку с этого места. Себя хозяин не убирает
     assert.deepEqual((await change({ chat: club, remove: ['9', '42'] }, t42)).body.chat.members, ['7', '42'])
     assert.equal(listOf(9)[club], undefined)
@@ -1268,7 +1327,7 @@ try {
     assert.deepEqual(await say(club, 'А я?', t9), { status: 404, body: { error: 'gone' } })
     assert.deepEqual((await change({ chat: club, add: ['9'] }, t42)).body.chat.members, ['7', '9', '42'])
     const back9 = (await read(club, t9)).body
-    assert.deepEqual([back9.first, back9.messages.map((m) => [m.s, m.f, m.k, m.o])], [5, [[5, '42', 'add', '9']]])
+    assert.deepEqual([back9.first, back9.messages.map((m) => [m.s, m.f, m.k, m.o])], [7, [[7, '42', 'add', '9']]])
     // В группе не больше MAX_MEMBERS человек
     const clubChat = objects.get(`chat:${club}`)
     const crowd = Array.from({ length: MAX_MEMBERS - 3 }, (_, i) => String(2000 + i))
