@@ -87,7 +87,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Lavoro** | Quaderno, Bacheca dei progetti |
 | **Altro** | Finestra di Arcade, Impostazioni, 🌐 lingua, 🐞 Segnala un errore, ☕ Sostieni il progetto |
 
-Fai clic sul titolo di una sezione per comprimerla o espanderla. Una sezione compressa mostra `▸` e quanti riquadri contiene, e *Social* mostra anche i nuovi messaggi 💬 e le richieste di amicizia 👥. Arcade ricorda quali sezioni sono compresse. Dopo l’accesso, l’intestazione del menu mostra il tuo @nome con gli stessi contatori.
+Fai clic sul titolo di una sezione per comprimerla o espanderla. Una sezione compressa mostra `▸` e quanti riquadri contiene, e *Social* mostra anche i nuovi messaggi 💬 e le richieste di amicizia 👥. Arcade ricorda quali sezioni sono compresse. Una sezione che non ti serve si può nascondere nelle **Impostazioni**: sparisce del tutto dal menu, titolo e riquadri compresi; *Altro*, con le impostazioni, resta sempre. Dopo l’accesso, l’intestazione del menu mostra il tuo @nome con gli stessi contatori.
 
 La **ricerca** parte da due lettere e trova titolo o genere, senza badare a maiuscole e accenti. I risultati sono raggruppati per sezione e genere, per esempio *Giochi · Sparatutto*. La stella ☆ accanto a un gioco lo aggiunge ai **★ Preferiti** (fino a 100), ordinati per sezione e genere, i più recenti per primi. Libri e audiolibri hanno una ricerca tutta loro, per titolo o autore.
 
@@ -138,7 +138,7 @@ La scheda di ogni gioco rimanda alla sua licenza e al suo codice sorgente.
 L’accesso è facoltativo: senza, tutto il resto funziona come prima.
 
 - **Accedi con GitHub** (in *Social*): Arcade mostra un codice da inserire nella pagina di GitHub nel tuo browser abituale. Arcade conosce solo il nome e l’immagine del tuo profilo GitHub — nessuna email, nessun accesso ai repository.
-- **Sincronizzazione.** Lingua, tasti, notifiche, dimensione del pannello, cosa fare del gioco quando l’agente avvisa, le opzioni del browser in Desktop, i tuoi argomenti, i canali Twitch, i preferiti, le sezioni compresse e il tuo record a Flappy Arcade diventano uguali su tutti i tuoi computer. I tuoi giochi, il browser e la modalità grafica restano per singolo computer.
+- **Sincronizzazione.** Lingua, tasti, notifiche, dimensione del pannello, cosa fare del gioco quando l’agente avvisa, le opzioni del browser in Desktop, i tuoi argomenti, i canali Twitch, i preferiti, le sezioni compresse, quelle nascoste e il tuo record a Flappy Arcade diventano uguali su tutti i tuoi computer. I tuoi giochi, il browser e la modalità grafica restano per singolo computer.
 - **@nome.** Usa il tuo nome GitHub con un clic o inventane uno: da 4 a 32 caratteri — lettere latine, cifre e `_`. Puoi cambiarlo fino a 5 volte al giorno.
 - **Amici.** Aggiungi un amico con il suo @nome esatto: la richiesta viene accettata dall’altra parte e comparite l’uno nell’elenco dell’altro. Durante la digitazione non ci sono suggerimenti, quindi nessuno può sfogliare chi usa Arcade. Rifiutare e rimuovere avvengono in silenzio.
 - **Online e inviti a giocare.** Finché il menu di Arcade è aperto, gli amici ti vedono *online*, e tu vedi loro; per non farti vedere, disattiva *Mostra agli amici che sono online* nella schermata *Amici*. *Invita* accanto a un amico propone i giochi in rete: un gioco da tavolo apre una stanza tutta vostra per due, un gioco Doom la sua lobby. Il gioco si apre subito per te; l’amico riceve una notifica e *Accetta* in cima al menu, e l’invito vale 10 minuti. Puoi invitare dove i giochi in rete si aprono in un browser: quello integrato in Desktop o una finestra del browser.
@@ -168,6 +168,7 @@ Aggiungi solo file su cui hai i diritti.
 
 Apri **Impostazioni** nella sezione *Altro* del menu `/arcade`:
 
+- **Sezioni del menu principale** — mostra o nascondi qualsiasi sezione tranne *Altro*; una sezione nascosta sparisce del tutto dal menu finché non la riattivi qui.
 - **Lingua** — una delle 13 (anche direttamente nel menu: 🌐).
 - **Apri i giochi** — qui nel pannello, in una finestra del browser o in un browser specifico; in Claude Desktop — nel browser integrato di Claude o in una finestra del browser.
 - **Grafica** (terminale) — pixel nei terminali che mostrano immagini (kitty, Ghostty, Rio), blocchi di testo ovunque altrove.

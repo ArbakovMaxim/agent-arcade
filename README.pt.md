@@ -87,7 +87,7 @@ No PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Trabalho** | Caderno, Quadro de projetos |
 | **Mais** | Janela do Arcade, Configurações, 🌐 idioma, 🐞 Relatar um erro, ☕ Apoiar o projeto |
 
-Clique no título de uma seção para recolhê-la ou expandi-la. Uma seção recolhida mostra `▸` e quantos blocos ela contém, e *Social* também mostra novas mensagens 💬 e pedidos de amizade 👥. O Arcade lembra quais seções estão recolhidas. Depois de entrar, o cabeçalho do menu mostra seu @apelido com os mesmos contadores.
+Clique no título de uma seção para recolhê-la ou expandi-la. Uma seção recolhida mostra `▸` e quantos blocos ela contém, e *Social* também mostra novas mensagens 💬 e pedidos de amizade 👥. O Arcade lembra quais seções estão recolhidas. Uma seção de que você não precisa pode ser ocultada em **Configurações**: ela some do menu por completo, com título e blocos; *Mais*, com as configurações, fica sempre. Depois de entrar, o cabeçalho do menu mostra seu @apelido com os mesmos contadores.
 
 A **busca** começa a partir de duas letras e encontra título ou gênero, sem diferenciar maiúsculas nem acentos. Os resultados são agrupados por seção e gênero, por exemplo *Jogos · Tiro*. A estrela ☆ ao lado de um jogo o adiciona a **★ Favoritos** (até 100), organizados por seção e gênero, os mais recentes primeiro. Livros e audiolivros têm busca própria, por título ou autor.
 
@@ -138,7 +138,7 @@ O cartão de cada jogo tem links para a licença e o código-fonte.
 Entrar é opcional — sem isso, todo o resto funciona como antes.
 
 - **Entrar com o GitHub** (em *Social*): o Arcade mostra um código que você digita na página do GitHub no seu navegador de sempre. O Arcade só fica sabendo o nome e a imagem do seu perfil do GitHub — nenhum e-mail, nenhum acesso a repositórios.
-- **Sincronização.** Idioma, teclas, notificações, tamanho do painel, o que fazer com o jogo quando o agente avisa, as opções do navegador no Desktop, seus temas, canais da Twitch, favoritos, seções recolhidas e seu recorde no Flappy Arcade ficam iguais em todos os seus computadores. Seus próprios jogos, o navegador e o modo gráfico continuam por computador.
+- **Sincronização.** Idioma, teclas, notificações, tamanho do painel, o que fazer com o jogo quando o agente avisa, as opções do navegador no Desktop, seus temas, canais da Twitch, favoritos, seções recolhidas, seções ocultas e seu recorde no Flappy Arcade ficam iguais em todos os seus computadores. Seus próprios jogos, o navegador e o modo gráfico continuam por computador.
 - **@apelido.** Use seu nome do GitHub com um clique ou invente um: de 4 a 32 caracteres — letras latinas, números e `_`. Você pode mudá-lo até 5 vezes por dia.
 - **Amigos.** Adicione um amigo pelo @apelido exato: o pedido é aceito do outro lado, e vocês aparecem nas listas um do outro. Não há sugestões enquanto você digita, então ninguém consegue vasculhar quem usa o Arcade. Recusar e remover acontecem em silêncio.
 - **Online e convites para jogar.** Enquanto o menu do Arcade está aberto, seus amigos veem você *online*, e você a eles; para não aparecer, desative *Mostrar aos amigos que estou online* na tela *Amigos*. *Convidar* ao lado de um amigo oferece os jogos em rede: um jogo de tabuleiro abre uma sala só para vocês dois, um jogo de Doom o seu lobby. O jogo abre para você na hora; seu amigo recebe uma notificação e *Aceitar* no topo do menu, e o convite vale por 10 minutos. Dá para convidar onde os jogos em rede abrem em um navegador — o integrado do Desktop ou uma janela do navegador.
@@ -168,6 +168,7 @@ Adicione apenas arquivos sobre os quais você tem direitos.
 
 Abra **Configurações** na seção *Mais* do menu `/arcade`:
 
+- **Seções do menu principal** — mostrar ou ocultar qualquer seção, menos *Mais*; uma seção oculta some do menu por completo até você trazê-la de volta aqui.
 - **Idioma** — um dos 13 (também direto no menu: 🌐).
 - **Abrir jogos** — aqui no painel, em uma janela do navegador ou em um navegador específico; no Claude Desktop — no navegador integrado do Claude ou em uma janela do navegador.
 - **Gráficos** (terminal) — pixels nos terminais que mostram imagens (kitty, Ghostty, Rio), blocos de texto em todos os outros.

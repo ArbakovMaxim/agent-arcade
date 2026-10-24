@@ -87,7 +87,7 @@ W PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mark
 | **Praca** | Notatnik, Tablica projektów |
 | **Więcej** | Okno Arcade, Ustawienia, 🌐 język, 🐞 Zgłoś błąd, ☕ Wesprzyj projekt |
 
-Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuje `▸` i liczbę kafelków w środku, a *Społeczność* także nowe wiadomości 💬 i zaproszenia do znajomych 👥. Arcade pamięta, które sekcje są zwinięte. Po zalogowaniu nagłówek menu pokazuje twój @nick z tymi samymi licznikami.
+Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuje `▸` i liczbę kafelków w środku, a *Społeczność* także nowe wiadomości 💬 i zaproszenia do znajomych 👥. Arcade pamięta, które sekcje są zwinięte. Niepotrzebną sekcję można ukryć w **Ustawieniach**: znika wtedy z menu całkowicie, razem z tytułem i kafelkami; *Więcej* z ustawieniami zostaje zawsze. Po zalogowaniu nagłówek menu pokazuje twój @nick z tymi samymi licznikami.
 
 **Wyszukiwanie** rusza od dwóch liter i znajduje tytuł lub gatunek, bez względu na wielkość liter i znaki diakrytyczne. Wyniki są pogrupowane według sekcji i gatunku, na przykład *Gry · Strzelanki*. Gwiazdka ☆ przy grze dodaje ją do **★ Ulubione** (do 100), uporządkowanych według sekcji i gatunku, najnowsze na początku. Książki i audiobooki mają własne wyszukiwanie, po tytule lub autorze.
 
@@ -138,7 +138,7 @@ Karta każdej gry prowadzi do jej licencji i kodu źródłowego.
 Logowanie jest opcjonalne — bez niego wszystko inne działa jak dotąd.
 
 - **Zaloguj się przez GitHub** (w *Społeczność*): Arcade pokazuje kod, który wpisujesz na stronie GitHuba w swojej zwykłej przeglądarce. Arcade poznaje tylko nazwę i zdjęcie twojego profilu GitHub — bez e-maila, bez dostępu do repozytoriów.
-- **Synchronizacja.** Język, klawisze, powiadomienia, rozmiar panelu, co robić z grą, gdy agent da znać, ustawienia przeglądarki w Desktop, twoje tematy, kanały Twitcha, ulubione, zwinięte sekcje i rekord we Flappy Arcade stają się takie same na wszystkich twoich komputerach. Własne gry, przeglądarka i tryb grafiki pozostają osobne dla każdego komputera.
+- **Synchronizacja.** Język, klawisze, powiadomienia, rozmiar panelu, co robić z grą, gdy agent da znać, ustawienia przeglądarki w Desktop, twoje tematy, kanały Twitcha, ulubione, zwinięte i ukryte sekcje i rekord we Flappy Arcade stają się takie same na wszystkich twoich komputerach. Własne gry, przeglądarka i tryb grafiki pozostają osobne dla każdego komputera.
 - **@nick.** Weź swoją nazwę z GitHuba jednym kliknięciem albo wymyśl własną: od 4 do 32 znaków — litery łacińskie, cyfry i `_`. Możesz ją zmieniać do 5 razy dziennie.
 - **Znajomi.** Dodaj znajomą osobę po dokładnym @nicku: zaproszenie zostaje przyjęte po drugiej stronie i pojawiacie się nawzajem na swoich listach. Podczas wpisywania nie ma podpowiedzi, więc nikt nie przejrzy, kto korzysta z Arcade. Odrzucanie i usuwanie odbywa się po cichu.
 - **Online i zaproszenia do gry.** Dopóki menu Arcade jest otwarte, znajomi widzą cię *online*, a ty ich; żeby się nie pokazywać, wyłącz *Pokazuj znajomym, że jestem online* na ekranie *Znajomi*. *Zaproś* obok znajomej osoby proponuje gry sieciowe: gra planszowa otwiera własny pokój dla dwojga, gra z rodziny Doom — swoje lobby. Gra od razu otwiera się u ciebie; znajoma osoba dostaje powiadomienie i *Przyjmij* na górze menu, a zaproszenie jest ważne przez 10 minut. Zapraszać można tam, gdzie gry sieciowe otwierają się w przeglądarce — wbudowanej w Desktop albo w oknie przeglądarki.
@@ -168,6 +168,7 @@ Dodawaj tylko pliki, do których masz prawa.
 
 Otwórz **Ustawienia** w sekcji *Więcej* menu `/arcade`:
 
+- **Działy menu głównego** — pokaż lub ukryj dowolną sekcję oprócz *Więcej*; ukrytej sekcji w ogóle nie ma w menu, dopóki jej tu nie przywrócisz.
 - **Język** — jeden z 13 (także bezpośrednio w menu: 🌐).
 - **Otwieranie gier** — tutaj w panelu, w oknie przeglądarki lub w konkretnej przeglądarce; w Claude Desktop — we wbudowanej przeglądarce Claude lub w oknie przeglądarki.
 - **Grafika** (terminal) — piksele w terminalach, które wyświetlają obrazy (kitty, Ghostty, Rio), wszędzie indziej bloki tekstu.

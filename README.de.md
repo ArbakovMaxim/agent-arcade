@@ -87,7 +87,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Arbeit** | Notizbuch, Projektboard |
 | **Mehr** | Arcade-Fenster, Einstellungen, 🌐 Sprache, 🐞 Fehler melden, ☕ Projekt unterstützen |
 
-Ein Klick auf den Titel eines Bereichs klappt ihn zu oder auf. Ein zugeklappter Bereich zeigt `▸` und wie viele Kacheln er enthält, *Soziales* zusätzlich neue Nachrichten 💬 und Freundschaftsanfragen 👥. Arcade merkt sich, welche Bereiche zugeklappt sind. Nach der Anmeldung zeigt der Menükopf deinen @Namen mit denselben Zählern.
+Ein Klick auf den Titel eines Bereichs klappt ihn zu oder auf. Ein zugeklappter Bereich zeigt `▸` und wie viele Kacheln er enthält, *Soziales* zusätzlich neue Nachrichten 💬 und Freundschaftsanfragen 👥. Arcade merkt sich, welche Bereiche zugeklappt sind. Einen Bereich, den du nicht brauchst, kannst du in den **Einstellungen** ausblenden: Dann fehlt er im Menü ganz, samt Titel und Kacheln; *Mehr* mit den Einstellungen bleibt immer. Nach der Anmeldung zeigt der Menükopf deinen @Namen mit denselben Zählern.
 
 Die **Suche** startet ab zwei Buchstaben und findet Titel oder Genres, ohne auf Groß-/Kleinschreibung und Akzente zu achten. Die Ergebnisse sind nach Bereich und Genre gruppiert, etwa *Spiele · Shooter*. Der Stern ☆ neben einem Spiel fügt es zu **★ Favoriten** hinzu (bis zu 100), geordnet nach Bereich und Genre, das Neueste zuerst. Bücher und Hörbücher haben ihre eigene Suche nach Titel oder Autor.
 
@@ -138,7 +138,7 @@ Die Karte jedes Spiels verlinkt seine Lizenz und seinen Quellcode.
 Die Anmeldung ist optional — ohne sie funktioniert alles andere wie bisher.
 
 - **Mit GitHub anmelden** (unter *Soziales*): Arcade zeigt einen Code, den du auf der GitHub-Seite in deinem normalen Browser eingibst. Arcade erfährt nur den Namen und das Bild deines GitHub-Profils — keine E-Mail, kein Zugriff auf Repositories.
-- **Synchronisierung.** Sprache, Tasten, Benachrichtigungen, Panelgröße, was beim Signal des Agenten mit dem Spiel passiert, die Browseroptionen in Desktop, deine Themen, Twitch-Kanäle, Favoriten, zugeklappte Bereiche und dein Flappy-Arcade-Rekord werden auf allen deinen Computern gleich. Eigene Spiele, Browser und Grafikmodus bleiben pro Computer.
+- **Synchronisierung.** Sprache, Tasten, Benachrichtigungen, Panelgröße, was beim Signal des Agenten mit dem Spiel passiert, die Browseroptionen in Desktop, deine Themen, Twitch-Kanäle, Favoriten, zugeklappte und ausgeblendete Bereiche und dein Flappy-Arcade-Rekord werden auf allen deinen Computern gleich. Eigene Spiele, Browser und Grafikmodus bleiben pro Computer.
 - **@Name.** Übernimm deinen GitHub-Namen mit einem Klick oder denk dir einen aus: 4 bis 32 Zeichen — lateinische Buchstaben, Ziffern und `_`. Du kannst ihn bis zu 5-mal am Tag ändern.
 - **Freunde.** Füge Freunde über ihren genauen @Namen hinzu: Die Anfrage wird auf der anderen Seite angenommen, und ihr erscheint gegenseitig in euren Listen. Beim Tippen gibt es keine Vorschläge, also kann niemand durchstöbern, wer Arcade nutzt. Ablehnen und Entfernen passieren still.
 - **Online und Einladungen zum Spielen.** Solange das Arcade-Menü offen ist, sehen deine Freunde dich *online* und du sie; willst du unsichtbar bleiben, schalte auf dem Bildschirm *Freunde* die Option *Freunden zeigen, dass ich online bin* aus. *Einladen* neben einem Freund bietet die Netzwerkspiele an: Ein Brettspiel öffnet einen eigenen Raum für zwei, ein Doom-Spiel seine Lobby. Das Spiel öffnet sich bei dir sofort; dein Freund bekommt eine Benachrichtigung und oben im Menü *Annehmen*, und die Einladung gilt 10 Minuten. Einladen kannst du dort, wo Netzwerkspiele im Browser öffnen — im eingebauten Browser von Desktop oder in einem Browserfenster.
@@ -168,6 +168,7 @@ Füge nur Dateien hinzu, an denen du die Rechte hast.
 
 Öffne **Einstellungen** im Bereich *Mehr* des Menüs `/arcade`:
 
+- **Bereiche des Hauptmenüs** — jeden Bereich außer *Mehr* zeigen oder ausblenden; ein ausgeblendeter Bereich fehlt im Menü ganz, bis du ihn hier zurückholst.
 - **Sprache** — eine von 13 (auch direkt im Menü: 🌐).
 - **Spiele öffnen** — hier im Panel, in einem Browserfenster oder in einem bestimmten Browser; in Claude Desktop — im integrierten Browser von Claude oder in einem Browserfenster.
 - **Grafik** (Terminal) — Pixel in Terminals, die Bilder anzeigen (kitty, Ghostty, Rio), sonst überall Textblöcke.
