@@ -469,6 +469,7 @@ const EXACT = {
   'Чатов пока нет. Нажми «Новый чат» и выбери друга.': 'No chats yet. Press “New chat” and pick a friend.',
   'Загружаю чаты…': 'Loading chats…',
   'Список чатов не загрузился.': "The chat list didn't load.",
+  'Выбери чат слева или начни новый.': 'Pick a chat on the left or start a new one.',
   'Переписка хранится на сайте Arcade и не шифруется — не пиши туда пароли и ключи.':
     'Messages are stored on the Arcade site and are not encrypted — never write passwords or keys there.',
   'Переписка не шифруется — не пиши сюда пароли и ключи.': 'Messages are not encrypted — never write passwords or keys here.',

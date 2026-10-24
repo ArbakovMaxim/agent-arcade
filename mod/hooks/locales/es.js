@@ -287,6 +287,7 @@ export default {
   "Pane size: normal": "Tamaño del panel: normal",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "Pausa: el agente terminó. Cualquier tecla del juego — seguir jugando, Esc — volver al agente",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "Pausa: el agente espera permiso. Cualquier tecla del juego — seguir jugando, Esc — volver al agente",
+  "Pick a chat on the left or start a new one.": "Elige un chat a la izquierda o empieza uno nuevo.",
   "Picking articles…": "Buscando artículos…",
   "Picking episodes…": "Buscando episodios…",
   "Picking topics…": "Buscando temas…",

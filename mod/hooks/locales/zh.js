@@ -287,6 +287,7 @@ export default {
   "Pane size: normal": "面板大小：标准",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "已暂停：智能体已完成。任意游戏键——继续玩，Esc——返回智能体",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "已暂停：智能体正在等待授权。任意游戏键——继续玩，Esc——返回智能体",
+  "Pick a chat on the left or start a new one.": "从左侧选择一个聊天，或开始新的聊天。",
   "Picking articles…": "正在挑选文章…",
   "Picking episodes…": "正在挑选单集…",
   "Picking topics…": "正在挑选主题…",

@@ -287,6 +287,7 @@ export default {
   "Pane size: normal": "패널 크기: 보통",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent": "일시정지: 에이전트 작업 완료. 아무 게임 키 — 계속 플레이, Esc — 에이전트로 돌아가기",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent": "일시정지: 에이전트가 권한 승인을 기다리는 중. 아무 게임 키 — 계속 플레이, Esc — 에이전트로 돌아가기",
+  "Pick a chat on the left or start a new one.": "왼쪽에서 채팅을 고르거나 새로 시작하세요.",
   "Picking articles…": "아티클을 고르는 중…",
   "Picking episodes…": "에피소드를 고르는 중…",
   "Picking topics…": "주제를 고르는 중…",
