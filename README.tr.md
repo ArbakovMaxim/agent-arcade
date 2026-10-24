@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · **Türkçe** · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Alfa (0.26).** Arcade çalışıyor ve her gün kullanılıyor, ama bu erken bir sürüm: bir şeyler bozulabilir, ayarlar ya da katalog güncellemeler arasında değişebilir. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
+> **Beta (0.33).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
 
 Arcade, ajanın çalışırken bekleme süresini dolduran bir [Claude Code](https://claude.com/claude-code) eklentisidir. Ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
 
@@ -16,7 +16,7 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 
 - **Kendiliğinden belirir.** Ajan 10 saniye çalıştıktan sonra Arcade istemin üstünde bir oyun önerir; sen istemedikçe odağı asla almaz.
 - **Ajanın ne yaptığını bilir.** Ajan bitirdiğinde ya da izin istediğinde oyunun üstünde bir bildirim çıkar — oynamaya devam et, duraklat ya da doğrudan ajana dön (davranışı ayarlardan seçersin). Claude Desktop’ta izlediğin sekmeyi de kapatabilir, böylece sohbet yeniden önüne gelir.
-- **Tek menü, altı bölüm.** *Oyna*, *Oku ve dinle*, *İzle*, *Sosyal*, *İş* ve *Diğer* — ihtiyacın olmayanları daralt. En üstte: son oyuna *Devam et*, *Ara* ve *Favoriler*.
+- **Tek menü, altı bölüm.** *Oyna*, *Oku ve dinle*, *İzle*, *Sosyal*, *İş* ve *Diğer* — ihtiyacın olmayanları daralt. En üstte: son oyuna *Devam et*, *Ara* ve *Favoriler*. Arcade’i ilk açtığında hangi bölümlerin görüneceğini seçersin.
 - **61 ücretsiz oyun:** NES (Dendy), Sega Mega Drive, Master System, PlayStation ve arcade oyunları, nişancı, yarış, strateji, macera ve masa oyunları içeren bir *Oyunlar* sekmesi.
 - **Oku ve dinle.** 30 dilde klasikler ve LibriVox sesli kitapları, doğrudan Project Gutenberg, Vikikaynak ve LibriVox’tan; ayrıca ajanın üzerinde çalıştığı konuyla ilgili yeni makaleler ve podcast bölümleri.
 - **İzle.** Ajanın üzerinde çalıştığı konuyla ilgili yeni YouTube videoları, Twitch: kendi kanalların ile programlama, teknoloji, bilim ve retro oyunlar üzerine canlı yayınlar ve TikTok: girişi kendin yaptığın TikTok’un kendi sitesinde *Sana Özel* akışı ve arama.
@@ -168,7 +168,7 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 
 `/arcade` menüsünün *Diğer* bölümünden **Ayarlar**’ı aç:
 
-- **Ana menü bölümleri** — *Diğer* dışındaki her bölümü göster ya da gizle; gizlenen bölüm, buradan geri getirene kadar menüde hiç görünmez.
+- **Ana menü bölümleri** — *Diğer* dışındaki her bölümü göster ya da gizle; gizlenen bölüm, buradan geri getirene kadar menüde hiç görünmez. Aynı seçim Arcade ilk açıldığında da sunulur.
 - **Dil** — 13 dilden biri (menüde doğrudan da: 🌐).
 - **Oyunları aç** — burada panelde, bir tarayıcı penceresinde ya da belirli bir tarayıcıda; Claude Desktop’ta — Claude’un yerleşik tarayıcısında ya da bir tarayıcı penceresinde.
 - **Grafik** (terminal) — resim gösterebilen terminallerde (kitty, Ghostty, Rio) piksel, diğer her yerde metin blokları.
@@ -180,6 +180,18 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 - **Pencerede oynarken bildirimler.**
 - **Mesaj bildirimleri** — bir arkadaşın sohbete yazdığında sol altta bir kart (macOS ve Linux’ta sistem bildirimi).
 - **Tuş testi ve tuş atama** (terminal).
+
+## Eklenti bilgisayarında ne yapar
+
+Arcade, Claude Code’un eklentilere verdiği erişimle Claude Code içinde çalışır. Kodunun tamamı bu depodadır ve `claude plugin validate ./mod` bağlandığı her olayı ve yaptığı her çağrıyı listeler. Kısaca:
+
+- **Ajanın araçları.** Arcade bir aracın ne zaman başlayıp bittiğini ve ajanın ne zaman izin istediğini görür — bildirimini ne zaman göstereceğini böyle bilir. Ajanın araç çağrılarını asla değiştirmez ya da engellemez. Kendisi yalnızca iki tür çağrıyı onaylar, o da yalnızca Claude Code’un aksi halde sana soracağı yerlerde: yalnızca defteri değiştiren ve hiçbir şey silmeyen `mcp__arcade__notes` ve panelde bastığın bir oyunun Desktop’un yerleşik tarayıcısında açılması. İzin verme ve reddetme kuralların olduğu gibi geçerlidir.
+- **Ajanı durdurma.** Yalnızca Claude Desktop’ta, ajan çalışırken yerleşik tarayıcıda bir şey açtığında: Desktop bir eklentinin tarayıcıyı kendi başına açmasına izin vermez. Arcade o anki aracın bitmesini bekler (10 saniye sonra onu keser, ama ekranda bir izin sorusu olduğu sürece bekler), ajanı durdurur ve Claude’dan sayfayı açıp işine dönmesini ister. Bundan kaçınmak için *Ayarlar → Oyunları aç* bölümünden bir tarayıcı penceresi seç.
+- **Sohbetin.** Konular için senin oturumundaki Haiku sohbetin sonunu, birkaç bin karakteri alır; bu, Claude kullanımına sayılır. Arcade sitesi sohbeti asla görmez. Arcade giriş kutusuna yalnızca sen istediğinde yazar ya da onu gönderir — örneğin defterdeki *Claude’a ver* — ya da yukarıda anlatıldığı gibi bir sayfa açmak için.
+- **Programlar.** Arcade penceresi için tarayıcın (Windows’ta `%LOCALAPPDATA%\claude-arcade` içinde kendi profiliyle); bildirimler — Windows’ta PowerShell, macOS’ta `osascript`, Linux’ta `notify-send`; hangi tarayıcıların kurulu olduğunun (Windows) ya da hangi sistem olduğunun (`uname`) kontrolü.
+- **Dosyalar.** Yalnızca `/arcade-add` ile eklediğin ROM’ları `~/.claude/arcade/roms` içine yazar; yalnızca belirttiğin dosyayı, bu kopyaları ve kendi dosyalarını okur. Ayarlar, defter ve favoriler Claude Code’un eklenti deposunda durur.
+- **Ortam değişkenleri.** `HOME` ya da `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` ve `OS` değişkenlerini okur; hiçbirini değiştirmez.
+- **Ağ.** Eklentinin kendisi yalnızca Arcade sitesiyle (`agent-arcade.fefaodessa.workers.dev`), YouTube kanallarının RSS akışlarıyla ve gösterdiği blog ve podcast’lerin akışlarıyla konuşur. Desktop panelindeki resimler, örneğin Twitch avatarları, doğrudan bu hizmetlerden yüklenir. Oyunları, kitapları ve videoları tarayıcıda açtığın sayfa yükler.
 
 ## Gizlilik
 
@@ -195,7 +207,7 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 
 ## Platformlar ve durum
 
-Arcade **alfa** aşamasında ve aktif olarak geliştiriliyor — bkz. [değişiklik günlüğü](CHANGELOG.md).
+Arcade **beta** aşamasında: özellikler yerinde, çalışmalar ayrıntılarda sürüyor — bkz. [değişiklik günlüğü](CHANGELOG.md).
 
 - Windows, macOS ve Linux’ta canlı olarak denendi.
 - Terminalde, VS Code’da ve Claude Desktop’ta çalışır.

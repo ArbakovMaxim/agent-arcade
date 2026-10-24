@@ -113,7 +113,8 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
     disk.set(e.path, e.text)
     return { value: undefined }
   })
-  const saved = new Map<string, unknown>(Object.entries(stored))
+  // Приветствие первого запуска уже закрыто — тесты сразу видят главное меню; его тесты передают welcomed: undefined
+  const saved = new Map<string, unknown>(Object.entries({ welcomed: true, ...stored }))
   const fetches: string[] = []
   const requests: any[] = []
   const notifies: any[] = []
@@ -5902,6 +5903,88 @@ test('Desktop: настройки — плитки с иконками под з
   await ui.press({ key: 'arcade-back' })
   expect(await ui.find({ key: 'arcade-lang' })).toMatchObject({ props: { autoFocus: true } })
   expect((await ui.find({ key: 'arcade-show-play' })).props.autoFocus).toBeUndefined()
+  await ui.unmount()
+})
+
+test('первый запуск: приветствие с разделами вместо меню; убранное и «Готово» помнятся', async ($, on) => {
+  const { saved } = stubs(on, { stored: { welcomed: undefined } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  // Вместо главного меню — приветствие: все разделы показаны, фокус на «Готово»
+  expect(await ui.find({ type: 'Text', text: 'Добро пожаловать в Arcade!' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-welcome-done' })).toMatchObject({ props: { label: 'Готово', autoFocus: true } })
+  for (const id of ['play', 'read', 'watch', 'talk', 'work']) expect((await ui.find({ key: `arcade-show-${id}` })).props.label).toMatch(/: показан$/)
+  expect(await ui.find({ key: 'arcade-show-more' })).toBeUndefined()
+  // Нажатие убирает раздел и сразу сохраняет, как в настройках
+  await ui.press({ key: 'arcade-show-work' })
+  await ui.press({ key: 'arcade-show-watch' })
+  expect(await ui.find({ key: 'arcade-show-watch' })).toMatchObject({ props: { label: 'Смотреть: скрыт' } })
+  expect(saved.get('hidden')).toEqual(['watch', 'work'])
+  expect(saved.get('welcomed')).toBeUndefined()
+  // «Готово» — главное меню без убранного; приветствие больше не показывается
+  await ui.press({ key: 'arcade-welcome-done' })
+  expect(saved.get('welcomed')).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'Добро пожаловать в Arcade!' })).toBeUndefined()
+  for (const key of ['arcade-menu-nes', 'arcade-fold-read', 'arcade-fold-talk', 'arcade-menu-settings']) expect(await ui.find({ key })).toBeDefined()
+  for (const key of ['arcade-fold-watch', 'arcade-menu-twitch', 'arcade-fold-work', 'arcade-menu-notes']) expect(await ui.find({ key })).toBeUndefined()
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-show-watch' })).toMatchObject({ props: { label: 'Смотреть: скрыт' } })
+  await ui.unmount()
+})
+
+// Кто уже пользовался Arcade (играл, менял настройки, входил), приветствия не видит — сразу главное меню
+for (const [who, stored] of [['играл', { lastGame: 'thwaite' }], ['менял настройки', { hidden: ['read'] }], ['входил', { account: { token: TOKEN, user: OCTO } }]] as const) {
+  test(`первый запуск: уже ${who} — приветствия нет`, async ($, on) => {
+    const { saved } = stubs(on, { stored: { welcomed: undefined, ...stored } })
+    await start($)
+    const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+    expect(await ui.find({ key: 'arcade-welcome-done' })).toBeUndefined()
+    expect(await ui.find({ key: 'arcade-menu-settings' })).toBeDefined()
+    expect(saved.get('welcomed')).toBeUndefined()
+    await ui.unmount()
+  })
+}
+
+test('первый запуск: язык меняется прямо на приветствии, фокус возвращается на него', async ($, on) => {
+  const { saved } = stubs(on, { stored: { welcomed: undefined } })
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 Русский' } })
+  await ui.press({ key: 'arcade-lang-main' })
+  await ui.press({ key: 'arcade-lang-en' })
+  // Снова приветствие — уже по-английски, фокус на языке
+  expect(await ui.find({ type: 'Text', text: 'Welcome to Arcade!' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Language' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { label: '🌐 English', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-welcome-done' })).toMatchObject({ props: { label: 'Done' } })
+  expect((await ui.find({ key: 'arcade-welcome-done' })).props.autoFocus).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-show-play' })).toMatchObject({ props: { label: 'Play: shown' } })
+  expect(saved.get('lang')).toBe('en')
+  // «Назад» с выбора языка — тоже на приветствие
+  await ui.press({ key: 'arcade-lang-main' })
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-lang-main' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+})
+
+test('Desktop: приветствие — плитки разделов с иконками, «Готово» главной кнопкой', async ($, on) => {
+  const { clock } = stubs(on, { env: WINDOWS, browser: 'ok', stored: { welcomed: undefined } })
+  await $.session.start({ surface: 'desktop', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: 'Добро пожаловать в Arcade!' })).toMatchObject({ props: { size: 'heading' } })
+  for (const title of ['Разделы главного меню', 'Язык']) expect(await ui.find({ type: 'Text', text: title })).toMatchObject({ props: { size: 'heading' } })
+  const play = JSON.stringify(await ui.find({ key: 'card-arcade-show-play' }))
+  expect(play).toContain('"alt":"Играть: показан"')
+  expect(play).toContain('приставки, игры в браузере и твои ROM')
+  await ui.press({ key: 'arcade-show-talk' })
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-show-talk' }))).toContain('#8b8d98')
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-lang-main' }))).toContain('"alt"')
+  expect(await ui.find({ key: 'arcade-welcome-done' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  await ui.press({ key: 'arcade-welcome-done' })
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-fold-talk' })).toBeUndefined()
   await ui.unmount()
 })
 

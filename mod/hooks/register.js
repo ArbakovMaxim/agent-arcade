@@ -141,6 +141,9 @@ const SECTION_ICONS = { play: 'games', read: 'books', watch: 'youtube', talk: 'f
 const FAV_LIMIT = 100
 let collapsed = []
 let hidden = []
+// Первый запуск: вместо главного меню — приветствие с выбором разделов, пока его не закрыли «Готово». На этом компьютере,
+// в $.store — welcomed
+let welcomed = true
 let favorites = []
 // Поиск: query — что вписано. Поле рисуется заново (field — его номер) с тем, что было вписано (seed), когда экран
 // поиска открывают снова: само поле, пока его нет на экране, вписанное не помнит. shown — экран поиска сейчас на виду
@@ -1617,6 +1620,14 @@ async function toggleHidden($, id) {
   hidden = hidden.includes(id) ? hidden.filter((x) => x !== id) : HIDEABLE.filter((x) => x === id || hidden.includes(x))
   $.ui.invalidate('ui.render')
   await saveSetting($, 'hidden', hidden)
+}
+
+// «Готово» на приветствии: дальше — главное меню с выбранными разделами
+async function finishWelcome($) {
+  welcomed = true
+  menuFrom = null
+  $.ui.invalidate('ui.render')
+  await $.store.set('welcomed', true)
 }
 
 // Отметить игру, книгу или аудиокнигу звёздочкой — или снять отметку
@@ -3631,6 +3642,8 @@ export function register(on) {
       const savedGame = await $.store.get('lastGame')
       played = games().some((g) => g.id === savedGame)
       if (played) lastGame = savedGame
+      // Кто Arcade уже пользовался (играл, менял настройки, входил), приветствия не видит
+      welcomed = (await $.store.get('welcomed')) === true || played || savedKeys.size > 0 || Boolean(acct.session)
       const savedGraphics = await $.store.get('graphics')
       if (GRAPHICS.includes(savedGraphics)) graphics = savedGraphics
       const savedOpener = await $.store.get('opener')
@@ -4293,6 +4306,17 @@ export function register(on) {
       const windowed = windowMode() || desktop
       // В Desktop заголовок раздела — крупно, с отступом сверху от раздела выше и снизу от своих плиток
       const section = (title) => (desktop ? Box({ marginTop: 'lg', marginBottom: 'sm', children: [Text({ size: 'heading', weight: 'semibold', children: [title] })] }) : Text({ bold: true, dimColor: true, children: [title] }))
+      // Разделы главного меню — в настройках и на приветствии: убранного раздела в меню нет совсем, ни заголовка, ни плиток
+      const sectionSwitches = (focus = () => ({})) =>
+        HIDEABLE.flatMap((id) => [
+          Button({
+            key: `arcade-show-${id}`,
+            label: SECTION_SWITCH[id][hidden.includes(id) ? 1 : 0],
+            ...focus(`arcade-show-${id}`),
+            onPress: () => toggleHidden($, id),
+          }),
+          dim(`  ${SECTION_NOTES[id]}`),
+        ])
       // Картинки (аватарки, плитки) — везде, кроме терминала: там то же самое текстом
       const pictures = !terminal
       // Выбор одной из AVATAR_COUNT картинок: своя аватарка в «Аккаунте», картинка группы у её хозяина. Каждая — плитка
@@ -5378,16 +5402,7 @@ export function register(on) {
         const focusKey = menuFrom === 'lang' || menuFrom === 'settings' ? 'arcade-lang' : `arcade-show-${HIDEABLE[0]}`
         const focus = (key) => (key === focusKey ? { autoFocus: true } : {})
         const group = (title, list, after = []) => (list.length ? [section(title), tiles(list, 40), ...after] : [])
-        // Разделы главного меню: убранного раздела в меню нет совсем — ни заголовка, ни плиток; вернуть — здесь же
-        const sectionTiles = HIDEABLE.flatMap((id) => [
-          Button({
-            key: `arcade-show-${id}`,
-            label: SECTION_SWITCH[id][hidden.includes(id) ? 1 : 0],
-            ...focus(`arcade-show-${id}`),
-            onPress: () => toggleHidden($, id),
-          }),
-          dim(`  ${SECTION_NOTES[id]}`),
-        ])
+        const sectionTiles = sectionSwitches(focus)
         // Desktop: встроенный браузер приложения или окно браузера; Денди там всегда в панели, графика — картинкой
         const openTiles = [
           ...(e.surface === 'desktop' && platform
@@ -6927,6 +6942,42 @@ export function register(on) {
             ...hint,
           ]
         }
+      } else if (menu === 'main' && !welcomed) {
+        // Первый запуск: что есть в Arcade и какие разделы показывать. Показаны все — лишнее человек убирает нажатием,
+        // вернуть можно в настройках. Язык угадан по окружению — сменить его можно здесь же. Вернулись с выбора языка
+        // (выбрали язык — menuFrom 'main', «Назад» — 'lang') — фокус на языке, иначе на «Готово»
+        const welcomeFocus = menuFrom === 'main' || menuFrom === 'lang' ? 'arcade-lang-main' : 'arcade-welcome-done'
+        const focus = (key) => (key === welcomeFocus ? { autoFocus: true } : {})
+        items = [
+          Text(desktop ? { size: 'heading', weight: 'semibold', children: ['Добро пожаловать в Arcade!'] } : { bold: true, children: ['Добро пожаловать в Arcade!'] }),
+          Text({ wrap: 'wrap', children: ['Пока Claude работает, здесь можно играть, читать и слушать, смотреть видео, общаться с друзьями и вести заметки.'] }),
+          dim('Выбери, что показывать в главном меню: нажатие убирает раздел или возвращает его.'),
+          ...(desktop ? [] : [gap]),
+          section('Разделы главного меню'),
+          tiles(sectionSwitches(), 40),
+          ...(desktop ? [] : [gap]),
+          section('Язык'),
+          tiles(
+            [
+              Button({
+                key: 'arcade-lang-main',
+                label: `🌐 ${LANG_NAMES[lang] ?? lang}`,
+                ...focus('arcade-lang-main'),
+                onPress: () => {
+                  langReturn = 'main'
+                  open('lang')()
+                },
+              }),
+              dim('  язык интерфейса — 13 на выбор'),
+            ],
+            40,
+          ),
+          gap,
+          Button({ key: 'arcade-welcome-done', label: 'Готово', ...(desktop ? { variant: 'primary' } : {}), ...focus('arcade-welcome-done'), onPress: () => finishWelcome($) }),
+          dim('Передумаешь — разделы меняются в «Ещё → Настройки».'),
+          ...noticeLines,
+          ...hint,
+        ]
       } else if (menu !== 'main') {
         const shelf = shelfView(menu)
         const c = shelf ?? consoles().find((x) => x.id === menu) ?? consoles()[0]
