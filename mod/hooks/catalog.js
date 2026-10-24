@@ -1,5 +1,5 @@
 // Каталог игр: что мод берёт с сайта Arcade (catalog.json), что лежит в нём самом на случай без интернета,
-// и как проверяется скачанная игра. Здесь нет вызовов Claude Code — сеть и хранилище в hooks/register.js.
+// и как проверяется скачанная игра. Здесь нет вызовов Claude Code — сеть и хранилище в hooks/app/.
 import THWAITE_ROM from './roms/thwaite.mjs'
 import CROOM_ROM from './roms/croom.mjs'
 import RFK_ROM from './roms/rfk.mjs'

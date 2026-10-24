@@ -2,7 +2,7 @@
 // этого тему с английским запросом, сайт Arcade ищет по запросу (/api/discover: YouTube, Hacker News и Medium, Apple
 // Podcasts) — ссылки из поиска он подписывает, страницы /read и /listen эту подпись проверяют. Найденное идёт вместе с
 // записями лент Arcade по направлениям темы. Последние темы человека хранятся в $.store. Здесь нет вызовов Claude
-// Code — сеть, модель и хранилище в hooks/register.js.
+// Code — сеть, модель и хранилище в hooks/app/watch.js и hooks/app/read.js.
 import { siteUrl } from './catalog.js'
 import { LANGUAGE, clean, hash, jsonFrom } from './youtube.js'
 

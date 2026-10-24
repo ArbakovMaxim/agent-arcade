@@ -1,7 +1,7 @@
 // Статьи и подкасты в Arcade: свежие записи из открытых RSS- и Atom-лент по теме работы агента. Список лент — с сайта
 // Arcade (feeds.json; копия в hooks/feeds.js — на случай без сайта). Темы — общие с YouTube, записи выбирает haiku.
 // Ленты — английские: у других языков мест в подборке нет. Здесь нет вызовов Claude Code — сеть, модель и хранилище
-// в hooks/register.js.
+// в hooks/app/read.js.
 import { SITE } from './catalog.js'
 import FEEDS from './feeds.js'
 import { LANGS } from './i18n.js'
