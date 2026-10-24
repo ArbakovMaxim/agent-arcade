@@ -18,6 +18,7 @@ import { FIND_LIMIT, MIN_QUERY, find, restoreFavorites, toggleIn } from './find.
 import { COL_NAMES, MAX_APP, MAX_BODY, MAX_URL, NOTES_TOOL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, columnCards, columnOf, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from './notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from './desks.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from './reports.js'
+import { BOOK_LANGS, BOOK_SECTIONS, BOOK_SOURCES, MIN_BOOK_QUERY, bookLang, bookQuery, booksPath, parseBooks } from './books.js'
 import { LOGO_SVG } from './logo.js'
 import { createFlappy } from './flappy.js'
 
@@ -179,6 +180,10 @@ const feedCache = new Map() // id канала → { at, entries }: ленты �
 // Статьи и подкасты: темы — общие с YouTube (yt.topics), у каждого раздела своя подборка открытой темы
 const emptyReads = (request = 0) => ({ topic: -1, items: [], seen: new Set(), loading: false, note: '', request })
 let reads = { articles: emptyReads(), podcasts: emptyReads() }
+// Книги и аудиокниги (hooks/books.js): язык книг — общий, у книг (book) и аудиокниг (audio) — свой раздел или поиск,
+// список, страница и беда загрузки; request — номер последней загрузки, как у статей
+const emptyBooks = (request = 0) => ({ section: '', q: '', items: [], page: 1, more: false, loading: false, error: '', request })
+let bk = { lang: 'en', book: emptyBooks(), audio: emptyBooks() }
 const rssCache = new Map() // «articles:id ленты» → { at, items }: ленты перечитываем не чаще FEED_TTL_MS
 // Свои темы человека: последние, из $.store. Заметка под полем «Своя тема» — у раздела, где тему ввели; номер последнего
 // разбора — ответ модели на старый ввод не нужен
@@ -273,10 +278,8 @@ function menuTabs() {
 }
 
 // --- Desktop: иконки плиток и обложки игр (картинки Svg) ---------------------------------------------------------
-const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', reading: '#12a594', books: '#12a594', listening: '#d6409f', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f' }
+const ICON_COLORS = { nes: '#e5484d', sega: '#3e63dd', sms: '#30a46c', psx: '#8e4ec6', games: '#f76b15', books: '#12a594', audiobooks: '#d6409f', mine: '#ffb224', settings: '#8b8d98', account: '#46a758', friends: '#e93d82', chats: '#0090ff', lang: '#0090ff', support: '#ff8b3e', library: '#6e56cf', youtube: '#ff0033', articles: '#29a383', podcasts: '#ab4aba', twitch: '#9146ff', tiktok: '#fe2c55', arcade: '#f76b15', shooters: '#e5484d', racing: '#30a46c', strategy: '#3e63dd', quests: '#ffb224', board: '#12a594', search: '#8e4ec6', favorites: '#ffb224', notes: '#00a2c7', boards: '#3e9b4f' }
 function iconSvg(kind) {
-  // Полки книг и аудиокниг (books-en, audio-mine) — иконкой своей группы
-  kind = /^books-/.test(kind) ? 'books' : /^audio-/.test(kind) ? 'audiobooks' : kind
   const c = ICON_COLORS[kind] ?? '#6e56cf'
   const shapes = {
     pad: `<rect x="6" y="15" width="36" height="18" rx="9" fill="${c}"/><rect x="12" y="21" width="9" height="3" fill="#fff"/><rect x="15" y="18" width="3" height="9" fill="#fff"/><circle cx="32" cy="22" r="2.4" fill="#fff"/><circle cx="37" cy="26" r="2.4" fill="#fff"/>`,
@@ -315,7 +318,7 @@ function iconSvg(kind) {
     // Доска проектов: три колонки с карточками
     kanban: `<rect x="8" y="9" width="9" height="30" rx="2" fill="${c}"/><rect x="19.5" y="9" width="9" height="22" rx="2" fill="${c}"/><rect x="31" y="9" width="9" height="14" rx="2" fill="${c}"/><path d="M10.5 15h4M10.5 21h4M10.5 27h4M22 15h4M22 21h4M33.5 15h4" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>`,
   }
-  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', reading: 'book', books: 'book', listening: 'phones', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban' }[kind] ?? 'stick'
+  const shape = { nes: 'pad', sega: 'pad', sms: 'pad', psx: 'disc', games: 'stick', books: 'book', audiobooks: 'phones', mine: 'folder', settings: 'gear', account: 'person', friends: 'people', chats: 'bubble', lang: 'globe', support: 'cup', library: 'window', youtube: 'play', articles: 'doc', podcasts: 'mic', twitch: 'tv', tiktok: 'note', arcade: 'stick', shooters: 'target', racing: 'flag', strategy: 'rook', quests: 'compass', board: 'dice', search: 'lens', favorites: 'star', notes: 'notebook', boards: 'kanban' }[kind] ?? 'stick'
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="#ffffff10"/>${shapes[shape]}</svg>`
 }
 // Флажки плиток «Arcade · язык»: флаг 36×24, упрощённый до читаемого в 36 точках. Английский — флаг Великобритании,
@@ -362,7 +365,7 @@ function coverSvg(g) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${hue},62%,52%)"/><stop offset="1" stop-color="hsl(${(hue + 40) % 360},70%,32%)"/></linearGradient></defs><rect width="56" height="56" rx="10" fill="url(#g)"/><text x="28" y="35" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">${esc(letters)}</text></svg>`
 }
 
-// Жанр книги для плитки и заголовка: перевод на язык интерфейса и с заглавной буквы («роман» → «Роман», «Novel»)
+// Жанр игры для заголовка раздела: перевод на язык интерфейса и с заглавной буквы («аркада» → «Аркада», «Arcade»)
 function genreLabel(genre) {
   const t = tr(genre, lang)
   return t.charAt(0).toLocaleUpperCase() + t.slice(1)
@@ -395,7 +398,7 @@ function games() {
     ...catalog.games.map((g) => {
       // Описание: по-русски, перевод с английского или английское, если перевода на этот язык нет
       const about = lang === 'ru' || !g.about_en ? g.about : g.about_i18n?.[lang] || g.about_en
-      return { ...g, note: `${g.author ? `${g.author} · ` : ''}${tr(g.genre, lang)}${about ? ` — ${about}` : ''}`, web: true }
+      return { ...g, note: `${tr(g.genre, lang)}${about ? ` — ${about}` : ''}`, web: true }
     }),
     ...mine.map((m) => ({
       id: m.id,
@@ -641,7 +644,7 @@ function usableKey(key) {
 function toLibrary() {
   releaseAll()
   const g = gameById(view)
-  menu = g?.mine ? 'mine' : (g?.kind === 'book' || g?.kind === 'audio') && g?.shelf ? `genre:${g.shelf}:${g.genre}` : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
+  menu = g?.mine ? 'mine' : g?.shelf ? `shelf:${g.shelf}` : g?.console ?? 'settings' // в список, откуда игру открыли
   view = 'library'
   mode = 'play'
   notice = ''
@@ -846,6 +849,11 @@ function windowUrl(id) {
   let url
   // tab:<вкладка> или tab:<группа>:<полка>
   if (typeof id === 'string' && id.startsWith('tab:')) url = tabPageUrl(...id.slice(4).split(':'))
+  // book:<ссылка> — читалка окна, audio:<ссылка> — проигрыватель; mine:book и mine:audio — «Мои книги» и «Мои
+  // аудиокниги» окна, с языком книг: на нём окно покажет свои разделы
+  else if (typeof id === 'string' && id.startsWith('book:')) url = `${SITE}/?book=${encodeURIComponent(id.slice(5))}`
+  else if (typeof id === 'string' && id.startsWith('audio:')) url = `${SITE}/?audio=${encodeURIComponent(id.slice(6))}`
+  else if (id === 'mine:book' || id === 'mine:audio') url = `${SITE}/?tab=${id === 'mine:book' ? 'books' : 'audiobooks'}&section=mine&book-lang=${bk.lang}`
   // Денди по сети — та же игра в окне на EmulatorJS (FCEUmm) с его сетевой игрой
   else if (typeof id === 'string' && id.startsWith('net:')) url = `${pageUrl(id.slice(4))}&net=1`
   // Кооператив Freedoom — лобби кооператива этой игры
@@ -926,6 +934,10 @@ function launchNotice(result, id) {
     if (typeof id === 'string' && id.startsWith('article:')) return `Статья открыта в ${where}.`
     if (typeof id === 'string' && id.startsWith('episode:')) return `Выпуск открыт в ${where}.`
     if (typeof id === 'string' && id.startsWith('live:')) return `Трансляция открыта в ${where}.`
+    if (typeof id === 'string' && id.startsWith('book:')) return `Книга открыта в ${where}.`
+    if (typeof id === 'string' && id.startsWith('audio:')) return `Аудиокнига открыта в ${where}.`
+    if (id === 'mine:book') return `«Мои книги» открыты в ${where}.`
+    if (id === 'mine:audio') return `«Мои аудиокниги» открыты в ${where}.`
     return id
       ? `${title} открыт в ${where}. Игра стоит на паузе, пока окно не в фокусе.`
       : `Arcade открыт в ${where}: выбирай приставку и игру.`
@@ -2833,6 +2845,43 @@ async function loadReads($, kind, key, again = false) {
   $.ui.invalidate('ui.render')
 }
 
+// Список книг или аудиокниг с сайта: раздел или поиск на языке книг; more — следующая страница к уже показанной.
+// Сайт собирает его из Project Gutenberg, Викитеки или archive.org — ждём дольше, чем ленту
+const BOOKS_FETCH_MS = 20_000
+async function loadBooks($, kind, { section = '', q = '', more = false } = {}) {
+  const was = bk[kind]
+  const request = was.request + 1
+  const page = more ? was.page + 1 : 1
+  const next = more ? { ...was, loading: true, error: '', request } : { ...emptyBooks(request), section, q, loading: true }
+  bk = { ...bk, [kind]: next }
+  $.ui.invalidate('ui.render')
+  const url = siteUrl(booksPath(kind, bk.lang, { section: next.section || 'popular', q: next.q, page }))
+  const answer = parseBooks(kind, await fetchWithin($, url, BOOKS_FETCH_MS))
+  if (request !== bk[kind].request) return
+  const cur = bk[kind]
+  const fresh = answer.error ? [] : answer.items.filter((x) => !cur.items.some((y) => y.ref === x.ref))
+  bk = {
+    ...bk,
+    [kind]: answer.error ? { ...cur, loading: false, error: answer.error } : { ...cur, items: [...cur.items, ...fresh], page, more: answer.more, loading: false },
+  }
+  if (answer.error) log(`книги: список не загрузился (${answer.error})`)
+  $.ui.invalidate('ui.render')
+}
+
+// Язык книг сменили: прежние списки — на старом языке, их ответы уже не нужны
+function resetBooks(code) {
+  if (code !== bk.lang) bk = { lang: code, book: emptyBooks(bk.book.request + 1), audio: emptyBooks(bk.audio.request + 1) }
+}
+async function setBookLang($, code) {
+  resetBooks(code)
+  await $.store.set('booksLang', code)
+  $.ui.invalidate('ui.render')
+}
+// Сменили язык интерфейса: язык книг, который человек не выбирал, идёт за ним
+async function followBookLang($) {
+  resetBooks(bookLang(await $.store.get('booksLang'), lang))
+}
+
 // Варианты «где открывать» по кругу: браузер по умолчанию, каждый найденный браузер, панель
 function openerOptions() {
   const browsers = platform === 'windows' ? detection?.browsers ?? [] : []
@@ -2882,11 +2931,7 @@ function consoleNote(c) {
   const count = c.group === undefined && groupsList().some((g) => g.id === c.id)
     ? games().filter((g) => groupConsoles(c.id).includes(g.console) && !g.mine).length
     : games().filter((g) => g.console === c.id && !g.mine).length
-  // У книг — «136 книг», а не «136 игр»
-  const list = c.group === undefined && groupsList().some((g) => g.id === c.id) ? games().filter((g) => groupConsoles(c.id).includes(g.console) && !g.mine) : games().filter((g) => g.console === c.id && !g.mine)
-  const audio = list.length > 0 && list.every((g) => ['audio', 'audio-mine'].includes(g.kind))
-  const books = list.length > 0 && list.every((g) => ['book', 'audio', 'audio-mine'].includes(g.kind)) // книги и аудиокниги
-  return count ? `${count} ${audio ? plural(count, 'аудиокнига', 'аудиокниги', 'аудиокниг') : books ? plural(count, 'книга', 'книги', 'книг') : plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
+  return count ? `${count} ${plural(count, 'игра', 'игры', 'игр')}` : 'скоро'
 }
 
 function settingsNote(surface) {
@@ -3453,7 +3498,8 @@ function libraryTitle() {
   if (menu === 'tiktok') return 'Arcade · TikTok'
   if (menu === 'boards' || menu.startsWith('board:') || shownBoard()) return 'Arcade · доска проектов'
   if (menu === 'notes' || menu.startsWith('note:')) return 'Arcade · блокнот'
-  if (menu.startsWith('genre:')) return `Arcade · ${shelfView(`shelf:${menu.split(':')[1]}`)?.title ?? ''} · ${genreLabel(menu.split(':').slice(2).join(':'))}`
+  if (menu === 'books' || menu.startsWith('books:')) return 'Arcade · Книги'
+  if (menu === 'audiobooks' || menu.startsWith('audiobooks:')) return 'Arcade · Аудиокниги'
   if (menu === 'mine') return 'Arcade · мои игры'
   const c = consoles().find((x) => x.id === menu) ?? groupsList().find((x) => x.id === menu) ?? shelfView(menu)
   return c ? `Arcade · ${c.title}` : 'Arcade'
@@ -3522,7 +3568,9 @@ export function register(on) {
       // Общие настройки (SYNC_KEYS): чего в $.store нет или что не подходит — остаётся по умолчанию
       for (const key of SYNC_KEYS) if (applySetting(key, await $.store.get(key))) savedKeys.add(key)
       if (!savedKeys.has('lang')) lang = detectLang(await $.env.get('LC_ALL'), await $.env.get('LC_MESSAGES'), await $.env.get('LANG'))
-      stamps = restoreStamps(await $.store.get('syncAt'))
+      // Язык книг: выбранный в «Книгах», иначе язык интерфейса
+      bk = { ...bk, lang: bookLang(await $.store.get('booksLang'), lang) }
+      stamps =restoreStamps(await $.store.get('syncAt'))
       msgNotify = (await $.store.get('msgNotify')) !== false
       acct.session = restoreAccount(await $.store.get('account'))
       mine = restoreMine(await $.store.get('mine'))
@@ -4262,14 +4310,17 @@ export function register(on) {
         // Плитка языка (arcade-lang-de) — флажком, подпись — название языка на нём самом
         const flag = /^arcade-lang-([a-z]{2})$/.exec(key)?.[1]
         if (FLAGS[flag]) return Svg({ source: flagSvg(flag), alt: LANG_NAMES[flag], width: 36, height: 36 })
-        // arcade-menu-shelf-books → books, arcade-lang-main → lang, arcade-support → support; жанр — иконкой своей полки
+        // arcade-menu-shelf-racing → racing, arcade-lang-main → lang, arcade-support → support. Язык книг — глобусом,
+        // «Мои книги» — папкой, разделы книг (arcade-bk-sec-…) и аудиокниг (arcade-ab-…) — иконкой своего раздела.
         // Темы YouTube (arcade-yt-topic-…), статей (ar-) и подкастов (pc-) — иконкой раздела; их названия придумала
         // модель, в alt не ставим
         const kind = key
           .replace(/^arcade-(menu-(shelf-)?)?/, '')
-          .replace(/^genre-fav$/, 'favorites')
           .replace(/^favorites-.+$/, 'favorites')
-          .replace(/^genre-\d+$/, String(menu).split(':')[1] ?? '')
+          .replace(/^(bk|ab)-lang(-.+)?$/, 'lang')
+          .replace(/^(bk|ab)-mine$/, 'mine')
+          .replace(/^bk-.+$/, 'books')
+          .replace(/^ab-.+$/, 'audiobooks')
           .replace(/^lang-main$/, 'lang')
           .replace(/^open-library$/, 'library')
           .replace(/^yt-.+$/, 'youtube')
@@ -4452,6 +4503,7 @@ export function register(on) {
                   menu = langReturn
                   $.ui.invalidate('ui.render')
                   await saveSetting($, 'lang', lang)
+                  await followBookLang($)
                 },
               }),
             ),
@@ -6464,8 +6516,8 @@ export function register(on) {
           ...hint,
         ]
       } else if (menu === 'search') {
-        // Поиск: игры, книги и аудиокниги — разделами по жанрам, за ними каналы Twitch. От двух букв, без регистра
-        // и диакритики: ищется в названии (и в его переводе), авторе, жанре и разделе
+        // Поиск: игры — разделами по жанрам, за ними каналы Twitch. От двух букв, без регистра и диакритики: ищется в
+        // названии (и в его переводе), жанре и разделе. Книги ищутся в «Книгах»: их список — на сайте
         if (!finder.shown) {
           finder.seed = finder.query
           finder.field++
@@ -6477,7 +6529,7 @@ export function register(on) {
         const found = ready
           ? find(pool, query, (g) => {
               const tab = tabOf(g)
-              return [g.title, tr(g.title, lang), g.author, g.genre && genreLabel(g.genre), g.genre, tab && tab.title, tab && tr(tab.title, lang)]
+              return [g.title, tr(g.title, lang), g.genre && genreLabel(g.genre), g.genre, tab && tab.title, tab && tr(tab.title, lang)]
             })
           : []
         const channels = [...tw.channels, ...tw.catalog.filter((c) => !tw.channels.some((x) => x.login === c.login))]
@@ -6496,10 +6548,10 @@ export function register(on) {
         items = [
           back,
           gap,
-          Input({ key: `arcade-search-${finder.field}`, label: 'Найти', placeholder: 'название, автор или жанр', value: finder.seed, autoFocus: true, onInput: set, onSubmit: set }),
+          Input({ key: `arcade-search-${finder.field}`, label: 'Найти', placeholder: 'название или жанр', value: finder.seed, autoFocus: true, onInput: set, onSubmit: set }),
           dim(
             !ready
-              ? 'От двух букв: название, автор или жанр. Ищу в играх, книгах, аудиокнигах и каналах Twitch.'
+              ? 'От двух букв: название или жанр. Ищу в играх и каналах Twitch.'
               : found.length || live.length
                 ? `найдено: ${found.length + live.length}`
                 : 'Ничего не нашлось — попробуй другое слово.',
@@ -6521,7 +6573,7 @@ export function register(on) {
         items = [
           scope ? Button({ key: 'arcade-back', label: '← Назад', onPress: open(scopeId) }) : back,
           gap,
-          ...(list.length ? byGenre(list, focusId) : [dim('Пока пусто. Отмечай звёздочкой ☆ игры, книги и аудиокниги — они соберутся здесь.')]),
+          ...(list.length ? byGenre(list, focusId) : [dim('Пока пусто. Отмечай звёздочкой ☆ игры — они соберутся здесь.')]),
           ...noticeLines,
           ...hint,
         ]
@@ -6576,7 +6628,7 @@ export function register(on) {
           const n = shelfGames(s.id).length
           return [
             Button({ key: `arcade-menu-shelf-${s.id}`, label: s.title, ...((menuFrom ? menuFrom === `shelf:${s.id}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`shelf:${s.id}`) }),
-            dim(`  ${n} ${shelfGames(s.id).every((g) => g.kind === 'book') ? plural(n, 'книга', 'книги', 'книг') : shelfGames(s.id).every((g) => ['audio', 'audio-mine'].includes(g.kind)) ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'игра', 'игры', 'игр')}`),
+            dim(`  ${n} ${plural(n, 'игра', 'игры', 'игр')}`),
           ]
         }),
         ]
@@ -6588,41 +6640,144 @@ export function register(on) {
           ...noticeLines,
           ...hint,
         ]
-      } else if (menu.startsWith('genre:') || (shelfView(menu) && shelfView(menu).list.length && (shelfView(menu).list.every((g) => g.kind === 'book') || shelfView(menu).list.every((g) => g.kind === 'audio')))) {
-        // Книги: на полке языка — плитки жанров («Роман · 26 книг»); в жанре — его книги. «Назад» — к жанрам, потом к языкам
-        const inGenre = menu.startsWith('genre:')
-        const shelfMenu = inGenre ? `shelf:${menu.split(':')[1]}` : menu
-        const shelf = shelfView(shelfMenu)
-        const genre = inGenre ? menu.split(':').slice(2).join(':') : null
-        const books = shelf ? shelf.list : []
-        if (!inGenre) {
-          const genres = [...new Set(books.map((g) => g.genre))]
-          const favHere = favoriteGames().filter((g) => books.some((b) => b.id === g.id)).length
+      } else if (/^(books|audiobooks)(:(lang|list))?$/.test(menu)) {
+        // Книги и аудиокниги: Arcade их не хранит — список приходит с сайта (Project Gutenberg, Викитека, LibriVox) на
+        // языке книг, который выбирает человек. Разделы одни на все языки, поиск — по названию или автору. Книга
+        // открывается в окне Arcade: там читалка или проигрыватель, там же её можно скачать к себе («Мои книги»)
+        const [page, screen] = menu.split(':')
+        const kind = page === 'books' ? 'book' : 'audio'
+        const short = kind === 'book' ? 'bk' : 'ab'
+        const state = bk[kind]
+        const builtin = builtinBrowser(e.surface)
+        const openWindow = async (id, opened) => {
+          if (builtin) return desktopWindow($, id, opened)
+          if (!platform) {
+            libraryNotice = `Открой в браузере: ${windowUrl(id)}`
+            $.ui.invalidate('ui.render')
+            return
+          }
+          libraryNotice = 'Открываю окно…'
+          $.ui.invalidate('ui.render')
+          const command = windowCommand(id)
+          try {
+            const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
+            windowNotice($, launchNotice(result, id))
+            if (result?.exitCode === 0) windowOpenedAt = await $.clock.now()
+          } catch (err) {
+            libraryNotice = `Не получилось открыть окно: ${err?.message ?? err}`
+          }
+          $.ui.invalidate('ui.render')
+        }
+        // В список раздела или поиска; тот же раздел уже загружен — показываем его, не загружая заново
+        const toList = (what) => () => {
+          open(`${page}:list`)()
+          if (what.q || what.section !== state.section || state.q || (!state.items.length && !state.loading)) loadBooks($, kind, what)
+        }
+        if (screen === 'lang') {
+          // Название языка — на нём самом (keep), выбранный — с галочкой
           items = [
-            Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelf.group) }),
+            Button({ key: 'arcade-back', label: '← Назад', onPress: open(page) }),
             gap,
-            tiles([
-              Button({ key: 'arcade-genre-fav', label: '★ Избранное', ...(menuFrom === `favorites:${shelfMenu}` ? { autoFocus: true } : {}), onPress: open(`favorites:${shelfMenu}`) }),
-              dim(favHere ? `  отмечено: ${favHere}` : '  отмечай ☆ — соберётся здесь'),
-              ...genres.flatMap((g, i) => {
-                const n = books.filter((b) => b.genre === g).length
-                const audio = books.every((b) => b.kind === 'audio')
-                return [
-                  Button({ key: `arcade-genre-${i}`, label: genreLabel(g), ...((menuFrom ? menuFrom === `genre:${shelfMenu.slice(6)}:${g}` : i === 0) ? { autoFocus: true } : {}), onPress: open(`genre:${shelfMenu.slice(6)}:${g}`) }),
-                  dim(`  ${n} ${audio ? plural(n, 'аудиокнига', 'аудиокниги', 'аудиокниг') : plural(n, 'книга', 'книги', 'книг')}`),
-                ]
+            dim('Книги и аудиокниги будут на этом языке. Язык интерфейса не меняется.'),
+            gap,
+            tiles(
+              Object.entries(BOOK_LANGS).map(([code, name]) =>
+                keep(
+                  Button({
+                    key: `arcade-${short}-lang-${code}`,
+                    label: `${name}${code === bk.lang ? ' ✓' : ''}`,
+                    ...(code === bk.lang ? { autoFocus: true } : {}),
+                    onPress: async () => {
+                      open(page)()
+                      if (code !== bk.lang) await setBookLang($, code)
+                    },
+                  }),
+                ),
+              ),
+              22,
+            ),
+            ...hint,
+          ]
+        } else if (screen === 'list') {
+          const opened = kind === 'book' ? 'Книга открыта во встроенном браузере Claude.' : 'Аудиокнига открыта во встроенном браузере Claude.'
+          // Названия и авторы — как у источника, без перевода (keep); источник переводим («Викитека» → «Wikisource»)
+          const entries = state.items.flatMap((x, k) => [
+            keep(
+              Button({
+                key: `arcade-${short}-item-${k}`,
+                label: x.title.length > 100 ? `${x.title.slice(0, 99)}…` : x.title,
+                ...(k === 0 ? { autoFocus: true } : {}),
+                onPress: () => openWindow(`${kind}:${x.ref}`, opened),
               }),
-            ]),
+            ),
+            keep(dim(`  ${[x.author, tr(BOOK_SOURCES[x.source] ?? x.source, lang)].filter(Boolean).join(' · ')}`)),
+          ])
+          const retry = () => (bk[kind].items.length ? loadBooks($, kind, { more: true }) : loadBooks($, kind, { section: state.section, q: state.q }))
+          items = [
+            Button({ key: 'arcade-back', label: '← Назад', ...(entries.length ? {} : { autoFocus: true }), onPress: open(page) }),
+            gap,
+            state.q ? keep(Text({ bold: true, children: [`${tr('Поиск', lang)}: ${state.q}`] })) : Text({ bold: true, children: [BOOK_SECTIONS[state.section] ?? BOOK_SECTIONS.popular] }),
+            keep(dim(`${tr(kind === 'book' ? 'Книги' : 'Аудиокниги', lang)} · ${BOOK_LANGS[bk.lang]}`)),
+            gap,
+            ...(entries.length ? [desktop ? tiles(entries, 44) : Box({ flexDirection: 'column', children: entries })] : []),
+            ...(state.loading && !entries.length ? [Text({ children: ['Загружаю список…'] })] : []),
+            ...(!state.loading && !state.error && !entries.length ? [Text({ children: ['Ничего не нашлось — попробуй другое слово или язык.'] })] : []),
+            ...(state.error
+              ? [
+                  gap,
+                  Text({ color: 'warning', children: [`Список не загрузился: ${state.error}`] }),
+                  Button({ key: `arcade-${short}-retry`, label: 'Ещё раз', onPress: retry }),
+                ]
+              : state.more
+                ? [gap, Button({ key: `arcade-${short}-more`, label: state.loading ? 'Загружаю…' : 'Ещё', onPress: () => !bk[kind].loading && loadBooks($, kind, { more: true }) })]
+                : []),
+            ...(entries.length && (builtin || platform)
+              ? [gap, dim(`${kind === 'book' ? 'Книги' : 'Аудиокниги'} открываются ${builtin ? 'во встроенном браузере Claude' : whereText()}.`)]
+              : []),
             ...noticeLines,
             ...hint,
           ]
         } else {
-          const list = books.filter((g) => g.genre === genre)
-          const focusId = list.some((g) => g.id === lastGame) ? lastGame : list[0]?.id
+          // Вернулись из списка раздела — фокус на этом разделе, из поиска — на поле, из языков — на языке
+          const fromList = menuFrom === `${page}:list`
+          const focusSection = menuFrom === `${page}:lang` || (fromList && state.q) ? null : fromList ? state.section || 'popular' : 'popular'
+          const search = (value) => {
+            const q = bookQuery(value)
+            if (q.length < MIN_BOOK_QUERY) {
+              libraryNotice = 'Напиши хотя бы две буквы.'
+              $.ui.invalidate('ui.render')
+              return
+            }
+            toList({ q })()
+          }
           items = [
-            Button({ key: 'arcade-back', label: '← Назад', onPress: open(shelfMenu) }),
+            back,
             gap,
-            ...gameRows(list, focusId),
+            tiles([
+              Button({ key: `arcade-${short}-lang`, label: `Язык книг: ${BOOK_LANGS[bk.lang]}`, ...(menuFrom === `${page}:lang` ? { autoFocus: true } : {}), onPress: open(`${page}:lang`) }),
+              dim('  разделы и поиск — на этом языке'),
+              Button({
+                key: `arcade-${short}-mine`,
+                label: kind === 'book' ? 'Мои книги' : 'Мои аудиокниги',
+                onPress: () => openWindow(`mine:${kind}`, kind === 'book' ? '«Мои книги» открыты во встроенном браузере Claude.' : '«Мои аудиокниги» открыты во встроенном браузере Claude.'),
+              }),
+              dim(kind === 'book' ? '  скачанные в окне Arcade — читать без интернета' : '  скачанные в окне Arcade — слушать без интернета'),
+            ]),
+            gap,
+            Input({ key: `arcade-${short}-find`, label: 'Найти', placeholder: 'название или автор', ...(fromList && state.q ? { autoFocus: true } : {}), onSubmit: search }),
+            section('Разделы'),
+            tiles(
+              Object.entries(BOOK_SECTIONS).map(([id, label]) =>
+                Button({ key: `arcade-${short}-sec-${id}`, label, ...(id === focusSection ? { autoFocus: true } : {}), onPress: toList({ section: id }) }),
+              ),
+              20,
+            ),
+            gap,
+            dim(
+              kind === 'book'
+                ? 'Книги — из Project Gutenberg и Викитеки, свободные от авторских прав. Arcade их не хранит: книга открывается в окне, скачать её к себе можно там же.'
+                : 'Аудиокниги — из LibriVox: их читают вслух добровольцы, записи свободны. Arcade их не хранит: слушать можно сразу в окне, скачать — там же.',
+            ),
             ...noticeLines,
             ...hint,
           ]
@@ -6688,7 +6843,10 @@ export function register(on) {
             }),
             dim(`  ${consoleNote(c)}`),
           ])
+        // Книги и аудиокниги — свои экраны, не вкладки каталога. Старый каталог сайта (до 0.31) держал их в группах
+        // reading и listening — в «Играть» их не показываем
         const reading = menuTabs().filter((c) => ['reading', 'books', 'listening', 'audiobooks'].includes(c.id))
+        const bookTile = (id, label, note) => [Button({ key: `arcade-menu-${id}`, label, ...(menuFrom === id || menuFrom?.startsWith(`${id}:`) ? { autoFocus: true } : {}), onPress: open(id) }), dim(note)]
         // YouTube, статьи и подкасты: общие темы подбираем заново, если их нет, сменился язык или они устарели
         const openTopics = (id) => () => {
           open(id)()
@@ -6805,9 +6963,9 @@ export function register(on) {
                 if (!tw.at) loadTwitch($)
               },
             }),
-            dim('  игры, книги, аудиокниги и каналы Twitch'),
+            dim('  игры и каналы Twitch'),
             Button({ key: 'arcade-menu-favorites', label: '★ Избранное', ...(menuFrom === 'favorites' ? { autoFocus: true } : {}), onPress: open('favorites') }),
-            dim(favCount ? `  отмечено: ${favCount}` : '  отмечай ☆ игры и книги — они соберутся здесь'),
+            dim(favCount ? `  отмечено: ${favCount}` : '  отмечай ☆ игры — они соберутся здесь'),
           ]),
           ...foldable('play', 'Играть', [
             ...tabItems(menuTabs().filter((c) => !reading.includes(c))),
@@ -6820,9 +6978,10 @@ export function register(on) {
             }),
             dim(`  ${mine.length ? `${mine.length} ${plural(mine.length, 'игра', 'игры', 'игр')}` : 'добавь свой файл ROM'}`),
           ]),
-          // Книги и аудиокниги из каталога, за ними — свежие статьи и подкасты по теме работы агента
+          // Книги и аудиокниги с открытых библиотек, за ними — свежие статьи и подкасты по теме работы агента
           ...foldable('read', 'Читать и слушать', [
-            ...tabItems(reading),
+            ...bookTile('books', 'Книги', '  классика на любом языке: разделы и поиск'),
+            ...bookTile('audiobooks', 'Аудиокниги', '  LibriVox: слушать сразу или скачать'),
             ...topicTile('articles', 'Статьи', '  свежие статьи по теме работы агента'),
             ...topicTile('podcasts', 'Подкасты', '  свежие выпуски подкастов по теме работы агента'),
           ]),

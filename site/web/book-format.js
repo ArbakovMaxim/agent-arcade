@@ -1,5 +1,5 @@
 // Книги Arcade: разбор EPUB, FB2 и TXT в общий вид — { title, author, lang, chapters: [{ title, paragraphs }] }.
-// Один и тот же файл работает в браузере (окно Arcade: свои книги) и в Node (tools/books: сборка книг каталога).
+// Один и тот же файл работает в браузере (окно Arcade: книги из открытых библиотек и свои) и в Node (тесты).
 // Без библиотек: свой разбор ZIP для EPUB, распаковка — функцией inflateRaw, которую передаёт вызывающий
 // (в браузере — DecompressionStream, в Node — zlib.inflateRawSync).
 ;(function (root) {
@@ -273,13 +273,7 @@
         // запись оглавления, указывающая на картинку («Marley’s Ghost»), — не начало главы
         if (tag && !/^(img|figure|svg|image)$/i.test(tag[1]) && !/class\s*=\s*["'][^"']*\b(fig\w*|illus\w*|image|caption)\b/i.test(tag[0])) anchors.push({ entry, doc, at: tag.index })
       })
-      for (const m of body.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>|<div\b[^>]*class="[^"]*\b(?:stanza|verse)\b[^"]*"[^>]*>([\s\S]*?)<\/div>|<(p|h[4-6]|li|dd)\b[^>]*>([\s\S]*?)<\/\4>|<pre\b[^>]*>([\s\S]*?)<\/pre>/gi)) {
-        // строфа Gutenberg: строки — <span> или <div class="line">, между ними — перенос; в <pre> перенос исходника — строка
-        const raw = m[6] !== undefined ? m[6].replace(/\r?\n/g, '<br/>') : m[3] !== undefined ? m[3].replace(/<\/(span|div)>\s*(<br\s*\/?>)?/gi, '<br/>') : (m[2] ?? m[5])
-        const verseAt = m[4] && /data-verse="(\d+)"/.exec(m[0])
-        const text = verseAt ? verses[Number(verseAt[1])] : clean(raw)
-        if (text) blocks.push({ head: Boolean(m[1]), text, doc, end: m.index + m[0].length })
-      }
+      for (const b of htmlBlocks(body, verses)) blocks.push({ ...b, doc })
       // В файле нет заголовков — название главы из его <title> (так делает ws-export: «ДІЯ ПЕРША»)
       const docTitle = clean((html.match(/<title[^>]*>([\s\S]*?)<\/title>/i) || [])[1] || '')
       const mine = blocks.slice(before)
@@ -421,6 +415,19 @@
     return out + html.slice(from)
   }
 
+  // Заголовки, абзацы и строфы HTML по порядку: { head, text, end } — общее для EPUB и Викитеки
+  function htmlBlocks(body, verses) {
+    const out = []
+    for (const m of body.matchAll(/<(h[1-3])\b[^>]*>([\s\S]*?)<\/\1>|<div\b[^>]*class="[^"]*\b(?:stanza|verse)\b[^"]*"[^>]*>([\s\S]*?)<\/div>|<(p|h[4-6]|li|dd)\b[^>]*>([\s\S]*?)<\/\4>|<pre\b[^>]*>([\s\S]*?)<\/pre>/gi)) {
+      // строфа Gutenberg: строки — <span> или <div class="line">, между ними — перенос; в <pre> перенос исходника — строка
+      const raw = m[6] !== undefined ? m[6].replace(/\r?\n/g, '<br/>') : m[3] !== undefined ? m[3].replace(/<\/(span|div)>\s*(<br\s*\/?>)?/gi, '<br/>') : (m[2] ?? m[5])
+      const verseAt = m[4] && /data-verse="(\d+)"/.exec(m[0])
+      const text = verseAt ? verses[Number(verseAt[1])] : clean(raw)
+      if (text) out.push({ head: Boolean(m[1]), text, end: m.index + m[0].length })
+    }
+    return out
+  }
+
   const EPUB_HEADING = /^(дія|розділ|частина|пісня|пролог|епілог|сцена|ява|глава|действие|песнь|canto|act|scene)(?=[\s.:—-]|$)[^.!?]{0,40}$/i
   // Стихи построчными абзацами (каждая строка — свой <p>): подряд 4 и больше коротких строк — строфы по 14 строк
   function verse(blocks) {
@@ -434,6 +441,224 @@
       } else out.push(blocks[i++])
     }
     return out
+  }
+
+  // --- Викитека: страницы из API (action=parse) ---------------------------------------------------------------------
+  // Книгу собирает окно: главная страница, при списке редакций — редакция, главы — подстраницами. Здесь только разбор
+  // HTML; скачивает reader.js. Служебное: шапка и навигация, лицензия, сноски и примечания, «править», номера страниц
+  // скана, оглавление
+  const WIKI_JUNK = /\b(class|id)\s*=\s*"[^"]*\b(ws-noexport|ws-header|wst-header|headertemplate|header_notes|licensetemplate|licenseContainer|navbox|mw-editsection|reference|references|reflist|mw-references-wrap|pagenum|ws-pagenum|noprint|metadata|catlinks|searchaux|thumb|gallery)\b[^"]*"/i
+  // Оглавление: в нём ссылки на главы (английская — блок wst-auxtoc), из текста главы — долой
+  const WIKI_TOC = /\b(class|id)\s*=\s*"[^"]*\b(toc|wst-auxtoc)\b[^"]*"/i
+  // Элемент целиком, считая вложенность одноимённых тегов
+  function dropTags(html, junk) {
+    const open = /<(div|span|table|ol|ul|sup|dl|p|center|small|figure)\b([^>]*)>/gi
+    let out = ''
+    let from = 0
+    let m
+    while ((m = open.exec(html))) {
+      if (!junk.test(m[2])) continue
+      const tags = new RegExp(`<\\/?${m[1]}\\b[^>]*>`, 'gi')
+      tags.lastIndex = m.index
+      let depth = 0
+      let end = html.length
+      let t
+      while ((t = tags.exec(html))) {
+        if (t[0].endsWith('/>')) continue
+        depth += t[0][1] === '/' ? -1 : 1
+        if (depth === 0) {
+          end = t.index + t[0].length
+          break
+        }
+      }
+      out += html.slice(from, m.index)
+      from = end
+      open.lastIndex = end
+    }
+    return out + html.slice(from)
+  }
+  function wikiClean(html) {
+    const h = String(html)
+      .replace(/&#95;/g, '_') // «header&#95;notes» в классах
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+      .replace(/<(link|meta)\b[^>]*>/gi, '')
+    return dropTags(h, WIKI_JUNK)
+  }
+  // Ссылки на страницы книг по порядку, без повторов: { title, text }. Красные ссылки и другие пространства
+  // («Автор:», «Индекс:») — мимо
+  function wikiLinks(html) {
+    const out = []
+    const seen = new Set()
+    for (const m of String(html).matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
+      if (!/\bhref\s*=\s*"\/wiki\//i.test(m[1]) || /\bclass\s*=\s*"[^"]*\bnew\b/i.test(m[1])) continue
+      const title = decode((m[1].match(/\btitle\s*=\s*"([^"]*)"/i) || [])[1] || '')
+      if (!title || /^[^\s/:]{1,20}:/.test(title) || seen.has(title)) continue
+      seen.add(title)
+      out.push({ title, text: clean(m[2]) })
+    }
+    return out
+  }
+  const VERSIONS = /(Список редакций|Версії роботи|Versions of|Versionen von|Versions de|Versiones de|Versioni di|Versões de|Wersje)/i
+  // Что на странице root: { kind: 'edition', page } — список редакций, идём в редакцию (в русской — не дореформенную);
+  // { kind: 'parts', pages: [{ page, title }] } — главы подстраницами; { kind: 'text', html } — сам текст
+  function wikiPage(raw, root) {
+    const html = wikiClean(raw)
+    const links = wikiLinks(html).filter((l) => l.title !== root)
+    const subs = links.filter((l) => l.title.startsWith(`${root}/`))
+    const words = clean(html).split(/\s+/).filter(Boolean).length
+    const head = clean(String(raw).replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')).slice(0, 3000)
+    // «/1960 (СО)», «/ПСС 1989 (СО)», «/Современник 1837 (ДО)»: год или пометка орфографии
+    const edition = (l) => {
+      const s = l.title.slice(root.length + 1)
+      return !s.includes('/') && /(^|\s)\d{4}(?=[\s.,)]|$)|\((ДО|СО|ВТ)\)/.test(s)
+    }
+    // Редакции подстраницами («/1960 (СО)») — или, без подстраниц, список редакций в шапке со ссылками на книги рядом
+    if (words < 3000 && (subs.length ? subs.every(edition) : VERSIONS.test(head))) {
+      const base = root.replace(/\s*\([^()]*\)$/, '').toLowerCase().slice(0, 8)
+      const same = subs.length ? subs : links.filter((l) => l.title.toLowerCase().startsWith(base))
+      const pick = same.find((l) => !/(\(|\/)ДО\)?$/.test(l.title)) ?? same[0]
+      if (pick) return { kind: 'edition', page: pick.title }
+    }
+    // Главы — листья: «Volume 1» не глава, если есть «Volume 1/Chapter 1». Название — текст ссылки в оглавлении
+    // («Глава I. Сержант гвардии»), перед ним — путь: «Volume 1. Chapter 1»
+    const leaves = subs.filter((l) => !subs.some((x) => x.title.startsWith(`${l.title}/`)))
+    if (leaves.length >= 2 && words < 3000)
+      return {
+        kind: 'parts',
+        pages: leaves.map((l) => {
+          const path = l.title.slice(root.length + 1).split('/')
+          return { page: l.title, title: [...path.slice(0, -1), l.text && l.text.length <= 120 ? l.text : path.at(-1)].join('. ') }
+        }),
+      }
+    return { kind: 'text', html: dropTags(html, WIKI_TOC) }
+  }
+  // Книга из страниц: [{ title, html }] — html после wikiClean; title главы ставим, если страница не начинается
+  // с заголовка
+  function fromWiki(pages, meta = {}) {
+    let blocks = []
+    for (const page of pages) {
+      const verses = []
+      const body = poems(page.html, verses)
+        // <div> без вложенных — абзац («ГЛАВА I» по центру, подпись под эпиграфом); ячейки таблиц — абзацы
+        .replace(/<div\b[^>]*>((?:(?!<\/?(?:div|p)\b)[\s\S])*?)<\/div>/gi, '<p>$1</p>')
+        .replace(/<t[dh]\b[^>]*>/gi, '<p>')
+        .replace(/<\/t[dh]>/gi, '</p>')
+      const mine = htmlBlocks(body, verses)
+      // Заголовок главы в тексте абзацем («Глава I» / «Сержант гвардии» по центру, «PRIDE & PREJUDICE.» / «CHAPTER I.»):
+      // короткие строки до него — долой, сам — заголовком из оглавления; нет его — заголовок из оглавления сверху
+      const norm = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+      const own = norm(page.title || '')
+      const at = page.title && !mine[0]?.head ? mine.slice(0, 3).findIndex((x, i) => mine.slice(0, i + 1).every((y) => y.text.length <= 120) && norm(x.text) && (own.includes(norm(x.text)) || norm(x.text).includes(own) || HEADING[0].test(x.text) || EPUB_HEADING.test(x.text))) : -1
+      if (at >= 0) mine.splice(0, at + 1, { head: true, text: page.title })
+      else if (page.title && !mine[0]?.head) mine.unshift({ head: true, text: page.title })
+      blocks.push(...mine)
+    }
+    const realHeadings = blocks.some((x) => x.head)
+    for (const x of blocks) if (!x.head && x.text.length <= 60 && !x.text.includes('\n') && (EPUB_HEADING.test(x.text) || (!realHeadings && HEADING.some((re) => re.test(x.text))))) x.head = true
+    blocks = verse(shape(blocks))
+    return { title: meta.title || '', author: meta.author || '', lang: meta.lang || '', chapters: split(toChapters(blocks, meta.title || '…')) }
+  }
+
+  // --- Чистка: служебный текст источников --------------------------------------------------------------------------
+  const words = (c) => c.paragraphs.join(' ').split(/\s+/).length
+  // Оглавление в начале: подряд короткие строки
+  const tocLike = (c) => c.paragraphs.length >= 2 && c.paragraphs.every((p) => p.length <= 60) && words(c) < 150
+
+  // Викитека: служебная строка, главы о самом издании, сноски, «----» как продолжение текста
+  const WIKISOURCE_JUNK = /^(об этом электронном издании|про це електронне видання|about this digital edition|примечани[яе]|приміт(ки|ка)|см\.\s*также|див\.\s*також|оглавление|содержание|зміст|список редакц|джерела|версії роботи)/i
+  const EXPORTED = /^((Экспортировано|Загружено) из Викитеки|(Експортовано|Завантажено) з Вікіджерел|Exported from Wikisource|Downloaded from Wikisource)/i
+  // Выходные данные издательства и год-дата в начале книги
+  const IMPRINT = /(Головліт|Укрголовліт|Окрліт|Окрлит|Укрліт|Книгоспілка|Друкарня|Державне видавництво|Держвидав|Зам\.\s*№|Тираж|Наклад|Типографія|Типография|Бібліографічний опис|Видавництво|ВИДАННЯ|Ціна \d|^стор\.|^\[\d{3}[\d.–-]*\]$|^\d{4,6}\.?$)/i
+  // Текст Викитеки о лицензии и навигация по частям
+  const WIKI_NOTE = /(суспільному надбанні|общественном достоянии|public domain|Автор помер у|Автор умер в|Ця робота|This work is|Термін дії авторських прав|Срок действия авторских прав)/i
+  const WIKI_NAV = /^[•·|]?\s*(([IVXLC]+|\d+)\s*[•·|]\s*)+([IVXLC]+|\d+)$|^(Частини|Глави|Розділи|Зміст|Части|Главы):?$/i
+  const EDITORIAL = /^(Впервые напечатано|Вперше надруковано|Впервые опубликовано|Вперше опубліковано)/i
+  function cleanWikisource(book) {
+    // без \b: в JavaScript он не работает рядом с кириллицей
+    const EDITION = /^(твори|зібрання творів|собрание сочинений)(?=[\s/.,—-]|$)|(^|[\s/])том\s+[ivxlc\d]/i
+    let chapters = book.chapters.map((c) => ({
+      title: EDITION.test(c.title) ? book.title : c.title.replace(/\.?\s*автор\s+.+$/i, '').trim() || book.title,
+      paragraphs: c.paragraphs
+        // По строкам: служебные строки склеиваются со стихами титула в одну «строфу»
+        .map((p) => p.split('\n').filter((line) => !EXPORTED.test(line) && !WIKI_NAV.test(line) && !(line.length < 400 && WIKI_NOTE.test(line)) && !(line.length < 200 && IMPRINT.test(line))).join('\n').trim())
+        .filter((p) => p && !EXPORTED.test(p) && !p.startsWith('↑') && !WIKI_NAV.test(p) && !(p.length < 400 && WIKI_NOTE.test(p)) && !(p.length < 200 && IMPRINT.test(p)))
+        .map((p) => p.replace(/\[\d{1,3}\]/g, '').replace(/[ \t]+([,.;:!?»)])/g, '$1').replace(/^(\d{1,3})\.(?=\p{L})/gmu, '$1. ').trim())
+        .filter(Boolean),
+    }))
+    // Сноска редакции в начале главы («1 Глава эта не включена… — Ред.») — и её цифра в конце заголовка
+    for (const c of chapters) {
+      const n = (c.title.match(/\s(\d{1,2})$/) || [])[1]
+      if (n && c.paragraphs[0] && c.paragraphs[0].startsWith(`${n} `) && /Ред\.?\s*$/.test(c.paragraphs[0])) {
+        c.paragraphs.shift()
+        c.title = c.title.slice(0, -n.length).trim()
+      }
+    }
+    chapters = chapters.filter((c) => c.paragraphs.length && !WIKISOURCE_JUNK.test(c.title) && !/список редакций|словни(к|чок)/i.test(c.title) && !c.paragraphs.every((p) => p.startsWith('↑')))
+    const merged = []
+    for (const c of chapters) {
+      if (/^[-—–*\s]+$/.test(c.title) && merged.length) merged.at(-1).paragraphs.push(...c.paragraphs)
+      else merged.push(c)
+    }
+    // Титул в начале: короткая глава из одних коротких строк (год, название, «Драма в п’яти діях»)
+    const titlePage = (c) => words(c) < 60 && c.paragraphs.every((p) => p.split('\n').every((line) => line.length < 80))
+    while (merged.length > 1 && (tocLike(merged[0]) || titlePage(merged[0]))) merged.shift()
+    // Начало первой главы: год-дата («1911») и выходные данные («ХАРКІВ КНИГОСПІЛКА 1925», «Укрголовліт № …»)
+    const first = merged[0]
+    while (first && first.paragraphs.length > 1 && (/^\d{4}(\s*(р|г)\.?)?$/.test(first.paragraphs[0]) || IMPRINT.test(first.paragraphs[0]) || (first.paragraphs[0].length < 40 && first.paragraphs[0] === first.paragraphs[0].toUpperCase() && /[А-ЯЁЇІЄҐ]{3}/.test(first.paragraphs[0])))) first.paragraphs.shift()
+    // Хвост: служебные строки электронных библиотек
+    const last = merged.at(-1)
+    while (last && last.paragraphs.length > 1 && (EDITORIAL.test(last.paragraphs.at(-1)) || /(https?:\/\/|^Версия \d|Сверка произведена|Электронная Библиотека)/i.test(last.paragraphs.at(-1)))) last.paragraphs.pop()
+    return { ...book, chapters: merged }
+  }
+
+  // Project Gutenberg: служебные абзацы, сноски изданий, титул и оглавление до первой настоящей главы, «THE END» и
+  // выходные данные типографии в конце
+  const GUTENBERG_JUNK = /(Project Gutenberg|^Produced by|\btranscriber\b|estimation of the difference in the original|cover art included with this e-?book|granted to the public domain|^This e-?book (is|was)|^This e-?text was|^The book cover and spine|^E-?text prepared by|^Updated editions will replace|^Note:\s.*(etext|e-text|ebook)|^\S+\.(jpe?g|png|gif)(\s*\(\d+K\))?$|^Full Size$|^\d+ \(return\))/i
+  function cleanGutenberg(book) {
+    let chapters = book.chapters
+      // Шапка («The Project Gutenberg eBook of …») и лицензия («THE FULL PROJECT GUTENBERG™ LICENSE») главами — долой
+      .filter((c) => !/project gutenberg|transcriber['’]?s? notes?|^(table of )?contents\.?$|^(list of )?illustrations\.?$|^introduction \(one page\)$/i.test(c.title))
+      .map((c) => ({
+        ...c,
+        paragraphs: c.paragraphs
+          .filter((p) => !GUTENBERG_JUNK.test(p) && !/^\[\d{1,3}\]/.test(p) && !/^(Title|Author|Release date|Language|Credits|Most recently updated|Original publication|Illustrator|Translator):/i.test(p)) // сноски изданий и строки шапки — долой
+          .map((p) => p.replace(/\s*\[\d{1,3}\]/g, '').replace(/\s*\(return\)/g, '').replace(/\s*\[Copyright \d{4}[^\]]*\]/gi, '').trim()) // номера сносок, «[Copyright 1894 by …]»
+          .filter(Boolean),
+      }))
+      .filter((c) => c.paragraphs.length)
+    // Оглавление внутри первых глав: «CONTENTS» и короткие строки за ним
+    for (const c of chapters.slice(0, 3)) {
+      const at = c.paragraphs.findIndex((p) => /^(table of )?contents\.?$/i.test(p))
+      if (at < 0) continue
+      let end = at + 1
+      while (end < c.paragraphs.length && c.paragraphs[end].length < 80) end++
+      c.paragraphs.splice(at, end - at)
+    }
+    // Выходные данные перед текстом («CHISWICK PRESS», «Thomas Y. Crowell & Co.», «Copyright 1887», «with a Preface by»):
+    // короткая первая глава с такими признаками — не текст книги (а предисловие автора без них остаётся)
+    const IMPRINT_EN = /(\bPRESS\b|Publisher|Copyright \d|Preface by|Illustrations by|Translated by|&\s*Co\.|Astor Place)/i
+    if (chapters.length > 1 && words(chapters[0]) < 300 && IMPRINT_EN.test(chapters[0].paragraphs.join(' '))) chapters.shift()
+    else if (chapters[0]) {
+      const p = chapters[0].paragraphs
+      while (p.length > 1 && p[0].length < 400 && IMPRINT_EN.test(p[0])) p.shift()
+      if (IMPRINT_EN.test(chapters[0].title)) chapters[0].title = book.title
+    }
+    // Титул в начале первой главы: название заглавными, «by …»
+    if (chapters[0]) {
+      const p = chapters[0].paragraphs
+      while (p.length > 1 && p[0].length < 80 && (/^by\s/i.test(p[0]) || (p[0] === p[0].toUpperCase() && /[A-Z]{3}/.test(p[0])))) p.shift()
+    }
+    chapters = chapters.filter((c) => c.paragraphs.length)
+    // Титул в начале: короткая глава из одних коротких строк (название, автор, издатель) или с «Contents»
+    const titlePage = (c) => tocLike(c) || /\bcontents\b/i.test(c.paragraphs.join(' ').slice(0, 400)) || (words(c) < 150 && c.paragraphs.every((p) => p.length < 80 && !p.includes('\n')))
+    while (chapters.length > 1 && titlePage(chapters[0])) chapters.shift()
+    const last = chapters.at(-1)
+    // Выходные данные типографии («CHISWICK PRESS: …») и «THE END»
+    while (last && last.paragraphs.length > 1 && last.paragraphs.at(-1).length < 200 && /(PRESS|PRINTED BY|PRINTERS|LONDON:|NEW YORK:|BOSTON:)/.test(last.paragraphs.at(-1))) last.paragraphs.pop()
+    if (last && /^THE END\.?$/i.test(last.paragraphs.at(-1) || '')) last.paragraphs.pop()
+    for (const c of chapters) c.title = c.title.replace(/\b(CHAPTER|Chapter|STAVE|BOOK|PART)([IVXLC]+|\d+)\b/g, '$1 $2') // «CHAPTERXXVII.»
+    return { ...book, chapters }
   }
 
   // --- Общее: по расширению и содержимому -----------------------------------------------------------------------
@@ -473,5 +698,5 @@
     return { chapters: book.chapters.length, words }
   }
 
-  root.ArcadeBookFormat = { fromTxt, fromFb2, fromEpub, parse, check, textOf }
+  root.ArcadeBookFormat = { fromTxt, fromFb2, fromEpub, fromWiki, wikiClean, wikiLinks, wikiPage, cleanWikisource, cleanGutenberg, parse, check, textOf }
 })(typeof window !== 'undefined' ? window : globalThis)
