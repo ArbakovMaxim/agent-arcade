@@ -6931,6 +6931,13 @@ test('Desktop: доска — «Новая карточка» без подпи�
   const colNew = await ui.find({ key: await noteKey(ui, 'arcade-col-new-') })
   expect(colNew).toMatchObject({ props: { placeholder: 'Новая колонка' } })
   expect(colNew.props.label).toBeUndefined()
+  // Строки колонок и «Общий доступ» не слипаются: между ними промежуток по высоте
+  const cols = await ui.find({ key: 'board-cols' })
+  expect(cols).toMatchObject({ props: { flexDirection: 'column', rowGap: 'sm' } })
+  for (const key of ['col-row-todo', 'col-row-done', await noteKey(ui, 'arcade-col-new-')]) expect(JSON.stringify(cols)).toContain(`"${key}"`)
+  const shareBlock = await ui.find({ key: 'board-share' })
+  expect(shareBlock).toMatchObject({ props: { flexDirection: 'column', rowGap: 'sm' } })
+  expect(JSON.stringify(shareBlock)).toContain('"card-arcade-board-login"')
   // «Отдать Claude», «Удалить доску» и «Войти через GitHub» — карточки со своими иконками и описанием
   const [send, remove, login] = await Promise.all(['arcade-board-send', 'arcade-board-delete', 'arcade-board-login'].map(async (key) => JSON.stringify(await ui.find({ key: `card-${key}` }))))
   expect(send).toContain('Claude получит доску с карточками и сможет добавлять, править и переносить их.')

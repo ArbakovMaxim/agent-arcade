@@ -1,5 +1,9 @@
 # Changelog · Список изменений
 
+## 0.32.2 — доска проектов в Desktop: строки колонок и «Общий доступ» больше не слипаются · project board in Desktop: the column rows and “Sharing” no longer stick together
+
+- In Desktop the column rows, “New column” and the lines of “Sharing” (the hint, the friends to tick and the tiles) have room between them; friends that wrap to a second line do too · в Desktop между строками колонок, «Новой колонкой» и строками «Общего доступа» (подсказка, друзья галочками и плитки) появился промежуток по высоте; у друзей, перенесённых на вторую строку, тоже
+
 ## 0.32.1 — доска проектов в Desktop: в колонке можно вписать карточку, поля колонок ровные, действия — плитками · project board in Desktop: a card can be typed in a column, the column fields line up, actions are tiles
 
 - In a board column the “New card” field has no label on its left any more — the hint is inside the field, so it takes the column's whole width instead of a couple of letters · в колонке доски у поля «Новая карточка» больше нет подписи слева — подсказка в самом поле, и оно занимает всю ширину колонки, а не пару букв
