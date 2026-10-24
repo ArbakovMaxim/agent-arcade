@@ -551,6 +551,12 @@ const EXACT = {
   'друзья, чаты и аккаунт': 'friends, chats and account',
   'блокнот и доска проектов': 'notebook and project board',
   'Убранного раздела нет в главном меню совсем; «Ещё» с настройками остаётся всегда.': 'A hidden section is gone from the main menu entirely; “More” with the settings always stays.',
+  // Приветствие при первом запуске
+  'Добро пожаловать в Arcade!': 'Welcome to Arcade!',
+  'Пока Claude работает, здесь можно играть, читать и слушать, смотреть видео, общаться с друзьями и вести заметки.': 'While Claude works, you can play here, read and listen, watch videos, chat with friends and keep notes.',
+  'Выбери, что показывать в главном меню: нажатие убирает раздел или возвращает его.': 'Choose what to show in the main menu: pressing a section hides it or brings it back.',
+  'Язык': 'Language',
+  'Передумаешь — разделы меняются в «Ещё → Настройки».': 'Changed your mind? Sections can be changed in “More → Settings”.',
   'Открывать: здесь, в панели': 'Open in: here, in the pane',
   'Открывать: окно браузера по умолчанию': 'Open in: default browser window',
   'Открывать: встроенный браузер Claude': "Open in: Claude's built-in browser",
