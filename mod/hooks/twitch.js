@@ -1,7 +1,7 @@
 // Twitch в Arcade: свои каналы человека и каталог Arcade — английские эфиры о программировании, технике, науке и
 // ретро-играх. Кто в эфире, мод спрашивает у сайта Arcade (/api/twitch): ключи Twitch — у сайта, регистрация не нужна.
 // Свои каналы хранятся в $.store. Смотреть — на странице /live сайта: плеер Twitch и список каналов. Здесь нет вызовов
-// Claude Code — сеть и хранилище в hooks/register.js.
+// Claude Code — сеть и хранилище в hooks/app/watch.js.
 import { SITE, siteUrl } from './catalog.js'
 import { clean, jsonFrom } from './youtube.js'
 

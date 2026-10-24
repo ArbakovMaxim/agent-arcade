@@ -115,7 +115,12 @@ const empty = (o) => Object.values(o.exact).filter((v) => !v).length + Object.va
 
 // --- Мод ---------------------------------------------------------------------------------------------------------
 const { tr } = await import(pathToFileURL(path.join(ROOT, 'mod', 'hooks', 'i18n.js')).href)
-const modFiles = fs.readdirSync(path.join(ROOT, 'mod', 'hooks')).filter((f) => f.endsWith('.js') && f !== 'i18n.js').map((f) => path.join(ROOT, 'mod', 'hooks', f))
+// Код мода — hooks/ с подпапками app/ и screens/; переводы, эмулятор и игры Денди не нужны
+const modFiles = fs
+  .readdirSync(path.join(ROOT, 'mod', 'hooks'), { recursive: true })
+  .map((f) => f.replaceAll('\\', '/'))
+  .filter((f) => f.endsWith('.js') && f !== 'i18n.js' && !/^(locales|vendor|roms)\//.test(f))
+  .map((f) => path.join(ROOT, 'mod', 'hooks', f))
 // Фразы, которые код собирает сам (например «a Chrome window»), — дополнительно из templates.json: modExact и siteExact
 const modSource = collect(modFiles, (s) => tr(s, 'en'), [...dictionary(path.join(ROOT, 'mod', 'hooks', 'i18n.js')), ...(templates.modExact ?? [])])
 for (const lang of LANGS) {

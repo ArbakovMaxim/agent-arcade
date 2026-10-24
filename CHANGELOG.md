@@ -1,5 +1,10 @@
 # Changelog · Список изменений
 
+## 0.33.1 — внутри мода: код панели и помощников разложен по файлам, поведение то же · inside the mod: the pane and helper code is split into files, behaviour unchanged
+
+- hooks/register.js now only subscribes to Claude Code events; the mod state and the helpers for each section moved to hooks/app/, and every pane screen — the main menu, games, settings, profile, friends, chats, video, books, notes, boards and the game itself — to its own file in hooks/screens/ · в hooks/register.js остались только подписки на события Claude Code; состояние мода и помощники разделов переехали в hooks/app/, а каждый экран панели — главное меню, игры, настройки, профиль, друзья, чаты, видео, книги, заметки, доски и сама игра — в свой файл в hooks/screens/
+- Nothing changes for the user: the same screens, keys, settings and tools · для пользователя ничего не меняется: те же экраны, клавиши, настройки и инструменты
+
 ## 0.33.0 — бета: при первом запуске Arcade здоровается и спрашивает, какие разделы показывать в главном меню; README на 13 языках — о бете и о том, что плагин делает на компьютере · beta: on first launch Arcade says hello and asks which sections to show in the main menu; the README in 13 languages covers the beta and what the plugin does on your computer
 
 - The first time you open Arcade, instead of the main menu there is a welcome screen: what Arcade has, the main-menu sections to show or hide with a press, the interface language and “Done”; after “Done” comes the main menu with the sections you chose · при первом запуске Arcade вместо главного меню — приветствие: что в Arcade есть, разделы главного меню, которые нажатием убираются и возвращаются, язык интерфейса и «Готово»; после «Готово» — главное меню с выбранными разделами
