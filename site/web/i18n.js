@@ -336,6 +336,7 @@
     'Видео здесь не играет — открой его на YouTube.': "The video doesn't play here — open it on YouTube.",
     'Условия использования': 'Terms of Use',
     'Конфиденциальность': 'Privacy Policy',
+    'Arcade ищет видео через YouTube API Services': 'Arcade finds videos with YouTube API Services',
     // каналы Twitch из мода
     'Открыть на Twitch': 'Open on Twitch',
     'В адресе нет каналов. Каналы выбирает мод Arcade: /arcade → Twitch.': 'There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.',

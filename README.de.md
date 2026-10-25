@@ -180,6 +180,7 @@ Füge nur Dateien hinzu, an denen du die Rechte hast.
 - **Benachrichtigungen beim Spielen im Fenster.**
 - **Benachrichtigungen bei Nachrichten** — eine Karte unten links, wenn ein Freund im Chat schreibt (unter macOS und Linux eine Systembenachrichtigung).
 - **Tastentest und Tastenbelegung** (Terminal).
+- **Bedingungen und Datenschutz** — Nutzungsbedingungen und Datenschutzerklärung der Website, im gewohnten Browser geöffnet.
 
 ## Was das Plugin auf deinem Computer tut
 
@@ -195,11 +196,14 @@ Arcade läuft in Claude Code mit dem Zugriff, den Claude Code Plugins gibt. Sein
 
 ## Datenschutz
 
+Details stehen in der [Datenschutzerklärung](https://agent-arcade.fefaodessa.workers.dev/privacy) und den [Nutzungsbedingungen](https://agent-arcade.fefaodessa.workers.dev/terms) der Website; im Plugin findest du sie unter *Einstellungen → Bedingungen und Datenschutz*. Kurz gesagt:
+
 - Keine Werbung, keine Analyse, kein Tracking. Spiele, die mit Analyse-Code kamen, wurden davon befreit (siehe die `NOTICE` jedes Spiels).
 - Deine eigenen ROMs, WADs, Bücher und Hörbuchdateien verlassen nie deinen Rechner oder Browser.
 - Listen von Büchern und Hörbüchern sowie Bücher von Project Gutenberg kommen über die Arcade-Website, die sie bei Project Gutenberg, Wikisource und archive.org abruft und nur im Cache von Cloudflare hält — Listen sechs Stunden, ein Buch eine Woche. Wikisource-Seiten und LibriVox-Aufnahmen lädt das Fenster direkt von diesen Websites.
 - Online-Spiele laufen über Arcades Server auf Cloudflare: Nachrichten werden zwischen den Spielern eines Raums weitergeleitet und nicht gespeichert — außer Zügen in Brettspielen, die aufbewahrt werden, damit du zurückkommen kannst; eine Partie, die einen Monat unberührt bleibt, wird gelöscht.
 - Themen schlägt Haiku in deiner eigenen Claude-Code-Sitzung vor; Arcades Website sieht deine Unterhaltung nie — nur eine kurze englische Suchanfrage, wenn du *Eigenes Thema* nutzt. Die Adresse eines Artikels steht hinter `#` und erreicht deshalb nie Arcades Server.
+- Eine Suche über *Eigenes Thema* läuft über die YouTube API Services, und Videos werden im eigenen Player von YouTube abgespielt, deshalb gelten auch die [Nutzungsbedingungen von YouTube](https://www.youtube.com/t/terms) und die [Datenschutzerklärung von Google](https://policies.google.com/privacy). Bis zu sechs Videos wählt Haiku in deiner eigenen Sitzung anhand ihrer Titel und kurzen Beschreibungen aus; Arcades Website hält Suchergebnisse einen Tag lang in einem gemeinsamen Cache.
 - Bist du angemeldet, speichert die Website deine synchronisierten Einstellungen, Favoriten, deinen @Namen, Freunde, Chats und geteilte Boards, dazu Einladungen zum Spielen für 10 Minuten. Wer online ist, hält sie nur im Arbeitsspeicher, anderthalb Minuten lang. Der Sitzungsschlüssel geht nur an Arcades Website.
 - Das Notizbuch bleibt auf deinem Computer. Geteilte Boards werden wie Chats auf Arcades Website gespeichert und sind nicht verschlüsselt. Seiten gehen nur auf deinen Wunsch an Notion oder eine andere App, und zwar über deine eigenen Claude-Connectors.
 - Ein Fehlerbericht enthält deinen Text, die Arcade-Version, wo Arcade geöffnet ist, die Oberflächensprache und das Betriebssystem — sonst nichts; ohne Anmeldung geht er unsigniert raus, und die Website speichert keine Adresse.

@@ -187,6 +187,7 @@
     if (openKind()) {
       root.append(window.ArcadeOpenLibrary.view(openKind(), render))
       root.append(el('div', 'hint', T('↑ ↓ — выбрать книгу · ← → — вкладка · Enter — открыть')))
+      root.append(legal())
       return
     }
 
@@ -227,6 +228,25 @@
     }
     root.append(list)
     root.append(el('div', 'hint', T('↑ ↓ — выбрать игру · ← → — приставка · Enter — играть')))
+    root.append(legal())
+  }
+
+  // В самом низу — мелкой серой строкой, как на /watch: видео Arcade ищет через YouTube API Services, а их правила
+  // требуют ссылок на условия Arcade, политику конфиденциальности и условия YouTube. Открываются в новой вкладке
+  function legal() {
+    const link = (href, text) => {
+      const a = el('a', '', text)
+      a.href = href
+      a.target = '_blank'
+      a.rel = 'noopener'
+      return a
+    }
+    const footer = el('footer', 'legal')
+    footer.append(
+      T('Arcade ищет видео через YouTube API Services'), ' · ', link('terms', T('Условия использования')), ' · ',
+      link('privacy', T('Конфиденциальность')), ' · ', link('https://www.youtube.com/t/terms', 'YouTube Terms of Service'),
+    )
+    return footer
   }
 
   window.addEventListener('keydown', (e) => {
