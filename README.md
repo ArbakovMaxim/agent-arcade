@@ -137,7 +137,7 @@ Each game's card links to its license and source code.
 
 Signing in is optional — without it everything else works as before.
 
-- **Sign in with GitHub** (in *Social*): Arcade shows a code, you enter it on GitHub's page in your regular browser. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
+- **Sign in with GitHub** (in *Social*): GitHub’s sign-in page opens in your regular browser; confirm there, then press *Sign in* on Arcade’s page — its code should match the one in the panel. If signing in through the browser doesn’t work, use *Sign in with a code*: Arcade shows a code, you enter it on GitHub’s page. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
 - **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded and hidden sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
 - **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
 - **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.

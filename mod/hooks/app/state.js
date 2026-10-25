@@ -214,8 +214,9 @@ export const searchCache = new Map() // «youtube:запрос» → { at, found
 // Twitch, каталог Arcade; at — когда спрашивали сайт, error — что ответил сайт, note — заметка под полем «Добавить
 // канал»; request — номер последнего вопроса: ответ старого вопроса, пришедший позже нового, не нужен
 S.tw = { channels: [], info: {}, missing: new Set(), catalog: [], at: 0, loading: false, error: '', note: '', request: 0 }
-// Аккаунт: вход через GitHub (session — { token, user } из $.store или null), вход по коду, который идёт сейчас (flow —
-// { device, code, url, interval, until } или null), starting — просим код у сайта, заметка в меню аккаунта, идёт ли
+// Аккаунт: вход через GitHub (session — { token, user } из $.store или null), вход, который идёт сейчас (flow — кнопкой
+// через сайт { web: true, state, key, mark, url, interval, until }, по коду { device, code, url, interval, until } или
+// null), starting — просим у сайта адрес входа или код, заметка в меню аккаунта, идёт ли
 // синхронизация (again — за время неё настройку поменяли ещё раз) и когда она последний раз удалась; confirmDelete —
 // «Удалить аккаунт» нажали один раз; request — номер последнего входа: ответ старого входа не нужен. handle — @ник,
 // ticket — его подпись для сетевых игр (оба с сайта, только в памяти), naming — сайт проверяет новый ник, handleNote —

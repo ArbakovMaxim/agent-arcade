@@ -90,7 +90,7 @@ export default {
     if (url.pathname.startsWith('/api/books/')) return books(request, url)
     // Twitch: кто из каналов человека и каталога Arcade сейчас в эфире
     if (url.pathname === '/api/twitch') return twitch(request, env, url)
-    // Аккаунт: вход через GitHub по коду и настройки мода, общие для всех компьютеров человека
+    // Аккаунт: вход через GitHub (кнопкой через сайт или по коду) и настройки мода, общие для всех компьютеров человека
     if (url.pathname.startsWith('/api/auth/') || url.pathname === '/api/me' || url.pathname.startsWith('/api/me/')) return account(request, env, url)
     // Отчёт об ошибке без входа; со входом — /api/me/report, список — только админам (worker/reports.js)
     if (url.pathname === '/api/report') return report(request, env)

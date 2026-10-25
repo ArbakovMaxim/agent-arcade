@@ -137,7 +137,7 @@ La ficha de cada juego enlaza a su licencia y su código fuente.
 
 Iniciar sesión es opcional: sin ello, todo lo demás funciona igual que antes.
 
-- **Iniciar sesión con GitHub** (en *Social*): Arcade muestra un código y lo introduces en la página de GitHub en tu navegador habitual. Arcade solo conoce el nombre y la imagen de tu perfil de GitHub — sin correo ni acceso a repositorios.
+- **Iniciar sesión con GitHub** (en *Social*): la página de inicio de sesión de GitHub se abre en tu navegador habitual; confirma allí y luego pulsa *Sign in* en la página de Arcade — su código debe coincidir con el del panel. Si por el navegador no funciona, usa *Iniciar sesión con un código*: Arcade muestra un código y lo introduces en la página de GitHub. Arcade solo conoce el nombre y la imagen de tu perfil de GitHub — sin correo ni acceso a repositorios.
 - **Sincronización.** Tu idioma, teclas, notificaciones, tamaño del panel, qué hacer con el juego cuando el agente avisa, las opciones del navegador de Desktop, tus temas, canales de Twitch, favoritos, secciones plegadas, secciones ocultas y récord de Flappy Arcade pasan a ser iguales en todos tus ordenadores. Tus propios juegos, el navegador y el modo gráfico se quedan en cada ordenador.
 - **@alias.** Toma tu nombre de GitHub con un clic o inventa uno: de 4 a 32 caracteres — letras latinas, dígitos y `_`. Puedes cambiarlo hasta 5 veces al día.
 - **Amigos.** Añade a alguien por su @alias exacto: esa persona acepta la solicitud en su lado y aparecéis en la lista del otro. No hay sugerencias al escribir, así que nadie puede curiosear quién usa Arcade. Rechazar y eliminar son silenciosos.

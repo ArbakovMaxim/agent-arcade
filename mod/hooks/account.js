@@ -1,6 +1,8 @@
-// Аккаунт Arcade: вход через GitHub по коду и настройки, общие для всех компьютеров человека. Вход нужен только для
-// этого — без него всё работает. Мод просит у сайта код (/api/auth/start), человек вводит его на
-// github.com/login/device, мод спрашивает сайт, вошёл ли он (/api/auth/poll), и получает ключ сессии Arcade — токена
+// Аккаунт Arcade: вход через GitHub и настройки, общие для всех компьютеров человека. Вход нужен только для этого —
+// без него всё работает. Обычно вход — кнопкой через сайт: мод просит у сайта адрес входа (/api/auth/web) и открывает
+// его в браузере, человек пускает Arcade на GitHub и подтверждает вход на странице сайта, а мод спрашивает сайт, вошёл
+// ли он (/api/auth/web/poll). Запасной вход — по коду: мод просит у сайта код (/api/auth/start), человек вводит его на
+// github.com/login/device, мод спрашивает /api/auth/poll. В конце мод получает ключ сессии Arcade — токена
 // GitHub мод не видит. Настройки на сайте — { ключ: { v, at } }: у каждого ключа побеждает более позднее изменение,
 // у рекорда Flappy Arcade — больший счёт. Ещё у аккаунта бывает свой @ник — подпись в сетевых играх. Здесь нет вызовов
 // Claude Code — сеть и хранилище в hooks/app/profile.js. С ником можно звать друзей: заявка по точному нику, друг
@@ -17,17 +19,22 @@ export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnD
 const TOKEN = /^(\d{1,20})\.[A-Za-z0-9_-]{43}$/
 const DEVICE = /^[A-Za-z0-9_-]{8,100}$/
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/
+// Вход кнопкой: номер входа и ключ к нему — по 43 знака base64url, код для сверки со страницей сайта — 4 знака
+const WEB_KEY = /^[A-Za-z0-9_-]{43}$/
+const MARK = /^[A-Z0-9]{4}$/
+const AUTHORIZE = /^https:\/\/github\.com\/login\/oauth\/authorize\?[\w.%&=*+~-]+$/
 const GH_LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/
 const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', avatar: 'api/me/avatar', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer' }
+const PATHS = { web: 'api/auth/web', wait: 'api/auth/web/poll', start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', avatar: 'api/me/avatar', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer' }
 
-// Адрес сайта для шага входа, настроек, ника, аватарки, друзей, чатов или отчётов об ошибках: start, poll, logout, me,
-// settings, handle, avatar, friends, accept, unfriend, chats, messages, unread, send, opendm, group, members, chatticket, report (без
-// входа), myReport (со входом), reports, closeReport (только админу), общих досок: boards, boardsync, boardnew,
-// boardmembers, boarddelete, «в сети» и приглашений в игру: pulse, invite, answer
+// Адрес сайта для шага входа, настроек, ника, аватарки, друзей, чатов или отчётов об ошибках: web, wait (вход кнопкой),
+// start, poll (вход по коду), logout, me, settings, handle, avatar, friends, accept, unfriend, chats, messages, unread,
+// send, opendm, group, members, chatticket, report (без входа), myReport (со входом), reports, closeReport (только
+// админу), общих досок: boards, boardsync, boardnew, boardmembers, boarddelete, «в сети» и приглашений в игру: pulse,
+// invite, answer
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }
@@ -57,6 +64,21 @@ export function restoreAccount(saved) {
   return m && user && user.id === m[1] ? { token: saved.token, user } : null
 }
 
+// Ответ /api/auth/web → { url, state, key, mark, interval, expires, error }: адрес входа на GitHub (открывается в
+// браузере), номер входа и ключ к нему (ключ остаётся в моде: по одному адресу из браузера не войти), код для сверки со
+// страницей сайта, через сколько секунд спрашивать снова и сколько секунд вход ждёт человека
+export function parseWeb(response) {
+  const data = jsonFrom(response?.text)
+  const error = trouble(response, data)
+  const none = (e) => ({ url: '', state: '', key: '', mark: '', interval: 3, expires: 0, error: e })
+  if (error) return none(error)
+  const url = String(data.url ?? '')
+  if (!AUTHORIZE.test(url) || !WEB_KEY.test(data.state ?? '') || !WEB_KEY.test(data.key ?? '') || !MARK.test(data.mark ?? '')) return none('down')
+  const interval = Math.min(Math.max(Number(data.interval) || 3, 1), 60)
+  const expires = Math.min(Math.max(Number(data.expires) || 600, 60), 3600)
+  return { url, state: data.state, key: data.key, mark: data.mark, interval, expires, error: '' }
+}
+
 // Ответ /api/auth/start → { device, code, url, interval, expires, error }: код для страницы GitHub, через сколько
 // секунд спрашивать снова и сколько секунд код живёт
 export function parseStart(response) {
@@ -71,8 +93,9 @@ export function parseStart(response) {
   return { device: data.device, code: data.code, url, interval, expires, error: '' }
 }
 
-// Ответ /api/auth/poll → { status, interval, account, error }. status — 'pending' (ждём человека), 'ok' (вошёл:
-// account — { token, user }), 'expired' (код истёк), 'denied' (человек отказался) или '' при ошибке; interval —
+// Ответ /api/auth/poll и /api/auth/web/poll → { status, interval, account, error }. status — 'pending' (ждём
+// человека), 'ok' (вошёл: account — { token, user }), 'expired' (код или вход истёк), 'denied' (человек отказался)
+// или '' при ошибке; interval —
 // новый срок между вопросами, если GitHub попросил спрашивать реже
 export function parsePoll(response) {
   const data = jsonFrom(response?.text)
