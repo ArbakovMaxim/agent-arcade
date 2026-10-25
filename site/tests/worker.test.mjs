@@ -258,9 +258,17 @@ try {
   const ctx = { acceptWebSocket: (ws) => sockets.push(ws), getWebSockets: () => sockets.filter((ws) => !ws.closed), waitUntil: () => {} }
   const room = new Room(ctx, {})
   const from = (ip) => ({ headers: new Headers({ 'CF-Connecting-IP': ip }) })
-  for (let i = 0; i < MAX_PER_IP; i++) assert.equal((await room.fetch(from('1.2.3.4'))).status, 101)
-  assert.equal((await room.fetch(from('1.2.3.4'))).status, 429, 'пятое с того же адреса — отказ')
+  // Целая комната может быть из одной сети (офис, общежитие): с одного адреса пускаем столько, сколько мест
+  assert.ok(MAX_PER_IP >= MAX_PEERS, 'полная комната с одного адреса')
+  for (let i = 0; i < MAX_PEERS - 1; i++) assert.equal((await room.fetch(from('1.2.3.4'))).status, 101)
   assert.equal((await room.fetch(from('5.6.7.8'))).status, 101, 'с другого — можно')
+  // Потолок с одного адреса держит EmulatorJS: все комнаты игры в одном объекте, своего числа мест у него нет
+  const ejsSockets = []
+  const ejs = new EjsGame({ acceptWebSocket: (ws) => ejsSockets.push(ws), getWebSockets: () => ejsSockets.filter((ws) => !ws.closed), waitUntil: () => {} }, presenceEnv)
+  const ejsFrom = (ip) => ({ url: 'https://ejs/net/ejs/123', headers: new Headers({ 'CF-Connecting-IP': ip }) })
+  for (let i = 0; i < MAX_PER_IP; i++) assert.equal((await ejs.fetch(ejsFrom('1.2.3.4'))).status, 101)
+  assert.equal((await ejs.fetch(ejsFrom('1.2.3.4'))).status, 429, 'сверх MAX_PER_IP с того же адреса — отказ')
+  assert.equal((await ejs.fetch(ejsFrom('5.6.7.8'))).status, 101, 'с другого — можно')
   // Заваливающий сообщениями перестаёт доходить до остальных
   const [spammer, listener] = sockets
   const before = listener.sent.length
