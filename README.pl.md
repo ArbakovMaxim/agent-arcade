@@ -137,7 +137,7 @@ Karta każdej gry prowadzi do jej licencji i kodu źródłowego.
 
 Logowanie jest opcjonalne — bez niego wszystko inne działa jak dotąd.
 
-- **Zaloguj się przez GitHub** (w *Społeczność*): Arcade pokazuje kod, który wpisujesz na stronie GitHuba w swojej zwykłej przeglądarce. Arcade poznaje tylko nazwę i zdjęcie twojego profilu GitHub — bez e-maila, bez dostępu do repozytoriów.
+- **Zaloguj się przez GitHub** (w *Społeczność*): strona logowania GitHuba otwiera się w twojej zwykłej przeglądarce; potwierdź tam, a potem kliknij *Sign in* na stronie Arcade — jej kod powinien być taki sam jak w panelu. Jeśli przez przeglądarkę nie wychodzi, wybierz *Zaloguj się kodem*: Arcade pokazuje kod, który wpisujesz na stronie GitHuba. Arcade poznaje tylko nazwę i zdjęcie twojego profilu GitHub — bez e-maila, bez dostępu do repozytoriów.
 - **Synchronizacja.** Język, klawisze, powiadomienia, rozmiar panelu, co robić z grą, gdy agent da znać, ustawienia przeglądarki w Desktop, twoje tematy, kanały Twitcha, ulubione, zwinięte i ukryte sekcje i rekord we Flappy Arcade stają się takie same na wszystkich twoich komputerach. Własne gry, przeglądarka i tryb grafiki pozostają osobne dla każdego komputera.
 - **@nick.** Weź swoją nazwę z GitHuba jednym kliknięciem albo wymyśl własną: od 4 do 32 znaków — litery łacińskie, cyfry i `_`. Możesz ją zmieniać do 5 razy dziennie.
 - **Znajomi.** Dodaj znajomą osobę po dokładnym @nicku: zaproszenie zostaje przyjęte po drugiej stronie i pojawiacie się nawzajem na swoich listach. Podczas wpisywania nie ma podpowiedzi, więc nikt nie przejrzy, kto korzysta z Arcade. Odrzucanie i usuwanie odbywa się po cichu.

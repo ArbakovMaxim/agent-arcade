@@ -6,7 +6,8 @@ import { picSvg } from '../avatars.js'
 import { S } from '../app/state.js'
 import { cancelLogin, claimHandle, closeReport, deleteAccount, loadReports, logout, openGithub, pickAvatar, reportNote, sendReport, startLogin, syncAccount } from '../app/profile.js'
 
-// Аккаунт: вошли — кто и что общее; идёт вход — код для GitHub; иначе — зачем вход и что Arcade узнает
+// Аккаунт: вошли — кто и что общее; идёт вход — код для сверки со страницей сайта или код для GitHub; иначе — зачем
+// вход и что Arcade узнает
 export function accountScreen($, e, kit) {
   const { Box, Button, Input, Svg, Text, back, desktop, dim, gap, hint, noticeLines, picGrid, pictures, section, tiles } = kit
   let items
@@ -60,6 +61,26 @@ export function accountScreen($, e, kit) {
       ...noticeLines,
       ...hint,
     ]
+  } else if (flow?.web) {
+    // Вход кнопкой: страница открылась в браузере сама; код здесь — чтобы сверить его со страницей сайта
+    items = [
+      back,
+      gap,
+      Text({ children: ['Страница входа открылась в браузере: подтверди вход на GitHub, потом нажми «Войти» на странице Arcade.'] }),
+      dim('Код на странице должен быть таким же:'),
+      keep(desktop ? Text({ size: 'heading', weight: 'semibold', children: [flow.mark] }) : Text({ bold: true, children: [`  ${flow.mark}`] })),
+      gap,
+      Button({ key: 'arcade-account-github', label: 'Открыть страницу ещё раз', autoFocus: true, onPress: () => openGithub($, flow.url) }),
+      dim('  если браузер не открылся или вкладку закрыли'),
+      keep(dim(`  ${flow.url}`)),
+      Button({ key: 'arcade-account-code', label: 'Войти по коду', onPress: () => startLogin($, true) }),
+      dim('  если через браузер войти не выходит'),
+      gap,
+      ...(note.length ? note : [dim('Жду, когда ты войдёшь в браузере…')]),
+      Button({ key: 'arcade-account-cancel', label: 'Отмена', onPress: () => cancelLogin($) }),
+      ...noticeLines,
+      ...hint,
+    ]
   } else if (flow) {
     items = [
       back,
@@ -84,7 +105,7 @@ export function accountScreen($, e, kit) {
       dim('Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.'),
       ...note,
       gap,
-      Button({ key: 'arcade-account-login', label: S.acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub', autoFocus: true, onPress: () => startLogin($) }),
+      Button({ key: 'arcade-account-login', label: S.acct.starting ? 'Готовлю вход…' : 'Войти через GitHub', autoFocus: true, onPress: () => startLogin($) }),
       ...noticeLines,
       ...hint,
     ]

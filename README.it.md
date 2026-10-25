@@ -137,7 +137,7 @@ La scheda di ogni gioco rimanda alla sua licenza e al suo codice sorgente.
 
 L’accesso è facoltativo: senza, tutto il resto funziona come prima.
 
-- **Accedi con GitHub** (in *Social*): Arcade mostra un codice da inserire nella pagina di GitHub nel tuo browser abituale. Arcade conosce solo il nome e l’immagine del tuo profilo GitHub — nessuna email, nessun accesso ai repository.
+- **Accedi con GitHub** (in *Social*): la pagina di accesso di GitHub si apre nel tuo browser abituale; conferma lì, poi fai clic su *Sign in* nella pagina di Arcade — il suo codice deve essere lo stesso del pannello. Se tramite il browser non funziona, scegli *Accedi con un codice*: Arcade mostra un codice da inserire nella pagina di GitHub. Arcade conosce solo il nome e l’immagine del tuo profilo GitHub — nessuna email, nessun accesso ai repository.
 - **Sincronizzazione.** Lingua, tasti, notifiche, dimensione del pannello, cosa fare del gioco quando l’agente avvisa, le opzioni del browser in Desktop, i tuoi argomenti, i canali Twitch, i preferiti, le sezioni compresse, quelle nascoste e il tuo record a Flappy Arcade diventano uguali su tutti i tuoi computer. I tuoi giochi, il browser e la modalità grafica restano per singolo computer.
 - **@nome.** Usa il tuo nome GitHub con un clic o inventane uno: da 4 a 32 caratteri — lettere latine, cifre e `_`. Puoi cambiarlo fino a 5 volte al giorno.
 - **Amici.** Aggiungi un amico con il suo @nome esatto: la richiesta viene accettata dall’altra parte e comparite l’uno nell’elenco dell’altro. Durante la digitazione non ci sono suggerimenti, quindi nessuno può sfogliare chi usa Arcade. Rifiutare e rimuovere avvengono in silenzio.

@@ -137,7 +137,7 @@ Die Karte jedes Spiels verlinkt seine Lizenz und seinen Quellcode.
 
 Die Anmeldung ist optional — ohne sie funktioniert alles andere wie bisher.
 
-- **Mit GitHub anmelden** (unter *Soziales*): Arcade zeigt einen Code, den du auf der GitHub-Seite in deinem normalen Browser eingibst. Arcade erfährt nur den Namen und das Bild deines GitHub-Profils — keine E-Mail, kein Zugriff auf Repositories.
+- **Mit GitHub anmelden** (unter *Soziales*): Die Anmeldeseite von GitHub öffnet sich in deinem normalen Browser — bestätige dort und klicke dann auf der Arcade-Seite auf *Sign in*; ihr Code sollte derselbe sein wie im Panel. Klappt es über den Browser nicht, nimm *Mit einem Code anmelden*: Arcade zeigt einen Code, den du auf der GitHub-Seite eingibst. Arcade erfährt nur den Namen und das Bild deines GitHub-Profils — keine E-Mail, kein Zugriff auf Repositories.
 - **Synchronisierung.** Sprache, Tasten, Benachrichtigungen, Panelgröße, was beim Signal des Agenten mit dem Spiel passiert, die Browseroptionen in Desktop, deine Themen, Twitch-Kanäle, Favoriten, zugeklappte und ausgeblendete Bereiche und dein Flappy-Arcade-Rekord werden auf allen deinen Computern gleich. Eigene Spiele, Browser und Grafikmodus bleiben pro Computer.
 - **@Name.** Übernimm deinen GitHub-Namen mit einem Klick oder denk dir einen aus: 4 bis 32 Zeichen — lateinische Buchstaben, Ziffern und `_`. Du kannst ihn bis zu 5-mal am Tag ändern.
 - **Freunde.** Füge Freunde über ihren genauen @Namen hinzu: Die Anfrage wird auf der anderen Seite angenommen, und ihr erscheint gegenseitig in euren Listen. Beim Tippen gibt es keine Vorschläge, also kann niemand durchstöbern, wer Arcade nutzt. Ablehnen und Entfernen passieren still.

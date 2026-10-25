@@ -18,7 +18,7 @@ import { AVATAR_COUNT, avatarName, avatarSvg, initial, letterColor, letterSvg, p
 import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, svgToXaml } from '../hooks/popup.js'
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
-import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
+import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
 import { BOOK_LANGS, BOOK_SECTIONS, bookLang, bookQuery, booksPath, parseBooks } from '../hooks/books.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
@@ -3924,6 +3924,15 @@ test('twitch.js: имя канала из ссылки, свои каналы, �
 const TOKEN = `583231.${'a'.repeat(43)}`
 const OCTO = { id: '583231', login: 'octocat' }
 const STARTED = { device: 'dev_code_1234', code: 'WDJB-MJHT', url: 'https://github.com/login/device', interval: 5, expires: 900 }
+// Вход кнопкой: адрес страницы входа GitHub, номер входа и ключ к нему, код для сверки со страницей сайта
+const WEB_STARTED = {
+  url: `https://github.com/login/oauth/authorize?client_id=Ov23lihBdf0vldzRqVhv&redirect_uri=https%3A%2F%2Fagent-arcade.fefaodessa.workers.dev%2Fapi%2Fauth%2Fcallback&scope=&state=${'S'.repeat(43)}`,
+  state: 'S'.repeat(43),
+  key: 'K'.repeat(43),
+  mark: 'AB2C',
+  interval: 3,
+  expires: 600,
+}
 
 // Сайт Arcade с аккаунтом: хранит настройки и сливает в них PUT. answers — свои ответы по «МЕТОД путь»: ответ или
 // функция запроса; undefined — ответ по умолчанию
@@ -3933,6 +3942,9 @@ function accountSite(settings: Record<string, any> = {}, answers: Record<string,
     const special = answers[`${request.method} ${path}`]
     const own = typeof special === 'function' ? special(request) : special
     if (own !== undefined) return own
+    // Вход кнопкой по умолчанию выключен, как на сайте без секрета приложения, — мод входит по коду
+    if (path === 'api/auth/web') return { status: 503, json: { error: 'off' } }
+    if (path === 'api/auth/web/poll') return { json: { status: 'pending' } }
     if (path === 'api/auth/start') return { json: STARTED }
     if (path === 'api/auth/poll') return { json: { status: 'pending' } }
     if (path === 'api/auth/logout' || (path === 'api/me' && request.method === 'DELETE')) return { json: { ok: true } }
@@ -3971,6 +3983,21 @@ test('account.js: ответы сайта про вход и настройки,
   expect(parseStart(reply(429, { error: 'limit' })).error).toBe('limit')
   expect(parseStart(reply(502, { error: 'upstream' })).error).toBe('down')
   expect(parseStart(reply(200, '<html>')).error).toBe('down')
+  // Начало входа кнопкой: страница только на github.com/login/oauth/authorize, номер и ключ по 43 знака, код — 4
+  expect(accountUrl('web')).toBe(`${SITE}/api/auth/web`)
+  expect(accountUrl('wait')).toBe(`${SITE}/api/auth/web/poll`)
+  expect(parseWeb(reply(200, WEB_STARTED))).toEqual({ ...WEB_STARTED, error: '' })
+  expect(parseWeb(reply(200, { ...WEB_STARTED, interval: 0.1, expires: 99_999 }))).toMatchObject({ interval: 1, expires: 3600 })
+  expect(parseWeb(reply(200, { ...WEB_STARTED, url: 'https://evil.example/login/oauth/authorize?state=x' }))).toMatchObject({ url: '', error: 'down' })
+  expect(parseWeb(reply(200, { ...WEB_STARTED, url: 'https://github.com/login/device' })).error).toBe('down')
+  expect(parseWeb(reply(200, { ...WEB_STARTED, url: `${WEB_STARTED.url}#x` })).error).toBe('down')
+  expect(parseWeb(reply(200, { ...WEB_STARTED, state: 'short' })).error).toBe('down')
+  expect(parseWeb(reply(200, { ...WEB_STARTED, key: `${'K'.repeat(42)}!` })).error).toBe('down')
+  expect(parseWeb(reply(200, { ...WEB_STARTED, mark: 'ab2c' })).error).toBe('down')
+  expect(parseWeb(null).error).toBe('down')
+  expect(parseWeb(reply(404, 'not found')).error).toBe('down')
+  expect(parseWeb(reply(503, { error: 'off' })).error).toBe('off')
+  expect(parseWeb(reply(429, { error: 'limit' })).error).toBe('limit')
   // Ждём человека, GitHub просит реже, код истёк, отказ, вошёл; ключ сессии от чужого профиля — не вход
   expect(parsePoll(reply(200, { status: 'pending' }))).toEqual({ status: 'pending', interval: 0, account: null, error: '' })
   expect(parsePoll(reply(200, { status: 'pending', interval: 10 }))).toMatchObject({ status: 'pending', interval: 10 })
@@ -4057,10 +4084,14 @@ test('аккаунт: вход через GitHub по коду — страни�
   expect(requests).toEqual([])
   expect(await ui.find({ type: 'Text', text: 'Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.' })).toBeDefined()
   expect(await ui.find({ key: 'arcade-account-login' })).toMatchObject({ props: { label: 'Войти через GitHub', autoFocus: true } })
-  // Код: сайт просит его у GitHub; человек вводит его на странице GitHub в обычном браузере
+  // Вход кнопкой на сайте выключен — код: сайт просит его у GitHub; человек вводит его на странице GitHub в обычном
+  // браузере
   await ui.press({ key: 'arcade-account-login' })
   await clock.settle()
-  expect(requests).toEqual([{ path: 'api/auth/start', method: 'POST', headers: { Accept: 'application/json' }, body: undefined }])
+  expect(requests).toEqual([
+    { path: 'api/auth/web', method: 'POST', headers: { Accept: 'application/json' }, body: undefined },
+    { path: 'api/auth/start', method: 'POST', headers: { Accept: 'application/json' }, body: undefined },
+  ])
   expect(await ui.find({ type: 'Text', text: 'Введи этот код на странице GitHub:' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '  WDJB-MJHT' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '  https://github.com/login/device' })).toBeDefined()
@@ -4091,6 +4122,108 @@ test('аккаунт: вход через GitHub по коду — страни�
   await ui.press({ key: 'arcade-back' })
   expect(await ui.find({ key: 'arcade-menu-account' })).toMatchObject({ props: { label: 'Аккаунт', autoFocus: true } })
   expect(await ui.find({ type: 'Text', text: '  GitHub: @octocat' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('аккаунт: вход кнопкой через сайт — страница входа открывается сама, код для сверки, сайт спрашиваем раз в 3 секунды', HEAVY, async ($, on) => {
+  let waits = 0
+  const { api } = accountSite(
+    {},
+    {
+      'POST api/auth/web': { json: WEB_STARTED },
+      'POST api/auth/web/poll': () => (++waits < 2 ? { json: { status: 'pending' } } : { json: { status: 'ok', token: TOKEN, user: OCTO } }),
+    },
+  )
+  const { clock, launches, requests, saved } = stubs(on, { env: WINDOWS, api })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  await ui.press({ key: 'arcade-account-login' })
+  await clock.settle()
+  // Сайт дал адрес входа — браузер открывается сам; кода у GitHub не просим
+  expect(requests).toEqual([{ path: 'api/auth/web', method: 'POST', headers: { Accept: 'application/json' }, body: undefined }])
+  expect(launches.map((l: any) => l.env.ARCADE_URL)).toEqual([WEB_STARTED.url])
+  expect(await ui.find({ type: 'Text', text: 'Открываю вход в браузере.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Страница входа открылась в браузере: подтверди вход на GitHub, потом нажми «Войти» на странице Arcade.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  AB2C' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: `  ${WEB_STARTED.url}` })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Жду, когда ты войдёшь в браузере…' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-account-github' })).toMatchObject({ props: { label: 'Открыть страницу ещё раз', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-account-code' })).toMatchObject({ props: { label: 'Войти по коду' } })
+  // Вкладку закрыли — та же страница ещё раз
+  await ui.press({ key: 'arcade-account-github' })
+  expect(launches.map((l: any) => l.env.ARCADE_URL)).toEqual([WEB_STARTED.url, WEB_STARTED.url])
+  // Спрашиваем раз в 3 секунды; номер входа и ключ к нему — в теле, не в адресе
+  await clock.advance(3_000)
+  expect(sent(requests, 'api/auth/web/poll', 'POST')).toEqual([
+    { path: 'api/auth/web/poll', method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: { state: WEB_STARTED.state, key: WEB_STARTED.key } },
+  ])
+  await clock.advance(3_000)
+  expect(waits).toBe(2)
+  // Вошёл: так же, как по коду
+  expect(saved.get('account')).toEqual({ token: TOKEN, user: OCTO })
+  expect(sent(requests, 'api/auth/start', 'POST')).toEqual([])
+  expect(sent(requests, 'api/me', 'GET').map((r) => r.headers.Authorization)).toEqual([`Bearer ${TOKEN}`])
+  expect(await ui.find({ type: 'Text', text: 'GitHub: @octocat' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('аккаунт: вход кнопкой — «Войти по коду», сайт не смог войти — сам на код; отказ, время вышло и лимит — понятно', HEAVY, async ($, on) => {
+  let webs = 0
+  let waitAnswer: any = { json: { status: 'pending' } }
+  const webAnswers = [{ json: WEB_STARTED }, { json: WEB_STARTED }, { json: WEB_STARTED }, { json: { ...WEB_STARTED, interval: 40, expires: 60 } }, { status: 429, json: { error: 'limit' } }]
+  const { api } = accountSite({}, { 'POST api/auth/web': () => webAnswers[webs++], 'POST api/auth/web/poll': () => waitAnswer })
+  const { clock, launches, requests, saved } = stubs(on, { env: WINDOWS, api })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-account' })
+  await clock.settle()
+  // Через браузер не выходит — «Войти по коду»: код у GitHub, сайт про вход кнопкой больше не спрашиваем
+  await ui.press({ key: 'arcade-account-login' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: '  AB2C' })).toBeDefined()
+  await ui.press({ key: 'arcade-account-code' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Введи этот код на странице GitHub:' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  WDJB-MJHT' })).toBeDefined()
+  await clock.advance(5_000)
+  expect(sent(requests, 'api/auth/web/poll', 'POST')).toEqual([])
+  expect(sent(requests, 'api/auth/poll', 'POST').length).toBe(1)
+  await ui.press({ key: 'arcade-account-cancel' })
+  // Сайт не смог обменять ответ GitHub на вход — сам переходим на код и говорим почему
+  await ui.press({ key: 'arcade-account-login' })
+  await clock.settle()
+  waitAnswer = { status: 503, json: { error: 'app' } }
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: 'Вход через сайт сейчас не работает — войди по коду.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  WDJB-MJHT' })).toBeDefined()
+  expect(sent(requests, 'api/auth/start', 'POST').length).toBe(2)
+  await ui.press({ key: 'arcade-account-cancel' })
+  // Человек отказался на GitHub — вход окончен
+  await ui.press({ key: 'arcade-account-login' })
+  await clock.settle()
+  waitAnswer = { json: { status: 'denied' } }
+  await clock.advance(3_000)
+  expect(await ui.find({ type: 'Text', text: 'Вход отменён.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-account-login' })).toBeDefined()
+  // Время на вход вышло, пока ждали: спрашивать сайт уже незачем
+  waitAnswer = { json: { status: 'pending' } }
+  await ui.press({ key: 'arcade-account-login' })
+  await clock.settle()
+  const waited = sent(requests, 'api/auth/web/poll', 'POST').length
+  await clock.advance(61_000) // спросили раз на 40-й секунде, на 60-й время вышло — дальше не ждём
+  expect(await ui.find({ type: 'Text', text: 'Время на вход вышло — попробуй ещё раз.' })).toBeDefined()
+  expect(sent(requests, 'api/auth/web/poll', 'POST').length).toBe(waited + 1)
+  // Лимит попыток у обоих входов общий — по коду не пробуем
+  await ui.press({ key: 'arcade-account-login' })
+  await clock.settle()
+  expect(await ui.find({ type: 'Text', text: 'Попыток входа с этого адреса на сегодня слишком много — попробуй завтра.' })).toBeDefined()
+  expect(sent(requests, 'api/auth/start', 'POST').length).toBe(2)
+  expect(launches.length).toBe(4)
+  expect(saved.has('account')).toBe(false)
   await ui.unmount()
 })
 

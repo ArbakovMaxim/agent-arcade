@@ -205,7 +205,7 @@ export function boardsScreen($, e, kit) {
           [
             Button({
               key: 'arcade-board-login',
-              label: S.acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
+              label: S.acct.starting ? 'Готовлю вход…' : 'Войти через GitHub',
               onPress: () => {
                 S.acct.confirmDelete = false
                 leave('account')()

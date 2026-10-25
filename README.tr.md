@@ -137,7 +137,7 @@ Her oyunun kartı lisansına ve kaynak koduna bağlantı verir.
 
 Giriş yapmak isteğe bağlı — giriş yapmadan da her şey eskisi gibi çalışır.
 
-- **GitHub ile giriş yap** (*Sosyal* içinde): Arcade bir kod gösterir, sen de bu kodu her zamanki tarayıcında GitHub sayfasına girersin. Arcade yalnızca GitHub profilinin adını ve resmini öğrenir — e-posta yok, depolara erişim yok.
+- **GitHub ile giriş yap** (*Sosyal* içinde): GitHub’ın giriş sayfası her zamanki tarayıcında açılır; orada onayla, sonra Arcade sayfasında *Sign in*’e tıkla — sayfadaki kod paneldekiyle aynı olmalı. Tarayıcı üzerinden olmazsa *Kodla giriş yap*: Arcade bir kod gösterir, sen de onu GitHub sayfasına girersin. Arcade yalnızca GitHub profilinin adını ve resmini öğrenir — e-posta yok, depolara erişim yok.
 - **Eşitleme.** Dil, tuşlar, bildirimler, panel boyutu, ajan haber verdiğinde oyunla ne yapılacağı, Desktop’taki tarayıcı seçenekleri, konuların, Twitch kanalların, favorilerin, daraltılmış ve gizlenmiş bölümler ve Flappy Arcade rekorun tüm bilgisayarlarında aynı olur. Kendi oyunların, tarayıcı ve grafik modu her bilgisayarda ayrı kalır.
 - **@takma ad.** GitHub adını tek tıkla al ya da kendin uydur: 4 ila 32 karakter — Latin harfleri, rakamlar ve `_`. Günde en fazla 5 kez değiştirebilirsin.
 - **Arkadaşlar.** Bir arkadaşını tam @takma adıyla ekle: istek karşı tarafta kabul edilir ve birbirinizin listesinde görünürsünüz. Yazarken öneri çıkmaz, bu yüzden kimse Arcade’i kimlerin kullandığına göz atamaz. Reddetmek ve silmek sessizce olur.

@@ -28,7 +28,7 @@ export function friendsScreen($, e, kit) {
   let items
   const login = Button({
     key: 'arcade-friends-login',
-    label: S.acct.starting ? 'Прошу код у GitHub…' : 'Войти через GitHub',
+    label: S.acct.starting ? 'Готовлю вход…' : 'Войти через GitHub',
     autoFocus: true,
     onPress: () => {
       S.acct.confirmDelete = false

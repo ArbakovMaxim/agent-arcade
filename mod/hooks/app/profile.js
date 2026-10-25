@@ -3,7 +3,7 @@ import { openUrlCommand } from '../browsers.js'
 import { LANGS } from '../i18n.js'
 import { restoreMyTopics } from '../search.js'
 import { restoreTwitch } from '../twitch.js'
-import { HANDLE, accountUrl, normalHandle, parseAvatar, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, syncPlan } from '../account.js'
+import { HANDLE, accountUrl, normalHandle, parseAvatar, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, parseWeb, syncPlan } from '../account.js'
 import { validPic } from '../avatars.js'
 import { restoreFavorites, toggleIn } from '../find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../reports.js'
@@ -255,13 +255,35 @@ export async function forgetSession($, note) {
   }
 }
 
-// «Войти через GitHub»: сайт просит у GitHub код, человек вводит его на странице GitHub
-export async function startLogin($) {
-  if (S.acct.starting || S.acct.flow || S.acct.session) return
+// «Войти через GitHub»: обычно — кнопкой через сайт: мод открывает страницу входа в браузере, человек пускает Arcade на
+// GitHub и подтверждает вход на странице сайта. Сайт так не умеет (копия ветки, старый сайт) или не ответил — вход по
+// коду: сайт просит у GitHub код, человек вводит его на странице GitHub. byCode — сразу по коду («Войти по коду» или
+// вход через сайт сломался), note — заметка, с которой начать
+export async function startLogin($, byCode = false, note = '') {
+  if (S.acct.starting || S.acct.session || (S.acct.flow && !(byCode && S.acct.flow.web))) return
   const request = ++S.acct.request
+  S.acct.flow = null
   S.acct.starting = true
-  S.acct.note = ''
+  S.acct.note = note
   $.ui.invalidate('ui.render')
+  if (!byCode) {
+    const web = parseWeb(await accountFetch($, 'web', { method: 'POST' }))
+    const now = await $.clock.now()
+    if (request !== S.acct.request) return
+    // Лимит попыток у обоих входов общий — по коду тоже не выйдет
+    if (!web.error || web.error === 'limit') {
+      S.acct.starting = false
+      if (web.error) S.acct.note = accountNote(web.error)
+      else {
+        S.acct.flow = { web: true, state: web.state, key: web.key, mark: web.mark, url: web.url, interval: web.interval, until: now + web.expires * 1000 }
+        waitLogin($, request, now)
+      }
+      $.ui.invalidate('ui.render')
+      if (S.acct.flow) await openGithub($, web.url)
+      return
+    }
+    log(`вход через сайт: ${web.error} — вход по коду`)
+  }
   const start = parseStart(await accountFetch($, 'start', { method: 'POST' }))
   const now = await $.clock.now()
   if (request !== S.acct.request) return
@@ -274,7 +296,8 @@ export async function startLogin($) {
   $.ui.invalidate('ui.render')
 }
 
-// Спрашивать сайт, вошёл ли человек, — раз в interval секунд, пока код жив; истечёт раньше — сказать сразу
+// Спрашивать сайт, вошёл ли человек, — раз в interval секунд, пока код (или вход кнопкой) жив; истечёт раньше —
+// сказать сразу
 function waitLogin($, request, now) {
   const flow = S.acct.flow
   const current = () => request === S.acct.request && S.acct.flow === flow
@@ -283,14 +306,19 @@ function waitLogin($, request, now) {
     S.acct.note = note
     $.ui.invalidate('ui.render')
   }
+  const expired = flow.web ? 'Время на вход вышло — попробуй ещё раз.' : 'Код истёк — попробуй ещё раз.'
   $.clock.after(Math.min(flow.interval * 1000, Math.max(flow.until - now, 0) + 1), async () => {
     if (!current()) return
-    if ((await $.clock.now()) > flow.until) return end('Код истёк — попробуй ещё раз.')
-    const poll = parsePoll(await accountFetch($, 'poll', { method: 'POST', body: { device: flow.device } }))
+    if ((await $.clock.now()) > flow.until) return end(expired)
+    const poll = flow.web
+      ? parsePoll(await accountFetch($, 'wait', { method: 'POST', body: { state: flow.state, key: flow.key } }))
+      : parsePoll(await accountFetch($, 'poll', { method: 'POST', body: { device: flow.device } }))
     if (!current()) return
     if (poll.status === 'ok') return finishLogin($, poll.account)
-    if (poll.status === 'expired') return end('Код истёк — попробуй ещё раз.')
-    if (poll.status === 'denied') return end('Вход отменён на GitHub.')
+    if (poll.status === 'expired') return end(expired)
+    if (poll.status === 'denied') return end(flow.web ? 'Вход отменён.' : 'Вход отменён на GitHub.')
+    // Сайт не смог обменять ответ GitHub на вход — значит, вход через сайт сломан, а по коду он может и пройти
+    if (flow.web && poll.error === 'app') return startLogin($, true, 'Вход через сайт сейчас не работает — войди по коду.')
     if (['off', 'app', 'limit'].includes(poll.error)) return end(accountNote(poll.error))
     // Ждём дальше; сайт не ответил — тоже ждём, но говорим об этом
     if (poll.interval) flow.interval = poll.interval
@@ -501,7 +529,8 @@ export async function deleteAccount($) {
   $.ui.invalidate('ui.render')
 }
 
-// Страница GitHub для кода — в обычном браузере: встроенный браузер Desktop открывает только страницы сайта Arcade
+// Страница входа на GitHub или страница GitHub для кода — в обычном браузере: встроенный браузер Desktop открывает только
+// страницы сайта Arcade, а на GitHub человек уже вошёл в своём браузере
 export async function openGithub($, url) {
   const command = openUrlCommand(S.platform, url)
   let opened = false
@@ -512,7 +541,7 @@ export async function openGithub($, url) {
       // не открылся — адрес и так написан в меню
     }
   }
-  if (opened) windowNotice($, 'Открываю GitHub в браузере — введи там код.')
+  if (opened) windowNotice($, S.acct.flow?.web ? 'Открываю вход в браузере.' : 'Открываю GitHub в браузере — введи там код.')
   else S.libraryNotice = 'Браузер не открылся — открой адрес выше сам.'
   $.ui.invalidate('ui.render')
 }
