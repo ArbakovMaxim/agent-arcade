@@ -165,6 +165,14 @@ assert.ok(Object.keys(catalog.games).length >= 12)
   const nesIds = Object.keys(catalog.games).filter((id) => catalog.games[id].console === 'nes')
   assert.deepEqual(cards.map((c) => c.dataset.game), nesIds)
   assert.match(textOf(cards[0]), /Thwaite.*аркада.*ещё не играли/)
+  // В самом низу — серая строка про YouTube API Services: условия Arcade, конфиденциальность и условия YouTube, в новой вкладке
+  const legal = library.children.at(-1)
+  assert.equal(legal.className, 'legal')
+  assert.match(textOf(legal), /Arcade ищет видео через YouTube API Services/)
+  assert.deepEqual(
+    legal.children.filter((x) => x.tagName === 'a').map((a) => [a.href, a.target]),
+    [['terms', '_blank'], ['privacy', '_blank'], ['https://www.youtube.com/t/terms', '_blank']],
+  )
   assert.equal(lib.focused, cards[0])
   lib.fire('keydown', { code: 'ArrowRight' })
   assert.equal(lib.pushed, '?tab=sega', 'у вкладки свой адрес')

@@ -180,6 +180,7 @@ Apri **Impostazioni** nella sezione *Altro* del menu `/arcade`:
 - **Notifiche mentre giochi in una finestra.**
 - **Notifiche dei messaggi** — una scheda in basso a sinistra quando un amico scrive in una chat (su macOS e Linux, una notifica di sistema).
 - **Test dei tasti e rimappatura** (terminale).
+- **Termini e privacy** — i Termini d’uso e l’Informativa sulla privacy del sito, nel tuo browser abituale.
 
 ## Cosa fa il plugin sul tuo computer
 
@@ -195,11 +196,14 @@ Arcade gira dentro Claude Code con l’accesso che Claude Code dà ai plugin. Tu
 
 ## Privacy
 
+I dettagli sono nell’[Informativa sulla privacy](https://agent-arcade.fefaodessa.workers.dev/privacy) e nei [Termini d’uso](https://agent-arcade.fefaodessa.workers.dev/terms) del sito; nel plugin si trovano in *Impostazioni → Termini e privacy*. In breve:
+
 - Niente pubblicità, niente analisi, niente tracciamento. I giochi che includevano codice di analisi ne sono stati ripuliti (vedi il `NOTICE` di ogni gioco).
 - Le tue ROM, i WAD, i libri e i file audio non lasciano mai il tuo computer o il tuo browser.
 - Gli elenchi di libri e audiolibri e i libri di Project Gutenberg passano dal sito di Arcade, che li chiede a Project Gutenberg, Wikisource e archive.org e li tiene solo nella cache di Cloudflare: gli elenchi per sei ore, un libro per una settimana. Le pagine di Wikisource e le registrazioni LibriVox la finestra le carica direttamente da quei siti.
 - Il gioco online passa per il server di Arcade su Cloudflare: i messaggi vengono inoltrati tra i giocatori di una stanza e non vengono conservati — tranne le mosse dei giochi da tavolo, tenute perché tu possa tornare; una partita inattiva per un mese viene eliminata.
 - Gli argomenti sono proposti da Haiku nella tua sessione di Claude Code; il sito di Arcade non vede mai la tua conversazione — solo una breve query di ricerca in inglese quando usi *Il tuo argomento*. L’indirizzo di un articolo va dopo `#`, quindi non arriva mai al server di Arcade.
+- La ricerca per *Il tuo argomento* passa dai YouTube API Services e i video si riproducono nel player di YouTube stesso, quindi valgono anche i [Termini di servizio di YouTube](https://www.youtube.com/t/terms) e le [Norme sulla privacy di Google](https://policies.google.com/privacy). Haiku, nella tua sessione, sceglie fino a sei video in base a titoli e brevi descrizioni; il sito di Arcade tiene i risultati di ricerca in una cache condivisa per un giorno.
 - Dopo l’accesso, il sito conserva le impostazioni sincronizzate, i preferiti, il tuo @nome, gli amici, le chat e le bacheche condivise, e gli inviti a giocare per 10 minuti. Chi è online lo tiene solo in memoria, per un minuto e mezzo. La chiave di sessione viene inviata solo al sito di Arcade.
 - Il quaderno resta sul tuo computer. Le bacheche condivise sono conservate sul sito di Arcade e non sono cifrate, come le chat. Le pagine vanno a Notion o a un’altra app solo quando lo chiedi, tramite i tuoi connettori di Claude.
 - Una segnalazione di errore contiene il tuo testo, la versione di Arcade, dove è aperto, la lingua dell’interfaccia e il sistema operativo — nient’altro; senza accesso parte senza firma, e il sito non conserva alcun indirizzo.

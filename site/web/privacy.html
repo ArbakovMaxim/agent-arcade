@@ -52,14 +52,22 @@ use a feature described below.</p>
 <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. Use of Arcade's YouTube features is also covered
 by the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>; see Arcade's <a href="terms">Terms of Use</a>.</p>
 <ul>
-  <li><b>Search by your own topic.</b> When you add your own topic in the plugin's Watch section, the website sends the
-    topic text to the YouTube Data API. It keeps the matching results in a shared cache for 24 hours: the video ID, title,
+  <li><b>Search by your own topic.</b> When you add your own topic in the plugin's Watch section, Claude, in your Claude
+    Code session, turns it into a short English search query. If Claude doesn't answer, the plugin uses the topic text
+    itself, when it is written in Latin letters. The plugin sends only this query to the website, and the website sends
+    it to the YouTube Data API. It keeps the matching results in a shared cache for 24 hours: the video ID, title,
     channel name, publication date, view count, duration and the first 300 characters of the description. The cache is
-    cleaned every 6 hours, so results are deleted within about 30 hours. The cache is keyed by the topic text, not by who
-    asked, and everyone who asks the same topic gets the same results.</li>
+    cleaned every 6 hours, so results are deleted within about 30 hours. The cache is keyed by the query, not by who
+    asked, and everyone who asks the same query gets the same results.</li>
   <li><b>Suggested topics.</b> Topics that Arcade suggests from your current work are chosen on your computer by Claude, in
     your Claude Code session, from a fixed list of directions. The plugin then reads the public video feeds of YouTube
     channels directly from your computer. Neither your conversation nor these topics are sent to the Arcade website.</li>
+  <li><b>Picking videos.</b> For both kinds of topics, Claude in your Claude Code session picks up to 6 videos to show:
+    from recent videos of curated channels on related topics and, for your own topic, from the search results too. For
+    this it gets the topic
+    and, for each video, its ID, channel name, publication date, title and the start of its description. This request
+    is part of your own Claude Code session, which Anthropic handles under the terms you use Claude Code with. Arcade
+    keeps the picked videos only in memory while the plugin runs and does not use any of this to train models.</li>
   <li><b>Playing videos.</b> The <a href="watch">/watch</a> page plays videos in YouTube's embedded player in
     privacy-enhanced mode (youtube-nocookie.com) and loads video titles from YouTube's oEmbed service. The list of video
     IDs is in the part of the address after <code>#</code>, which the browser does not send to the Arcade website. While
