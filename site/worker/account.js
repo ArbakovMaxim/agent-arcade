@@ -1,9 +1,16 @@
-// Аккаунты Arcade: вход через GitHub по коду (device flow) и настройки мода, общие для всех компьютеров человека.
-// Мод просит код (/api/auth/start), человек вводит его на github.com/login/device, мод спрашивает, вошёл ли он
-// (/api/auth/poll). Токен GitHub до мода не доходит: по нему сайт узнаёт номер и имя профиля и сразу забывает токен.
+// Аккаунты Arcade: вход через GitHub и настройки мода, общие для всех компьютеров человека. Вход — двумя путями.
+// Кнопкой через сайт (web flow): мод просит вход (/api/auth/web) и открывает страницу GitHub в браузере, GitHub
+// возвращает человека на /api/auth/callback, сайт спрашивает «Войти в Arcade как @…?» и показывает код для сверки с
+// Claude Code, человек подтверждает (/api/auth/confirm), а мод всё это время спрашивает, вошёл ли он
+// (/api/auth/web/poll). Запасной — по коду (device flow): мод просит код (/api/auth/start), человек вводит его на
+// github.com/login/device, мод спрашивает, вошёл ли он (/api/auth/poll). Таких кодов GitHub выдаёт приложению не
+// больше 50 в час, поэтому код — только запасной путь.
+// Токен GitHub до мода не доходит: по нему сайт узнаёт номер и имя профиля и сразу забывает токен.
 // Мод получает свой ключ сессии Arcade — <номер GitHub>.<случайная строка>; сайт хранит только его хеш.
 // Приложение GitHub — OAuth App с включённым Device Flow; его client ID не секрет и лежит в vars (GITHUB_CLIENT_ID),
-// client secret сайту не нужен. Почты и доступа к репозиториям Arcade не просит: scope пустой.
+// как и адрес возврата (GITHUB_CALLBACK — тот же, что в настройках приложения); client secret — секрет сайта
+// GITHUB_CLIENT_SECRET (wrangler secret put). Без секрета или адреса возврата вход кнопкой выключен — мод входит по
+// коду. Почты и доступа к репозиториям Arcade не просит: scope пустой.
 // Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
 // аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js),
 // список его общих досок проектов (сами доски — в worker/desk.js) и приглашения в игру от друзей; экземпляр 'online' —
@@ -24,6 +31,13 @@ const SYNC_BODY = 512 * 1024 // сверка доски везёт карточ�
 // С одного адреса в сутки: кодов и вопросов «вошёл ли». Код живёт 15 минут, вопрос — раз в 5 секунд: 180 на код.
 // Счётчики — в памяти объекта 'auth', адрес — только меткой
 export const PER_IP_DAILY = { starts: 30, polls: 1500 }
+// Вход кнопкой: сколько он ждёт человека и через сколько секунд мод спрашивает снова. Код для сверки — 4 знака без
+// похожих друг на друга (0 и O, 1 и I)
+export const WEB_MS = 10 * MINUTE
+export const WEB_INTERVAL = 3
+const MARK_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const STATE = /^[A-Za-z0-9_-]{43}$/
+const GH_CODE = /^[A-Za-z0-9_-]{1,100}$/
 const FETCH_MS = 8000
 const AGENT = 'agent-arcade' // API GitHub без User-Agent не отвечает
 const TOKEN = /^(\d{1,20})\.[A-Za-z0-9_-]{43}$/
@@ -90,6 +104,10 @@ class LimitError extends Error {}
 const ROUTES = {
   'POST /api/auth/start': ['auth', '/start'],
   'POST /api/auth/poll': ['auth', '/poll'],
+  'POST /api/auth/web': ['auth', '/web'],
+  'POST /api/auth/web/poll': ['auth', '/webpoll'],
+  'GET /api/auth/callback': ['auth', '/callback'],
+  'POST /api/auth/confirm': ['auth', '/confirm'],
   'POST /api/auth/logout': ['user', '/logout'],
   'GET /api/me': ['user', '/me'],
   'DELETE /api/me': ['user', '/delete'],
@@ -139,6 +157,12 @@ async function readBody(request, limit) {
 // --- Маршрут Worker'а -----------------------------------------------------------------------------------------
 // POST /api/auth/start → { device, code, url, interval, expires }: код для github.com/login/device
 // POST /api/auth/poll { device } → { status: 'pending' | 'expired' | 'denied' } или { status: 'ok', token, user }
+// POST /api/auth/web → { url, state, key, mark, interval, expires }: вход кнопкой — url — страница GitHub для браузера,
+// state и key — чтобы спрашивать, вошёл ли человек (key в браузер не попадает), mark — код для сверки на странице
+// сайта; POST /api/auth/web/poll { state, key } — то же, что /api/auth/poll. GET /api/auth/callback?code=&state= —
+// сюда GitHub возвращает человека, POST /api/auth/confirm (форма state, nonce, answer) — он подтвердил вход или
+// ответил «Это не я»: обе отвечают страницей для браузера. Без GITHUB_CLIENT_SECRET и GITHUB_CALLBACK, и не с того
+// сайта, что в GITHUB_CALLBACK (копия ветки), /api/auth/web отвечает 503 ({ error: 'off' })
 // GET /api/me → { user, settings, handle?, ticket?, pic?, friends?, requests?, unread?, role? } (pic — номер своей
 // аватарки; сколько друзей, заявок тебе и непрочитанных сообщений; role: 'admin' — у админа),
 // PUT /api/me/settings { settings } → { settings },
@@ -204,7 +228,13 @@ export async function account(request, env, url) {
   const forward = new Request(`https://account${path}${url.search}`, {
     method: request.method === 'GET' ? 'GET' : 'POST',
     ...(body ? { body } : {}),
-    headers: { 'X-IP': request.headers.get('CF-Connecting-IP') || '', Authorization: request.headers.get('Authorization') || '' },
+    headers: {
+      'X-IP': request.headers.get('CF-Connecting-IP') || '',
+      Authorization: request.headers.get('Authorization') || '',
+      // Вход кнопкой: с какого сайта спрашивают и на каком языке показать страницу браузеру
+      'X-Origin': url.origin,
+      'X-Lang': request.headers.get('Accept-Language') || '',
+    },
   })
   return env.ACCOUNT.get(env.ACCOUNT.idFromName(name)).fetch(forward)
 }
@@ -323,6 +353,69 @@ function randomKey() {
   return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
+// Код для сверки: тот же, что мод показывает в Claude Code
+function markCode() {
+  return [...crypto.getRandomValues(new Uint8Array(4))].map((b) => MARK_CHARS[b % MARK_CHARS.length]).join('')
+}
+
+// --- Страницы входа кнопкой ----------------------------------------------------------------------------------
+// Их видит человек в браузере после GitHub. По-русски — если браузер просит русский, иначе по-английски
+const PAGE_TEXT = {
+  en: {
+    title: 'Arcade — sign in',
+    ask: (login) => `Sign in to Arcade as @${login}?`,
+    mark: 'The code in Claude Code should be the same:',
+    warn: 'If you didn’t start signing in to Arcade in Claude Code, click “It wasn’t me”: someone may be trying to get into your account.',
+    yes: 'Sign in',
+    no: 'It wasn’t me',
+    done: 'Done — head back to Claude Code.',
+    cancelled: 'Sign-in cancelled. You can close this page.',
+    stale: 'This sign-in link no longer works — maybe you have already signed in. If not, start signing in again in Claude Code.',
+    broken: 'Signing in through the site isn’t working right now. Go back to Claude Code and sign in with a code.',
+  },
+  ru: {
+    title: 'Arcade — вход',
+    ask: (login) => `Войти в Arcade как @${login}?`,
+    mark: 'Код в Claude Code должен быть таким же:',
+    warn: 'Если вход в Arcade в Claude Code начинал не ты, нажми «Это не я»: кто-то пытается войти в твой аккаунт.',
+    yes: 'Войти',
+    no: 'Это не я',
+    done: 'Готово — возвращайся в Claude Code.',
+    cancelled: 'Вход отменён. Эту страницу можно закрыть.',
+    stale: 'Эта ссылка для входа больше не действует — возможно, ты уже вошёл. Если нет, начни вход в Claude Code заново.',
+    broken: 'Вход через сайт сейчас не работает. Вернись в Claude Code и войди по коду.',
+  },
+}
+const pageText = (lang) => (/^ru\b/i.test(lang.trim()) ? PAGE_TEXT.ru : PAGE_TEXT.en)
+const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+
+// Страница для браузера: несколько слов и, может быть, форма. Чужой сайт не встроит её в рамку — кнопку «Войти» не
+// подсунуть под чужую; адрес с кодом GitHub не уходит дальше по ссылкам, страница не кешируется
+function page(t, body, status = 200) {
+  const lang = t === PAGE_TEXT.ru ? 'ru' : 'en'
+  const html = `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${escapeHtml(t.title)}</title><style>
+:root{color-scheme:light dark;--bg:#f6f5f2;--card:#fff;--text:#1d1c1a;--dim:#6b6862;--accent:#c96442;--line:#e3e0da}
+@media (prefers-color-scheme:dark){:root{--bg:#1c1b19;--card:#262522;--text:#ecebe7;--dim:#a19e97;--line:#3a3834}}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{box-sizing:border-box;width:min(440px,100% - 32px);background:var(--card);border:1px solid var(--line);border-radius:14px;padding:28px}
+h1{font-size:20px;margin:0 0 12px}p{margin:0 0 12px}.dim{color:var(--dim);font-size:14px}
+.mark{font:600 28px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.2em;margin:4px 0 16px}
+form{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}button{font:inherit;border-radius:9px;padding:9px 18px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--text)}
+button.yes{background:var(--accent);border-color:var(--accent);color:#fff}
+</style></head><body><main>${body}</main></body></html>`
+  return new Response(html, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'Referrer-Policy': 'no-referrer',
+      'X-Frame-Options': 'DENY',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+    },
+  })
+}
+const note = (t, text, status) => page(t, `<h1>Arcade</h1><p>${escapeHtml(text)}</p>`, status)
+
 // Экземпляр 'auth': коды GitHub, выдача ключей сессии и реестр ников — handle:<ник> → { id, until? } (чей ник и, если
 // его отпустили, до какого времени он ещё держится за прежним хозяином) и owner:<номер> → { handle?, changes, pic? }
 // (ник человека, когда его меняли, и номер аватарки). Экземпляр gh:<номер> хранит user (номер, имя и картинка профиля
@@ -354,6 +447,10 @@ export class Account {
     try {
       if (path === '/start') return await this.start(ip)
       if (path === '/poll') return await this.poll(await request.text(), ip)
+      if (path === '/web') return await this.webStart(ip, request.headers.get('X-Origin') || '')
+      if (path === '/webpoll') return await this.webPoll(await request.text(), ip)
+      if (path === '/callback') return await this.callback(url.searchParams, request.headers.get('X-Lang') || '')
+      if (path === '/confirm') return await this.confirm(await request.text(), request.headers.get('X-Lang') || '')
       if (path === '/login') return await this.login(await request.json())
       if (path === '/claim') return await this.claim(await request.json())
       if (path === '/release') return await this.release(await request.json())
@@ -473,10 +570,134 @@ export class Account {
     if (typeof data.access_token !== 'string' || !data.access_token) throw new Error(`github: ${data.error ?? 'нет токена'}`)
     const user = await this.githubUser(data.access_token)
     // Токен GitHub больше не нужен: он нигде не сохраняется и через 8 часов истечёт сам
+    return Response.json({ status: 'ok', token: await this.signIn(user), user })
+  }
+
+  // Ключ сессии Arcade от экземпляра человека
+  async signIn(user) {
     const space = this.env.ACCOUNT
     const answer = await space.get(space.idFromName(`gh:${user.id}`)).fetch(new Request('https://account/login', { method: 'POST', body: JSON.stringify(user) }))
-    const { token } = await answer.json()
-    return Response.json({ status: 'ok', token, user })
+    return (await answer.json()).token
+  }
+
+  // --- Вход кнопкой ---------------------------------------------------------------------------------------------
+  // Вход ждёт в web:<state> → { key, mark, until } (key — хеш ключа мода), после GitHub — ещё user и nonce (хеш
+  // ключа формы на странице), потом confirmed, denied или broken. Будильник экземпляру 'auth' ставить нельзя: alarm()
+  // удалил бы реестр ников, — поэтому старые входы убирает следующий новый.
+  // Включён, если есть секрет и адрес возврата и мод спрашивает тот сайт, куда GitHub вернёт человека
+  webReady(origin) {
+    const back = this.env.GITHUB_CALLBACK
+    if (!this.env.GITHUB_CLIENT_SECRET || typeof back !== 'string' || !back.startsWith('https://')) return false
+    try {
+      return new URL(back).origin === origin
+    } catch {
+      return false
+    }
+  }
+
+  async webStart(ip, origin) {
+    if (!this.webReady(origin)) return refuse('off', 503)
+    await this.count(ip, 'starts')
+    const now = Date.now()
+    const old = [...(await this.ctx.storage.list({ prefix: 'web:', limit: 500 }))].filter(([, v]) => !(v?.until > now)).map(([k]) => k)
+    if (old.length) await this.ctx.storage.delete(old.slice(0, 128))
+    const state = randomKey()
+    const key = randomKey()
+    const mark = markCode()
+    await this.ctx.storage.put(`web:${state}`, { key: await sha256(key), mark, until: now + WEB_MS })
+    const query = new URLSearchParams({ client_id: this.env.GITHUB_CLIENT_ID, redirect_uri: this.env.GITHUB_CALLBACK, scope: '', state })
+    return Response.json({ url: `https://github.com/login/oauth/authorize?${query}`, state, key, mark, interval: WEB_INTERVAL, expires: WEB_MS / 1000 })
+  }
+
+  // Вход, который ещё ждёт; истёк — забываем
+  async webEntry(state) {
+    if (typeof state !== 'string' || !STATE.test(state)) return null
+    const entry = await this.ctx.storage.get(`web:${state}`)
+    if (entry && entry.until > Date.now()) return entry
+    if (entry) await this.ctx.storage.delete(`web:${state}`)
+    return null
+  }
+
+  async webPoll(text, ip) {
+    const { state, key } = parsed(text)
+    if (typeof state !== 'string' || !STATE.test(state) || typeof key !== 'string' || !STATE.test(key)) return refuse('bad request', 400)
+    await this.count(ip, 'polls')
+    const entry = await this.webEntry(state)
+    // Чужой ключ — как будто входа нет: по одному state, который был в браузере, не войти
+    if (!entry || entry.key !== (await sha256(key))) return Response.json({ status: 'expired' })
+    if (!entry.confirmed && !entry.denied && !entry.broken) return Response.json({ status: 'pending' })
+    await this.ctx.storage.delete(`web:${state}`)
+    if (entry.denied) return Response.json({ status: 'denied' })
+    if (entry.broken) return refuse('app', 503)
+    return Response.json({ status: 'ok', token: await this.signIn(entry.user), user: entry.user })
+  }
+
+  // GitHub вернул человека: код GitHub — в токен, токен — в профиль, и спросить «Войти в Arcade как @…?». Второй раз с
+  // тем же state страница не открывается: иначе знающий адрес подтвердил бы чужой вход
+  async callback(params, lang) {
+    const t = pageText(lang)
+    const state = params.get('state') ?? ''
+    const entry = await this.webEntry(state)
+    if (!entry || entry.user || entry.denied || entry.broken) return note(t, t.stale, 400)
+    if (params.get('error') === 'access_denied') {
+      await this.ctx.storage.put(`web:${state}`, { ...entry, denied: true })
+      return note(t, t.cancelled)
+    }
+    const code = params.get('code') ?? ''
+    if (!GH_CODE.test(code)) return note(t, t.stale, 400)
+    let user
+    try {
+      const data = await this.github('https://github.com/login/oauth/access_token', { client_secret: this.env.GITHUB_CLIENT_SECRET, code, redirect_uri: this.env.GITHUB_CALLBACK })
+      if (typeof data.access_token !== 'string' || !data.access_token) return note(t, t.stale, 400)
+      user = await this.githubUser(data.access_token)
+      await this.revoke(data.access_token)
+    } catch (error) {
+      if (!(error instanceof AppError)) return note(t, t.broken, 502)
+      await this.ctx.storage.put(`web:${state}`, { ...entry, broken: true })
+      return note(t, t.broken, 503)
+    }
+    const fresh = await this.webEntry(state)
+    if (!fresh || fresh.user || fresh.denied || fresh.broken) return note(t, t.stale, 400)
+    const nonce = randomKey()
+    await this.ctx.storage.put(`web:${state}`, { ...fresh, user, nonce: await sha256(nonce) })
+    const hidden = (name, value) => `<input type="hidden" name="${name}" value="${escapeHtml(value)}">`
+    return page(t, `<h1>${escapeHtml(t.ask(user.login))}</h1><p class="dim">${escapeHtml(t.mark)}</p><p class="mark">${escapeHtml(fresh.mark)}</p>`
+      + `<p class="dim">${escapeHtml(t.warn)}</p><form method="post" action="/api/auth/confirm">${hidden('state', state)}${hidden('nonce', nonce)}`
+      + `<button class="yes" name="answer" value="yes">${escapeHtml(t.yes)}</button><button name="answer" value="no">${escapeHtml(t.no)}</button></form>`)
+  }
+
+  // Ответ со страницы «Войти в Arcade как @…?»: войти — мод при следующем вопросе получит ключ сессии; «Это не я» —
+  // вход отменён
+  async confirm(text, lang) {
+    const t = pageText(lang)
+    const form = new URLSearchParams(text)
+    const state = form.get('state') ?? ''
+    const nonce = form.get('nonce') ?? ''
+    const entry = await this.webEntry(state)
+    if (!entry?.nonce || !STATE.test(nonce) || entry.nonce !== (await sha256(nonce)) || entry.denied) return note(t, t.stale, 400)
+    if (entry.confirmed) return note(t, t.done)
+    const yes = form.get('answer') === 'yes'
+    await this.ctx.storage.put(`web:${state}`, { ...entry, ...(yes ? { confirmed: true } : { denied: true }) })
+    return note(t, yes ? t.done : t.cancelled)
+  }
+
+  // Токен GitHub от входа кнопкой больше не нужен — отзываем его сразу; не вышло — не беда, он нигде не сохранён
+  async revoke(token) {
+    try {
+      await fetch(`https://api.github.com/applications/${this.env.GITHUB_CLIENT_ID}/token`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Basic ${btoa(`${this.env.GITHUB_CLIENT_ID}:${this.env.GITHUB_CLIENT_SECRET}`)}`,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': AGENT,
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({ access_token: token }),
+        signal: AbortSignal.timeout(FETCH_MS),
+      })
+    } catch {
+      // GitHub не ответил
+    }
   }
 
   // Кто вошёл: номер, имя и картинка профиля GitHub

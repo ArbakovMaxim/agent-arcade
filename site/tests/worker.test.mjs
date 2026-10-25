@@ -737,7 +737,7 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE, PICKS_PER_MINUTE } = await import('../worker/account.js')
+  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE, PICKS_PER_MINUTE, WEB_MS, WEB_INTERVAL } = await import('../worker/account.js')
   const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, AVATAR_COUNT, dmId, cleanText, groupName } = await import('../worker/chat.js')
   const { Reports, cleanReport, admins, MAX_REPORT, PER_SENDER_DAILY, DAILY, KEEP: REPORTS_KEEP } = await import('../worker/reports.js')
   const { Desk, DEFAULT_COLS, MAX_CARDS, MAX_TOTAL, MAX_TITLE, MAX_OPS, KEEP_GONE, MAX_MEMBERS: DESK_MEMBERS, cleanTitle, cleanCols } = await import('../worker/desk.js')
@@ -775,7 +775,7 @@ try {
 
   // GitHub — подставной: коды, ответы на «вошёл ли» по очереди и профиль
   const asked = []
-  const gh = { answers: [], user: { id: 42, login: 'octo-cat', avatar_url: 'https://avatars.githubusercontent.com/u/42?v=4', email: 'octo@example.com' }, disabled: false, down: false }
+  const gh = { answers: [], user: { id: 42, login: 'octo-cat', avatar_url: 'https://avatars.githubusercontent.com/u/42?v=4', email: 'octo@example.com' }, disabled: false, down: false, revoked: [] }
   const realFetch = globalThis.fetch
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
@@ -793,6 +793,13 @@ try {
     if (url === 'https://github.com/login/oauth/access_token') {
       const form = new URLSearchParams(init.body)
       assert.equal(form.get('client_id'), 'gh-client')
+      // Вход кнопкой: код со страницы возврата, секрет приложения и тот же адрес возврата
+      if (form.has('code')) {
+        assert.equal(form.get('client_secret'), 'gh-secret')
+        assert.equal(form.get('redirect_uri'), 'https://arcade.test/api/auth/callback')
+        const code = form.get('code')
+        return Response.json(code === 'gh_code' ? { access_token: 'gho_github_token', token_type: 'bearer', scope: '' } : { error: code === 'bad_app' ? 'incorrect_client_credentials' : 'bad_verification_code' })
+      }
       assert.equal(form.get('device_code'), 'dev_code_12345')
       assert.equal(form.get('grant_type'), 'urn:ietf:params:oauth:grant-type:device_code')
       return Response.json(gh.answers.length ? gh.answers.shift() : { access_token: 'gho_github_token', token_type: 'bearer', scope: '' })
@@ -801,6 +808,12 @@ try {
       assert.equal(init.headers.Authorization, 'Bearer gho_github_token')
       assert.ok(init.headers['User-Agent'])
       return Response.json(gh.user)
+    }
+    if (url === 'https://api.github.com/applications/gh-client/token') {
+      assert.equal(init.method, 'DELETE')
+      assert.equal(init.headers.Authorization, `Basic ${btoa('gh-client:gh-secret')}`)
+      gh.revoked.push(JSON.parse(init.body).access_token)
+      return new Response(null, { status: 204 })
     }
     return new Response('нет', { status: 404 })
   }
@@ -1678,6 +1691,101 @@ try {
     assert.equal((await go('POST', '/api/auth/start', { ip: '10.8.8.8' })).status, 200, 'другой адрес — можно')
     assert.ok([...objects.get('auth').object.ips.keys()].every((k) => !k.includes('10.9.9.9')))
     assert.ok(!saved().includes('10.9.9.9'))
+
+    // Вход кнопкой через сайт: без секрета и адреса возврата выключен — мод войдёт по коду; копия ветки — тоже: GitHub
+    // вернёт человека не на неё
+    const webStart = () => go('POST', '/api/auth/web', { ip: '10.4.0.1' })
+    assert.deepEqual(await webStart(), { status: 503, body: { error: 'off' } })
+    env.GITHUB_CLIENT_SECRET = 'gh-secret'
+    assert.deepEqual(await webStart(), { status: 503, body: { error: 'off' } }, 'без адреса возврата')
+    env.GITHUB_CALLBACK = 'https://other.test/api/auth/callback'
+    assert.deepEqual(await webStart(), { status: 503, body: { error: 'off' } }, 'адрес возврата — на другом сайте')
+    env.GITHUB_CALLBACK = 'https://arcade.test/api/auth/callback'
+    assert.deepEqual(await go('GET', '/api/auth/web'), { status: 405, body: { error: 'method' } })
+    gh.user = { id: 77, login: 'web-user', avatar_url: 'https://avatars.githubusercontent.com/u/77?v=4', email: 'web@example.com' }
+    const html = async (method, path, { body, lang = 'en-US,en;q=0.9' } = {}) => {
+      const headers = { 'CF-Connecting-IP': '10.4.0.2', 'Accept-Language': lang, ...(body ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) }
+      const response = await worker.fetch(new Request(`https://arcade.test${path}`, { method, headers, ...(body ? { body: new URLSearchParams(body).toString() } : {}) }), env)
+      return { status: response.status, text: await response.text(), headers: response.headers }
+    }
+    const nonceOf = (text) => /name="nonce" value="([A-Za-z0-9_-]{43})"/.exec(text)?.[1]
+    const webKeys = () => [...objects.get('auth').store.keys()].filter((k) => k.startsWith('web:'))
+    const w1 = (await webStart()).body
+    const authorize = new URL(w1.url)
+    assert.equal(`${authorize.origin}${authorize.pathname}`, 'https://github.com/login/oauth/authorize')
+    assert.deepEqual(Object.fromEntries(authorize.searchParams), { client_id: 'gh-client', redirect_uri: 'https://arcade.test/api/auth/callback', scope: '', state: w1.state })
+    assert.match(w1.state, /^[A-Za-z0-9_-]{43}$/)
+    assert.match(w1.key, /^[A-Za-z0-9_-]{43}$/)
+    assert.ok(!w1.url.includes(w1.key), 'ключ мода в браузер не попадает')
+    assert.match(w1.mark, /^[A-HJ-NP-Z2-9]{4}$/)
+    assert.deepEqual([w1.interval, w1.expires], [WEB_INTERVAL, WEB_MS / 1000])
+    assert.ok(!saved().includes(w1.key), 'ключ мода — только хешем')
+    const wait = (flow, key = flow.key) => go('POST', '/api/auth/web/poll', { body: { state: flow.state, key }, ip: '10.4.0.1' })
+    assert.deepEqual(await wait(w1), { status: 200, body: { status: 'pending' } })
+    assert.deepEqual(await wait(w1, 'b'.repeat(43)), { status: 200, body: { status: 'expired' } }, 'по одному state из браузера не войти')
+    assert.deepEqual(await go('POST', '/api/auth/web/poll', { body: { state: w1.state }, ip: '10.4.0.1' }), { status: 400, body: { error: 'bad request' } })
+
+    // GitHub вернул человека: страница спрашивает, войти ли, и показывает код для сверки; токен GitHub сразу отозван
+    const page1 = await html('GET', `/api/auth/callback?code=gh_code&state=${w1.state}`)
+    assert.equal(page1.status, 200)
+    assert.match(page1.headers.get('Content-Type'), /^text\/html/)
+    assert.equal(page1.headers.get('X-Frame-Options'), 'DENY')
+    assert.match(page1.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/)
+    assert.equal(page1.headers.get('Referrer-Policy'), 'no-referrer')
+    assert.equal(page1.headers.get('Cache-Control'), 'no-store')
+    assert.ok(page1.text.includes('Sign in to Arcade as @web-user?') && page1.text.includes(w1.mark) && page1.text.includes('lang="en"'))
+    assert.deepEqual(gh.revoked, ['gho_github_token'])
+    assert.ok(!saved().includes('gho_github_token') && !saved().includes('web@example.com'))
+    const nonce1 = nonceOf(page1.text)
+    assert.ok(nonce1 && !saved().includes(nonce1), 'ключ формы — только хешем')
+    assert.deepEqual(await wait(w1), { status: 200, body: { status: 'pending' } }, 'пока человек не нажал «Войти»')
+    // Второй раз та же страница не открывается — знающий адрес не подтвердит чужой вход; подделанный ключ формы
+    assert.equal((await html('GET', `/api/auth/callback?code=gh_code&state=${w1.state}`)).status, 400)
+    assert.equal((await html('POST', '/api/auth/confirm', { body: { state: w1.state, nonce: 'c'.repeat(43), answer: 'yes' } })).status, 400)
+    const yes = await html('POST', '/api/auth/confirm', { body: { state: w1.state, nonce: nonce1, answer: 'yes' } })
+    assert.equal(yes.status, 200)
+    assert.ok(yes.text.includes('Done'))
+    assert.equal((await html('POST', '/api/auth/confirm', { body: { state: w1.state, nonce: nonce1, answer: 'yes' } })).status, 200, 'нажал дважды')
+    const signedIn = await wait(w1)
+    assert.equal(signedIn.body.status, 'ok')
+    assert.deepEqual(signedIn.body.user, { id: '77', login: 'web-user', avatar: 'https://avatars.githubusercontent.com/u/77?v=4' })
+    assert.match(signedIn.body.token, /^77\.[A-Za-z0-9_-]{43}$/)
+    assert.equal((await go('GET', '/api/me', { token: signedIn.body.token })).status, 200)
+    assert.deepEqual(await wait(w1), { status: 200, body: { status: 'expired' } }, 'ключ сессии выдаётся один раз')
+    assert.deepEqual(webKeys(), [], 'вход забыт')
+
+    // «Это не я» — по-русски; отказ на странице GitHub
+    const w2 = (await webStart()).body
+    const ru = await html('GET', `/api/auth/callback?code=gh_code&state=${w2.state}`, { lang: 'ru-RU,ru;q=0.9' })
+    assert.ok(ru.text.includes('Войти в Arcade как @web-user?') && ru.text.includes('lang="ru"'))
+    const no = await html('POST', '/api/auth/confirm', { body: { state: w2.state, nonce: nonceOf(ru.text), answer: 'no' }, lang: 'ru' })
+    assert.ok(no.text.includes('Вход отменён'))
+    assert.deepEqual(await wait(w2), { status: 200, body: { status: 'denied' } })
+    const w3 = (await webStart()).body
+    assert.equal((await html('GET', `/api/auth/callback?error=access_denied&state=${w3.state}`)).status, 200)
+    assert.deepEqual(await wait(w3), { status: 200, body: { status: 'denied' } })
+
+    // Старый код GitHub и чужой state — «ссылка не действует»; GitHub не принял секрет — мод узнает 'app'
+    const w4 = (await webStart()).body
+    assert.equal((await html('GET', `/api/auth/callback?code=old_code&state=${w4.state}`)).status, 400)
+    assert.equal((await html('GET', `/api/auth/callback?code=gh_code&state=${'d'.repeat(43)}`)).status, 400)
+    assert.equal((await html('GET', `/api/auth/callback?state=${w4.state}`)).status, 400)
+    const broken = await html('GET', `/api/auth/callback?code=bad_app&state=${w4.state}`)
+    assert.equal(broken.status, 503)
+    assert.ok(broken.text.includes('sign in with a code'))
+    assert.deepEqual(await wait(w4), { status: 503, body: { error: 'app' } })
+
+    // Вход ждёт WEB_MS; брошенные убирает следующий новый вход — будильника у экземпляра 'auth' нет, его alarm()
+    // удалил бы реестр ников
+    const w5 = (await webStart()).body
+    const w6 = (await webStart()).body
+    Date.now = () => realNow() + WEB_MS + 1000
+    assert.deepEqual(await wait(w5), { status: 200, body: { status: 'expired' } })
+    assert.equal((await html('GET', `/api/auth/callback?code=gh_code&state=${w6.state}`)).status, 400)
+    const w7 = (await webStart()).body
+    assert.deepEqual(webKeys(), [`web:${w7.state}`])
+    assert.equal(objects.get('auth').storage.alarm, null)
+    Date.now = realNow
   } finally {
     globalThis.fetch = realFetch
     Date.now = realNow

@@ -19,7 +19,7 @@
   // без них /api/discover отвечает 503, а мод берёт темы только из каталога.
   // Twitch — свой Durable Object и секреты TWITCH_CLIENT_ID и TWITCH_CLIENT_SECRET (приложение на dev.twitch.tv);
   // без них /api/twitch отвечает 503, а раздел Twitch в моде показывает каналы без эфиров.
-  // Аккаунты — свой Durable Object Account: вход через GitHub по коду (worker/account.js); чаты друзей — Chat
+  // Аккаунты — свой Durable Object Account: вход через GitHub (worker/account.js); чаты друзей — Chat
   // (worker/chat.js), по экземпляру на чат; отчёты об ошибках — Reports (worker/reports.js), один на сайт;
   // общие доски проектов — Desk (worker/desk.js), по экземпляру на доску
   "durable_objects": {
@@ -55,11 +55,14 @@
     // Доски проектов: общие доски друзей (worker/desk.js)
     { "tag": "v10", "new_sqlite_classes": ["Desk"] }
   ],
-  // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет; client secret сайту не нужен.
+  // Вход через GitHub: client ID приложения (OAuth App с Device Flow) — не секрет, GITHUB_CALLBACK — адрес возврата,
+  // тот же, что в настройках приложения на GitHub. Вход кнопкой через сайт ещё ждёт секрета GITHUB_CLIENT_SECRET
+  // (wrangler secret put); без него мод входит по коду.
   // ADMINS — номера GitHub тех, кто читает отчёты об ошибках (номер профиля публичный, не секрет)
-  "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv", "ADMINS": "92333314" },
+  "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv", "GITHUB_CALLBACK": "https://agent-arcade.fefaodessa.workers.dev/api/auth/callback", "ADMINS": "92333314" },
   // Предварительные копии веток (wrangler preview): у каждой — свои Durable Objects, отдельно от рабочего сайта.
-  // Код обращается к ним через env.ROOMS и т. д., поэтому привязки повторены здесь — иначе в копии ошибка 1101
+  // Код обращается к ним через env.ROOMS и т. д., поэтому привязки повторены здесь — иначе в копии ошибка 1101.
+  // GITHUB_CALLBACK здесь нет: GitHub возвращает человека только на рабочий сайт, копия входит по коду
   "previews": {
     "vars": { "GITHUB_CLIENT_ID": "Ov23lihBdf0vldzRqVhv", "ADMINS": "92333314" },
     "durable_objects": {

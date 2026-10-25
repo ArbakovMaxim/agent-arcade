@@ -353,7 +353,15 @@ const EXACT = {
     'Signing in keeps your settings the same on all your computers and lets you take your own @handle for online games. Everything works without it.',
   'Arcade узнаёт только имя и картинку профиля GitHub — ни почты, ни доступа к репозиториям.':
     'Arcade only learns your GitHub profile name and picture — no email, no access to repositories.',
-  'Прошу код у GitHub…': 'Asking GitHub for a code…',
+  'Страница входа открылась в браузере: подтверди вход на GitHub, потом нажми «Войти» на странице Arcade.':
+    'The sign-in page opened in the browser: confirm the sign-in on GitHub, then click “Sign in” on the Arcade page.',
+  'Код на странице должен быть таким же:': 'The code on the page should be the same:',
+  'Открыть страницу ещё раз': 'Open the page again',
+  '  если браузер не открылся или вкладку закрыли': "  if the browser didn't open or the tab was closed",
+  'Войти по коду': 'Sign in with a code',
+  '  если через браузер войти не выходит': "  if signing in through the browser doesn't work",
+  'Жду, когда ты войдёшь в браузере…': 'Waiting for you to sign in in the browser…',
+  'Готовлю вход…': 'Getting sign-in ready…',
   'Вход на сайте Arcade ещё не настроен.': "Sign-in isn't set up on the Arcade site yet.",
   'GitHub не принял приложение Arcade — вход пока не работает.': "GitHub didn't accept the Arcade app — sign-in doesn't work for now.",
   'Попыток входа с этого адреса на сегодня слишком много — попробуй завтра.': 'Too many sign-in attempts from this address today — try again tomorrow.',
@@ -362,11 +370,15 @@ const EXACT = {
   'Вход на этом компьютере больше не действует — войди через GitHub заново.': 'The sign-in on this computer is no longer valid — sign in with GitHub again.',
   'Вход отменён на GitHub.': 'Sign-in was cancelled on GitHub.',
   'Код истёк — попробуй ещё раз.': 'The code expired — try again.',
+  'Вход отменён.': 'Sign-in was cancelled.',
+  'Время на вход вышло — попробуй ещё раз.': 'Time to sign in ran out — try again.',
+  'Вход через сайт сейчас не работает — войди по коду.': "Signing in through the site doesn't work right now — sign in with a code.",
   'Выход выполнен: на этом компьютере настройки больше не синхронизируются.': 'Signed out: settings on this computer are no longer synced.',
   'Удаляю аккаунт…': 'Deleting the account…',
   'Аккаунт удалён: сайт Arcade забыл тебя и твои настройки. Здесь настройки остались.':
     'Account deleted: the Arcade site forgot you and your settings. Your settings here stay.',
   'Открываю GitHub в браузере — введи там код.': 'Opening GitHub in the browser — enter the code there.',
+  'Открываю вход в браузере.': 'Opening sign-in in the browser.',
   'Браузер не открылся — открой адрес выше сам.': "The browser didn't open — open the address above yourself.",
   // @ник в меню аккаунта
   'Ника пока нет.': 'No handle yet.',
