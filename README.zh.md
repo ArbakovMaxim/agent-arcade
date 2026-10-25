@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · **中文** · [한국어](README.ko.md)
 
-> **Beta 版（0.33）。** 这里介绍的一切都能正常使用，每天都有人在用；之后的变化主要在细节上。非常欢迎报告错误 — 见[反馈](#反馈)。
+> **Beta 版（0.34）。** 这里介绍的一切都能正常使用，每天都有人在用；之后的变化主要在细节上。非常欢迎报告错误 — 见[反馈](#反馈)。
 
 Arcade 是一个 [Claude Code](https://claude.com/claude-code) 插件，帮你打发智能体工作时的等待时间。当智能体忙碌超过 10 秒，提示符上方会出现一行小字 *“玩一会儿吗？”*。你可以玩游戏 — NES、Sega、PlayStation、Doom、国际象棋等等 — 读一本书，听有声书或播客，或者观看与智能体当前工作主题相关的视频。智能体一完成工作或需要你授权，Arcade 就会立刻告诉你，什么都不会错过。
 
