@@ -180,6 +180,7 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 - **在窗口中游戏时通知。**
 - **消息通知** — 好友在聊天中发消息时，左下角弹出卡片（macOS 和 Linux 上为系统通知）。
 - **按键测试和按键重映射**（终端）。
+- **条款与隐私** — 网站的使用条款和隐私政策，在你常用的浏览器中打开。
 
 ## 插件在你的电脑上做什么
 
@@ -195,11 +196,14 @@ Arcade 在 Claude Code 内部运行，拥有 Claude Code 给插件的权限。�
 
 ## 隐私
 
+详情见网站的[隐私政策](https://agent-arcade.fefaodessa.workers.dev/privacy)和[使用条款](https://agent-arcade.fefaodessa.workers.dev/terms)；在插件中位于 *设置 → 条款与隐私*。简而言之：
+
 - 没有广告，没有分析，没有追踪。原本带有分析功能的游戏已将其移除（见每款游戏的 `NOTICE`）。
 - 你自己的 ROM、WAD、书籍和音频文件绝不会离开你的电脑或浏览器。
 - 书籍和有声书列表以及 Project Gutenberg 的书籍经由 Arcade 网站获取：网站从 Project Gutenberg、Wikisource 和 archive.org 取来，只保存在 Cloudflare 缓存中——列表六小时，书籍一周。Wikisource 页面和 LibriVox 录音由窗口直接从这些网站加载。
 - 联网对战通过 Arcade 在 Cloudflare 上的服务器进行：消息只在房间内的玩家之间转发，不会保存 — 棋类游戏的走法除外，保存它们是为了让你可以回来继续；一个月无人动过的对局会被删除。
 - 主题由 Haiku 在你自己的 Claude Code 会话中推荐；Arcade 的网站永远看不到你的对话 — 只有在你使用 *自定义主题* 时，才会收到一条简短的英语搜索查询。文章地址放在 `#` 之后，因此永远不会到达 Arcade 的服务器。
+- *自定义主题* 的搜索经由 YouTube API Services，视频在 YouTube 自己的播放器中播放，因此 [YouTube 服务条款](https://www.youtube.com/t/terms)和 [Google 隐私权政策](https://policies.google.com/privacy)同样适用。最多 6 个视频由你自己会话中的 Haiku 根据标题和简短描述挑选；Arcade 的网站把搜索结果在共享缓存中保留一天。
 - 登录后，网站会保存你同步的设置、收藏、@用户名、好友、聊天和共享看板，游戏邀请保存 10 分钟。谁在线只保存在内存中，持续一分半钟。会话密钥只发送到 Arcade 的网站。
 - 笔记本保留在你的电脑上。共享看板和聊天一样保存在 Arcade 的网站上，且没有加密。只有在你要求时，页面才会通过你自己的 Claude 连接器发送到 Notion 或其他应用。
 - 错误报告只包含你的文字、Arcade 版本、打开的位置、界面语言和操作系统 — 别无其他；未登录时以匿名方式发送，网站也不会保存任何地址。

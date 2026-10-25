@@ -180,6 +180,7 @@ PowerShell에서는 `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugi
 - **창에서 플레이 중 알림.**
 - **메시지 알림** — 친구가 채팅에 글을 쓰면 왼쪽 아래에 카드가 뜹니다(macOS와 Linux에서는 시스템 알림).
 - **키 테스트와 키 재설정**(터미널).
+- **약관 및 개인정보** — 사이트의 이용 약관과 개인정보 처리방침을 평소 쓰는 브라우저에서 엽니다.
 
 ## 플러그인이 내 컴퓨터에서 하는 일
 
@@ -195,11 +196,14 @@ Arcade는 Claude Code가 플러그인에 주는 권한 안에서 Claude Code 내
 
 ## 개인정보
 
+자세한 내용은 사이트의 [개인정보 처리방침](https://agent-arcade.fefaodessa.workers.dev/privacy)과 [이용 약관](https://agent-arcade.fefaodessa.workers.dev/terms)에 있습니다. 플러그인에서는 *설정 → 약관 및 개인정보*에서 볼 수 있습니다. 요약하면:
+
 - 광고, 분석, 추적이 없습니다. 분석 기능이 들어 있던 게임은 그 기능을 제거했습니다(각 게임의 `NOTICE` 참고).
 - 내 ROM, WAD, 책, 오디오 파일은 내 컴퓨터나 브라우저 밖으로 나가지 않습니다.
 - 책과 오디오북 목록, 그리고 Project Gutenberg 책은 Arcade 사이트를 거칩니다. 사이트는 이를 Project Gutenberg, Wikisource, archive.org에서 가져와 Cloudflare 캐시에만 둡니다(목록은 6시간, 책은 1주일). Wikisource 페이지와 LibriVox 녹음은 창이 해당 사이트에서 바로 불러옵니다.
 - 온라인 플레이는 Cloudflare에 있는 Arcade 서버를 거칩니다. 메시지는 방 안의 플레이어 사이에서 전달될 뿐 저장되지 않습니다 — 다만 나중에 돌아올 수 있도록 보드게임의 수는 저장되며, 한 달 동안 아무도 두지 않은 대국은 삭제됩니다.
 - 주제는 내 Claude Code 세션 안에서 Haiku가 제안합니다. Arcade 사이트는 대화를 볼 수 없으며, *나만의 주제*를 쓸 때 짧은 영어 검색어만 받습니다. 아티클 주소는 `#` 뒤에 붙기 때문에 Arcade 서버에 전달되지 않습니다.
+- *나만의 주제* 검색은 YouTube API Services를 거치고, 동영상은 YouTube 자체 플레이어에서 재생되므로 [YouTube 서비스 약관](https://www.youtube.com/t/terms)과 [Google 개인정보처리방침](https://policies.google.com/privacy)도 적용됩니다. 보여 줄 동영상 최대 6개는 내 세션의 Haiku가 제목과 짧은 설명을 보고 고릅니다. Arcade 사이트는 검색 결과를 공유 캐시에 하루 동안 보관합니다.
 - 로그인하면 사이트는 동기화된 설정, 즐겨찾기, @닉네임, 친구, 채팅, 공유 보드를 보관하고, 게임 초대는 10분 동안 보관합니다. 누가 온라인인지는 메모리에만 1분 30초 동안 둡니다. 세션 키는 Arcade 사이트로만 전송됩니다.
 - 노트는 내 컴퓨터에 남습니다. 공유 보드는 채팅과 마찬가지로 Arcade 사이트에 저장되며 암호화되지 않습니다. 페이지는 내가 요청할 때만, 내 Claude 커넥터를 통해 Notion이나 다른 앱으로 전송됩니다.
 - 오류 신고에는 내가 쓴 내용, Arcade 버전, 열려 있는 환경, 인터페이스 언어, OS만 담깁니다. 로그인하지 않았다면 서명 없이 전송되며, 사이트는 주소를 저장하지 않습니다.

@@ -180,6 +180,7 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 - **Pencerede oynarken bildirimler.**
 - **Mesaj bildirimleri** — bir arkadaşın sohbete yazdığında sol altta bir kart (macOS ve Linux’ta sistem bildirimi).
 - **Tuş testi ve tuş atama** (terminal).
+- **Koşullar ve gizlilik** — sitenin Kullanım Koşulları ve Gizlilik Politikası, her zamanki tarayıcında açılır.
 
 ## Eklenti bilgisayarında ne yapar
 
@@ -195,11 +196,14 @@ Arcade, Claude Code’un eklentilere verdiği erişimle Claude Code içinde çal
 
 ## Gizlilik
 
+Ayrıntılar sitenin [Gizlilik Politikası](https://agent-arcade.fefaodessa.workers.dev/privacy) ve [Kullanım Koşulları](https://agent-arcade.fefaodessa.workers.dev/terms) sayfalarında; eklentide *Ayarlar → Koşullar ve gizlilik* altında. Kısaca:
+
 - Reklam yok, analiz yok, takip yok. Analiz koduyla gelen oyunlar bundan arındırıldı (her oyunun `NOTICE` dosyasına bak).
 - Kendi ROM’ların, WAD’ların, kitapların ve ses dosyaların bilgisayarından ya da tarayıcından asla çıkmaz.
 - Kitap ve sesli kitap listeleri ile Project Gutenberg kitapları Arcade sitesi üzerinden gelir: site bunları Project Gutenberg, Vikikaynak ve archive.org’dan alır ve yalnızca Cloudflare önbelleğinde tutar — listeleri altı saat, bir kitabı bir hafta. Vikikaynak sayfalarını ve LibriVox kayıtlarını pencere doğrudan bu sitelerden yükler.
 - Çevrim içi oyun Cloudflare üzerindeki Arcade sunucusundan geçer: mesajlar bir odadaki oyuncular arasında aktarılır ve saklanmaz — geri dönebilmen için tutulan masa oyunu hamleleri hariç; bir ay boyunca dokunulmayan oyun silinir.
 - Konuları kendi Claude Code oturumunda Haiku önerir; Arcade sitesi sohbetini asla görmez — *Kendi konun*’u kullandığında yalnızca kısa bir İngilizce arama sorgusu gider. Bir makalenin adresi `#` işaretinden sonra gelir, bu yüzden Arcade sunucusuna asla ulaşmaz.
+- *Kendi konun* araması YouTube API Services üzerinden yapılır ve videolar YouTube’un kendi oynatıcısında oynar; bu yüzden [YouTube Hizmet Şartları](https://www.youtube.com/t/terms) ve [Google Gizlilik Politikası](https://policies.google.com/privacy) da geçerlidir. Kendi oturumundaki Haiku, başlıklarına ve kısa açıklamalarına bakarak en fazla altı video seçer; Arcade sitesi arama sonuçlarını ortak bir önbellekte bir gün tutar.
 - Giriş yaptıktan sonra site eşitlenen ayarlarını, favorilerini, @takma adını, arkadaşlarını, sohbetlerini ve ortak panolarını saklar; oyun davetlerini ise 10 dakika tutar. Kimin çevrimiçi olduğunu yalnızca bellekte, bir buçuk dakika tutar. Oturum anahtarı yalnızca Arcade sitesine gönderilir.
 - Defter bilgisayarında kalır. Ortak panolar, tıpkı sohbetler gibi Arcade sitesinde saklanır ve şifrelenmez. Sayfalar Notion’a ya da başka bir uygulamaya yalnızca sen istediğinde, kendi Claude bağlayıcıların üzerinden gider.
 - Bir hata raporu metnini, Arcade sürümünü, nerede açık olduğunu, arayüz dilini ve işletim sistemini içerir — başka hiçbir şey; giriş yapmadan imzasız gider ve site hiçbir adres saklamaz.

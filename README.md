@@ -180,6 +180,7 @@ Open **Settings** in the *More* section of the `/arcade` menu:
 - **Notifications while playing in the window.**
 - **Message notifications** — a card in the bottom left when a friend writes in a chat (a system notification on macOS and Linux).
 - **Key test and key remapping** (terminal).
+- **Terms and privacy** — the site's Terms of Use and Privacy Policy, opened in your usual browser.
 
 ## What the plugin does on your computer
 
@@ -195,11 +196,14 @@ Arcade runs inside Claude Code with the access Claude Code gives plugins. All of
 
 ## Privacy
 
+The site's [Privacy Policy](https://agent-arcade.fefaodessa.workers.dev/privacy) and [Terms of Use](https://agent-arcade.fefaodessa.workers.dev/terms) have the details; in the plugin they are under *Settings → Terms and privacy*. In short:
+
 - No ads, no analytics, no tracking. Games that came with analytics had it removed (see each game's `NOTICE`).
 - Your own ROMs, WADs, books and audiobook files never leave your machine or browser.
 - Book and audiobook lists and Project Gutenberg books come through Arcade's site, which fetches them from Project Gutenberg, Wikisource and archive.org and keeps them only in Cloudflare's cache — lists for six hours, a book for a week. Wikisource pages and LibriVox recordings the window loads straight from those sites.
 - Online play goes through Arcade's server on Cloudflare: messages are relayed between players in a room and not stored — except moves of board games, which are kept so you can come back; a game untouched for a month is deleted.
 - Topics are suggested by Haiku in your own Claude Code session; Arcade's site never sees your conversation — only a short English search query when you use *Your own topic*. An article's address goes after `#`, so it never reaches Arcade's server.
+- A search for *Your own topic* goes through YouTube API Services, and videos play in YouTube's own player, so the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the [Google Privacy Policy](https://policies.google.com/privacy) apply too. Haiku in your own session picks up to six videos from their titles and short descriptions; Arcade's site keeps search results in a shared cache for a day.
 - Signed in, the site keeps your synced settings, favorites, @handle, friends, chats and shared boards, and game invitations for 10 minutes. Who is online it holds only in memory, for a minute and a half. The session key goes only to Arcade's site.
 - The notebook stays on your computer. Shared boards are stored on Arcade's site and are not encrypted, like chats. Pages go to Notion or another app only when you ask, through your own Claude connectors.
 - A bug report carries your text, the Arcade version, where it is open, the interface language and the OS — nothing else; without signing in it goes unsigned, and the site keeps no address.
