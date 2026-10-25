@@ -1,6 +1,8 @@
 // Arcade: экраны языка и настроек.
 import { LANGS, LANG_NAMES } from '../i18n.js'
-import { FIELD, GRAPHICS, HIDEABLE, PANE, PANE_ROWS, S, SIGNAL_LABELS, SIGNAL_MODES } from '../app/state.js'
+import { SITE } from '../catalog.js'
+import { openUrlCommand } from '../browsers.js'
+import { FIELD, GRAPHICS, HIDEABLE, LAUNCH_TIMEOUT_MS, PANE, PANE_ROWS, S, SIGNAL_LABELS, SIGNAL_MODES } from '../app/state.js'
 import { paneColumns } from '../app/status.js'
 import { graphicsLabel, launch, startAssign } from '../app/play.js'
 import { MOUSE_NOTE, builtinBrowser, desktopLabel, desktopOptions, openerLabel, openerOptions, windowMode } from '../app/window.js'
@@ -33,6 +35,23 @@ export function langScreen($, e, kit) {
     ),
     ...hint,
   ]
+}
+
+// Условия использования и политика конфиденциальности — страницы сайта в браузере по умолчанию; браузер не открылся
+// (или его не открыть, как в VS Code без системы) — адрес строкой под настройками
+export async function openLegal($, page) {
+  const url = `${SITE}/${page}`
+  const command = S.platform ? openUrlCommand(S.platform, url) : null
+  let opened = false
+  if (command) {
+    try {
+      opened = (await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS }))?.exitCode === 0
+    } catch {
+      // не открылся — покажем адрес
+    }
+  }
+  S.libraryNotice = opened ? 'Страница открыта в браузере.' : url
+  $.ui.invalidate('ui.render')
 }
 
 export function settingsScreen($, e, kit) {
@@ -231,6 +250,13 @@ export function settingsScreen($, e, kit) {
           dim('  мод попросит нажать клавиши по очереди: вверх, вниз, влево, вправо, A, B, Start, Select'),
         ]
       : []
+  // Правила сайта Arcade — в самом конце настроек, чтобы не мешали; их требуют правила YouTube API Services
+  const legalTiles = [
+    Button({ key: 'arcade-terms', label: 'Условия использования', onPress: () => openLegal($, 'terms') }),
+    dim('  правила Arcade и условия YouTube'),
+    Button({ key: 'arcade-privacy', label: 'Политика конфиденциальности', onPress: () => openLegal($, 'privacy') }),
+    dim('  что хранит сайт Arcade, сколько и как это удалить'),
+  ]
   return [
     back,
     ...group('Разделы главного меню', sectionTiles),
@@ -240,6 +266,7 @@ export function settingsScreen($, e, kit) {
     ...group('Панель и язык', paneTiles),
     ...group('Уведомления', notifyTiles),
     ...group('Клавиши', keyTiles),
+    ...group('Условия и конфиденциальность', legalTiles),
     ...noticeLines,
     ...hint,
   ]

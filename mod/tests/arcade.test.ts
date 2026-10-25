@@ -6030,12 +6030,45 @@ test('Desktop: настройки — плитки с иконками под з
   // У настроек свои иконки, а не джойстик по умолчанию
   for (const key of ['arcade-opener', 'arcade-keep-menu', 'arcade-back-on-done', 'arcade-wide', 'arcade-on-done', 'arcade-on-permission', 'arcade-notify', 'arcade-msg-notify'])
     expect(JSON.stringify(await ui.find({ key: `card-${key}` }))).toContain('"alt"')
+  // Условия — документом, конфиденциальность — замком
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-terms' }))).toContain('M13 7h15l9 9v25H13z')
+  expect(JSON.stringify(await ui.find({ key: 'card-arcade-privacy' }))).toContain('M16 21v-5a8 8 0 0 1 16 0v5')
   expect(JSON.stringify(await ui.find({ key: 'card-arcade-lang' }))).toContain('<ellipse')
   // Вернулись с выбора языка — фокус на «Язык»
   await ui.press({ key: 'arcade-lang' })
   await ui.press({ key: 'arcade-back' })
   expect(await ui.find({ key: 'arcade-lang' })).toMatchObject({ props: { autoFocus: true } })
   expect((await ui.find({ key: 'arcade-show-play' })).props.autoFocus).toBeUndefined()
+  await ui.unmount()
+})
+
+// Правила сайта для YouTube API Services: последняя группа настроек, страницы — в обычном браузере; не открылся — адрес
+test('настройки: «Условия и конфиденциальность» открывают /terms и /privacy сайта в обычном браузере', async ($, on) => {
+  const { clock, launches } = stubs(on, { env: WINDOWS })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ type: 'Text', text: 'Условия и конфиденциальность' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  что хранит сайт Arcade, сколько и как это удалить' })).toBeDefined()
+  await ui.press({ key: 'arcade-terms' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/terms`)
+  expect(await ui.find({ type: 'Text', text: 'Страница открыта в браузере.' })).toBeDefined()
+  await ui.press({ key: 'arcade-privacy' })
+  expect(launches.at(-1).env.ARCADE_URL).toBe(`${SITE}/privacy`)
+  await ui.unmount()
+})
+
+test('настройки: браузер не открыл политику конфиденциальности — адрес строкой под настройками', async ($, on) => {
+  const { clock } = stubs(on, { env: WINDOWS, launchExit: 1 })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-privacy' })
+  expect(await ui.find({ type: 'Text', text: `${SITE}/privacy` })).toBeDefined()
   await ui.unmount()
 })
 
