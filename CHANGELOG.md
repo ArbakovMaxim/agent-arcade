@@ -1,5 +1,11 @@
 # Changelog · Список изменений
 
+## 0.34.1 — условия использования и политика конфиденциальности сайта Arcade — в конце настроек · the Arcade site’s Terms of Use and Privacy Policy are at the end of the settings
+
+- New last settings group “Terms and privacy”: “Terms of Use” and “Privacy Policy” open the site’s /terms and /privacy pages in your regular browser; if no browser opens, the address is shown under the settings · новая последняя группа настроек «Условия и конфиденциальность»: «Условия использования» и «Политика конфиденциальности» открывают страницы сайта /terms и /privacy в обычном браузере; не открылся — адрес показывается под настройками
+- The site: new /terms and /privacy pages — what the site keeps, for how long, who else handles it and how to delete it, plus the YouTube Terms of Service and the Google Privacy Policy that the YouTube API Services require; a small grey line with these links under the video list on /watch · сайт: новые страницы /terms и /privacy — что сайт хранит, сколько, кто ещё это обрабатывает и как удалить, и условия YouTube с политикой Google, которых требуют правила YouTube API Services; под списком видео на /watch — мелкая серая строка с этими ссылками
+- New strings are translated into all 13 languages · новые строки переведены на все 13 языков
+
 ## 0.34.0 — вход через GitHub — кнопкой в браузере, без кода; вход по коду остался запасным · signing in with GitHub is a button in the browser, no code to type; signing in with a code stays as the fallback
 
 - “Sign in with GitHub” opens GitHub’s sign-in page in your regular browser by itself; after you confirm there, Arcade’s page asks you to press “Sign in” and shows a 4-character code that should match the one in the panel · «Войти через GitHub» сам открывает страницу входа GitHub в обычном браузере; после подтверждения там страница Arcade просит нажать «Войти» и показывает код из 4 знаков — он должен совпасть с кодом в панели

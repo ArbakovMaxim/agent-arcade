@@ -1266,7 +1266,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
 {
   const PLAYER = 'https://www.youtube-nocookie.com'
   async function watchPage({ hash, search = '', oembed = true }) {
-    const page = { posted: [], replaced: null, fetched: [], handlers: {}, location: { hash, search, pathname: '/watch', origin: 'https://agent-arcade.test' } }
+    const page = { posted: [], replaced: null, fetched: [], handlers: {}, after: [], location: { hash, search, pathname: '/watch', origin: 'https://agent-arcade.test' } }
     const node = (tag) => {
       const n = {
         tagName: tag, className: '', children: [], attributes: {}, listeners: {}, hidden: false, title: '', own: '',
@@ -1274,6 +1274,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
         get textContent() { return this.own + this.children.map((c) => c.textContent).join('') },
         set textContent(v) { this.own = String(v); this.children = [] },
         append(...kids) { this.children.push(...kids) },
+        after(...kids) { page.after.push(...kids) },
         addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
         setAttribute(k, v) { this.attributes[k] = String(v) },
         removeAttribute(k) { delete this.attributes[k] },
@@ -1323,6 +1324,12 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(page.root.children[0].children[1].children[1].href, 'https://www.youtube.com/watch?v=bbbbbbbbbbb')
   assert.ok(page.items()[1].classList.contains('active') && !page.items()[0].classList.contains('active'))
   assert.equal(page.replaced, '/watch#v=aaaaaaaaaaa,bbbbbbbbbbb&i=1', 'в адресе — только настоящая подборка')
+  // Под подборкой — условия Arcade, конфиденциальность и условия YouTube, в новой вкладке
+  const legal = page.after.find((x) => x.className === 'legal')
+  assert.deepEqual(
+    legal.children.filter((x) => typeof x === 'object').map((a) => [a.href, a.target]),
+    [['terms', '_blank'], ['privacy', '_blank'], ['https://www.youtube.com/t/terms', '_blank']],
+  )
   // Названия — из oEmbed YouTube
   assert.equal(page.fetched.length, 2)
   assert.equal(page.items()[0].querySelector('.name').textContent, 'Видео aaaaaaaaaaa')

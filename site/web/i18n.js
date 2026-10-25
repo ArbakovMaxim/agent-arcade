@@ -334,6 +334,8 @@
     'Видео удалено или скрыто.': 'The video has been removed or hidden.',
     'Автор не разрешил смотреть это видео на других сайтах — открой его на YouTube.': "The author doesn't allow watching this video on other sites — open it on YouTube.",
     'Видео здесь не играет — открой его на YouTube.': "The video doesn't play here — open it on YouTube.",
+    'Условия использования': 'Terms of Use',
+    'Конфиденциальность': 'Privacy Policy',
     // каналы Twitch из мода
     'Открыть на Twitch': 'Open on Twitch',
     'В адресе нет каналов. Каналы выбирает мод Arcade: /arcade → Twitch.': 'There are no channels in the address. The Arcade mod picks the channels: /arcade → Twitch.',

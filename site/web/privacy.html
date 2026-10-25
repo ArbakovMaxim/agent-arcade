@@ -1,0 +1,180 @@
+<!doctype html>
+<!-- Политика конфиденциальности сайта Arcade — по-английски, без перевода окна: это текст, на который ссылаются правила
+     YouTube API Services (III.A.2). Сроки и состав данных — те же, что в worker/*.js; поменялся код — поправь и здесь -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Arcade · Privacy Policy</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; min-height: 100%; background: #0d0d0f; color: #d8d8dc;
+    font: 14px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { margin: 0 0 4px; font-size: 24px; color: #fff; }
+  h2 { margin: 28px 0 8px; font-size: 17px; color: #fff; }
+  p, ul { margin: 0 0 10px; }
+  ul { padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  a { color: #7fb2ff; }
+  .updated { color: #9a9aa3; font-size: 13px; margin-bottom: 18px; }
+  .summary { padding: 12px 16px; background: #17171b; border: 1px solid #26262c; border-radius: 8px; }
+  .summary ul { margin: 0; }
+  nav { margin-top: 32px; color: #9a9aa3; font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Privacy Policy</h1>
+<div class="updated">Last updated: October 25, 2026</div>
+
+<p>Arcade is a free, open-source plugin for Claude Code together with this website (agent-arcade.fefaodessa.workers.dev),
+which serves the game player, multiplayer rooms, optional accounts, chats and content search. The source code is public at
+<a href="https://github.com/ArbakovMaxim/agent-arcade">github.com/ArbakovMaxim/agent-arcade</a>, and the project is run by
+the maintainer of that repository. This policy explains what the website collects, how it is used, how long it is kept,
+who else is involved and how to delete it.</p>
+
+<p>The plugin keeps its settings, notebook, game progress and scores on your computer. They go to the website only when you
+use a feature described below.</p>
+
+<div class="summary">
+<ul>
+  <li>No ads, no analytics and no tracking cookies. Arcade does not sell or rent your data, and does not share it except as
+    described here.</li>
+  <li>Your IP address is not stored. For rate limits, the website keeps at most a salted daily tag of it.</li>
+  <li>An account is optional. It uses GitHub sign-in, and you can delete it at any time.</li>
+  <li>Data from YouTube is cached for at most about 30 hours.</li>
+</ul>
+</div>
+
+<h2>YouTube API Services</h2>
+<p>Arcade uses YouTube API Services to find videos. Data from YouTube is also handled by Google, under the
+<a href="https://policies.google.com/privacy">Google Privacy Policy</a>. Use of Arcade's YouTube features is also covered
+by the <a href="https://www.youtube.com/t/terms">YouTube Terms of Service</a>; see Arcade's <a href="terms">Terms of Use</a>.</p>
+<ul>
+  <li><b>Search by your own topic.</b> When you add your own topic in the plugin's Watch section, the website sends the
+    topic text to the YouTube Data API. It keeps the matching results in a shared cache for 24 hours: the video ID, title,
+    channel name, publication date, view count, duration and the first 300 characters of the description. The cache is
+    cleaned every 6 hours, so results are deleted within about 30 hours. The cache is keyed by the topic text, not by who
+    asked, and everyone who asks the same topic gets the same results.</li>
+  <li><b>Suggested topics.</b> Topics that Arcade suggests from your current work are chosen on your computer by Claude, in
+    your Claude Code session, from a fixed list of directions. The plugin then reads the public video feeds of YouTube
+    channels directly from your computer. Neither your conversation nor these topics are sent to the Arcade website.</li>
+  <li><b>Playing videos.</b> The <a href="watch">/watch</a> page plays videos in YouTube's embedded player in
+    privacy-enhanced mode (youtube-nocookie.com) and loads video titles from YouTube's oEmbed service. The list of video
+    IDs is in the part of the address after <code>#</code>, which the browser does not send to the Arcade website. While
+    you watch, your browser connects to YouTube and Google directly, and they may store data in your browser under their
+    own policies.</li>
+  <li>Arcade does not use Google sign-in and never accesses your Google or YouTube account.</li>
+</ul>
+
+<h2>Accounts (optional)</h2>
+<ul>
+  <li><b>Sign-in.</b> You sign in with GitHub. Arcade asks GitHub for no permissions, so it learns only your public GitHub
+    ID, login and avatar address. The GitHub access token is used once to read them and is not kept.</li>
+  <li><b>What the website stores.</b>
+    <ul>
+      <li>Your GitHub ID and login, and your GitHub avatar address. The avatar is not shown to other people.</li>
+      <li>The @handle you choose, and the number of the Arcade avatar picture you pick.</li>
+      <li>The settings you sync, up to 16 KB: interface language, keys, notifications, panel size, what to do when the
+        agent finishes or asks for permission, your own Watch topics and Twitch channels, the Flappy best score, collapsed
+        and hidden sections, favorites, and whether to hide that you are online.</li>
+      <li>Your friends and friend requests, the lists of your chats and shared boards, and pending invites.</li>
+      <li>Hashes of your sign-in keys, for at most 10 devices. The keys themselves stay on your computers.</li>
+    </ul></li>
+  <li><b>Online status.</b> While Arcade is open, your friends can see that you are online. The status expires 90 seconds
+    after the plugin last reported it. You can hide it in your settings.</li>
+  <li><b>How long.</b> Until you delete the account. An account that is not used for a year is deleted automatically,
+    with everything listed above. A handle you give up stays reserved for 30 days, so nobody else can take it right
+    away.</li>
+</ul>
+
+<h2>Chats</h2>
+<p>Direct messages and group chats with friends are stored on the website as written. They are not end-to-end encrypted,
+so don't send passwords or other secrets. A message is up to 2,000 characters, and each chat keeps its latest 1,000
+messages; older ones are deleted. A direct chat is deleted for both people when either of them removes the other from
+friends or deletes their account. A group chat is deleted when its last member leaves. Messages you sent to a group stay
+there for the remaining members.</p>
+
+<h2>Shared project boards</h2>
+<p>Boards you share with friends are stored on the website with their cards, not encrypted. A board is deleted when its
+owner deletes it or its last member leaves. Your own unshared notebook and boards stay on your computer.</p>
+
+<h2>Multiplayer games</h2>
+<p>Game rooms pass moves between players in real time and keep nothing about the players once the room is empty. Board
+games (such as chess) keep the moves on the website, so you can come back to the same game; a game with no moves for 30
+days is deleted. If you play signed in, the other player sees your @handle.</p>
+
+<h2>Bug reports</h2>
+<p>A report contains the text you write, plus the Arcade version, where Arcade is open (for example, the terminal or
+Claude Desktop), the interface language and the operating system. If you are signed in, it is signed with your GitHub ID
+and @handle. Only the maintainer can read reports. A closed report is deleted, and at most 1,000 open reports are kept.
+The sender's IP address is not stored with a report.</p>
+
+<h2>Articles, podcasts, books and Twitch</h2>
+<ul>
+  <li><b>Articles and podcasts.</b> Your own topic text is sent to Hacker News search (by Algolia), Medium tag feeds and
+    Apple's iTunes Search. The results are cached for 12 hours, the same way as YouTube results.</li>
+  <li><b>Books.</b> Book lists and files come from Project Gutenberg, Wikisource and LibriVox (on the Internet Archive),
+    some of them through the website. Copies are cached for up to 7 days. Nothing about the reader is stored.</li>
+  <li><b>Twitch.</b> The channel names you follow are sent to the Twitch API to check who is live. Answers are cached for
+    1 minute (who is live) and 7 days (channel details).</li>
+</ul>
+
+<h2>IP addresses and rate limits</h2>
+<p>To keep free services available to everyone, the website limits requests per network address. Examples are 10 new
+YouTube searches per day, or 8 connections to one game room. For this, the address is used in memory, or turned into a
+salted tag that cannot be turned back into the address and changes every day. The tags are deleted after their day. The
+address itself is not saved.</p>
+
+<h2>Server logs</h2>
+<p>The website runs on Cloudflare Workers. Cloudflare records each request for troubleshooting. A record can include the
+time, the address requested (which may contain a search topic), the response status, your IP address, browser and
+country. Sign-in keys in request headers are masked. Records are kept for up to 7 days, and only the maintainer can see
+them.</p>
+
+<h2>Service providers and other sites</h2>
+<p>Arcade relies on these services. Each one handles data under its own privacy policy.</p>
+<ul>
+  <li><b>Cloudflare:</b> hosting and logs.</li>
+  <li><b>GitHub:</b> sign-in.</li>
+  <li><b>Google and YouTube:</b> video search and the player.</li>
+  <li><b>Twitch</b> and the content sources named above.</li>
+</ul>
+<p>Games and some links open other sites, such as a game's home page or TikTok's own site. Those sites are not covered by
+this policy.</p>
+
+<h2>Your browser and your computer</h2>
+<p>Arcade sets no cookies. The website's pages keep your interface language in your browser's local storage. The game
+player also keeps your game progress, scores and the game files you open yourself ("My games") in the browser. This
+never leaves your browser. You can remove it by clearing this site's data in your browser. The YouTube player may store
+data under Google's policy, as described above.</p>
+
+<h2>Deleting your data</h2>
+<ul>
+  <li><b>Delete your account.</b> Open your profile in Arcade's menu, then Sync and sign-in, then Delete account. The
+    deletion happens right away. It removes your account data and settings, friends and requests, direct chats and sign-in
+    keys. It also takes you out of your groups and shared boards, and removes your signature from bug reports you sent.
+    Your handle is released.</li>
+  <li><b>Sign out.</b> Signing out forgets the sign-in on that computer.</li>
+  <li><b>Anything else.</b> For other deletion requests, such as an unsigned bug report or a cached search, or for any
+    question about your data, use 🐞 Report a bug in Arcade's menu. Only the maintainer reads these reports. You can also
+    open an issue at <a href="https://github.com/ArbakovMaxim/agent-arcade/issues">github.com/ArbakovMaxim/agent-arcade/issues</a>,
+    but issues are public. Requests are handled within 7 days.</li>
+</ul>
+
+<h2>Children</h2>
+<p>Arcade is not directed at children under 13, and accounts require a GitHub account, which has its own minimum age.</p>
+
+<h2>Changes</h2>
+<p>When this policy changes, the date at the top changes too. Significant changes are also noted in the project's
+release notes.</p>
+
+<h2>Contact</h2>
+<p>Use 🐞 Report a bug in Arcade's menu (private), or open an issue on
+<a href="https://github.com/ArbakovMaxim/agent-arcade/issues">GitHub</a> (public).</p>
+
+<nav><a href="terms">Terms of Use</a> · <a href="https://github.com/ArbakovMaxim/agent-arcade">Source code</a></nav>
+</main>
+</body>
+</html>

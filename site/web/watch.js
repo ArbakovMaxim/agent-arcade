@@ -159,5 +159,14 @@
   }
   window.addEventListener('hashchange', load)
   document.documentElement.lang = lang
+  // Под подборкой — условия Arcade, политика конфиденциальности и условия YouTube: ссылок на них требуют правила
+  // YouTube API Services. Открываются в новой вкладке, чтобы не сбить видео
+  const legal = (href, text) => el('a', { href, target: '_blank', rel: 'noopener', textContent: text })
+  root.after(
+    el('footer', { className: 'legal' }, [
+      legal('terms', T('Условия использования')), ' · ', legal('privacy', T('Конфиденциальность')), ' · ',
+      legal('https://www.youtube.com/t/terms', 'YouTube Terms of Service'),
+    ]),
+  )
   load()
 })()
