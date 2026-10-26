@@ -10,7 +10,9 @@ Arcade es un plugin para [Claude Code](https://claude.com/claude-code) que llena
 
 Todo el catálogo es gratuito: los juegos tienen licencias abiertas y los libros y audiolibros son de dominio público. También puedes jugar en línea con otras personas que esperan a sus agentes y chatear con tus amigos.
 
-![«¿jugamos?» sobre el prompt de Claude Code tras 11 segundos de trabajo del agente](docs/images/prompt.png)
+[![Demo: Claude Code recibe una tarea, aparece «¿jugamos?» sobre el prompt, un juego de NES corre junto al chat y Arcade te avisa cuando el agente termina; también hay libros, audiolibros y artículos](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287)
+
+*31 segundos en Claude Desktop, con la interfaz en inglés. Haz clic en la animación para ver el vídeo en 720p.*
 
 ## Funciones
 

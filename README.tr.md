@@ -10,7 +10,9 @@ Arcade, ajanın çalışırken bekleme süresini dolduran bir [Claude Code](http
 
 Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kitaplar kamu malı. Ajanlarını bekleyen başka kişilerle çevrim içi oynayabilir ve arkadaşlarınla sohbet edebilirsin.
 
-![Ajan 11 saniye çalıştıktan sonra Claude Code isteminin üstünde «oynamak ister misin?»](docs/images/prompt.png)
+[![Demo: Claude Code’a bir görev verilir, istemin üstünde «oynamak ister misin?» belirir, sohbetin yanında bir NES oyunu çalışır ve ajan bitirince Arcade seni geri çağırır; kitaplar, sesli kitaplar ve makaleler de var](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287)
+
+*Claude Desktop’ta 31 saniye, arayüz İngilizce. Videoyu 720p izlemek için animasyona tıkla.*
 
 ## Özellikler
 
