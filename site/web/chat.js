@@ -4,7 +4,8 @@
 // (sessionStorage) и в адрес не попадает — ссылку на страницу можно переслать, не отдав переписку. #t=<билет> тоже
 // принимается и сразу уходит из адреса.
 // Новые сообщения приходят по живому соединению /net/chat; пока его нет — страница спрашивает сама раз в 10 секунд.
-// Сообщения хранятся на сайте Arcade как есть, без шифрования.
+// Своё сообщение можно поправить и удалить у всех: ⋮ рядом с ним или правая кнопка мыши. Правки и удаления других
+// приходят тем же путём, что и новые сообщения. Сообщения хранятся на сайте Arcade как есть, без шифрования.
 ;(function () {
   'use strict'
 
@@ -27,8 +28,9 @@
   const names = new Map() // номер → @ник без @
   const pics = new Map() // номер → номер аватарки 0–23, кто её выбрал
   let online = new Set() // друзья в сети — приходят со списком чатов
-  let current = null // { id, chat, messages, first, gone }
+  let current = null // { id, chat, messages, first, gone, draft, editing: { s, text } | null }
   let panel = null // 'new' | 'members' — лист поверх переписки
+  let menu = null // { s, x, y, up, confirm } — меню своего сообщения: где открыто и спрашивает ли «удалить у всех?»
   let friends = null // [{ id, handle }] — для нового чата и группы
   let parts = null
   let socket = null
@@ -149,6 +151,7 @@
     if (code === 'full') return T('В группе может быть не больше 50 человек.')
     if (code === 'owner') return T('Это может только тот, кто управляет группой.')
     if (code === 'off') return T('Чаты на сайте сейчас выключены.')
+    if (code === 'edit') return T('Этого сообщения уже нет.')
     return T('Сайт Arcade не ответил — попробуй ещё раз.')
   }
   function say(text) {
@@ -220,9 +223,12 @@
     const talk = el('section', { className: 'talk' })
     const notice = el('div', { className: 'notice' })
     notice.setAttribute('role', 'status')
-    const app = el('div', { className: 'app' }, [side, talk])
+    const menuBox = el('div', { className: 'menu' })
+    menuBox.setAttribute('role', 'menu')
+    const app = el('div', { className: 'app' }, [side, talk, menuBox])
     root.append(app)
-    parts = { app, meName, meAva, dot, list, talk, notice, feed: null, input: null, send: null, left: null }
+    menu = null
+    parts = { app, meName, meAva, dot, list, talk, notice, menu: menuBox, feed: null, dock: null, input: null, send: null, left: null }
     renderAll()
   }
 
@@ -258,7 +264,8 @@
   function renderTalk() {
     const talk = parts.talk
     talk.textContent = ''
-    parts.feed = parts.input = parts.send = parts.left = parts.head = null
+    parts.feed = parts.dock = parts.input = parts.send = parts.left = parts.head = null
+    closeMenu()
     parts.app.classList.toggle('open', Boolean(current || panel))
     if (panel === 'new') return talk.append(el('div', { className: 'head' }, [back()]), parts.notice, sheetNew())
     if (panel === 'members' && current && current.chat) return talk.append(el('div', { className: 'head' }, [back()]), parts.notice, sheetMembers())
@@ -267,27 +274,53 @@
     talk.append(parts.head, parts.notice)
     renderHead()
     const feed = el('div', { className: 'feed' })
+    // Переписку прокрутили — сообщение уехало от меню: меню закрывается
+    for (const type of ['wheel', 'touchmove']) feed.addEventListener(type, () => closeMenu(), { passive: true })
     parts.feed = feed
     talk.append(feed)
     renderFeed(true)
     if (current.gone) return
-    const input = el('textarea', { rows: 1, maxLength: MAX_TEXT, placeholder: T('Сообщение'), value: current.draft || '' })
-    input.setAttribute('aria-label', T('Сообщение'))
+    parts.dock = el('div', { className: 'dock' })
+    talk.append(parts.dock)
+    renderCompose()
+  }
+
+  // Поле внизу: новое сообщение, а после «Изменить» — текст своего сообщения, править здесь же. Enter сохраняет,
+  // Esc и «Отмена» — оставить как было; начатое новое сообщение при этом не теряется
+  function renderCompose() {
+    const dock = parts && parts.dock
+    if (!dock) return
+    dock.textContent = ''
+    const editing = current.editing && current.messages.find((m) => m.s === current.editing.s && !m.d)
+    const input = el('textarea', { rows: 1, maxLength: MAX_TEXT, placeholder: T('Сообщение'), value: (editing ? current.editing.text : current.draft) || '' })
+    input.setAttribute('aria-label', editing ? T('Правка сообщения') : T('Сообщение'))
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault()
         send()
+      } else if (event.key === 'Escape' && current.editing) {
+        event.preventDefault()
+        stopEdit()
       }
     })
     input.addEventListener('input', () => {
-      current.draft = input.value
+      if (current.editing) current.editing.text = input.value
+      else current.draft = input.value
       counter()
     })
     const left = el('span', { className: 'left' })
-    const sendButton = button(T('Отправить'), () => send(), 'main')
+    const sendButton = button(editing ? T('Сохранить') : T('Отправить'), () => send(), 'main')
     Object.assign(parts, { input, send: sendButton, left })
-    talk.append(el('div', { className: 'compose' }, [input, left, sendButton]), el('div', { className: 'plain', textContent: T('Переписка не шифруется — не пиши сюда пароли и ключи.') }))
+    const bar = editing && el('div', { className: 'editing' }, [el('span', { className: 'what', textContent: T('Правка сообщения') }), el('span', { className: 'was', textContent: editing.t }), link(T('Отмена'), () => stopEdit())])
+    dock.append(...[bar, el('div', { className: 'compose' }, [input, left, sendButton]), el('div', { className: 'plain', textContent: T('Переписка не шифруется — не пиши сюда пароли и ключи.') })].filter(Boolean))
     counter()
+  }
+
+  // Тихая кнопка-надпись: пункты меню сообщения и «Отмена» правки — не крупные кнопки
+  function link(text, onClick, className) {
+    const b = el('button', { type: 'button', className: className ? `act ${className}` : 'act', textContent: text })
+    b.addEventListener('click', onClick)
+    return b
   }
 
   const back = () =>
@@ -332,10 +365,13 @@
     const stick = bottom || feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40
     const before = feed.scrollHeight - feed.scrollTop
     feed.textContent = ''
-    const list = current.messages
+    parts.bubbles = new Map()
+    // Удалённые сообщения не показываем; «Раньше» — пока на сайте есть сообщения до загруженных
+    const list = current.messages.filter((m) => !m.d)
+    const earlier = current.messages.length > 0 && current.messages[0].s > current.first
     if (current.gone) feed.append(el('div', { className: 'note', textContent: T('Этого чата больше нет.') }))
-    if (list.length && list[0].s > current.first) feed.append(button(T('Раньше'), () => older(), 'more'))
-    if (current.chat && !list.length && !current.gone) feed.append(el('div', { className: 'hint', textContent: T('Здесь пока пусто — напиши первым.') }))
+    if (earlier) feed.append(button(T('Раньше'), () => older(), 'more'))
+    if (current.chat && !list.length && !earlier && !current.gone) feed.append(el('div', { className: 'hint', textContent: T('Здесь пока пусто — напиши первым.') }))
     const group = current.id.startsWith('g')
     // Подряд от одного человека в один день: в группе имя — у первого сообщения, аватарка — у последнего
     const run = (a, b) => Boolean(a && b && !a.k && !b.k && a.f === b.f && sameDay(a.at, b.at))
@@ -346,16 +382,190 @@
       const mine = Boolean(me && m.f === me.id)
       // Одна галочка — сообщение на сайте; прочитано ли — сайт не знает
       const tick = mine && el('span', { className: 'tick', textContent: '✓', title: T('Доставлено') })
-      const bubble = el('div', { className: mine ? 'msg mine' : 'msg' }, [
+      // «изменено» — сообщение поправили; когда — в подсказке
+      const at = m.e ? el('span', { className: 'at', textContent: `${T('изменено')} ${clock(m.at)}`, title: format(m.e, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) }, [tick]) : el('span', { className: 'at', textContent: clock(m.at) }, [tick])
+      const own = mine && !current.gone
+      const edited = Boolean(current.editing && current.editing.s === m.s)
+      const bubble = el('div', { className: ['msg', mine && 'mine', edited && 'editing', menu && menu.s === m.s && 'open'].filter(Boolean).join(' ') }, [
         group && !mine && !run(prev, m) && el('div', { className: 'who', textContent: nameOf(m.f) }),
         el('div', { className: 'text' }, rich(m.t)),
-        el('span', { className: 'at', textContent: clock(m.at) }, [tick]),
+        at,
+        own && dots(m),
       ])
+      if (own) {
+        parts.bubbles.set(m.s, bubble)
+        bubble.addEventListener('contextmenu', (event) => {
+          // Выделен текст или нажали на ссылку — обычное меню браузера: скопировать, открыть
+          const picked = typeof window.getSelection === 'function' && String(window.getSelection()).trim()
+          if (picked || (event.target && typeof event.target.closest === 'function' && event.target.closest('a'))) return
+          event.preventDefault()
+          openMenu(m.s, event.clientX, event.clientY, event.clientY, false)
+        })
+      }
       if (!group || mine) return feed.append(bubble)
       const face = run(m, list[i + 1]) ? el('span', { className: 'gap' }) : ava(personSvg(m.f), 'small')
       feed.append(el('div', { className: 'line' }, [face, bubble]))
     })
     feed.scrollTop = stick ? feed.scrollHeight : feed.scrollHeight - before
+  }
+
+  // --- Меню своего сообщения -----------------------------------------------------------------------------------
+  // ⋮ рядом со своим сообщением (видно при наведении) — то же меню, что по правой кнопке мыши
+  function dots(m) {
+    const b = el('button', { type: 'button', className: 'dots', textContent: '⋮', title: T('Ещё') })
+    b.setAttribute('aria-label', T('Ещё'))
+    b.setAttribute('aria-haspopup', 'menu')
+    b.addEventListener('click', () => {
+      if (menu && menu.s === m.s) return closeMenu()
+      const r = typeof b.getBoundingClientRect === 'function' ? b.getBoundingClientRect() : { left: 0, top: 0, bottom: 0 }
+      openMenu(m.s, r.left, r.bottom + 4, r.top - 4, true)
+    })
+    return b
+  }
+
+  // Меню открывается вниз от (x, y); не помещается внизу окна — вверх, нижним краем к up
+  function openMenu(s, x, y, up, keyboard) {
+    closeMenu()
+    menu = { s, x: x || 0, y: y || 0, up: up || 0, confirm: false }
+    mark(s, true)
+    renderMenu(keyboard)
+  }
+
+  function closeMenu() {
+    if (!menu) return
+    mark(menu.s, false)
+    menu = null
+    renderMenu(false)
+  }
+
+  // Пока меню открыто, ⋮ у сообщения не прячется
+  function mark(s, on) {
+    const bubble = parts && parts.bubbles && parts.bubbles.get(s)
+    if (bubble) bubble.classList.toggle('open', on)
+  }
+
+  // «Изменить» и «Удалить»; «Удалить» спрашивает ещё раз — сообщение пропадёт у всех
+  function renderMenu(keyboard) {
+    const box = parts && parts.menu
+    if (!box) return
+    box.textContent = ''
+    const m = menu && current && current.messages.find((x) => x.s === menu.s && !x.d)
+    if (!m) {
+      menu = null
+      return
+    }
+    const item = (text, onClick, className) => {
+      const b = link(text, onClick, className)
+      b.setAttribute('role', 'menuitem')
+      return b
+    }
+    const items = menu.confirm
+      ? [el('div', { className: 'ask', textContent: T('Удалить сообщение у всех?') }), item(T('Удалить'), () => erase(m.s), 'warn'), item(T('Отмена'), () => closeMenu())]
+      : [
+          item(T('Изменить'), () => startEdit(m.s)),
+          item(T('Удалить'), () => {
+            menu.confirm = true
+            renderMenu(keyboard)
+          }, 'warn'),
+        ]
+    box.append(...items)
+    box.style.left = `${menu.x}px`
+    box.style.top = `${menu.y}px`
+    if (typeof box.getBoundingClientRect === 'function') {
+      // Не за краем окна
+      const r = box.getBoundingClientRect()
+      box.style.left = `${Math.max(8, Math.min(menu.x, window.innerWidth - r.width - 8))}px`
+      if (menu.y + r.height > window.innerHeight - 8) box.style.top = `${Math.max(8, menu.up - r.height)}px`
+    }
+    // С клавиатуры — фокус на первый пункт; в вопросе «удалить у всех?» — на «Отмена»
+    const first = items[menu.confirm ? 2 : 0]
+    if (keyboard && typeof first.focus === 'function') first.focus()
+  }
+
+  // --- Правка и удаление своего сообщения ----------------------------------------------------------------------
+  function startEdit(s) {
+    const m = current && current.messages.find((x) => x.s === s && !x.d)
+    if (!m) return closeMenu()
+    current.editing = { s, text: m.t }
+    say('')
+    closeMenu()
+    renderCompose()
+    renderFeed(false)
+    const input = parts && parts.input
+    if (input && typeof input.focus === 'function') {
+      input.focus()
+      if (typeof input.setSelectionRange === 'function') input.setSelectionRange(input.value.length, input.value.length)
+    }
+  }
+
+  function stopEdit() {
+    if (!current || !current.editing) return
+    current.editing = null
+    renderCompose()
+    renderFeed(false)
+  }
+
+  // Тот же текст — правки нет, на сайт не ходим
+  async function save() {
+    const editing = current.editing
+    const m = current.messages.find((x) => x.s === editing.s && !x.d)
+    const text = parts.input.value.trim()
+    if (!text) return
+    if (!m || text === m.t) return stopEdit()
+    if (text.length > MAX_TEXT) return say(problem({ code: 'long' }))
+    const id = current.id
+    sending = true
+    parts.send.disabled = true
+    try {
+      const { msg } = await api('POST', 'chats/edit', { chat: id, s: editing.s, text })
+      if (current && current.id === id) {
+        if (msg) merge([msg])
+        if (current.editing === editing) current.editing = null
+        say('')
+        renderCompose()
+        renderFeed(false)
+      }
+      soonList()
+    } catch (error) {
+      if (error.code === 'gone') gone(id)
+      else if (error.code === 'edit' && current && current.id === id) {
+        // Сообщение уже удалили (например, в Arcade) — правка закрывается, удаление подтянется
+        current.editing = null
+        renderCompose()
+        say(problem(error))
+        newer()
+      } else if (error.code !== 'auth') say(problem(error))
+    } finally {
+      sending = false
+      if (parts && parts.send) parts.send.disabled = false
+      if (parts && parts.input && typeof parts.input.focus === 'function') parts.input.focus()
+    }
+  }
+
+  async function erase(s) {
+    closeMenu()
+    if (!current || sending) return
+    const id = current.id
+    sending = true
+    try {
+      const { msg } = await api('POST', 'chats/delete', { chat: id, s })
+      if (current && current.id === id) {
+        if (msg) merge([msg])
+        if (current.editing && current.editing.s === s) {
+          current.editing = null
+          renderCompose()
+        }
+        say('')
+        renderFeed(false)
+      }
+      soonList()
+    } catch (error) {
+      if (error.code === 'gone') gone(id)
+      else if (error.code === 'edit') newer()
+      else if (error.code !== 'auth') say(problem(error))
+    } finally {
+      sending = false
+    }
   }
 
   // Лист «Новый чат»: написать другу, группа из отмеченных друзей или со всеми сразу
@@ -477,7 +687,7 @@
 
   async function open(id) {
     if (!CHAT.test(id) || !ticket) return
-    current = { id, chat: null, messages: [], first: 1, gone: false, draft: '' }
+    current = { id, chat: null, messages: [], first: 1, gone: false, draft: '', editing: null }
     panel = null
     leaving = false
     address()
@@ -502,19 +712,31 @@
     }
   }
 
-  // Новое в открытом чате — после последнего показанного; чат становится прочитанным
+  // Новое в открытом чате — после последнего показанного; чат становится прочитанным. edits — номер последней правки
+  // переписки, которую страница уже видела: сайт пришлёт и поправленные или удалённые с тех пор сообщения постарше
   async function newer() {
     if (!current || !current.chat || current.gone) return
     const id = current.id
     const last = current.messages.length ? current.messages[current.messages.length - 1].s : current.chat.last
+    const seen = Number.isSafeInteger(current.chat.edits) ? current.chat.edits : 0
     try {
-      const data = await api('GET', `chats/messages?chat=${id}&after=${last}`)
+      const data = await api('GET', `chats/messages?chat=${id}&after=${last}&edits=${seen}`)
       if (!current || current.id !== id) return
       absorb(data)
       current.chat = data.chat
-      merge(data.messages || [])
+      // Поправленные раньше первого загруженного не нужны: их покажет «Раньше» уже такими
+      const first = current.messages.length ? current.messages[0].s : Infinity
+      merge((data.messages || []).filter((m) => m && (m.s > last || m.s >= first)))
       const entry = chats.find((c) => c.id === id)
       if (entry) entry.unread = 0
+      const alive = (s) => current.messages.some((m) => m.s === s && !m.d)
+      // Сообщение удалили в другом месте — его меню и правка закрываются
+      if (menu && !alive(menu.s)) closeMenu()
+      if (current.editing && !alive(current.editing.s)) {
+        current.editing = null
+        say(T('Этого сообщения уже нет.'))
+        if (!panel) renderCompose()
+      }
       if (panel) renderTalk()
       else renderFeed(false)
       renderSide()
@@ -538,9 +760,11 @@
     }
   }
 
+  // Пришедшее с тем же номером — поправленное или удалённое сообщение: заменяет прежнее
   function merge(list) {
-    const known = new Set(current.messages.map((m) => m.s))
-    current.messages = [...current.messages, ...list.filter((m) => m && Number.isSafeInteger(m.s) && !known.has(m.s))].sort((a, b) => a.s - b.s)
+    const known = new Map(current.messages.map((m) => [m.s, m]))
+    for (const m of list) if (m && Number.isSafeInteger(m.s)) known.set(m.s, m)
+    current.messages = [...known.values()].sort((a, b) => a.s - b.s)
   }
 
   function gone(id) {
@@ -554,6 +778,7 @@
 
   async function send() {
     if (!current || !parts.input || sending) return
+    if (current.editing) return save()
     const text = parts.input.value.trim()
     if (!text) return
     if (text.length > MAX_TEXT) return say(problem({ code: 'long' }))
@@ -796,7 +1021,16 @@
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && ticket) newer()
     })
+    // Меню сообщения закрывается щелчком мимо него и Esc
+    document.addEventListener('pointerdown', (event) => {
+      const target = event.target
+      if (menu && !(target && typeof target.closest === 'function' && target.closest('.menu, .dots'))) closeMenu()
+    })
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeMenu()
+    })
   }
+  for (const type of ['resize', 'blur']) window.addEventListener(type, () => closeMenu())
   if (typeof setInterval === 'function') {
     // Без живого соединения — спрашиваем сами; с ним — изредка сверяем список
     let ticks = 0

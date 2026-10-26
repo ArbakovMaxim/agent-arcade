@@ -1664,7 +1664,7 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   async function chatPage({ hash = '', search = '', store = new Map(), data = site() }) {
     const page = { replaced: null, fetched: [], handlers: {}, timers: [], sockets: [], store, data, focused: null, location: { hash, search, pathname: '/chat', host: 'agent-arcade.test', protocol: 'https:' } }
     const node = (tag) => ({
-      tagName: tag, className: '', children: [], attributes: {}, listeners: {}, title: '', own: '', value: '', disabled: false, scrollTop: 0, scrollHeight: 0, clientHeight: 0,
+      tagName: tag, className: '', children: [], attributes: {}, listeners: {}, style: {}, title: '', own: '', value: '', disabled: false, scrollTop: 0, scrollHeight: 0, clientHeight: 0,
       classList: { set: new Set(), toggle(c, on) { if (on) this.set.add(c); else this.set.delete(c) }, contains(c) { return this.set.has(c) } },
       get textContent() { return this.own + this.children.map((c) => (typeof c === 'string' ? c : c.textContent)).join('') },
       set textContent(v) { this.own = String(v); this.children = [] },
@@ -1693,7 +1693,14 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
       fire(t, event = {}) { for (const f of this.listeners[t] ?? []) f(event) }
     }
     const reply = (status, body) => ({ ok: status < 400, status, json: async () => body })
-    const summary = (c) => ({ ...c.meta, last: c.messages.at(-1)?.s ?? 0, ...(c.with ? { with: c.with } : {}) })
+    const summary = (c) => ({ ...c.meta, last: c.messages.at(-1)?.s ?? 0, ...(c.with ? { with: c.with } : {}), ...(c.edits ? { edits: c.edits } : {}) })
+    // Правка или удаление на сайте: следующий номер правки, сообщение — в списке поправленных
+    page.change = (chat, msg) => {
+      chat.messages[chat.messages.findIndex((m) => m.s === msg.s)] = msg
+      chat.edits = (chat.edits ?? 0) + 1
+      ;(chat.changed ??= []).push([chat.edits, msg.s])
+      return msg
+    }
     const total = () => Object.values(data.chats).reduce((n, c) => n + c.unread, 0)
     const ctx = {
       location: page.location, URLSearchParams, console, Intl, WebSocket: Socket,
@@ -1718,7 +1725,8 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
         if (data.fail[route]) return reply(400, { error: data.fail[route] })
         const chat = data.chats[u.searchParams.get('chat') ?? body?.chat]
         if (route === 'chats') {
-          const list = Object.values(data.chats).map((c) => ({ id: c.meta.id, kind: c.meta.kind, ...(c.with ? { with: c.with } : { name: c.meta.name, ...(c.meta.pic !== undefined ? { pic: c.meta.pic } : {}) }), unread: c.unread, at: c.messages.at(-1)?.at ?? 0, ...(c.messages.length ? { last: c.messages.at(-1) } : {}) }))
+          const lastOf = (c) => c.messages.filter((m) => !m.d).at(-1)
+          const list = Object.values(data.chats).map((c) => ({ id: c.meta.id, kind: c.meta.kind, ...(c.with ? { with: c.with } : { name: c.meta.name, ...(c.meta.pic !== undefined ? { pic: c.meta.pic } : {}) }), unread: c.unread, at: c.messages.at(-1)?.at ?? 0, ...(lastOf(c) ? { last: lastOf(c) } : {}) }))
           return reply(200, { me: data.me, chats: list.sort((a, b) => b.at - a.at), names: data.names, pics: data.pics, online: data.online, unread: total() })
         }
         if (route === 'chats/messages') {
@@ -1726,7 +1734,17 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
           const after = Number(u.searchParams.get('after') ?? -1)
           const before = Number(u.searchParams.get('before') ?? Infinity)
           if (!u.searchParams.has('before')) chat.unread = 0
-          return reply(200, { me: data.me, chat: summary(chat), messages: chat.messages.filter((m) => m.s > after && m.s < before), first: 1, names: data.names, pics: data.pics, unread: total() })
+          // edits — правка, которую страница уже видела: и поправленные после неё сообщения до after
+          const seen = u.searchParams.has('edits') && !u.searchParams.has('before') ? Number(u.searchParams.get('edits')) : Infinity
+          const changed = new Set((chat.changed ?? []).filter(([v]) => v > seen).map(([, s]) => s))
+          return reply(200, { me: data.me, chat: summary(chat), messages: chat.messages.filter((m) => (m.s > after && m.s < before) || (m.s <= after && changed.has(m.s))), first: 1, names: data.names, pics: data.pics, unread: total() })
+        }
+        // Своё сообщение с текстом — поправить или удалить; иначе 409
+        if (route === 'chats/edit' || route === 'chats/delete') {
+          const old = chat.messages.find((m) => m.s === body.s)
+          if (!old || old.f !== '1' || typeof old.t !== 'string') return reply(409, { error: 'edit' })
+          if (route === 'chats/edit' && old.t === body.text) return reply(200, { msg: old })
+          return reply(200, { msg: page.change(chat, route === 'chats/delete' ? { s: old.s, f: old.f, at: old.at, d: Date.now() } : { ...old, t: body.text, e: Date.now() }) })
         }
         if (route === 'chats/send') {
           const msg = { s: (chat.messages.at(-1)?.s ?? 0) + 1, f: '1', t: body.text, at: Date.now() }
@@ -1871,8 +1889,105 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   page.data.chats['d1-2'].messages.push({ s: 5, f: '2', t: 'вижу', at: Date.now() })
   page.sockets[0].fire('message', { data: JSON.stringify({ type: 'note', chat: 'd1-2', msg: { f: '2' } }) })
   await page.wait()
-  assert.equal(page.fetched.filter((f) => f.route === 'chats/messages').at(-1).query, '?chat=d1-2&after=4')
+  assert.equal(page.fetched.filter((f) => f.route === 'chats/messages').at(-1).query, '?chat=d1-2&after=4&edits=0')
   assert.equal(page.messages().at(-1).children[0].textContent, 'вижу')
+
+  // Своё сообщение: ⋮ рядом с ним или правая кнопка мыши — меню «Изменить» и «Удалить», без крупных кнопок
+  const mine = () => page.messages().filter((m) => m.className.split(' ').includes('mine'))
+  const menuItems = () => page.one('menu').children.map((c) => c.textContent)
+  const edits = () => page.fetched.filter((f) => f.route === 'chats/edit' || f.route === 'chats/delete')
+  page.input().value = 'черновик'
+  page.input().fire('input')
+  assert.equal(page.all('dots').length, 2, '⋮ — только у своих сообщений')
+  assert.deepEqual(menuItems(), [], 'меню закрыто')
+  mine()[1].children.at(-1).fire('click')
+  assert.deepEqual(menuItems(), ['Изменить', 'Удалить'])
+  assert.ok(mine()[1].classList.contains('open'), 'пока меню открыто, ⋮ видно')
+  assert.equal(page.focused, page.one('menu').children[0], 'с клавиатуры — фокус на первый пункт')
+  // Закрывается Esc и щелчком мимо; щелчок внутри меню его не закрывает
+  page.handlers['document:keydown'][0]({ key: 'Escape' })
+  assert.deepEqual(menuItems(), [])
+  assert.ok(!mine()[1].classList.contains('open'))
+  mine()[1].fire('contextmenu', { clientX: 120, clientY: 300, target: {} })
+  assert.deepEqual(menuItems(), ['Изменить', 'Удалить'])
+  assert.deepEqual([page.one('menu').style.left, page.one('menu').style.top], ['120px', '300px'])
+  page.handlers['document:pointerdown'][0]({ target: { closest: () => ({}) } })
+  assert.deepEqual(menuItems(), ['Изменить', 'Удалить'])
+  page.handlers['document:pointerdown'][0]({ target: { closest: () => null } })
+  assert.deepEqual(menuItems(), [])
+  // Выделен текст — обычное меню браузера
+  page.ctx.getSelection = () => 'салют'
+  mine()[1].fire('contextmenu', { clientX: 1, clientY: 1, target: {} })
+  assert.deepEqual(menuItems(), [])
+  delete page.ctx.getSelection
+  // «Изменить»: текст — в поле внизу, над ним «Правка сообщения» и «Отмена»; Enter сохраняет
+  mine()[1].fire('contextmenu', { clientX: 1, clientY: 1, target: {} })
+  page.button('Изменить').fire('click')
+  assert.deepEqual(menuItems(), [])
+  assert.equal(page.input().value, 'салют')
+  assert.equal(page.input().attributes['aria-label'], 'Правка сообщения')
+  assert.deepEqual([page.one('what').textContent, page.one('was').textContent], ['Правка сообщения', 'салют'])
+  assert.ok(page.button('Сохранить') && page.button('Отмена') && !page.button('Отправить'))
+  assert.ok(mine()[1].className.includes('editing'))
+  // Тот же текст — на сайт не ходим, правка закрывается
+  page.input().fire('keydown', { key: 'Enter', shiftKey: false })
+  await page.wait()
+  assert.equal(edits().length, 0)
+  assert.equal(page.input().value, 'черновик', 'начатое новое сообщение не потерялось')
+  assert.equal(page.one('was'), undefined)
+  // Esc — оставить как было
+  mine()[1].children.at(-1).fire('click')
+  page.button('Изменить').fire('click')
+  page.input().fire('keydown', { key: 'Escape' })
+  assert.ok(page.button('Отправить') && !page.button('Сохранить'))
+  assert.equal(page.input().value, 'черновик')
+  // Поправили: на сайт — номер и новый текст, у сообщения — «изменено»
+  mine()[1].children.at(-1).fire('click')
+  page.button('Изменить').fire('click')
+  page.input().value = '  салют всем  '
+  page.input().fire('input')
+  await page.send(page.input().value)
+  assert.deepEqual(edits().map((f) => [f.route, f.body]), [['chats/edit', { chat: 'd1-2', s: 4, text: 'салют всем' }]])
+  assert.equal(mine()[1].children[0].textContent, 'салют всем')
+  assert.match(mine()[1].children[1].textContent, /^изменено \d\d:\d\d✓$/)
+  assert.equal(page.input().value, 'черновик')
+  assert.ok(page.button('Отправить'))
+  // «Удалить» спрашивает ещё раз; «Отмена» — ничего не удаляет
+  mine()[0].children.at(-1).fire('click')
+  page.button('Удалить').fire('click')
+  assert.deepEqual(menuItems(), ['Удалить сообщение у всех?', 'Удалить', 'Отмена'])
+  assert.equal(page.focused, page.one('menu').children[2], 'с клавиатуры — фокус на «Отмена»')
+  page.button('Отмена').fire('click')
+  assert.deepEqual(menuItems(), [])
+  assert.equal(edits().length, 1)
+  mine()[0].children.at(-1).fire('click')
+  page.button('Удалить').fire('click')
+  page.button('Удалить').fire('click')
+  await page.wait()
+  assert.deepEqual(edits().at(-1).body, { chat: 'd1-2', s: 1 })
+  assert.deepEqual(page.messages().map((m) => m.children[0].textContent), ['смотри https://example.com/a?b=1. и javascript:alert(1)', 'ну как?', 'салют всем', 'вижу'])
+  assert.deepEqual(page.all('day').map((d) => d.textContent), ['Сегодня'], 'день удалённого сообщения пропал вместе с ним')
+  // Чужое сообщение поправили на сайте — страница спрашивает с номером последней правки и меняет его на месте
+  const dm = page.data.chats['d1-2']
+  page.change(dm, { ...dm.messages[1], t: 'смотри', e: Date.now() })
+  page.sockets[0].fire('message', { data: JSON.stringify({ type: 'note', chat: 'd1-2', msg: { s: 2 } }) })
+  await page.wait()
+  assert.equal(page.fetched.filter((f) => f.route === 'chats/messages').at(-1).query, '?chat=d1-2&after=5&edits=0')
+  assert.equal(page.messages()[0].children[0].textContent, 'смотри')
+  assert.match(page.messages()[0].children[1].textContent, /^изменено \d\d:\d\d$/)
+  // Правку открыли, а сообщение тем временем удалили в Arcade — сайт отказал, страница так и говорит
+  mine()[0].children.at(-1).fire('click')
+  page.button('Изменить').fire('click')
+  page.change(dm, { s: 4, f: '1', at: dm.messages[3].at, d: Date.now() })
+  page.input().value = 'салют'
+  await page.send('салют')
+  assert.equal(page.notice(), 'Этого сообщения уже нет.')
+  assert.ok(page.button('Отправить'))
+  assert.equal(page.fetched.filter((f) => f.route === 'chats/messages').at(-1).query, '?chat=d1-2&after=5&edits=3')
+  assert.deepEqual(page.messages().map((m) => m.children[0].textContent), ['смотри', 'ну как?', 'вижу'])
+  assert.equal(page.all('dots').length, 0)
+  page.input().value = ''
+  page.input().fire('input')
   // В другом чате новое — обновляется только список
   page.data.chats[GROUP].messages.push({ s: 3, f: '2', t: 'го', at: Date.now() + 1000 })
   page.data.chats[GROUP].unread = 1
@@ -2010,6 +2125,19 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.equal(en.all('note')[0].textContent, '@alice created the group “Squad”')
   assert.equal(en.button('New chat').textContent, 'New chat')
   assert.equal(en.ctx.document.title, '(2) Chats · Arcade', 'чат с Бобом не прочитан')
+  await en.send('hi')
+  en.one('dots').fire('click')
+  assert.deepEqual(en.one('menu').children.map((c) => c.textContent), ['Edit', 'Delete'])
+  assert.equal(en.one('dots').attributes['aria-label'], 'More')
+  en.button('Delete').fire('click')
+  assert.equal(en.one('ask').textContent, 'Delete the message for everyone?')
+  en.button('Cancel').fire('click')
+  en.one('dots').fire('click')
+  en.button('Edit').fire('click')
+  assert.equal(en.one('what').textContent, 'Editing a message')
+  assert.ok(en.button('Save') && en.button('Cancel'))
+  await en.send('hi all')
+  assert.match(en.all('at').at(-1).textContent, /^edited \d\d:\d\d( [AP]M)?✓$/)
   en.button('Members').fire('click')
   await en.wait()
   assert.equal(en.all('pick')[7].attributes['aria-label'], 'octopus')

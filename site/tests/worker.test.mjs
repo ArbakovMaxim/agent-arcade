@@ -1270,11 +1270,51 @@ try {
     const taken = await dmChat.object.fetch(new Request('https://chat/open', { method: 'POST', body: JSON.stringify({ chat: dm, by: '9', kind: 'dm', members: ['7', '9'] }) }))
     assert.deepEqual([taken.status, await taken.json()], [409, { error: 'taken' }])
 
-    // Не больше SENDS_PER_MINUTE сообщений в минуту
+    // Поправить своё сообщение: новый текст и e — когда; список чатов не двигается, в нём — новый текст последнего.
+    // С edits= ответ после after добавляет поправленные раньше
+    const edit = (body, token) => go('POST', '/api/me/chats/edit', { body, token })
+    const unsay = (body, token) => go('POST', '/api/me/chats/delete', { body, token })
+    const entry42 = listOf(42)[dm]
+    const fixed = await edit({ chat: dm, s: 2, text: `  Отлично!${rlo} ` }, t7)
+    assert.equal(fixed.status, 200)
+    assert.deepEqual({ ...fixed.body.msg, at: 0, e: 0 }, { s: 2, f: '7', t: 'Отлично!', at: 0, e: 0 })
+    assert.ok(fixed.body.msg.e >= fixed.body.msg.at)
+    assert.deepEqual(listOf(42)[dm], { ...entry42, p: { f: '7', t: 'Отлично!' } })
+    const afterEdit = (await read(dm, t42, '&after=2&edits=0')).body
+    assert.deepEqual([afterEdit.chat.edits, afterEdit.messages.map((m) => [m.s, m.t, m.e > 0])], [1, [[2, 'Отлично!', true]]])
+    assert.deepEqual((await read(dm, t42, '&after=2&edits=1')).body.messages, [])
+    assert.deepEqual((await read(dm, t42, '&after=2')).body.messages, [], 'без edits — только новые')
+    // Чужое, служебное, нет такого, не того вида, пустое и длинное — отказ; в чужом чате — его нет
+    assert.deepEqual(await edit({ chat: dm, s: 1, text: 'чужое' }, t7), { status: 409, body: { error: 'edit' } })
+    assert.deepEqual(await edit({ chat: dm, s: 99, text: 'нет' }, t7), { status: 409, body: { error: 'edit' } })
+    assert.deepEqual(await unsay({ chat: dm, s: 1 }, t7), { status: 409, body: { error: 'edit' } })
+    assert.deepEqual(await edit({ chat: dm, s: '2', text: 'да' }, t7), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await edit({ chat: dm, s: 2, text: ' ' }, t7), { status: 400, body: { error: 'empty' } })
+    assert.deepEqual(await edit({ chat: dm, s: 2, text: 'x'.repeat(MAX_TEXT + 1) }, t7), { status: 400, body: { error: 'long' } })
+    assert.deepEqual(await unsay({ chat: dm, s: 2 }, t9), { status: 404, body: { error: 'gone' } })
+    assert.deepEqual(await read(dm, t42, '&edits=x'), { status: 400, body: { error: 'bad request' } })
+    assert.equal(dmChat.store.get('meta').edits, 1, 'отказы ничего не записали')
+    // Удалить: остаётся { s, f, at, d } без текста. Удалили непрочитанное, а дальше читать нечего — чат прочитан; в
+    // списке — последнее неудалённое
+    assert.equal((await say(dm, 'Опечатка', t7)).body.msg.s, 3)
+    assert.equal(listOf(42)[dm].last - listOf(42)[dm].read, 1)
+    const gone3 = await unsay({ chat: dm, s: 3 }, t7)
+    assert.deepEqual({ ...gone3.body.msg, at: 0, d: 0 }, { s: 3, f: '7', at: 0, d: 0 })
+    assert.deepEqual([listOf(42)[dm].last, listOf(42)[dm].read, listOf(42)[dm].p], [3, 3, { f: '7', t: 'Отлично!' }])
+    assert.equal((await unsay({ chat: dm, s: 2 }, t7)).status, 200)
+    assert.deepEqual([listOf(42)[dm].p, listOf(7)[dm].p], [{ f: '42', t: 'Привет! Как дела?' }, { f: '42', t: 'Привет! Как дела?' }])
+    assert.deepEqual(brief((await chatsOf(t42)).body.chats), [{ id: dm, kind: 'dm', with: '7', unread: 0, last: { f: '42', t: 'Привет! Как дела?' } }])
+    assert.deepEqual((await read(dm, t42, '&after=3&edits=2')).body.messages.map((m) => [m.s, m.t, m.d > 0]), [[2, undefined, true]])
+    assert.deepEqual((await read(dm, t7)).body.messages.map((m) => [m.s, m.d > 0]), [[1, false], [2, true], [3, true]])
+    assert.deepEqual(await edit({ chat: dm, s: 3, text: 'вернуть' }, t7), { status: 409, body: { error: 'edit' } }, 'удалённое не поправить')
+    assert.deepEqual(await unsay({ chat: dm, s: 3 }, t7), { status: 409, body: { error: 'edit' } })
+
+    // Не больше SENDS_PER_MINUTE сообщений в минуту — правки и удаления тоже считаются
     account42.object.sends = Array(SENDS_PER_MINUTE).fill(Date.now())
     assert.deepEqual(await say(dm, 'ещё', t42), { status: 429, body: { error: 'often' } })
+    assert.deepEqual(await edit({ chat: dm, s: 1, text: 'ещё' }, t42), { status: 429, body: { error: 'often' } })
     account42.object.sends = Array(SENDS_PER_MINUTE).fill(Date.now() - 60_000)
-    assert.equal((await say(dm, 'ещё', t42)).body.msg.s, 3)
+    assert.equal((await say(dm, 'ещё', t42)).body.msg.s, 4)
 
     // В чате хранятся последние KEEP сообщений, старые уходят пачками по 100; читать — по PAGE, раньше — с before
     const dmMeta = await dmChat.storage.get('meta')

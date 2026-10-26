@@ -68,6 +68,26 @@
   .msg .text a { color: #b9a2f0; }
   .msg .at { display: block; text-align: right; color: #75757e; font-size: 11px; }
   .msg .tick { margin-left: 3px; color: #b9a2f0; }
+  /* Своё сообщение: ⋮ слева от пузыря появляется при наведении — меню «Изменить» и «Удалить», как и по правой кнопке */
+  .msg.mine { position: relative; }
+  .msg.editing { border-color: #7d5bbe; }
+  .msg .dots { position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 2px; padding: 2px 6px; background: transparent; border: 0; border-radius: 6px; color: #75757e; font-size: 16px; line-height: 1; opacity: 0; }
+  .msg:hover .dots, .msg:focus-within .dots, .msg.open .dots, .msg .dots:focus { opacity: 1; }
+  .msg .dots:hover, .msg .dots:focus { color: #d8d8dc; background: #1c1c21; outline: none; }
+  @media (hover: none) { .msg .dots { opacity: .7; } }
+  .menu { position: fixed; z-index: 10; min-width: 160px; padding: 4px; display: flex; flex-direction: column; background: #1c1c21; border: 1px solid #34343a; border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); }
+  .menu:empty { display: none; }
+  .menu .ask { padding: 6px 10px 4px; color: #9a9aa3; font-size: 12px; }
+  /* Тихие кнопки-надписи: пункты меню и «Отмена» правки */
+  .act { padding: 6px 10px; text-align: left; background: transparent; border: 0; border-radius: 6px; }
+  .act:hover, .act:focus { background: #26262b; outline: none; }
+  .act.warn { color: #f0a0a0; }
+  /* Над полем ввода во время правки: что правим и «Отмена» */
+  .editing:not(.msg) { display: flex; align-items: center; gap: 8px; padding: 6px 12px 0; border-top: 1px solid #222228; font-size: 12px; }
+  .editing:not(.msg) + .compose { border-top: 0; }
+  .editing .what { flex: none; color: #b9a2f0; }
+  .editing .was { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a8a93; }
+  .editing .act { padding: 2px 8px; color: #9a9aa3; }
   .note { align-self: center; color: #8a8a93; font-size: 12px; text-align: center; }
   .compose { display: flex; gap: 8px; align-items: flex-end; padding: 10px 12px; border-top: 1px solid #222228; }
   .compose textarea { flex: 1; min-height: 38px; max-height: 160px; resize: vertical; padding: 8px 10px; background: #17171b; border: 1px solid #2c2c32; border-radius: 8px; }

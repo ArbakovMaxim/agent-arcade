@@ -248,9 +248,11 @@ S.ol = noOnline()
 // busy — какое действие ждёт ответа сайта,
 // note — заметка (bad — что-то не вышло), picked — кого отметили для новой группы, groupName — что вписано в название,
 // field — номер поля «Сообщение» (после отправки — новое, пустое), confirmLeave — «Выйти из группы» нажали один раз.
-// request — номер последнего вопроса: ответ старого не нужен
+// Своё сообщение: msgMenu — у какого открыто меню ⋮, confirmDelete — какое ждёт «Удалить?», editing — какое правится
+// в поле внизу. request — номер последнего вопроса: ответ старого не нужен
 export const CHAT_SHOWN = 30 // сколько последних сообщений чата показывать сразу; «Раньше» — ещё столько же
-export const NO_CHATS = { list: null, names: {}, pics: {}, online: [], me: '', loading: false, talk: '', about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: false, older: false, polling: false, busy: '', note: '', bad: false, groupName: '', field: 0, confirmLeave: false }
+export const NO_MSG_MENU = { msgMenu: 0, confirmDelete: 0, editing: 0 }
+export const NO_CHATS = { list: null, names: {}, pics: {}, online: [], me: '', loading: false, talk: '', about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: false, older: false, polling: false, busy: '', note: '', bad: false, groupName: '', field: 0, confirmLeave: false, ...NO_MSG_MENU }
 S.ch = { ...NO_CHATS, picked: new Set(), request: 0 }
 S.chatLink = '' // код ссылки на страницу чатов: его страница один раз обменяет на свой билет
 // Отчёт об ошибке: field — номер поля (после отправки — новое, пустое), sending — отчёт ждёт ответа сайта, note —

@@ -38,14 +38,15 @@ const cut = (text, n) => [...text].slice(0, n).join('')
 // Что не так с ответом про чаты: общие ошибки аккаунта (trouble) и свои — 'empty' (пустое сообщение или группа без
 // людей), 'long' (длиннее MAX_TEXT), 'name' (группа без названия), 'invalid' (сайт не понял вопрос), 'friend' (писать
 // можно только друзьям), 'owner' (это может только хозяин группы), 'gone' (чата нет или тебя в нём нет), 'full' (в
-// группе больше MAX_MEMBERS), 'nohandle' (сначала свой @ник), 'often' (слишком часто). Сайт без чатов — 'off' или 'down'
+// группе больше MAX_MEMBERS), 'nohandle' (сначала свой @ник), 'often' (слишком часто), 'edit' (сообщение уже не
+// поправить и не удалить: его нет или оно удалено). Сайт без чатов — 'off' или 'down'
 export function chatFailure(response, data) {
   const said = data?.error
   const status = response?.status
   if (status === 400) return ['empty', 'long', 'name'].includes(said) ? said : 'invalid'
   if (status === 403) return said === 'owner' ? 'owner' : 'friend'
   if (status === 404) return said === 'gone' ? 'gone' : 'down'
-  if (status === 409) return said === 'full' || said === 'nohandle' ? said : 'down'
+  if (status === 409) return ['full', 'nohandle', 'edit'].includes(said) ? said : 'down'
   if (status === 429) return said === 'often' ? 'often' : 'limit'
   return trouble(response, data)
 }
@@ -64,11 +65,14 @@ function bodyFrom(m, limit) {
   return { f, k: m.k, ...(o ? { o } : {}), ...(n ? { n } : {}) }
 }
 
-// Сообщение переписки: номер s, кто f, когда at, и текст или служебное; не сходится — null
+// Сообщение переписки: номер s, кто f, когда at, и текст (e — когда поправлен) или служебное; удалённое — { s, at,
+// f, d: true } без текста; не сходится — null
 function messageFrom(m) {
+  if (!Number.isSafeInteger(m?.s) || m.s < 0 || !Number.isFinite(m.at)) return null
+  if (m.d) return accountId(m.f) ? { s: m.s, at: m.at, f: accountId(m.f), d: true } : null
   const body = bodyFrom(m, MAX_TEXT)
-  if (!body || !Number.isSafeInteger(m.s) || m.s < 0 || !Number.isFinite(m.at)) return null
-  return { s: m.s, at: m.at, ...body }
+  if (!body) return null
+  return { s: m.s, at: m.at, ...body, ...(body.t !== undefined && Number.isFinite(m.e) ? { e: m.e } : {}) }
 }
 
 // Ники по номерам: { номер: ник }; у удалённого аккаунта ника нет
@@ -110,13 +114,13 @@ function chatFrom(c) {
   }
 }
 
-// О самом чате: как в списке и ещё участники и хозяин группы
+// О самом чате: как в списке и ещё участники, хозяин группы и edits — номер последней правки сообщений в чате
 function aboutFrom(c) {
   const chat = chatFrom({ ...c, unread: 0, at: 0, last: undefined })
   if (!chat) return null
   const members = Array.isArray(c.members) ? [...new Set(c.members.map(accountId).filter(Boolean))].slice(0, MAX_MEMBERS) : []
   const { unread, at, ...about } = chat
-  return { ...about, owner: accountId(c.owner), members }
+  return { ...about, owner: accountId(c.owner), members, edits: Number.isSafeInteger(c.edits) && c.edits > 0 ? c.edits : 0 }
 }
 
 const meFrom = (me) => accountId(me?.id)
@@ -166,7 +170,7 @@ export function parseMessages(response) {
   return { me, chat, messages, first, names: namesFrom(data.names), pics: allPics(data, me), unread: count(data.unread), error: '' }
 }
 
-// Ответ POST /api/me/chats/send → { msg, error }
+// Ответ POST /api/me/chats/send, /edit и /delete → { msg, error }
 export function parseSent(response) {
   const data = jsonFrom(response?.text)
   const error = chatFailure(response, data)

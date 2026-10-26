@@ -418,6 +418,13 @@
     'Это может только тот, кто управляет группой.': 'Only the person who runs the group can do this.',
     'Чаты на сайте сейчас выключены.': 'Chats on the site are turned off right now.',
     'Сайт Arcade не ответил — попробуй ещё раз.': "The Arcade site didn't respond — try again.",
+    'Изменить': 'Edit',
+    'Отмена': 'Cancel',
+    'Сохранить': 'Save',
+    'Правка сообщения': 'Editing a message',
+    'Удалить сообщение у всех?': 'Delete the message for everyone?',
+    'Этого сообщения уже нет.': 'This message is gone.',
+    'изменено': 'edited',
   }
 
   const dur = (t) => t.replace(/(\d+) ч/g, '$1 h').replace(/(\d+) мин/g, '$1 min').replace(/(\d+) с(?![а-я])/g, '$1 s')
