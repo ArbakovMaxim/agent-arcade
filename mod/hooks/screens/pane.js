@@ -16,6 +16,7 @@ import { addTopic, forgetTopics, loadVideos } from '../app/watch.js'
 import { loadReads } from '../app/read.js'
 import { toggleFavorite, toggleHidden } from '../app/profile.js'
 import { answerInvite } from '../app/talk.js'
+import { modError, notesShown, refreshNotes } from '../app/work.js'
 import { gameScreen } from './game.js'
 import { mainScreen, welcomeScreen } from './main.js'
 import { favoritesScreen, groupScreen, mineScreen, searchScreen, shelfScreen } from './games.js'
@@ -160,6 +161,8 @@ export async function drawPane($, e) {
       S.menu = id
       S.libraryNotice = ''
       $.ui.invalidate('ui.render')
+      // Блокнот и доски — свежие: их могли поправить в другой сессии Claude Code
+      if (notesShown()) refreshNotes($).catch(modError)
     }
     const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') })
     const dim = (text) => Text({ dimColor: true, children: [text] })

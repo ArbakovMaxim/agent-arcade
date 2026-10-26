@@ -8,8 +8,7 @@ import { DETECT_ARGV, notifyCommand, parseDetection } from './browsers.js'
 import { detectLang, tr, translateTree } from './i18n.js'
 import { restoreMine } from './mine.js'
 import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
-import { NOTES_TOOL, applyNotesTool, restoreNotes } from './notes.js'
-import { cardId, restoreDesks } from './desks.js'
+import { NOTES_TOOL } from './notes.js'
 import { bookLang } from './books.js'
 import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_ROWS, PIXEL_DENIES, S, TICK_MS, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
@@ -19,7 +18,7 @@ import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from 
 import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
-import { BOARDS_POLL_MS, BOARD_POLL_MS, loadBoards, notesChanged, pushBoards, shownBoard, syncBoard, withDraft } from './app/work.js'
+import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
@@ -40,8 +39,7 @@ export function register(on) {
       S.msgNotify = (await $.store.get('msgNotify')) !== false
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
-      S.notes = restoreNotes(await $.store.get('notes'))
-      S.desks = restoreDesks(await $.store.get('desks'), S.notes)
+      await loadNotes($)
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
         S.sep = home.includes('\\') ? '\\' : '/'
@@ -111,6 +109,10 @@ export function register(on) {
         if (chatsOn() && S.menu === 'boards') loadBoards($, true).catch(chatError)
       })
       $.clock.after(4_000, () => pushBoards($))
+      // Блокнот на экране — перечитываем: его могли поправить в другой сессии Claude Code
+      $.clock.every(NOTES_POLL_MS, () => {
+        if (S.paneOpen && S.view === 'library' && notesShown()) refreshNotes($).catch(chatError)
+      })
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -373,13 +375,11 @@ export function register(on) {
     if (decided?.decision !== 'ask') return decided
     return { decision: 'allow', reason: 'Блокнот Arcade: инструмент меняет только блокнот мода' }
   })
-  // Вызов инструмента блокнота: несохранённый текст поля «Текст» сначала уходит в страницу — правка Claude ложится поверх.
-  // Ошибку (нет страницы, не помещается) модель получает ошибкой — отказом с текстом
+  // Вызов инструмента блокнота: поверх свежего блокнота из хранилища (его могли поправить в другой сессии), несохранённый
+  // текст поля «Текст» сначала уходит в страницу — правка Claude ложится поверх. Ошибку (нет страницы, не помещается)
+  // модель получает ошибкой — отказом с текстом
   on('tool.call', { tool: NOTES_TOOL_NAME }, async ($, e) => {
-    const at = await $.clock.now()
-    const base = withDraft(S.notes, at) ?? S.notes
-    const out = applyNotesTool(base, e, at, cardId)
-    if (out.changed || base !== S.notes) await notesChanged($, out.notes)
+    const out = await notesTool($, e)
     return out.isError ? { deny: out.text } : { result: out.text }
   })
 
