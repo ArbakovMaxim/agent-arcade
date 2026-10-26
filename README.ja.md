@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · **日本語** · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **ベータ版（0.35）。** ここに書かれていることはすべて動作し、毎日使われています。これからの変更は主に細かな部分です。不具合の報告は大歓迎です — [フィードバック](#フィードバック)をご覧ください。
+> **ベータ版（0.36）。** ここに書かれていることはすべて動作し、毎日使われています。これからの変更は主に細かな部分です。不具合の報告は大歓迎です — [フィードバック](#フィードバック)をご覧ください。
 
 Arcade は、エージェントが作業している間の待ち時間を埋める [Claude Code](https://claude.com/claude-code) 用プラグインです。エージェントの作業が 10 秒を超えると、プロンプトの上に小さく *「プレイしますか？」* と表示されます。NES、Sega、PlayStation、Doom、チェスなどで遊んだり、本を読んだり、オーディオブックやポッドキャストを聴いたり、エージェントが取り組んでいるテーマの動画を観たりできます。エージェントが作業を終えたり許可を求めたりすると、Arcade がすぐに知らせるので、何も見逃しません。
 
