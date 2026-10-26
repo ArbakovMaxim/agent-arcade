@@ -284,6 +284,7 @@ const MENU_OF: Record<string, string> = {
   'arcade-notify': 'settings',
   'arcade-assign': 'settings',
   'arcade-wide': 'settings',
+  'arcade-ask-after': 'settings',
   'arcade-on-done': 'settings',
   'arcade-on-permission': 'settings',
   'arcade-lang': 'settings',
@@ -519,6 +520,44 @@ test('через 10 секунд работы агента появляется 
   expect(opened).toEqual(['arcade'])
   await band.unmount()
 })
+
+test('строка «сыграть?» в настройках: через сколько появиться или не показывать совсем — по кругу и запоминается', async ($, on) => {
+  const { saved } = stubs(on)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(ui, 'arcade-ask-after') // 10 с → 30 с
+  const label = async () => (await ui.find({ key: 'arcade-ask-after' })).props.label
+  expect(await label()).toBe('Строка «сыграть?»: через 30 с')
+  expect(saved.get('askAfter')).toBe(30)
+  for (const [next, value] of [['через 1 мин', 60], ['через 2 мин', 120], ['через 5 мин', 300], ['выключена', 0], ['через 10 с', 10]] as const) {
+    await ui.press({ key: 'arcade-ask-after' })
+    expect(await label()).toBe(`Строка «сыграть?»: ${next}`)
+    expect(saved.get('askAfter')).toBe(value)
+  }
+  expect(tr('Строка «сыграть?»: через 2 мин', 'en')).toBe('“Play?” line: after 2 min')
+  expect(tr('Строка «сыграть?»: выключена', 'en')).toBe('“Play?” line: off')
+  expect(tr('Строка «сыграть?»: через 30 с', 'uk')).toBe('Рядок «зіграти?»: через 30 с')
+  await ui.unmount()
+})
+
+// Сохранённая настройка → когда строка видна: [сколько прошло после прошлой проверки, видна ли]
+for (const [title, askAfter, checks] of [
+  ['через 30 секунд — не раньше', 30, [[11_000, false], [20_000, true]]],
+  ['выключена — не появляется совсем', 0, [[11_000, false], [120_000, false], [120_000, false], [120_000, false]]], // дольше самого долгого выбора — 5 минут; часы теста проматываются шагами
+  ['значение не из списка — как по умолчанию, через 10 секунд', 15, [[9_000, false], [2_000, true]]],
+] as [string, number, [number, boolean][]][]) {
+  test(`строка «сыграть?»: ${title}`, HEAVY, async ($, on) => {
+    const { clock } = stubs(on, { stored: { askAfter } })
+    await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+    await $.turn.start({ turnId: 't1' })
+    for (const [ms, visible] of checks) {
+      await clock.advance(ms)
+      const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+      expect(Boolean(await band.find({ type: 'Text', text: /сыграть\?/ }))).toBe(visible)
+      await band.unmount()
+    }
+  })
+}
 
 test('пока в полосе вопрос Claude Code, «сыграть?» уступает ему место и возвращается после', HEAVY, async ($, on) => {
   const { clock } = stubs(on)
@@ -4042,7 +4081,7 @@ test('account.js: ответы сайта про вход и настройки,
   expect(restoreStamps({ lang: 5, wide: 'x', junk: 3, notify: -1, keys: 0 })).toEqual({ lang: 5 })
   expect(restoreStamps(null)).toEqual({})
   // Встреча: сайт новее — оттуда; здесь новее — туда; на сайте нет — туда; не менял здесь (нет отметки) — с сайта
-  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'hidden', 'favorites', 'hideOnline'])
+  expect(SYNC_KEYS).toEqual(['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'hidden', 'favorites', 'hideOnline', 'askAfter'])
   expect(
     syncPlan(
       { lang: 'ru', wide: true, notify: false, onDone: 'pause' },
@@ -6028,7 +6067,7 @@ test('Desktop: настройки — плитки с иконками под з
   expect(play).not.toContain('#8b8d98')
   expect(JSON.stringify(await ui.find({ key: 'card-arcade-show-talk' }))).toContain('#8b8d98')
   // У настроек свои иконки, а не джойстик по умолчанию
-  for (const key of ['arcade-opener', 'arcade-keep-menu', 'arcade-back-on-done', 'arcade-wide', 'arcade-on-done', 'arcade-on-permission', 'arcade-notify', 'arcade-msg-notify'])
+  for (const key of ['arcade-opener', 'arcade-keep-menu', 'arcade-back-on-done', 'arcade-wide', 'arcade-ask-after', 'arcade-on-done', 'arcade-on-permission', 'arcade-notify', 'arcade-msg-notify'])
     expect(JSON.stringify(await ui.find({ key: `card-${key}` }))).toContain('"alt"')
   // Условия — документом, конфиденциальность — замком
   expect(JSON.stringify(await ui.find({ key: 'card-arcade-terms' }))).toContain('M13 7h15l9 9v25H13z')

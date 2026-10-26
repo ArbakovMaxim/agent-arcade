@@ -71,7 +71,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 ## How to use
 
 - **`/arcade`** opens the menu at any time.
-- When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now.
+- When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now. In Settings → Notifications you can choose when it appears — from 10 seconds to 5 minutes — or turn it off.
 - Arrow keys or Tab to choose, Enter to open; the mouse works too. Game controls are shown under each game.
 - When the agent finishes or waits for permission, a banner appears over the game: **Back to agent** or **Keep playing**.
 
