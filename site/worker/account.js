@@ -88,8 +88,8 @@ const GAME_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 const ROOM = /^[a-z0-9]{6,16}$/
 const MAX_SOCKETS = 5 // открытых страниц чата у человека
 const CHAT_TICKET = /^(\d{1,20})\.(\d{10})\.([0-9a-f]{12})\.([A-Za-z0-9_-]{22})$/
-const TICKET_PATHS = new Set(['/friends', '/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/socket'])
-const CHAT_PATHS = new Set(['/chats', '/messages', '/unread', '/send', '/opendm', '/group', '/members', '/chatticket', '/socket'])
+const TICKET_PATHS = new Set(['/friends', '/chats', '/messages', '/unread', '/send', '/editmsg', '/delmsg', '/opendm', '/group', '/members', '/socket'])
+const CHAT_PATHS = new Set(['/chats', '/messages', '/unread', '/send', '/editmsg', '/delmsg', '/opendm', '/group', '/members', '/chatticket', '/socket'])
 const REPORT_PATHS = new Set(['/report', '/reports', '/closereport'])
 const BOARD_PATHS = new Set(['/boards', '/boardsync', '/boardnew', '/boardmembers', '/boarddelete'])
 const ACCOUNT_ID = /^\d{1,20}$/
@@ -122,6 +122,8 @@ const ROUTES = {
   'GET /api/me/chats/messages': ['user', '/messages'],
   'GET /api/me/chats/unread': ['user', '/unread'],
   'POST /api/me/chats/send': ['user', '/send'],
+  'POST /api/me/chats/edit': ['user', '/editmsg'],
+  'POST /api/me/chats/delete': ['user', '/delmsg'],
   'POST /api/me/chats/open': ['user', '/opendm'],
   'POST /api/me/chats/group': ['user', '/group'],
   'POST /api/me/chats/members': ['user', '/members'],
@@ -183,8 +185,12 @@ async function readBody(request, limit) {
 // Чаты (worker/chat.js): GET /api/me/chats → { me, chats, names, pics?, online?, unread } — чаты, новые сверху, { id,
 // kind: 'dm' | 'group', with? (друг) | name? и pic? (группа), unread, at, last? (последнее сообщение коротко) }, ники
 // и номера аватарок по номерам аккаунтов и кто из друзей в сети;
-// GET /api/me/chats/messages?chat=&after=&before= → { me, chat, messages, first, names, pics?, unread } — без before чат
-// становится прочитанным; GET /api/me/chats/unread → { unread }; POST /api/me/chats/send { chat, text } → { msg };
+// GET /api/me/chats/messages?chat=&after=&before=&edits= → { me, chat, messages, first, names, pics?, unread } — без
+// before чат становится прочитанным; chat.edits — номер последней правки в чате: с edits= ответ добавляет сообщения
+// раньше страницы, поправленные или удалённые после неё (поправленное — с e, удалённое — { s, f, at, d } без текста);
+// GET /api/me/chats/unread → { unread }; POST /api/me/chats/send { chat, text } → { msg };
+// POST /api/me/chats/edit { chat, s, text } и POST /api/me/chats/delete { chat, s } → { msg } — поправить и удалить
+// своё сообщение (409 — его нет, оно не твоё или служебное: 'edit');
 // POST /api/me/chats/open { with } → { chat } — чат с другом; POST /api/me/chats/group { name, members | all: true }
 // → { chat } — группа из друзей или со всеми друзьями; POST /api/me/chats/members { chat, add?, remove?, name?, pic? }
 // → { chat } (pic — номер картинки группы или null) или { chat, leave: true } → { ok } — выйти; POST /api/me/chats/ticket → { ticket, until } — билет для
@@ -309,7 +315,7 @@ const linkPayload = (id, until, prefix) => `link|${id}|${until}|${prefix}`
 const unreadOf = (chats) => Object.values(chats).reduce((sum, c) => sum + Math.max(0, c.last - c.read), 0)
 const gameInvite = (game, room) => typeof game === 'string' && GAME_ID.test(game) && (room === undefined || (typeof room === 'string' && ROOM.test(room)))
 
-// Последнее сообщение для списка чатов: начало текста одной строкой или служебное целиком
+// Последнее сообщение для списка чатов: начало текста одной строкой или служебное целиком (удалённых сюда не дают)
 function preview(msg) {
   if (typeof msg.t === 'string') return { f: msg.f, t: [...msg.t.replace(/\s+/g, ' ')].slice(0, PREVIEW).join('') }
   return { f: msg.f, k: msg.k, ...(msg.o ? { o: msg.o } : {}), ...(msg.n !== undefined ? { n: msg.n } : {}) }
@@ -492,6 +498,7 @@ export class Account {
       if (path === '/messages') return await this.messages(url.searchParams)
       if (path === '/unread') return Response.json({ unread: unreadOf(await this.chats()) })
       if (path === '/send') return await this.send(await request.text())
+      if (path === '/editmsg' || path === '/delmsg') return await this.changeMessage(await request.text(), path === '/delmsg')
       if (path === '/opendm') return await this.openDm(await request.text())
       if (path === '/group') return await this.makeGroup(await request.text())
       if (path === '/members') return await this.changeMembers(await request.text())
@@ -1192,18 +1199,31 @@ export class Account {
   }
 
   // Чат сообщает о новом сообщении. Чата ещё нет в списке — появляется, непрочитанное — с этого сообщения; своё
-  // сообщение сразу прочитано. Аккаунта уже нет — 404, и ничего не записываем
-  async chatnote({ chat, kind, with: other, name, pic, msg }) {
+  // сообщение сразу прочитано. Поправленное (e) или удалённое (d) сообщение список не двигает и непрочитанных не
+  // прибавляет; top — последнее неудалённое сообщение, когда правка его коснулась (null — такого нет): оно в списке.
+  // Удалили непрочитанное, а дальше читать нечего — чат прочитан. Аккаунта уже нет — 404, и ничего не записываем
+  async chatnote({ chat, kind, with: other, name, pic, msg, top }) {
     const me = await this.myId()
     if (!me) return refuse('nobody', 404)
     if (typeof chat !== 'string' || !CHAT_ID.test(chat) || !['dm', 'group'].includes(kind) || !Number.isSafeInteger(msg?.s)) return refuse('bad request', 400)
     const chats = await this.chats()
+    const change = Boolean(msg.e || msg.d)
+    if (change && !chats[chat]) {
+      await this.push({ type: 'note', chat, msg })
+      return Response.json({ ok: true })
+    }
     const entry = { ...(chats[chat] ?? { last: 0, read: msg.s - 1, at: 0 }), kind, ...(typeof other === 'string' ? { with: other } : {}), ...(typeof name === 'string' ? { name } : {}) }
     // Картинка группы приходит с каждым сообщением: её нет — значит, её убрали
     if (kind === 'group' && validPic(pic)) entry.pic = pic
     else delete entry.pic
-    if (msg.s >= entry.last) Object.assign(entry, { last: msg.s, at: msg.at, p: preview(msg) })
-    if (msg.f === me) entry.read = Math.max(entry.read, msg.s)
+    if (!change) {
+      if (msg.s >= entry.last) Object.assign(entry, { last: msg.s, at: msg.at, p: preview(msg) })
+      if (msg.f === me) entry.read = Math.max(entry.read, msg.s)
+    } else if (top !== undefined) {
+      if (Number.isSafeInteger(top?.s)) entry.p = preview(top)
+      else delete entry.p
+      if (msg.d && (top?.s ?? 0) <= entry.read) entry.read = Math.max(entry.read, entry.last)
+    }
     await this.ctx.storage.put('chats', trimmed({ ...chats, [chat]: entry }, chat))
     await this.push({ type: 'note', chat, msg })
     return Response.json({ ok: true })
@@ -1246,9 +1266,9 @@ export class Account {
   // если его не было в списке (друг открыл чат, но ещё не писал) — появляется
   async messages(params) {
     const chat = params.get('chat') ?? ''
-    const [after, before] = ['after', 'before'].map((key) => (params.has(key) ? Number(params.get(key)) : undefined))
-    if (!CHAT_ID.test(chat) || ![after, before].every((n) => n === undefined || (Number.isSafeInteger(n) && n >= 0))) return refuse('bad request', 400)
-    const answer = await this.chat(chat, '/history', { after, before })
+    const [after, before, edits] = ['after', 'before', 'edits'].map((key) => (params.has(key) ? Number(params.get(key)) : undefined))
+    if (!CHAT_ID.test(chat) || ![after, before, edits].every((n) => n === undefined || (Number.isSafeInteger(n) && n >= 0))) return refuse('bad request', 400)
+    const answer = await this.chat(chat, '/history', { after, before, edits })
     if (answer.status === 403 || answer.status === 404) {
       await this.lose(chat)
       return refuse('gone', 404)
@@ -1261,7 +1281,7 @@ export class Account {
     const entry = chats[chat]
     const pic = validPic(about.pic) ? about.pic : undefined
     if (before === undefined && (!entry || entry.read < about.last || (about.name && entry.name !== about.name) || (about.kind === 'group' && entry.pic !== pic))) {
-      const last = messages.at(-1)
+      const last = messages.findLast((m) => !m.d)
       const fresh = entry ?? { kind: about.kind, ...(other ? { with: other } : {}), at: last?.at ?? Date.now(), ...(last ? { p: preview(last) } : {}) }
       const next = { ...fresh, ...(about.name ? { name: about.name } : {}), last: Math.max(fresh.last ?? 0, about.last), read: about.last }
       if (pic === undefined) delete next.pic
@@ -1296,6 +1316,27 @@ export class Account {
       const opened = await this.chat(chat, '/open', { kind: 'dm', members: [me, other] })
       if (opened.ok) answer = await this.chat(chat, '/post', { text: message })
     }
+    if (answer.status === 403 || answer.status === 404) {
+      await this.lose(chat)
+      return refuse('gone', 404)
+    }
+    if (!answer.ok) throw new Error(`chat: ${answer.status}`)
+    return Response.json({ msg: (await answer.json()).msg })
+  }
+
+  // Поправить (новый текст) или удалить своё сообщение s. Считается вместе с отправленными — не чаще SENDS_PER_MINUTE
+  async changeMessage(text, remove) {
+    const { chat, s, text: raw } = parsed(text)
+    if (typeof chat !== 'string' || !CHAT_ID.test(chat) || !Number.isSafeInteger(s) || s < 1) return refuse('bad request', 400)
+    const message = remove ? '' : cleanText(raw)
+    if (!remove && !message) return refuse('empty', 400)
+    if (message.length > MAX_TEXT) return refuse('long', 400)
+    const now = Date.now()
+    this.sends = this.sends.filter((at) => now - at < MINUTE)
+    if (this.sends.length >= SENDS_PER_MINUTE) return refuse('often', 429)
+    this.sends.push(now)
+    const answer = await this.chat(chat, remove ? '/delete' : '/edit', remove ? { s } : { s, text: message })
+    if (answer.status === 409) return refuse('edit', 409)
     if (answer.status === 403 || answer.status === 404) {
       await this.lose(chat)
       return refuse('gone', 404)

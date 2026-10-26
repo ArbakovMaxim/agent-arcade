@@ -5,7 +5,7 @@ import { HANDLE, normalHandle, parseFriends, parseInvite, parsePulse } from '../
 import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread } from '../chats.js'
 import { picSvg } from '../avatars.js'
 import { avatarXaml, keepPopped, popupChats, popupCommand, restorePopped } from '../popup.js'
-import { CHAT_SHOWN, LAUNCH_TIMEOUT_MS, PANE, PANE_ROWS, S } from './state.js'
+import { CHAT_SHOWN, LAUNCH_TIMEOUT_MS, NO_MSG_MENU, PANE, PANE_ROWS, S } from './state.js'
 import { gameById, games } from './library.js'
 import { log, paneColumns, windowNotice } from './status.js'
 import { markPaneOpen, toLibrary } from './play.js'
@@ -99,6 +99,7 @@ function chatNote(error, group = false) {
   if (error === 'full') return 'В группе может быть не больше 50 человек.'
   if (error === 'owner') return 'Это может только тот, кто управляет группой.'
   if (error === 'off') return 'Чаты на сайте сейчас выключены.'
+  if (error === 'edit') return 'Этого сообщения уже нет.'
   return accountNote(error)
 }
 
@@ -138,7 +139,8 @@ export function serviceText(m) {
   return fill(tr(d.text, S.lang), d.values.map((v, k) => (k === 1 && named ? v : chatPerson(v))))
 }
 
-// Переписка вместе с новыми сообщениями: без повторов, по порядку номеров
+// Переписка вместе с новыми сообщениями: без повторов, по порядку номеров; поправленное заменяет прежнее, удалённое
+// остаётся без текста (d) — на экран его не выводят
 function mergeMessages(old, fresh) {
   const all = new Map(old.map((m) => [m.s, m]))
   for (const m of fresh) all.set(m.s, m)
@@ -201,7 +203,7 @@ export async function openChat($, id) {
   }
   S.libraryNotice = ''
   // Поле «Сообщение» — новое: недописанное в другом чате сюда не переходит
-  Object.assign(S.ch, { talk: id, about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: true, older: false, note: '', bad: false, confirmLeave: false, field: S.ch.field + 1 })
+  Object.assign(S.ch, { talk: id, about: null, messages: [], first: 0, shown: CHAT_SHOWN, opening: true, older: false, note: '', bad: false, confirmLeave: false, field: S.ch.field + 1, ...NO_MSG_MENU })
   $.ui.invalidate('ui.render')
   const answer = await chatFetch($, 'messages', parseMessages, { query: { chat: id } })
   if (!answer || request !== S.ch.request) return
@@ -225,14 +227,14 @@ export async function openChat($, id) {
   $.ui.invalidate('ui.render')
 }
 
-// Новые сообщения открытого чата — по таймеру, пока он на экране. Ошибки молча: спросим ещё раз; только если чата
-// больше нет — заметка, и спрашивать перестаём
+// Новые сообщения открытого чата — по таймеру, пока он на экране, и с ними поправленные и удалённые после прошлого
+// раза (edits). Ошибки молча: спросим ещё раз; только если чата больше нет — заметка, и спрашивать перестаём
 export async function pollChat($) {
   const id = S.ch.talk
   if (!S.acct.session || S.ch.polling || S.ch.opening || S.ch.about?.id !== id) return
   S.ch.polling = true
   const after = String(S.ch.messages.at(-1)?.s ?? 0)
-  const answer = await chatFetch($, 'messages', parseMessages, { query: { chat: id, after } })
+  const answer = await chatFetch($, 'messages', parseMessages, { query: { chat: id, after, edits: String(S.ch.about.edits ?? 0) } })
   if (!answer) return
   S.ch.polling = false
   if (S.ch.talk !== id || S.ch.about?.id !== id) return
@@ -245,7 +247,13 @@ export async function pollChat($) {
   }
   const seen = () => JSON.stringify([S.ch.about, S.ch.messages.length, S.ch.messages.at(-1)?.s, S.ch.pics, S.acct.unread])
   const before = seen()
-  S.ch.messages = mergeMessages(S.ch.messages, answer.messages).slice(-CHAT_KEPT)
+  // Поправленные раньше загруженных не берём: «Раньше» принесёт их уже свежими
+  const start = S.ch.messages[0]?.s ?? 0
+  S.ch.messages = mergeMessages(S.ch.messages, answer.messages.filter((m) => m.s >= start)).slice(-CHAT_KEPT)
+  // Сообщение с правкой или открытым меню удалили в другом окне — правка и меню ни к чему
+  const removed = (s) => s && S.ch.messages.find((m) => m.s === s)?.d
+  if (removed(S.ch.editing)) stopEditing($)
+  else if (removed(S.ch.msgMenu)) Object.assign(S.ch, { msgMenu: 0, confirmDelete: 0 })
   S.ch.about = answer.chat
   S.ch.names = { ...S.ch.names, ...answer.names }
   S.ch.pics = mergePics(S.ch.pics, answer)
@@ -253,13 +261,16 @@ export async function pollChat($) {
   if (seen() !== before) $.ui.invalidate('ui.render')
 }
 
+// Переписка на экране: удалённые сообщения не показываем
+export const visibleMessages = () => S.ch.messages.filter((m) => !m.d)
+
 // Есть ли сообщения раньше показанных: уже загруженные или ещё на сайте
-export const olderShown = () => S.ch.messages.length > S.ch.shown || (S.ch.messages.length > 0 && S.ch.messages.length < CHAT_KEPT && S.ch.messages[0].s > S.ch.first)
+export const olderShown = () => visibleMessages().length > S.ch.shown || (S.ch.messages.length > 0 && S.ch.messages.length < CHAT_KEPT && S.ch.messages[0].s > S.ch.first)
 
 // «Раньше»: показать ещё CHAT_SHOWN сообщений; загруженные кончились — спросить у сайта более ранние
 export async function olderMessages($) {
   const id = S.ch.talk
-  if (S.ch.messages.length > S.ch.shown) {
+  if (visibleMessages().length > S.ch.shown) {
     S.ch.shown += CHAT_SHOWN
     return $.ui.invalidate('ui.render')
   }
@@ -313,15 +324,94 @@ export async function sendMessage($, value) {
       entry.at = answer.msg.at
       S.ch.list = [entry, ...S.ch.list.filter((c) => c !== entry)]
     }
-    S.ch.field++
-    const key = `arcade-chat-input-${S.ch.field}`
-    $.clock.after(50, async () => {
-      try {
-        await $.ui.focus({ requestId: PANE, key })
-      } catch {
-        // панель уже закрыли или поле не на экране
-      }
-    })
+    freshField($)
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Поле внизу переписки — новое, пустое, и фокус в нём
+function freshField($) {
+  S.ch.field++
+  const key = `arcade-chat-input-${S.ch.field}`
+  $.clock.after(50, async () => {
+    try {
+      await $.ui.focus({ requestId: PANE, key })
+    } catch {
+      // панель уже закрыли или поле не на экране
+    }
+  })
+}
+
+// --- Своё сообщение: ⋮ — меню «Изменить» и «Удалить» ---------------------------------------------------------------
+
+// Меню и правку — закрыть; правили — внизу снова новое, пустое поле «Сообщение»
+export function stopEditing($) {
+  const editing = S.ch.editing
+  Object.assign(S.ch, NO_MSG_MENU)
+  if (editing) freshField($)
+}
+
+// ⋮ у сообщения s: открыть его меню или закрыть
+export function toggleMsgMenu(s) {
+  const open = S.ch.msgMenu === s
+  S.ch.msgMenu = open ? 0 : s
+  S.ch.confirmDelete = 0
+}
+
+// «Изменить»: текст сообщения s — в поле внизу, править там
+export function startEditing($, s) {
+  S.ch.note = ''
+  S.ch.bad = false
+  Object.assign(S.ch, NO_MSG_MENU, { editing: s })
+  freshField($)
+}
+
+// «Сохранить» правку сообщения s. Тот же текст — сайт не спрашиваем; пусто — не сохраняем
+export async function editMessage($, s, value) {
+  const text = cleanText(value).trim()
+  const old = S.ch.messages.find((m) => m.s === s)
+  if (!text || !old || old.d) return
+  if (text === old.t) {
+    stopEditing($)
+    return $.ui.invalidate('ui.render')
+  }
+  if (text.length > MAX_TEXT) {
+    S.ch.note = chatNote('long')
+    S.ch.bad = true
+    return $.ui.invalidate('ui.render')
+  }
+  await changeMessage($, 'editmsg', { s, text })
+}
+
+// «Удалить» сообщение s — у всех в чате
+export async function deleteMessage($, s) {
+  await changeMessage($, 'delmsg', { s })
+}
+
+// Правка или удаление на сайте. Вышло — сообщение в переписке новое, меню и правка закрыты, список чатов — с сайта:
+// последнее сообщение в нём могло смениться. Нет — правка остаётся в поле
+async function changeMessage($, name, body) {
+  const id = S.ch.talk
+  if (!S.acct.session || S.ch.busy || S.ch.about?.id !== id) return
+  S.ch.busy = name === 'editmsg' ? 'edit' : 'delete'
+  S.ch.note = ''
+  S.ch.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, name, parseSent, { body: { chat: id, ...body } })
+  if (!answer) return
+  S.ch.busy = ''
+  if (S.ch.talk !== id) return $.ui.invalidate('ui.render')
+  if (answer.error) {
+    S.ch.note = chatNote(answer.error)
+    S.ch.bad = true
+    if (answer.error === 'gone') S.ch.about = null
+    S.ch.confirmDelete = 0
+  } else {
+    S.ch.messages = mergeMessages(S.ch.messages, [answer.msg])
+    // Удалили не то, что правится, — правка остаётся
+    if (name === 'editmsg' || S.ch.editing === body.s) stopEditing($)
+    else Object.assign(S.ch, { msgMenu: 0, confirmDelete: 0 })
+    loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
   }
   $.ui.invalidate('ui.render')
 }

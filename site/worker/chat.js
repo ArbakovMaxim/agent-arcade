@@ -9,6 +9,7 @@ export const MAX_NAME = 40 // знаков в названии группы
 export const KEEP = 1000 // сообщений в чате хранится; старые уходят пачками по TRIM
 export const PAGE = 50 // сообщений за один раз
 const TRIM = 100
+const CHANGED = 200 // последних правок и удалений чат помнит — их получают те, у кого переписка уже загружена
 export const CHAT_ID = /^(?:d\d{1,20}-\d{1,20}|g[A-Za-z0-9_-]{16})$/
 const ACCOUNT_ID = /^\d{1,20}$/
 // Аватарки — 24 готовые картинки (mod/hooks/avatars.js): сайт хранит только номер 0–23
@@ -46,13 +47,15 @@ const summary = (meta) => ({
   ...(meta.owner ? { owner: meta.owner } : {}),
   members: Object.keys(meta.members),
   last: meta.last,
+  ...(meta.edits ? { edits: meta.edits } : {}),
 })
 
 // meta — { id, kind: 'dm' | 'group', name?, pic? (номер картинки группы), owner?, members: { номер: с какого сообщения он видит переписку },
-// first, last — номера самого старого и последнего сообщения, created }. Сообщение m:<номер> — { s, f, t, at }:
-// номер, кто написал, текст, когда; служебное — { s, f, k, o?, n?, at }: 'create' — создал группу n, 'add' и
-// 'remove' — добавил и убрал o, 'leave' — вышел, 'name' — назвал группу n, 'pic' — поставил картинку группы n (без n —
-// убрал её)
+// first, last — номера самого старого и последнего сообщения, created, edits? — номер последней правки, changed? —
+// [номер правки, номер сообщения] последних CHANGED правок }. Сообщение m:<номер> — { s, f, t, at, e? }: номер, кто
+// написал, текст, когда, когда поправил; удалённое — { s, f, at, d } (d — когда удалил); служебное — { s, f, k, o?,
+// n?, at }: 'create' — создал группу n, 'add' и 'remove' — добавил и убрал o, 'leave' — вышел, 'name' — назвал группу
+// n, 'pic' — поставил картинку группы n (без n — убрал её)
 export class Chat {
   constructor(ctx, env) {
     this.ctx = ctx
@@ -69,6 +72,7 @@ export class Chat {
       if (!meta) return refuse('gone', 404)
       if (!has(meta.members, body.by)) return refuse('member', 403)
       if (path === '/post') return await this.post(meta, body)
+      if (path === '/edit' || path === '/delete') return await this.change(meta, body, path === '/delete')
       if (path === '/history') return await this.history(meta, body)
       if (path === '/members') return await this.members(meta, body)
       if (path === '/close') return await this.close(meta)
@@ -116,9 +120,35 @@ export class Chat {
     return Response.json({ msg })
   }
 
+  // Поправить или удалить своё сообщение с текстом, пока оно хранится и видно. Удалённое остаётся без текста — номера
+  // не сдвигаются. Каждая правка получает следующий номер meta.edits. Участникам — уведомление с сообщением; если
+  // оно последнее из неудалённых или было им — ещё и top: последнее неудалённое теперь (или null)
+  async change(meta, { by, s, text }, remove) {
+    if (!Number.isSafeInteger(s) || (!remove && (typeof text !== 'string' || !text || text.length > MAX_TEXT))) return refuse('bad request', 400)
+    const old = s >= Math.max(meta.first, meta.members[by]) && s <= meta.last ? await this.ctx.storage.get(`m:${s}`) : undefined
+    if (old?.f !== by || typeof old.t !== 'string') return refuse('edit', 409)
+    if (!remove && old.t === text) return Response.json({ msg: old })
+    const msg = remove ? { s, f: by, at: old.at, d: Date.now() } : { ...old, t: text, e: Date.now() }
+    meta.edits = (meta.edits ?? 0) + 1
+    meta.changed = [...(meta.changed ?? []).filter(([, n]) => n !== s), [meta.edits, s]].slice(-CHANGED)
+    await this.ctx.storage.put({ meta, [`m:${s}`]: msg })
+    const top = await this.latest(meta)
+    await this.notify(meta, msg, (top?.s ?? 0) <= s ? { top } : {})
+    return Response.json({ msg })
+  }
+
+  // Последнее неудалённое сообщение — из последних PAGE; нет — null
+  async latest(meta) {
+    const keys = []
+    for (let s = meta.last; s >= Math.max(meta.first, meta.last - PAGE + 1); s--) keys.push(`m:${s}`)
+    const found = keys.length ? await this.ctx.storage.get(keys) : new Map()
+    return [...found.values()].filter((m) => !m.d).sort((a, b) => b.s - a.s)[0] ?? null
+  }
+
   // Сообщения: последние PAGE, PAGE до before или новые после after (из них — не больше последних PAGE). Кого
-  // добавили в группу, видит переписку с сообщения о том, что его добавили
-  async history(meta, { by, after, before }) {
+  // добавили в группу, видит переписку с сообщения о том, что его добавили. edits — номер правки, которую спрашивающий
+  // уже видел: без before к странице добавляются сообщения раньше неё, поправленные и удалённые после этой правки
+  async history(meta, { by, after, before, edits }) {
     const from = Math.max(meta.first, meta.members[by])
     const hi = Number.isSafeInteger(before) ? Math.min(before - 1, meta.last) : meta.last
     let lo = Math.max(from, hi - PAGE + 1)
@@ -126,7 +156,9 @@ export class Chat {
     const keys = []
     for (let s = lo; s <= hi; s++) keys.push(`m:${s}`)
     const found = keys.length ? await this.ctx.storage.get(keys) : new Map()
-    const messages = [...found.values()].sort((a, b) => a.s - b.s)
+    const changed = Number.isSafeInteger(edits) && !Number.isSafeInteger(before) ? (meta.changed ?? []).filter(([v, s]) => v > edits && s >= from && s < lo) : []
+    const earlier = changed.length ? await this.ctx.storage.get(changed.map(([, s]) => `m:${s}`)) : new Map()
+    const messages = [...earlier.values(), ...found.values()].sort((a, b) => a.s - b.s)
     return Response.json({ chat: summary(meta), messages, first: from })
   }
 
@@ -184,12 +216,14 @@ export class Chat {
     return Response.json({ ok: true })
   }
 
-  // Каждому участнику — в его экземпляр Account: в чате новое сообщение. Кто не ответил, узнает при следующем.
-  // Про группу — название и картинка: так списки чатов у всех узнают, что их поменяли
-  async notify(meta, msg) {
+  // Каждому участнику — в его экземпляр Account: в чате новое сообщение (или поправленное — с top, см. change). Кто не
+  // ответил, узнает при следующем. Про группу — название и картинка: так списки чатов у всех узнают, что их поменяли
+  async notify(meta, msg, { top } = {}) {
     const people = Object.keys(meta.members)
     const about = (id) => (meta.kind === 'dm' ? { with: people.find((other) => other !== id) } : { name: meta.name, ...(validPic(meta.pic) ? { pic: meta.pic } : {}) })
-    await Promise.allSettled(people.map(async (id) => this.account(id, '/chatnote', { chat: meta.id, kind: meta.kind, ...about(id), msg })))
+    // Последнее неудалённое — только если он его видит
+    const seen = (id) => (top === undefined ? {} : { top: top && top.s >= meta.members[id] ? top : null })
+    await Promise.allSettled(people.map(async (id) => this.account(id, '/chatnote', { chat: meta.id, kind: meta.kind, ...about(id), msg, ...seen(id) })))
   }
 
   async tellGone(meta, people) {
