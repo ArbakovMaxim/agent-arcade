@@ -34,6 +34,7 @@
   "Held: {0}",
   "Keys: {0}",
   "{0} — this terminal does not show images",
+  "“Play?” line: after {0}",
   "When the agent finishes: {0}",
   "When the agent asks for permission: {0}",
   "open in: {0}",

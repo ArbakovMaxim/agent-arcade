@@ -595,6 +595,8 @@ const EXACT = {
   'Размер панели: во всю ширину': 'Pane size: full width',
   'Размер панели: обычный': 'Pane size: normal',
   'во всю ширину разговор с агентом сжимается в узкую полосу; поправить ширину можно мышью': 'at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse',
+  'Строка «сыграть?»: выключена': '“Play?” line: off',
+  'над полем ввода, когда агент работает дольше этого; выключена — Arcade открывается командой /arcade': 'above the input box once the agent has been working this long; when off, open Arcade with the /arcade command',
   'для игры в панели Claude; в окне браузера — системное уведомление': 'for games in the Claude pane; in a browser window you get a system notification',
   'Уведомления, пока играешь в окне: да': 'Notifications while playing in a window: on',
   'Уведомления, пока играешь в окне: нет': 'Notifications while playing in a window: off',
@@ -851,6 +853,7 @@ const RULES = [
   [/^Открывать: (окно .+)$/, (m) => `Open in: ${opener(m[1])}`],
   [/^Игры открываются (.+)\.$/, (m) =>
     `Games open ${m[1] === 'здесь, в панели' ? 'here, in the pane' : m[1] === 'во встроенном браузере Claude' ? "in Claude's built-in browser" : `in ${where(m[1].replace(/^в /, ''))}`}.`],
+  [/^Строка «сыграть\?»: через (.+)$/, (m) => `“Play?” line: after ${dur(m[1])}`],
   [/^Когда агент закончил: (.+)$/, (m) => `When the agent finishes: ${SIGNAL[m[1]] ?? m[1]}`],
   [/^Когда агент ждёт разрешения: (.+)$/, (m) => `When the agent asks for permission: ${SIGNAL[m[1]] ?? m[1]}`],
   [/^Открыть (.+) в окне$/, (m) => `Open ${tr(m[1], 'en')} in a window`],

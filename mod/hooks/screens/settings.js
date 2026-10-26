@@ -2,8 +2,8 @@
 import { LANGS, LANG_NAMES } from '../i18n.js'
 import { SITE } from '../catalog.js'
 import { openUrlCommand } from '../browsers.js'
-import { FIELD, GRAPHICS, HIDEABLE, LAUNCH_TIMEOUT_MS, PANE, PANE_ROWS, S, SIGNAL_LABELS, SIGNAL_MODES } from '../app/state.js'
-import { paneColumns } from '../app/status.js'
+import { ASK_AFTER_CHOICES, FIELD, GRAPHICS, HIDEABLE, LAUNCH_TIMEOUT_MS, PANE, PANE_ROWS, S, SIGNAL_LABELS, SIGNAL_MODES } from '../app/state.js'
+import { paneColumns, workedText } from '../app/status.js'
 import { graphicsLabel, launch, startAssign } from '../app/play.js'
 import { MOUSE_NOTE, builtinBrowser, desktopLabel, desktopOptions, openerLabel, openerOptions, windowMode } from '../app/window.js'
 import { followBookLang } from '../app/read.js'
@@ -187,6 +187,17 @@ export function settingsScreen($, e, kit) {
   // Сигналы агента: у каждой плитки своё описание — плитка берёт только описание сразу под кнопкой
   const signalNote = '  для игры в панели Claude; в окне браузера — системное уведомление'
   const notifyTiles = [
+    // Строка «сыграть?» над полем ввода: через сколько работы агента — или не показывать совсем
+    Button({
+      key: 'arcade-ask-after',
+      label: `Строка «сыграть?»: ${S.askAfter ? `через ${workedText(S.askAfter)}` : 'выключена'}`,
+      onPress: async () => {
+        S.askAfter = ASK_AFTER_CHOICES[(ASK_AFTER_CHOICES.indexOf(S.askAfter) + 1) % ASK_AFTER_CHOICES.length]
+        $.ui.invalidate('ui.render')
+        await saveSetting($, 'askAfter', S.askAfter)
+      },
+    }),
+    dim('  над полем ввода, когда агент работает дольше этого; выключена — Arcade открывается командой /arcade'),
     Button({
       key: 'arcade-on-done',
       label: `Когда агент закончил: ${SIGNAL_LABELS[S.onDone]}`,
