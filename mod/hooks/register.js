@@ -11,7 +11,7 @@ import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
 import { NOTES_TOOL, applyNotesTool, restoreNotes } from './notes.js'
 import { cardId, restoreDesks } from './desks.js'
 import { bookLang } from './books.js'
-import { ASK_AFTER_MS, DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_ROWS, PIXEL_DENIES, S, TICK_MS, savedKeys } from './app/state.js'
+import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_ROWS, PIXEL_DENIES, S, TICK_MS, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
 import { LOBBIES_EVERY_MS, log, paneColumns, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
 import { markPaneOpen, nesView, pixelMode, pressStart, readInput, releaseAll, screenContent, stepNes, toLibrary, typedFrom } from './app/play.js'
@@ -163,7 +163,7 @@ export function register(on) {
       // Раз в секунду: проверить порог вопроса и обновить счётчик секунд
       $.clock.every(1000, async () => {
         const now = await $.clock.now()
-        if (S.status === 'working' && !S.asked && !S.paneOpen && now - S.turnStartedAt >= ASK_AFTER_MS) {
+        if (S.status === 'working' && S.askAfter > 0 && !S.asked && !S.paneOpen && now - S.turnStartedAt >= S.askAfter * 1000) {
           S.askVisible = true
         }
         if (S.askVisible || S.paneOpen) $.ui.invalidate('ui.render')
@@ -499,7 +499,8 @@ export function register(on) {
       const below = await next(e)
       return below ? Box({ flexDirection: 'column', children: [ours, below] }) : ours
     }
-    if (!S.askVisible || e.props.hasSurvey) return next(e)
+    // Строку выключили в настройках — здесь или на другом компьютере — она уходит сразу, не дожидаясь хода
+    if (!S.askVisible || !S.askAfter || e.props.hasSurvey) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
     const now = await $.clock.now()
     const canWindow = (S.platform !== null || e.surface === 'desktop') && webGame(S.lastGame)

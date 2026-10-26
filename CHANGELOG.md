@@ -1,5 +1,12 @@
 # Changelog · Список изменений
 
+## 0.35.0 — строку «сыграть?» над полем ввода можно выключить или выбрать, через сколько она появится · the “play?” line above the input box can be turned off, or set to appear later
+
+- New first tile in Settings → Notifications: “Play?” line — after 10 s (as before), 30 s, 1 min, 2 min, 5 min, or off; a press moves to the next choice · новая первая плитка в «Настройки → Уведомления»: «Строка «сыграть?»» — через 10 с (как раньше), 30 с, 1 мин, 2 мин, 5 мин или выключена; нажатие переключает на следующий вариант
+- Off means the line never appears, whatever the agent does; Arcade still opens with /arcade, and a game in progress still gets the “agent finished” and “waiting for permission” signals · выключена — строка не появляется совсем, как бы долго агент ни работал; Arcade по-прежнему открывается командой /arcade, а в идущей игре сигналы «агент закончил» и «ждёт разрешения» остаются
+- Signed in, the choice syncs to your other computers like the other settings; turned off on another computer, a line already showing here goes away as soon as the setting arrives · со входом выбор синхронизируется на другие компьютеры, как остальные настройки; выключили на другом компьютере — строка, которая уже видна здесь, уходит, как только дойдёт настройка
+- In Desktop the tile has its own stopwatch icon; the README in all 13 languages mentions the setting; new strings are translated into all 13 languages · в Desktop у плитки своя иконка-секундомер; README на всех 13 языках говорит о настройке; новые строки переведены на все 13 языков
+
 ## 0.34.1 — условия использования и политика конфиденциальности сайта Arcade — в конце настроек · the Arcade site’s Terms of Use and Privacy Policy are at the end of the settings
 
 - New last settings group “Terms and privacy”: “Terms of Use” and “Privacy Policy” open the site’s /terms and /privacy pages in your regular browser; if no browser opens, the address is shown under the settings · новая последняя группа настроек «Условия и конфиденциальность»: «Условия использования» и «Политика конфиденциальности» открывают страницы сайта /terms и /privacy в обычном браузере; не открылся — адрес показывается под настройками

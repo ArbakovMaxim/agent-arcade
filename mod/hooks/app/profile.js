@@ -7,7 +7,7 @@ import { HANDLE, accountUrl, normalHandle, parseAvatar, parseDone, parseHandle, 
 import { validPic } from '../avatars.js'
 import { restoreFavorites, toggleIn } from '../find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../reports.js'
-import { FAV_LIMIT, HIDEABLE, LAUNCH_TIMEOUT_MS, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_REPORTS, S, SECTIONS, SIGNAL_MODES, noOnline, restoreKeymap, savedKeys } from './state.js'
+import { ASK_AFTER_CHOICES, FAV_LIMIT, HIDEABLE, LAUNCH_TIMEOUT_MS, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_REPORTS, S, SECTIONS, SIGNAL_MODES, noOnline, restoreKeymap, savedKeys } from './state.js'
 import { log, windowNotice } from './status.js'
 import { fetchWithin } from './watch.js'
 import { withoutPics } from './talk.js'
@@ -65,6 +65,9 @@ export function applySetting(key, value) {
     if (!SIGNAL_MODES.includes(value)) return false
     if (key === 'onDone') S.onDone = value
     else S.onPermission = value
+  } else if (key === 'askAfter') {
+    if (!ASK_AFTER_CHOICES.includes(value)) return false
+    S.askAfter = value
   } else if (key === 'myTopics') {
     if (!Array.isArray(value)) return false
     S.myTopics = restoreMyTopics(value)
@@ -91,7 +94,7 @@ export function applySetting(key, value) {
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang: S.lang, keys: S.keymap, notify: S.osNotify, wide: S.wide, keepMenu: S.keepMenu, backOnDone: S.backOnDone, onDone: S.onDone, onPermission: S.onPermission, myTopics: S.myTopics, twitchChannels: S.tw.channels, flappyBest: S.flappyBest, collapsed: S.collapsed, hidden: S.hidden, favorites: S.favorites, hideOnline: S.hideOnline }[key]
+  return { lang: S.lang, keys: S.keymap, notify: S.osNotify, wide: S.wide, keepMenu: S.keepMenu, backOnDone: S.backOnDone, onDone: S.onDone, onPermission: S.onPermission, myTopics: S.myTopics, twitchChannels: S.tw.channels, flappyBest: S.flappyBest, collapsed: S.collapsed, hidden: S.hidden, favorites: S.favorites, hideOnline: S.hideOnline, askAfter: S.askAfter }[key]
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт

@@ -14,8 +14,9 @@ import { jsonFrom } from './youtube.js'
 // Что из $.store общее для всех компьютеров. Свои игры, каталог, последняя игра, браузер и графика — у каждого компьютера
 // свои: файлы игр, браузеры и терминал на другом компьютере другие. keepMenu — оставлять ли меню Arcade, когда
 // открылся встроенный браузер Desktop, collapsed — свёрнутые разделы главного меню, hidden — убранные из него
-// совсем, favorites — избранное, hideOnline — не показывать друзьям, что человек в сети
-export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'hidden', 'favorites', 'hideOnline']
+// совсем, favorites — избранное, hideOnline — не показывать друзьям, что человек в сети, askAfter — через сколько
+// секунд работы агента показать «сыграть?» (0 — не показывать)
+export const SYNC_KEYS = ['lang', 'keys', 'notify', 'wide', 'keepMenu', 'backOnDone', 'onDone', 'onPermission', 'myTopics', 'twitchChannels', 'flappyBest', 'collapsed', 'hidden', 'favorites', 'hideOnline', 'askAfter']
 const TOKEN = /^(\d{1,20})\.[A-Za-z0-9_-]{43}$/
 const DEVICE = /^[A-Za-z0-9_-]{8,100}$/
 const USER_CODE = /^[A-Z0-9]{4}-[A-Z0-9]{4}$/
