@@ -22,6 +22,7 @@ import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFrie
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
 import { BOOK_LANGS, BOOK_SECTIONS, bookLang, bookQuery, booksPath, parseBooks } from '../hooks/books.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
+import { BOARD_POLL_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -7541,6 +7542,258 @@ test('блокнот: из $.store — после перезапуска; Deskto
   expect(await ui.find({ type: 'Text', text: 'Пн' })).toMatchObject({ props: { weight: 'semibold' } })
   expect(await ui.find({ key: 'arcade-note-line-2' })).toMatchObject({ props: { label: '☑ тесты', dimColor: true } })
   expect(await ui.find({ type: 'Text', text: 'текст' })).toBeDefined()
+  await ui.unmount()
+})
+
+// Другая сессия Claude Code правит то же хранилище: своей копией, не задевая того, что держит мод
+function elsewhere(saved: Map<string, unknown>, key: string, change: (value: any) => any) {
+  saved.set(key, change(JSON.parse(JSON.stringify(saved.get(key) ?? null))))
+}
+
+test('блокнот в двух сессиях: инструмент Claude правит свежий блокнот — чужие страницы не пропадают и не возвращаются', async ($, on) => {
+  const stored = { notes: [{ id: 'pk', title: 'Купить', body: '- [ ] хлеб', parent: null, at: 1 }] }
+  const { clock, saved } = stubs(on, { stored })
+  await start($)
+  await clock.advance(200)
+  const pages = () => saved.get('notes') as any[]
+  const page = (id: string) => pages().find((p) => p.id === id)
+
+  // A заводит доску — B видит её в list сразу, без перезапуска; страница B ложится рядом
+  elsewhere(saved, 'notes', (list) => [{ id: 'pt', title: 'Тест A', body: '', parent: null, at: 2, board: { cols: DEFAULT_COLS } }, ...list])
+  expect(((await $.tool.call({ tool: NOTES, action: 'list' })) as any).result).toContain('- pt: Тест A [board: To do, Doing, Done]')
+  expect(await $.tool.call({ tool: NOTES, action: 'create', title: 'Из B' })).toMatchObject({ result: expect.stringMatching(/^Created page p\w+: Из B\.$/) })
+  expect(pages().map((p) => p.title).sort()).toEqual(['Из B', 'Купить', 'Тест A'])
+
+  // A удаляет страницу — правка B её не возвращает, и read её уже не находит
+  elsewhere(saved, 'notes', (list) => list.filter((p: any) => p.id !== 'pk'))
+  await $.tool.call({ tool: NOTES, action: 'append', page: 'Из B', text: '- [ ] шаг' })
+  expect(page('pk')).toBeUndefined()
+  expect(await $.tool.call({ tool: NOTES, action: 'read', page: 'pk' })).toMatchObject({ deny: 'No page "pk". Use action list to see the pages.' })
+
+  // Разные страницы: A переименовывает доску и заводит карточку, B — свою карточку и отметку — на месте всё
+  elsewhere(saved, 'notes', (list) => [...list.map((p: any) => (p.id === 'pt' ? { ...p, title: 'Тест A2', at: 3 } : p)), { id: 'ca', title: 'От A', body: '', parent: 'pt', at: 3, col: 'todo', pos: 0 }])
+  expect(await $.tool.call({ tool: NOTES, action: 'create', parent: 'pt', title: 'От B' })).toMatchObject({ result: expect.stringMatching(/^Created card c\w+: От B \(card on Тест A2, column To do\)\.$/) })
+  expect(await $.tool.call({ tool: NOTES, action: 'check', page: 'Из B', item: 'шаг' })).toMatchObject({ result: 'Ticked: шаг.' })
+  expect(columnCards(pages(), page('pt'), 'todo').map((p: any) => p.title)).toEqual(['От A', 'От B'])
+  expect(page('pt').title).toBe('Тест A2')
+
+  // Одна страница: B читает правку A и дописывает поверх неё; последняя правка остаётся, другие страницы не тронуты
+  const mine = pages().find((p) => p.title === 'Из B').id
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === mine ? { ...p, body: '- [ ] от A', at: 4 } : p)))
+  expect(((await $.tool.call({ tool: NOTES, action: 'read', page: mine })) as any).result).toContain('- [ ] от A')
+  await $.tool.call({ tool: NOTES, action: 'append', page: mine, text: '- [ ] от B' })
+  expect(page(mine).body).toBe('- [ ] от A\n- [ ] от B')
+  expect(pages().map((p) => p.title).sort()).toEqual(['Из B', 'От A', 'От B', 'Тест A2'])
+})
+
+test('блокнот в двух сессиях: экран перечитывает хранилище, набранное — в свою страницу, удалённая страница — назад с заметкой', async ($, on) => {
+  const stored = {
+    notes: [
+      { id: 'pa', title: 'Альфа', body: '- [ ] один', parent: null, at: 1 },
+      { id: 'pb', title: 'Бета', body: '', parent: null, at: 1 },
+    ],
+  }
+  const { clock, saved } = stubs(on, { stored })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const page = (id: string) => pages().find((p) => p.id === id)
+  const field = async () => (await ui.find({ key: await noteKey(ui, 'arcade-note-text-') }))?.props.value
+  const tick = async () => {
+    await clock.advance(NOTES_POLL_MS)
+    await clock.settle()
+  }
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  await press('arcade-menu-notes')
+
+  // Страница из A появляется на экране B со следующим тиком
+  elsewhere(saved, 'notes', (list) => [{ id: 'pc', title: 'Гамма', body: '', parent: null, at: 2 }, ...list])
+  expect(await ui.find({ key: 'arcade-note-page-pc' })).toBeUndefined()
+  await tick()
+  expect(await ui.find({ key: 'arcade-note-page-pc' })).toMatchObject({ props: { label: 'Гамма' } })
+
+  // B набирает текст в «Альфе», A тем временем правит «Бету»: поле B не рисуется заново, набранное — в свою страницу
+  await press('arcade-note-page-pa')
+  await noteInput(ui, 'arcade-note-text-', '- [ ] один\n- [ ] два', 'change')
+  const key = await noteKey(ui, 'arcade-note-text-')
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A', at: 3 } : p)))
+  await tick()
+  expect(await noteKey(ui, 'arcade-note-text-')).toBe(key)
+  await press('arcade-back')
+  expect([page('pa').body, page('pb').body, page('pc')?.title]).toEqual(['- [ ] один\n- [ ] два', 'от A', 'Гамма'])
+
+  // Открытую страницу без набранного A поправил — поле рисуется с новым текстом; с набранным — остаётся последняя правка
+  await press('arcade-note-page-pb')
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A ещё', at: 4 } : p)))
+  await tick()
+  expect(await field()).toBe('от A ещё')
+  await noteInput(ui, 'arcade-note-text-', 'от B', 'change')
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A снова', at: 5 } : p)))
+  await tick()
+  await press('arcade-back')
+  expect([page('pa').body, page('pb').body]).toEqual(['- [ ] один\n- [ ] два', 'от B'])
+
+  // Открытую страницу удалили в A — со следующим тиком B уходит к списку с заметкой, страница не возвращается
+  await press('arcade-note-page-pc')
+  elsewhere(saved, 'notes', (list) => list.filter((p: any) => p.id !== 'pc'))
+  await tick()
+  expect(await text('Открытую страницу удалили в другой сессии.')).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ key: 'arcade-note-page-pa' })).toBeDefined()
+  expect(page('pc')).toBeUndefined()
+
+  // Удалили до тика, а B правит её — правка не делается, B уходит к списку
+  await press('arcade-note-page-pb')
+  elsewhere(saved, 'notes', (list) => list.filter((p: any) => p.id !== 'pb'))
+  await noteInput(ui, 'arcade-note-add-', 'пункт')
+  await clock.settle()
+  expect(await text('Открытую страницу удалили в другой сессии.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-page-pa' })).toBeDefined()
+  expect(pages().map((p) => p.id)).toEqual(['pa'])
+  await ui.unmount()
+})
+
+test('доска проектов в двух сессиях: правки поверх свежего блокнота, удалённые карточка и доска — назад с заметкой', async ($, on) => {
+  const stored = {
+    notes: [
+      { id: 'pd', title: 'Релиз', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } },
+      { id: 'c1', title: 'Логин', body: '', parent: 'pd', at: 1, col: 'todo', pos: 0 },
+      { id: 'c2', title: 'Тесты', body: '', parent: 'pd', at: 1, col: 'todo', pos: 1 },
+    ],
+  }
+  const { clock, saved } = stubs(on, { stored })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const titles = (col: string) => columnCards(pages(), pages().find(isBoard), col).map((p: any) => p.title)
+  const tick = async () => {
+    await clock.advance(NOTES_POLL_MS)
+    await clock.settle()
+  }
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  await press('arcade-menu-boards')
+  await press('arcade-desk-pd')
+
+  // Карточка из A появляется на доске B со следующим тиком; карточка B ложится рядом
+  elsewhere(saved, 'notes', (list) => [...list, { id: 'ca', title: 'От A', body: '', parent: 'pd', at: 2, col: 'doing', pos: 0 }])
+  await tick()
+  expect(await ui.find({ key: 'arcade-card-ca' })).toMatchObject({ props: { label: 'От A' } })
+  await noteInput(ui, 'arcade-card-new-todo-', 'От B')
+  await clock.settle()
+  expect([titles('todo'), titles('doing')]).toEqual([['Логин', 'Тесты', 'От B'], ['От A']])
+
+  // Открытую карточку удалили в A — назад к доске с заметкой
+  await press('arcade-card-c1')
+  await press('arcade-card-c1')
+  expect(await noteKey(ui, 'arcade-note-text-')).toBeDefined()
+  elsewhere(saved, 'notes', (list) => list.filter((p: any) => p.id !== 'c1'))
+  await tick()
+  expect(await text('Открытую карточку удалили в другой сессии.')).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ key: 'arcade-card-c2' })).toBeDefined()
+  expect(titles('todo')).toEqual(['Тесты', 'От B'])
+
+  // Открытую доску удалили в A — к списку досок с заметкой
+  elsewhere(saved, 'notes', (list) => list.filter((p: any) => p.id !== 'pd' && p.parent !== 'pd'))
+  await tick()
+  expect(await text('Открытую доску удалили в другой сессии.')).toMatchObject({ props: { color: 'warning' } })
+  expect(await text('Досок пока нет — впиши название новой выше.')).toBeDefined()
+  expect(pages()).toEqual([])
+  await ui.unmount()
+})
+
+test('общая доска в двух сессиях: сверка — поверх свежих блокнота и досок, на сайте без дублей и потерь', HEAVY, async ($, on) => {
+  const site = boardsSite()
+  const b = site.board('Релиз', OCTO.id, [OCTO.id, '7'], [{ id: 'c1', title: 'Логин', body: '', col: 'todo', pos: 0 }])
+  const share = b.id
+  // Пока сверка B ждёт ответа, A успевает сверить ту же доску
+  let meanwhile: (() => void) | null = null
+  const api = (path: string, request: any) => {
+    const run = path === 'api/me/boards/sync' ? meanwhile : null
+    meanwhile = run ? null : meanwhile
+    run?.()
+    return site.api(path, request)
+  }
+  const stored = {
+    account: { token: TOKEN, user: OCTO },
+    notes: [
+      { id: 'pd', title: 'Релиз', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS, share } },
+      { id: 'c1', title: 'Логин', body: '', parent: 'pd', at: 1, col: 'todo', pos: 0 },
+    ],
+    desks: { [share]: { page: 'pd', rev: b.rev, name: 'Релиз', cols: DEFAULT_COLS, owner: OCTO.id, members: [OCTO.id, '7'], names: {}, cards: { c1: 1 }, held: {} } },
+  }
+  const { clock, requests, saved } = stubs(on, { env: WINDOWS, api, stored })
+  await start($)
+  await clock.advance(4_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const pages = () => saved.get('notes') as any[]
+  const cards = () => pages().filter((p) => p.parent === 'pd').map((p) => p.title).sort()
+  const onSite = () => Object.values(b.cards).filter((c: any) => !c.gone).map((c: any) => c.title).sort()
+  const syncs = () => sent(requests, 'api/me/boards/sync', 'POST').map((r) => r.body)
+  const puts = (id: string) => syncs().flatMap((s) => s.ops).filter((op: any) => op.put?.id === id).length
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  const settle = async (ms: number) => {
+    await clock.advance(ms)
+    await clock.settle()
+  }
+  // A сверил свою карточку: она на сайте, в блокноте и в основе доски — блокнот пишется раньше досок
+  const syncedInA = (id: string, title: string, at: number) => {
+    site.put(b, { id, title, body: '', col: 'doing', pos: at })
+    elsewhere(saved, 'notes', (list) => [...list, { id, title, body: '', parent: 'pd', at, col: 'doing', pos: at }])
+    elsewhere(saved, 'desks', (desks) => ({ ...desks, [share]: { ...desks[share], rev: b.rev, cards: { ...desks[share].cards, [id]: at } } }))
+  }
+  await press('arcade-menu-boards')
+  await press('arcade-desk-pd')
+  expect(syncs().at(-1)).toMatchObject({ board: share, since: b.rev, ops: [] })
+
+  // A сверил карточку, B завёл свою: B отдаёт сайту только свою, карточка A — у B один раз
+  syncedInA('ca', 'От A', 5)
+  await noteInput(ui, 'arcade-card-new-todo-', 'От B')
+  await settle(1_500)
+  const mine = pages().find((p) => p.title === 'От B').id
+  expect(puts(mine)).toBe(1)
+  expect(puts('ca')).toBe(0)
+  expect(cards()).toEqual(['Логин', 'От A', 'От B'])
+  expect(onSite()).toEqual(['Логин', 'От A', 'От B'])
+  expect(await ui.find({ key: 'arcade-card-ca' })).toMatchObject({ props: { label: 'От A' } })
+  expect((saved.get('desks') as any)[share]).toMatchObject({ rev: b.rev, cards: { c1: 1, ca: 5, [mine]: expect.any(Number) } })
+
+  // Сверка B и сверка A — одновременно: ответ B к старой основе брошен, основа A цела, следующая сверка доделывает
+  meanwhile = () => syncedInA('ca2', 'Ещё от A', 7)
+  await noteInput(ui, 'arcade-card-new-todo-', 'Ещё от B')
+  await settle(1_500)
+  const mine2 = pages().find((p) => p.title === 'Ещё от B').id
+  expect(meanwhile).toBeNull()
+  expect((saved.get('desks') as any)[share].cards).toMatchObject({ ca2: 7 })
+  await settle(BOARD_POLL_MS)
+  expect(puts('ca2')).toBe(0)
+  expect(cards()).toEqual(['Ещё от A', 'Ещё от B', 'Логин', 'От A', 'От B'])
+  expect(onSite()).toEqual(['Ещё от A', 'Ещё от B', 'Логин', 'От A', 'От B'])
+  expect((saved.get('desks') as any)[share]).toMatchObject({ rev: b.rev, cards: { ca2: 7, [mine2]: expect.any(Number) } })
+
+  // A удалил доску с сайта: у B она со следующим тиком своя, и правка B не возвращает её связь с сайтом
+  delete site.boards[share]
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pd' ? { ...p, board: { cols: DEFAULT_COLS }, at: 9 } : p)))
+  elsewhere(saved, 'desks', () => ({}))
+  await settle(NOTES_POLL_MS)
+  const count = syncs().length
+  await noteInput(ui, 'arcade-card-new-todo-', 'Своя')
+  await settle(BOARD_POLL_MS)
+  expect(syncs().length).toBe(count)
+  expect(saved.get('desks')).toEqual({})
+  expect(pages().find(isBoard).board).toEqual({ cols: DEFAULT_COLS })
+  expect(cards()).toContain('Своя')
   await ui.unmount()
 })
 
