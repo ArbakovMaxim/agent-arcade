@@ -10,7 +10,9 @@ Arcade 是一个 [Claude Code](https://claude.com/claude-code) 插件，帮你�
 
 目录中的一切都是免费的：游戏采用开放许可，书籍和有声书属于公有领域。你还可以和同样在等待智能体的其他人联网对战，并和好友聊天。
 
-![智能体工作 11 秒后，Claude Code 提示符上方出现的“玩一会儿吗？”](docs/images/prompt.png)
+![演示：给 Claude Code 一个任务，提示符上方出现“玩一会儿吗？”，聊天旁边运行着一款 NES 游戏，智能体完成后 Arcade 叫你回来；还有书籍、有声书和文章](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
+
+*Claude Desktop 中的 31 秒，界面为英文。[观看 720p 视频](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287)。*
 
 ## 功能
 
