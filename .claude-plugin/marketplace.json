@@ -1,6 +1,6 @@
 {
   "name": "agent-arcade",
-  "description": "Arcade: games while your Claude Code agent works · игры, пока агент Claude Code работает",
+  "description": "Arcade: task boards, notes, team chats and games inside Claude Code · доски задач, блокнот, чаты команды и игры внутри Claude Code",
   "owner": {
     "name": "Max"
   },
@@ -8,7 +8,7 @@
     {
       "name": "arcade",
       "source": "./mod",
-      "description": "NES, Sega, PlayStation, Doom, chess and more — in the Claude Code panel or a browser window, with online play · Денди, Sega, PlayStation, Doom, шахматы и другие — в панели Claude Code или в окне браузера, с игрой по сети"
+      "description": "Task boards Claude picks up, a notebook it keeps with you, team chats — and games, books and podcasts while the agent works · Доски задач, которые берёт Claude, блокнот, который он ведёт вместе с тобой, чаты команды — и игры, книги и подкасты, пока агент работает"
     }
   ]
 }

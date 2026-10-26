@@ -1,23 +1,25 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Logo di Arcade" align="right">
 
-# Arcade — gioca, leggi, ascolta e guarda mentre il tuo agente Claude Code lavora
+# Arcade — bacheche di attività, note, chat di squadra e giochi dentro Claude Code
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · **Italiano** · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
 > **Beta (0.36).** Tutto ciò che è descritto qui funziona e si usa ogni giorno; d’ora in poi cambiano soprattutto i dettagli. Le segnalazioni di errori sono benvenute — vedi [Feedback](#feedback).
 
-Arcade è un plugin per [Claude Code](https://claude.com/claude-code) che riempie l’attesa mentre il tuo agente lavora. Quando l’agente è occupato per più di 10 secondi, sopra il prompt compare un piccolo *«vuoi giocare?»*. Gioca a qualcosa — NES, Sega, PlayStation, Doom, scacchi e altro —, leggi un libro, ascolta un audiolibro o un podcast, oppure guarda un video sull’argomento su cui lavora l’agente. Arcade ti avvisa appena l’agente ha finito o ha bisogno del tuo permesso — non ti perdi niente.
+Arcade è un plugin per [Claude Code](https://claude.com/claude-code) che lo trasforma in un piccolo spazio di lavoro: bacheche dei progetti dove qualsiasi scheda passa a Claude con un pulsante, un quaderno che Claude tiene insieme a te e che tutte le sessioni aperte condividono, e bacheche e chat condivise per la tua squadra. E per l’attesa: quando l’agente è occupato per più di 10 secondi, sopra il prompt compare un piccolo *«vuoi giocare?»*. Gioca a qualcosa — NES, Sega, PlayStation, Doom, scacchi e altro —, leggi un libro, ascolta un audiolibro o un podcast, oppure guarda un video sull’argomento su cui lavora l’agente. Arcade ti avvisa appena l’agente ha finito o ha bisogno del tuo permesso — non ti perdi niente.
 
 Tutto il catalogo è gratuito: i giochi hanno licenze aperte, i libri e gli audiolibri sono di pubblico dominio. Puoi anche giocare online con altre persone che aspettano i loro agenti e chattare con i tuoi amici.
 
 ![Demo: Claude Code riceve un compito, sopra il prompt compare «vuoi giocare?», accanto alla chat gira un gioco NES e Arcade ti richiama quando l’agente ha finito; ci sono anche libri, audiolibri e articoli](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*31 secondi in Claude Desktop, interfaccia in inglese. [Guarda il video in 720p](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*Mentre l’agente lavora: 31 secondi in Claude Desktop, interfaccia in inglese. [Guarda il video in 720p](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## Funzionalità
 
-- **Compare da solo.** Dopo 10 secondi di lavoro dell’agente, Arcade propone un gioco sopra il prompt; non prende mai il focus se non lo chiedi tu.
+- **Quaderno e bacheche dei progetti.** Pagine, sottopagine e checklist che tiene anche Claude, e bacheche con colonne e schede. *Dai a Claude* passa una pagina o una scheda a Claude: spunta ciò che è fatto e ci scrive il risultato. Tutte le sessioni aperte di Claude Code condividono il quaderno, così ognuna può prendere la propria scheda dalla stessa bacheca. Condividi una bacheca con gli amici, e tutti lavorano sulla stessa. Invia una pagina a Notion o a un’altra app, o portane una da lì, tramite i connettori di Claude; detta nella casella del prompt di Claude e sposta il testo su una pagina.
+- **Amici e chat.** Un accesso facoltativo con GitHub mantiene le impostazioni uguali su tutti i tuoi computer e ti dà un @nome; aggiungi amici con il loro nome esatto, vedi chi è online, condividi bacheche, invitali a giocare e chatta a due o in gruppo.
 - **Sa cosa fa l’agente.** Quando l’agente ha finito o chiede un permesso, sul gioco compare un avviso — continua a giocare, metti in pausa o torna subito all’agente (il comportamento si sceglie nelle impostazioni). In Claude Desktop può anche chiudere la scheda che stai guardando, così la conversazione torna davanti a te.
+- **Compare da solo.** Dopo 10 secondi di lavoro dell’agente, Arcade propone un gioco sopra il prompt — o più tardi, o mai, come scegli nelle impostazioni; non prende mai il focus se non lo chiedi tu.
 - **Un menu, sei sezioni.** *Gioca*, *Leggi e ascolta*, *Guarda*, *Social*, *Lavoro* e *Altro* — comprimi quelle che non ti servono. In alto: *Continua* l’ultimo gioco, *Cerca* e *Preferiti*. La prima volta che apri Arcade scegli quali sezioni mostrare.
 - **61 giochi gratuiti** per NES (Dendy), Sega Mega Drive, Master System, PlayStation e una scheda *Giochi* con giochi arcade, sparatutto, corse, strategia, avventure e giochi da tavolo.
 - **Leggi e ascolta.** Classici e audiolibri LibriVox in 30 lingue, direttamente da Project Gutenberg, Wikisource e LibriVox, più articoli ed episodi recenti di podcast sull’argomento del lavoro dell’agente.
@@ -25,8 +27,6 @@ Tutto il catalogo è gratuito: i giochi hanno licenze aperte, i libri e gli audi
 - **NES e Flappy Arcade direttamente in Claude Code** — nel terminale, in VS Code e in Claude Desktop. Tutto il resto si apre in una finestra del browser; in Claude Desktop, per impostazione predefinita, nel browser integrato di Claude (gli sparatutto si aprono comunque in una finestra del browser: il browser integrato non può catturare il mouse).
 - **Gioco online.** Giochi per console a due in rete, deathmatch e cooperativa in Doom, scacchi, go, dama e reversi contro persone o contro il computer.
 - **«Chi aspetta online».** Arcade mostra in Claude Code quando qualcuno aspetta un compagno di gioco, con un pulsante *Unisciti*.
-- **Amici e chat.** Un accesso facoltativo con GitHub mantiene le impostazioni uguali su tutti i tuoi computer e ti dà un @nome; aggiungi amici con il loro nome esatto, vedi chi è online, invitali a giocare e chatta a due o in gruppo.
-- **Quaderno e bacheche dei progetti.** Pagine, sottopagine e checklist che tiene anche Claude; invia una pagina a Notion o a un’altra app, o portane una da lì, tramite i connettori di Claude; detta nella casella del prompt di Claude e sposta il testo su una pagina. Bacheche con colonne e schede — condividine una con gli amici, e tutti lavorano sulla stessa bacheca.
 - **Ricerca e preferiti.** Un’unica ricerca tra giochi e canali Twitch, raggruppata per sezione e genere; segna un gioco con ☆ per tenerlo in *★ Preferiti*.
 - **I tuoi giochi.** Aggiungi le ROM che possiedi; restano sul tuo computer.
 - **13 lingue dell’interfaccia:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — in base alla lingua del sistema o del browser, inglese per impostazione predefinita.
@@ -158,6 +158,7 @@ Entrambi sono nella sezione *Lavoro* del menu.
 - **A voce.** Detta nella casella del prompt di Claude con la dettatura del sistema (Win+H su Windows, Fn due volte su macOS), poi premi *Prendi dalla casella del prompt di Claude* — il testo passa alla fine della pagina.
 - **Bacheca dei progetti.** Colonne — *Da fare*, *In corso*, *Fatto* o le tue, fino a 8 — e schede; una scheda è una pagina del quaderno con testo e checklist. Premi una scheda per sceglierla e spostarla con le frecce, premila di nuovo per aprirla. Anche Claude può gestire una bacheca: *Dai a Claude*, oppure chiedigli di distribuire i compiti su una bacheca in Arcade.
 - **Bacheche condivise.** Dopo l’accesso e con un @nome, spunta gli amici e premi *Condividi*: tutti hanno le stesse schede, colonne e nome, e le modifiche arrivano in pochi secondi. Il proprietario invita altri amici, rimuove partecipanti ed elimina la bacheca dal sito; chiunque può uscire; qualunque cosa succeda, ognuno conserva la propria copia. Fino a 3 bacheche condivise tue, 20 persone e 200 schede per bacheca.
+- **Più sessioni insieme.** Tutte le sessioni aperte di Claude Code su questo computer condividono lo stesso quaderno e le sue bacheche: ciò che una sessione aggiunge, modifica o spunta, le altre lo vedono in pochi secondi, così ogni sessione può seguire la propria scheda della stessa bacheca.
 
 ## I tuoi giochi
 

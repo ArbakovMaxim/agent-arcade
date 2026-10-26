@@ -1,23 +1,25 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade logosu" align="right">
 
-# Arcade — Claude Code ajanın çalışırken oyna, oku, dinle ve izle
+# Arcade — Claude Code içinde görev panoları, notlar, ekip sohbetleri ve oyunlar
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · **Türkçe** · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
 > **Beta (0.36).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
 
-Arcade, ajanın çalışırken bekleme süresini dolduran bir [Claude Code](https://claude.com/claude-code) eklentisidir. Ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
+Arcade, [Claude Code](https://claude.com/claude-code) için bir eklentidir ve onu küçük bir çalışma alanına dönüştürür: her kartın tek tuşla Claude’a gittiği proje panoları, Claude’un seninle birlikte tuttuğu ve açık tüm oturumlarının paylaştığı bir defter, ekibin için ortak panolar ve sohbetler. Bekleme için de: ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
 
 Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kitaplar kamu malı. Ajanlarını bekleyen başka kişilerle çevrim içi oynayabilir ve arkadaşlarınla sohbet edebilirsin.
 
 ![Demo: Claude Code’a bir görev verilir, istemin üstünde «oynamak ister misin?» belirir, sohbetin yanında bir NES oyunu çalışır ve ajan bitirince Arcade seni geri çağırır; kitaplar, sesli kitaplar ve makaleler de var](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*Claude Desktop’ta 31 saniye, arayüz İngilizce. [Videoyu 720p izle](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*Ajan çalışırken: Claude Desktop’ta 31 saniye, arayüz İngilizce. [Videoyu 720p izle](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## Özellikler
 
-- **Kendiliğinden belirir.** Ajan 10 saniye çalıştıktan sonra Arcade istemin üstünde bir oyun önerir; sen istemedikçe odağı asla almaz.
+- **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri, sütunlu ve kartlı panolar. *Claude'a ver* bir sayfayı ya da kartı Claude’a iletir: Claude yapılanları işaretler ve sonucu oraya yazar. Açık tüm Claude Code oturumları defteri paylaşır, böylece her biri aynı panodan kendi kartını alabilir. Bir panoyu arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın. Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı.
+- **Arkadaşlar ve sohbetler.** İsteğe bağlı GitHub girişi ayarlarını tüm bilgisayarlarında aynı tutar ve sana bir @takma ad verir; arkadaşlarını tam takma adlarıyla ekle, kimin çevrimiçi olduğunu gör, panolarını paylaş, onları oyuna davet et, ikili ya da grup halinde sohbet et.
 - **Ajanın ne yaptığını bilir.** Ajan bitirdiğinde ya da izin istediğinde oyunun üstünde bir bildirim çıkar — oynamaya devam et, duraklat ya da doğrudan ajana dön (davranışı ayarlardan seçersin). Claude Desktop’ta izlediğin sekmeyi de kapatabilir, böylece sohbet yeniden önüne gelir.
+- **Kendiliğinden belirir.** Ajan 10 saniye çalıştıktan sonra Arcade istemin üstünde bir oyun önerir — ya da ayarlarda seçtiğin gibi daha sonra veya hiç; sen istemedikçe odağı asla almaz.
 - **Tek menü, altı bölüm.** *Oyna*, *Oku ve dinle*, *İzle*, *Sosyal*, *İş* ve *Diğer* — ihtiyacın olmayanları daralt. En üstte: son oyuna *Devam et*, *Ara* ve *Favoriler*. Arcade’i ilk açtığında hangi bölümlerin görüneceğini seçersin.
 - **61 ücretsiz oyun:** NES (Dendy), Sega Mega Drive, Master System, PlayStation ve arcade oyunları, nişancı, yarış, strateji, macera ve masa oyunları içeren bir *Oyunlar* sekmesi.
 - **Oku ve dinle.** 30 dilde klasikler ve LibriVox sesli kitapları, doğrudan Project Gutenberg, Vikikaynak ve LibriVox’tan; ayrıca ajanın üzerinde çalıştığı konuyla ilgili yeni makaleler ve podcast bölümleri.
@@ -25,8 +27,6 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 - **NES ve Flappy Arcade doğrudan Claude Code içinde** — terminalde, VS Code’da ve Claude Desktop’ta. Geri kalan her şey bir tarayıcı penceresinde açılır; Claude Desktop’ta varsayılan olarak Claude’un yerleşik tarayıcısında (nişancı oyunları yine de tarayıcı penceresinde açılır: yerleşik tarayıcı fareyi yakalayamaz).
 - **Çevrim içi oyun.** Ağ üzerinden iki kişilik konsol oyunları, Doom’da deathmatch ve co-op, insanlara ya da bilgisayara karşı satranç, go, dama ve reversi.
 - **«Çevrim içi kim bekliyor».** Biri oyun arkadaşı beklediğinde Arcade bunu Claude Code’da bir *Katıl* düğmesiyle gösterir.
-- **Arkadaşlar ve sohbetler.** İsteğe bağlı GitHub girişi ayarlarını tüm bilgisayarlarında aynı tutar ve sana bir @takma ad verir; arkadaşlarını tam takma adlarıyla ekle, kimin çevrimiçi olduğunu gör, onları oyuna davet et, ikili ya da grup halinde sohbet et.
-- **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri; Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı. Sütunlu ve kartlı panolar — birini arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın.
 - **Arama ve favoriler.** Oyunlarda ve Twitch kanallarında tek bir arama, bölüme ve türe göre gruplanmış; *★ Favoriler*’de tutmak için bir oyunu ☆ ile işaretle.
 - **Kendi oyunların.** Sahip olduğun ROM’ları ekle; bilgisayarında kalırlar.
 - **13 arayüz dili:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — sistem ya da tarayıcı diline göre, varsayılan İngilizce.
@@ -158,6 +158,7 @@ Giriş yapmak isteğe bağlı — giriş yapmadan da her şey eskisi gibi çalı
 - **Sesle.** Sistemin kendi dikte özelliğiyle Claude’un giriş kutusuna dikte et (Windows’ta Win+H, macOS’ta iki kez Fn), sonra *Claude’un giriş kutusundan al*’a bas — metin sayfanın sonuna taşınır.
 - **Proje panosu.** Sütunlar — *Yapılacak*, *Yapılıyor*, *Bitti* ya da kendi sütunların, en fazla 8 — ve kartlar; kart, metin ve kontrol listesi olan bir defter sayfasıdır. Bir kartı seçip oklarla taşımak için ona bas, açmak için bir kez daha bas. Claude da pano yönetebilir: *Claude’a ver* ya da ondan görevleri Arcade’de bir panoya dağıtmasını iste.
 - **Ortak panolar.** @takma adla giriş yaptıysan arkadaşlarını işaretle ve *Paylaş*’a bas: herkeste aynı kartlar, sütunlar ve ad olur, değişiklikler birkaç saniye içinde görünür. Sahip başka arkadaşlarını da davet eder, kişileri çıkarır ve panoyu siteden siler; panodan herkes çıkabilir; ne olursa olsun herkesin kendi kopyası kalır. Kendine ait en fazla 3 ortak pano, bir panoda en fazla 20 kişi ve 200 kart.
+- **Aynı anda birkaç oturum.** Bu bilgisayarda açık olan tüm Claude Code oturumları tek bir defteri ve panolarını paylaşır: bir oturumun eklediğini, değiştirdiğini ya da işaretlediğini diğerleri birkaç saniye içinde görür; böylece her oturum aynı panonun kendi kartı üzerinde çalışabilir.
 
 ## Kendi oyunların
 
