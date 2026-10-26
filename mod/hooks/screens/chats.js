@@ -5,7 +5,7 @@ import { letterColor, picSvg, validPic } from '../avatars.js'
 import { PANE_COLUMNS, S } from '../app/state.js'
 import { clip, log } from '../app/status.js'
 import { startLogin, syncAccount } from '../app/profile.js'
-import { CHAT_HOVER, CHAT_MINE, CHAT_PICKED, CHAT_SPLIT, CHAT_THEIRS, CHAT_WALL, changeMembers, chatPerson, chatSvg, chatTitle, createGroup, friendsCall, isOnline, leaveGroup, loadChats, olderMessages, olderShown, openChat, openChatPage, openDm, personSvg, renameGroup, sendMessage, serviceText } from '../app/talk.js'
+import { CHAT_HOVER, CHAT_MINE, CHAT_PICKED, CHAT_SPLIT, CHAT_THEIRS, CHAT_WALL, changeMembers, chatPerson, chatSvg, chatTitle, createGroup, deleteMessage, editMessage, friendsCall, isOnline, leaveGroup, loadChats, olderMessages, olderShown, openChat, openChatPage, openDm, personSvg, renameGroup, sendMessage, serviceText, startEditing, stopEditing, toggleMsgMenu, visibleMessages } from '../app/talk.js'
 
 // Чаты с друзьями: список, новый чат (с другом или группа), переписка и участники группы. Чужой текст —
 // сообщения, ники, названия групп — не переводится (keep). Без входа и без ника — что сделать сначала
@@ -306,6 +306,7 @@ export function chatsScreen($, e, kit) {
     const about = S.ch.about
     const listed = S.ch.list?.find((c) => c.id === S.ch.talk)
     const chat = about ?? listed
+    const editing = S.ch.editing ? S.ch.messages.find((m) => m.s === S.ch.editing && !m.d) : undefined
     const title = chat ? chatTitle(chat) : ''
     const group = chat?.kind === 'group'
     const membersButton = Button({
@@ -338,13 +339,37 @@ export function chatsScreen($, e, kit) {
     }
     // Служебное (создал, добавил, переименовал) — посередине, тускло
     const service = (m) => Box({ flexDirection: 'row', justifyContent: 'center', paddingX: 4, children: [keep(Text({ dimColor: true, wrap: 'wrap', children: [serviceText(m)] }))] })
-    // Сообщение. Под текстом — время, у своего ещё ✓: дошло до сайта (прочитано ли, Arcade не показывает).
-    // Где рисуют картинки — пузырём в рамке, своё — цветом акцента; в терминале — текст и время в строку.
-    // В группе у первого сообщения подряд от одного человека — его аватарка и ник цветом от ника
+    // Меню своего сообщения под ним, без крупных кнопок: «Изменить» и «Удалить»; «Удалить» спрашивает ещё раз
+    const redraw = (act) => () => {
+      act()
+      $.ui.invalidate('ui.render')
+    }
+    const menuButton = (key, label, act) => Button({ key, label, plain: true, onPress: redraw(act) })
+    const msgMenu = (m) =>
+      Box({
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        flexWrap: 'wrap',
+        columnGap: pictures ? 'md' : 2,
+        children:
+          S.ch.confirmDelete === m.s
+            ? [dim('Удалить сообщение у всех?'), menuButton(`arcade-msg-delete-yes-${m.s}`, 'Удалить', () => deleteMessage($, m.s)), menuButton(`arcade-msg-delete-no-${m.s}`, 'Отмена', () => toggleMsgMenu(m.s))]
+            : [
+                menuButton(`arcade-msg-edit-${m.s}`, 'Изменить', () => startEditing($, m.s)),
+                menuButton(`arcade-msg-delete-${m.s}`, 'Удалить', () => {
+                  S.ch.confirmDelete = m.s
+                }),
+              ],
+      })
+    // Сообщение. Под текстом — время («изменено» — его поправили), у своего ещё ✓: дошло до сайта (прочитано ли,
+    // Arcade не показывает) и ⋮ — меню. Где рисуют картинки — пузырём в рамке, своё — цветом акцента; в терминале —
+    // текст и время в строку. В группе у первого сообщения подряд от одного человека — его аватарка и ник цветом от ника
     const message = (m, first, spaced) => {
       const mine = m.f === S.ch.me
       const author = group && !mine
-      const time = keep(Text({ dimColor: true, size: 'footnote', children: [mine ? `${clock(m.at)} ✓` : clock(m.at)] }))
+      const at = `${m.e ? `${tr('изменено', S.lang)} ` : ''}${clock(m.at)}`
+      const time = keep(Text({ dimColor: true, size: 'footnote', children: [mine ? `${at} ✓` : at] }))
+      const dots = mine && about ? [keep(Button({ key: `arcade-msg-menu-${m.s}`, label: '⋮', plain: true, dimColor: true, onPress: redraw(() => toggleMsgMenu(m.s)) }))] : []
       const text = keep(Text({ wrap: 'wrap', children: [m.t] }))
       const name = author && first ? [keep(Text({ weight: 'semibold', color: letterColor(S.ch.names[m.f] || m.f), children: [chatPerson(m.f)] }))] : []
       const body = pictures
@@ -357,12 +382,12 @@ export function chatsScreen($, e, kit) {
             backgroundColor: mine ? CHAT_MINE : CHAT_THEIRS,
             paddingX: 'md',
             paddingY: 'xs',
-            children: [...name, text, Box({ flexDirection: 'row', justifyContent: 'flex-end', children: [time] })],
+            children: [...name, text, Box({ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', columnGap: 'sm', children: [time, ...dots] })],
           })
-        : Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [...name, Box({ flexDirection: 'row', columnGap: 1, children: [Box({ flexShrink: 1, minWidth: 0, children: [text] }), time] })] })
+        : Box({ flexDirection: 'column', flexShrink: 1, minWidth: 0, children: [...name, Box({ flexDirection: 'row', columnGap: 1, children: [Box({ flexShrink: 1, minWidth: 0, children: [text] }), time, ...dots] })] })
       // Место под аватарку — у каждого чужого сообщения группы, чтобы пузыри стояли ровно; сама она — у первого
       const face = author && pictures ? [Box({ width: 5, flexShrink: 0, children: first ? [avatar(personSvg(m.f), chatPerson(m.f), 28)] : [] })] : []
-      return Box({
+      const bubble = Box({
         flexDirection: 'row',
         justifyContent: mine ? 'flex-end' : 'flex-start',
         ...(mine ? { paddingLeft: 8 } : { paddingRight: 8 }),
@@ -370,9 +395,10 @@ export function chatsScreen($, e, kit) {
         ...(pictures ? (spaced ? { marginTop: 'sm' } : {}) : name.length ? { marginTop: 1 } : {}),
         children: [...face, body],
       })
+      return dots.length && S.ch.msgMenu === m.s ? Box({ flexDirection: 'column', rowGap: pictures ? 'xs' : 0, children: [bubble, msgMenu(m)] }) : bubble
     }
     // Подряд от одного человека в один день — без повторного ника и аватарки; новый день — разделитель
-    const shown = S.ch.messages.slice(-S.ch.shown)
+    const shown = visibleMessages().slice(-S.ch.shown)
     const lines = shown.flatMap((m, k) => {
       const before = shown[k - 1]
       const newDay = !before || day(before.at, now) !== day(m.at, now)
@@ -383,7 +409,7 @@ export function chatsScreen($, e, kit) {
       ...(olderShown() ? [Box({ flexDirection: 'row', justifyContent: 'center', children: [Button({ key: 'arcade-chat-older', label: S.ch.older ? 'Загружаю…' : 'Раньше', onPress: () => olderMessages($) })] })] : []),
       ...(S.ch.opening
         ? [dim('Загружаю переписку…')]
-        : about && !S.ch.messages.length
+        : about && !shown.length
           ? [dim('Здесь пока пусто — напиши первым.')]
           : [Box({ flexDirection: 'column', rowGap: pictures ? 'xs' : 0, children: lines })]),
     ]
@@ -392,14 +418,23 @@ export function chatsScreen($, e, kit) {
       gap,
       // Где есть картинки — переписка на своём фоне в рамке, как обои в мессенджере
       ...(pictures ? [Box({ flexDirection: 'column', rowGap: 'sm', padding: 'md', borderStyle: 'round', borderColor: 'subtle', backgroundColor: CHAT_WALL, children: area })] : area),
+      // Поле внизу: новое сообщение, а после «Изменить» — текст своего сообщения, править здесь же
       ...(about
         ? [
             gap,
-            Input({ key: `arcade-chat-input-${S.ch.field}`, label: 'Сообщение', autoFocus: true, submitLabel: tr('Отправить', S.lang), onSubmit: (value) => sendMessage($, value) }),
+            ...(editing ? [row([dim('Правка сообщения'), Button({ key: 'arcade-chat-edit-cancel', label: 'Отмена', plain: true, dimColor: true, onPress: redraw(() => stopEditing($)) })])] : []),
+            Input({
+              key: `arcade-chat-input-${S.ch.field}`,
+              label: editing ? 'Изменить сообщение' : 'Сообщение',
+              ...(editing ? { value: editing.t } : {}),
+              autoFocus: true,
+              submitLabel: tr(editing ? 'Сохранить' : 'Отправить', S.lang),
+              onSubmit: (value) => (editing ? editMessage($, editing.s, value) : sendMessage($, value)),
+            }),
             dim('Переписка не шифруется — не пиши сюда пароли и ключи.'),
           ]
         : []),
-      ...(S.ch.busy === 'send' ? [dim('Отправляю…')] : note),
+      ...(S.ch.busy === 'send' ? [dim('Отправляю…')] : S.ch.busy === 'edit' ? [dim('Сохраняю…')] : S.ch.busy === 'delete' ? [dim('Удаляю…')] : note),
       gap,
       pageButton,
     ]
