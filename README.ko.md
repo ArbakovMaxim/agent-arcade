@@ -10,9 +10,9 @@ Arcade는 에이전트가 일하는 동안의 기다림을 채워 주는 [Claude
 
 카탈로그의 모든 것은 무료입니다. 게임은 오픈 라이선스이고, 책과 오디오북은 퍼블릭 도메인입니다. 마찬가지로 에이전트를 기다리는 다른 사람들과 온라인으로 플레이하고, 친구와 채팅할 수도 있습니다.
 
-[![데모: Claude Code에 작업을 맡기면 프롬프트 위에 「플레이할까요?」가 나타나고, 채팅 옆에서 NES 게임이 실행되며, 에이전트가 끝나면 Arcade가 다시 불러 줍니다. 책, 오디오북, 기사도 있습니다](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287)
+![데모: Claude Code에 작업을 맡기면 프롬프트 위에 「플레이할까요?」가 나타나고, 채팅 옆에서 NES 게임이 실행되며, 에이전트가 끝나면 Arcade가 다시 불러 줍니다. 책, 오디오북, 기사도 있습니다](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*Claude Desktop에서 31초, 인터페이스는 영어입니다. 애니메이션을 클릭하면 720p 영상을 볼 수 있습니다.*
+*Claude Desktop에서 31초, 인터페이스는 영어입니다. [720p 영상 보기](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## 기능
 
