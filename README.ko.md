@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · **한국어**
 
-> **베타 버전(0.35).** 여기에 설명된 모든 기능이 작동하고 매일 사용되고 있습니다. 앞으로는 주로 세부 사항이 바뀝니다. 오류 신고는 언제든 환영합니다 — [피드백](#피드백)을 참고하세요.
+> **베타 버전(0.36).** 여기에 설명된 모든 기능이 작동하고 매일 사용되고 있습니다. 앞으로는 주로 세부 사항이 바뀝니다. 오류 신고는 언제든 환영합니다 — [피드백](#피드백)을 참고하세요.
 
 Arcade는 에이전트가 일하는 동안의 기다림을 채워 주는 [Claude Code](https://claude.com/claude-code) 플러그인입니다. 에이전트가 10초 넘게 작업하면 프롬프트 위에 작은 *「플레이할까요?」* 가 나타납니다. NES, Sega, PlayStation, Doom, 체스 등으로 게임을 하거나, 책을 읽거나, 오디오북이나 팟캐스트를 듣거나, 에이전트가 작업 중인 주제의 영상을 볼 수 있습니다. 에이전트가 작업을 마치거나 권한을 요청하면 Arcade가 바로 알려 주므로 놓칠 일이 없습니다.
 
