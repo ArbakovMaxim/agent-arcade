@@ -1,23 +1,25 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade-Logo" align="right">
 
-# Arcade — spielen, lesen, hören und schauen, während dein Claude-Code-Agent arbeitet
+# Arcade — Aufgabenboards, Notizen, Team-Chats und Spiele direkt in Claude Code
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · **Deutsch** · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
 > **Beta (0.36).** Alles, was hier beschrieben ist, funktioniert und ist täglich im Einsatz; was sich jetzt noch ändert, sind vor allem Details. Fehlerberichte sind sehr willkommen — siehe [Feedback](#feedback).
 
-Arcade ist ein Plugin für [Claude Code](https://claude.com/claude-code), das die Wartezeit füllt, während dein Agent arbeitet. Ist der Agent länger als 10 Sekunden beschäftigt, erscheint über dem Prompt ein kleines *„spielen?“*. Spiel etwas — NES, Sega, PlayStation, Doom, Schach und mehr —, lies ein Buch, hör ein Hörbuch oder einen Podcast oder schau ein Video zum Thema, an dem der Agent arbeitet. Arcade sagt dir sofort Bescheid, wenn der Agent fertig ist oder deine Erlaubnis braucht — du verpasst nichts.
+Arcade ist ein Plugin für [Claude Code](https://claude.com/claude-code), das daraus einen kleinen Arbeitsplatz macht: Projektboards, auf denen jede Karte mit einem Knopf an Claude geht, ein Notizbuch, das Claude mit dir führt und das alle offenen Sitzungen teilen, und geteilte Boards und Chats für dein Team. Und für die Wartezeit: Ist der Agent länger als 10 Sekunden beschäftigt, erscheint über dem Prompt ein kleines *„spielen?“*. Spiel etwas — NES, Sega, PlayStation, Doom, Schach und mehr —, lies ein Buch, hör ein Hörbuch oder einen Podcast oder schau ein Video zum Thema, an dem der Agent arbeitet. Arcade sagt dir sofort Bescheid, wenn der Agent fertig ist oder deine Erlaubnis braucht — du verpasst nichts.
 
 Alles im Katalog ist kostenlos: Die Spiele stehen unter offenen Lizenzen, die Bücher und Hörbücher sind gemeinfrei. Du kannst auch online mit anderen spielen, die ebenfalls auf ihre Agenten warten, und mit deinen Freunden chatten.
 
 ![Demo: Claude Code bekommt eine Aufgabe, über dem Prompt erscheint „spielen?“, neben dem Chat läuft ein NES-Spiel, und wenn der Agent fertig ist, holt Arcade dich zurück; Bücher, Hörbücher und Artikel gibt es auch](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*31 Sekunden in Claude Desktop, Oberfläche auf Englisch. [Video in 720p ansehen](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*Während der Agent arbeitet: 31 Sekunden in Claude Desktop, Oberfläche auf Englisch. [Video in 720p ansehen](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## Funktionen
 
-- **Erscheint von selbst.** Nach 10 Sekunden Agentenarbeit bietet Arcade über dem Prompt ein Spiel an; den Fokus nimmt es nie, außer du willst es.
+- **Notizbuch und Projektboards.** Seiten, Unterseiten und Checklisten, die auch Claude führt, und Boards mit Spalten und Karten. *An Claude geben* übergibt Claude eine Seite oder Karte: Claude hakt Erledigtes ab und schreibt das Ergebnis dazu. Alle offenen Claude-Code-Sitzungen teilen sich das Notizbuch, so kann jede ihre eigene Karte vom selben Board nehmen. Teile ein Board mit Freunden, und alle arbeiten am selben. Schick eine Seite über Claudes Connectors an Notion oder eine andere App oder hol eine von dort; diktiere in Claudes Eingabefeld und übertrag den Text auf eine Seite.
+- **Freunde und Chats.** Eine optionale Anmeldung mit GitHub hält deine Einstellungen auf allen deinen Computern gleich und gibt dir einen @Namen; füge Freunde über ihren genauen Namen hinzu, sieh, wer online ist, teile Boards, lade sie zu einem Spiel ein und chatte zu zweit oder in Gruppen.
 - **Weiß, was der Agent tut.** Wenn der Agent fertig ist oder um Erlaubnis bittet, erscheint ein Banner über dem Spiel — weiterspielen, pausieren oder direkt zurück zum Agenten (das Verhalten legst du in den Einstellungen fest). In Claude Desktop kann es auch den Tab schließen, in dem du gerade etwas ansiehst, sodass die Unterhaltung wieder vor dir ist.
+- **Erscheint von selbst.** Nach 10 Sekunden Agentenarbeit bietet Arcade über dem Prompt ein Spiel an — oder später, oder nie, wie du es in den Einstellungen wählst; den Fokus nimmt es nie, außer du willst es.
 - **Ein Menü, sechs Bereiche.** *Spielen*, *Lesen & hören*, *Ansehen*, *Soziales*, *Arbeit* und *Mehr* — klapp zu, was du nicht brauchst. Oben: *Fortsetzen* des letzten Spiels, *Suchen* und *Favoriten*. Beim ersten Öffnen von Arcade wählst du, welche Bereiche erscheinen.
 - **61 kostenlose Spiele** für NES (Dendy), Sega Mega Drive, Master System, PlayStation und ein Tab *Spiele* mit Arcade-Spielen, Shootern, Rennspielen, Strategie, Adventures und Brettspielen.
 - **Lesen und hören.** Klassiker und LibriVox-Hörbücher in 30 Sprachen, direkt von Project Gutenberg, Wikisource und LibriVox, dazu aktuelle Artikel und Podcastfolgen zum Thema der Agentenarbeit.
@@ -25,8 +27,6 @@ Alles im Katalog ist kostenlos: Die Spiele stehen unter offenen Lizenzen, die B�
 - **NES und Flappy Arcade direkt in Claude Code** — im Terminal, in VS Code und in Claude Desktop. Alles andere öffnet sich in einem Browserfenster — in Claude Desktop standardmäßig im integrierten Browser von Claude (Shooter öffnen sich trotzdem in einem Browserfenster: Der integrierte Browser kann die Maus nicht einfangen).
 - **Online spielen.** Konsolenspiele zu zweit über das Netz, Deathmatch und Koop in Doom, Schach, Go, Dame und Reversi gegen Menschen oder den Computer.
 - **„Wer wartet online“.** Arcade zeigt in Claude Code, wenn jemand auf einen Mitspieler wartet — mit einer Schaltfläche *Mitspielen*.
-- **Freunde und Chats.** Eine optionale Anmeldung mit GitHub hält deine Einstellungen auf allen deinen Computern gleich und gibt dir einen @Namen; füge Freunde über ihren genauen Namen hinzu, sieh, wer online ist, lade sie zu einem Spiel ein und chatte zu zweit oder in Gruppen.
-- **Notizbuch und Projektboards.** Seiten, Unterseiten und Checklisten, die auch Claude führt; schick eine Seite über Claudes Connectors an Notion oder eine andere App oder hol eine von dort; diktiere in Claudes Eingabefeld und übertrag den Text auf eine Seite. Boards mit Spalten und Karten — teile eines mit Freunden, und alle arbeiten am selben Board.
 - **Suche und Favoriten.** Eine Suche über Spiele und Twitch-Kanäle, gruppiert nach Bereich und Genre; markiere ein Spiel mit ☆, um es in *★ Favoriten* zu behalten.
 - **Eigene Spiele.** Füge ROMs hinzu, die du besitzt; sie bleiben auf deinem Rechner.
 - **13 Sprachen für die Oberfläche:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — nach System- oder Browsersprache, standardmäßig Englisch.
@@ -158,6 +158,7 @@ Beides findest du im Bereich *Arbeit* des Menüs.
 - **Per Stimme.** Diktiere mit der Diktierfunktion des Systems in Claudes Eingabefeld (Win+H unter Windows, zweimal Fn unter macOS) und drück dann *Aus Claudes Eingabefeld übernehmen* — der Text wandert ans Ende der Seite.
 - **Projektboard.** Spalten — *Zu erledigen*, *In Arbeit*, *Erledigt* oder eigene, bis zu 8 — und Karten; eine Karte ist eine Notizbuchseite mit Text und Checkliste. Drück auf eine Karte, um sie zu wählen und mit den Pfeilen zu verschieben, noch einmal, um sie zu öffnen. Auch Claude kann ein Board führen: *An Claude geben*, oder bitte ihn, Aufgaben auf einem Board in Arcade zu verteilen.
 - **Geteilte Boards.** Bist du mit einem @Namen angemeldet, hak Freunde an und drück *Teilen*: Alle haben dieselben Karten, Spalten und denselben Namen, und Änderungen kommen innerhalb von Sekunden an. Der Besitzer lädt weitere Freunde ein, entfernt Leute und löscht das Board von der Website; verlassen kann es jeder; was auch passiert, jeder behält seine eigene Kopie. Bis zu 3 eigene geteilte Boards, 20 Leute und 200 Karten pro Board.
+- **Mehrere Sitzungen gleichzeitig.** Alle offenen Claude-Code-Sitzungen auf diesem Computer teilen sich ein Notizbuch und seine Boards: Was eine Sitzung hinzufügt, ändert oder abhakt, sehen die anderen nach wenigen Sekunden — so kann jede Sitzung ihre eigene Karte desselben Boards bearbeiten.
 
 ## Eigene Spiele
 

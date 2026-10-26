@@ -1,23 +1,25 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Logo d’Arcade" align="right">
 
-# Arcade — jouez, lisez, écoutez et regardez pendant que votre agent Claude Code travaille
+# Arcade — tableaux de tâches, notes, discussions d’équipe et jeux dans Claude Code
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · **Français** · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
 > **Bêta (0.36).** Tout ce qui est décrit ici fonctionne et sert tous les jours ; désormais, ce sont surtout les détails qui changent. Les signalements de bugs sont les bienvenus — voir [Retours](#retours).
 
-Arcade est un plugin pour [Claude Code](https://claude.com/claude-code) qui occupe l’attente pendant que votre agent travaille. Quand l’agent est occupé depuis plus de 10 secondes, un petit *« envie de jouer ? »* apparaît au-dessus du prompt. Lancez un jeu — NES, Sega, PlayStation, Doom, échecs et plus encore —, lisez un livre, écoutez un livre audio ou un podcast, ou regardez une vidéo sur le sujet du travail de l’agent. Arcade vous prévient dès que l’agent a fini ou a besoin de votre autorisation : vous ne manquez rien.
+Arcade est un plugin pour [Claude Code](https://claude.com/claude-code) qui en fait un petit espace de travail : des tableaux de projets où n’importe quelle carte passe à Claude d’un seul bouton, un carnet que Claude tient avec vous et que partagent toutes vos sessions ouvertes, et des tableaux et discussions partagés pour votre équipe. Et pour l’attente : quand l’agent est occupé depuis plus de 10 secondes, un petit *« envie de jouer ? »* apparaît au-dessus du prompt. Lancez un jeu — NES, Sega, PlayStation, Doom, échecs et plus encore —, lisez un livre, écoutez un livre audio ou un podcast, ou regardez une vidéo sur le sujet du travail de l’agent. Arcade vous prévient dès que l’agent a fini ou a besoin de votre autorisation : vous ne manquez rien.
 
 Tout le catalogue est gratuit : les jeux sont sous licences libres, les livres et livres audio sont dans le domaine public. Vous pouvez aussi jouer en ligne avec d’autres personnes qui attendent leur agent, et discuter avec vos amis.
 
 ![Démo : Claude Code reçoit une tâche, « envie de jouer ? » apparaît au-dessus du prompt, un jeu NES tourne à côté du chat et Arcade vous rappelle quand l’agent a fini ; il y a aussi des livres, des livres audio et des articles](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*31 secondes dans Claude Desktop, interface en anglais. [Voir la vidéo en 720p](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*Pendant que l’agent travaille : 31 secondes dans Claude Desktop, interface en anglais. [Voir la vidéo en 720p](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## Fonctionnalités
 
-- **Apparaît tout seul.** Après 10 secondes de travail de l’agent, Arcade propose un jeu au-dessus du prompt ; il ne prend jamais le focus sans que vous le demandiez.
+- **Carnet et tableaux de projets.** Des pages, des sous-pages et des checklists que Claude tient aussi, et des tableaux avec des colonnes et des cartes. *Donner à Claude* transmet une page ou une carte à Claude : il coche ce qui est fait et y écrit le résultat. Toutes vos sessions Claude Code ouvertes partagent le carnet, si bien que chacune peut prendre sa propre carte sur le même tableau. Partagez un tableau avec vos amis, et tout le monde travaille sur le même. Envoyez une page vers Notion ou une autre application, ou importez-en une, via les connecteurs de Claude ; dictez dans la zone de saisie de Claude et déplacez le texte sur une page.
+- **Amis et discussions.** Une connexion GitHub facultative garde vos paramètres identiques sur tous vos ordinateurs et vous donne un @pseudo ; ajoutez des amis par leur pseudo exact, voyez qui est en ligne, partagez des tableaux, invitez-les à jouer et discutez en tête-à-tête ou en groupe.
 - **Sait ce que fait l’agent.** Quand l’agent a fini ou demande une autorisation, un bandeau s’affiche sur le jeu — continuez à jouer, mettez en pause ou retournez directement à l’agent (le comportement se choisit dans les paramètres). Dans Claude Desktop, il peut aussi fermer l’onglet que vous regardez, pour que la conversation soit de nouveau devant vous.
+- **Apparaît tout seul.** Après 10 secondes de travail de l’agent, Arcade propose un jeu au-dessus du prompt — ou plus tard, ou jamais, selon vos paramètres ; il ne prend jamais le focus sans que vous le demandiez.
 - **Un menu, six sections.** *Jouer*, *Lire et écouter*, *Regarder*, *Social*, *Travail* et *Plus* — repliez celles dont vous n’avez pas besoin. En haut : *Continuer* la dernière partie, *Rechercher* et *Favoris*. À la première ouverture d’Arcade, vous choisissez les sections à afficher.
 - **61 jeux gratuits** sur NES (Dendy), Sega Mega Drive, Master System, PlayStation et un onglet *Jeux* avec des jeux d’arcade, de tir, de course, de stratégie, d’aventure et de société.
 - **Lire et écouter.** Des classiques et des livres audio LibriVox en 30 langues, directement depuis Project Gutenberg, Wikisource et LibriVox, ainsi que des articles et des épisodes de podcasts récents sur le sujet du travail de l’agent.
@@ -25,8 +27,6 @@ Tout le catalogue est gratuit : les jeux sont sous licences libres, les livres e
 - **NES et Flappy Arcade directement dans Claude Code** — dans le terminal, VS Code et Claude Desktop. Tout le reste s’ouvre dans une fenêtre de navigateur ; dans Claude Desktop, par défaut dans le navigateur intégré de Claude (les jeux de tir s’ouvrent quand même dans une fenêtre de navigateur : le navigateur intégré ne peut pas capturer la souris).
 - **Jeu en ligne.** Jeux console à deux en réseau, deathmatch et coopération dans Doom, échecs, go, dames et reversi contre des personnes ou contre l’ordinateur.
 - **« Qui attend en ligne ».** Arcade indique dans Claude Code quand quelqu’un attend un partenaire, avec un bouton *Rejoindre*.
-- **Amis et discussions.** Une connexion GitHub facultative garde vos paramètres identiques sur tous vos ordinateurs et vous donne un @pseudo ; ajoutez des amis par leur pseudo exact, voyez qui est en ligne, invitez-les à jouer et discutez en tête-à-tête ou en groupe.
-- **Carnet et tableaux de projets.** Des pages, des sous-pages et des checklists que Claude tient aussi ; envoyez une page vers Notion ou une autre application, ou importez-en une, via les connecteurs de Claude ; dictez dans la zone de saisie de Claude et déplacez le texte sur une page. Des tableaux avec des colonnes et des cartes — partagez-en un avec vos amis, et tout le monde travaille sur le même tableau.
 - **Recherche et favoris.** Une seule recherche dans les jeux et les chaînes Twitch, regroupée par section et par genre ; marquez un jeu d’une ☆ pour le garder dans *★ Favoris*.
 - **Vos propres jeux.** Ajoutez les ROM que vous possédez ; elles restent sur votre machine.
 - **13 langues d’interface :** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — d’après la langue du système ou du navigateur, anglais par défaut.
@@ -158,6 +158,7 @@ Les deux se trouvent dans la section *Travail* du menu.
 - **À la voix.** Dictez dans la zone de saisie de Claude avec la dictée du système (Win+H sous Windows, deux fois Fn sous macOS), puis appuyez sur *Prendre dans la zone de saisie de Claude* — le texte passe à la fin de la page.
 - **Tableau de projets.** Des colonnes — *À faire*, *En cours*, *Fait* ou les vôtres, jusqu’à 8 — et des cartes ; une carte est une page du carnet avec du texte et une checklist. Appuyez sur une carte pour la choisir et la déplacer avec les flèches, appuyez encore pour l’ouvrir. Claude peut aussi gérer un tableau : *Donner à Claude*, ou demandez-lui de répartir des tâches sur un tableau dans Arcade.
 - **Tableaux partagés.** Une fois connecté avec un @pseudo, cochez des amis et appuyez sur *Partager* : tout le monde a les mêmes cartes, colonnes et nom, et les modifications arrivent en quelques secondes. Le propriétaire invite d’autres amis, retire des participants et supprime le tableau du site ; chacun peut le quitter ; quoi qu’il arrive, chacun garde sa propre copie. Jusqu’à 3 tableaux partagés dont vous êtes propriétaire, 20 personnes et 200 cartes par tableau.
+- **Plusieurs sessions à la fois.** Toutes les sessions Claude Code ouvertes sur cet ordinateur partagent un même carnet et ses tableaux : ce qu’une session ajoute, modifie ou coche, les autres le voient en quelques secondes, et chaque session peut ainsi suivre sa propre carte du même tableau.
 
 ## Vos propres jeux
 

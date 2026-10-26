@@ -1,23 +1,25 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade logo" align="right">
 
-# Arcade — play, read, listen and watch while your Claude Code agent works
+# Arcade — task boards, notes, team chats and games inside Claude Code
 
 **English** · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
 > **Beta (0.36).** Everything described here works and is used every day; what changes from now on is mostly the details. Bug reports are very welcome — see [Feedback](#feedback).
 
-Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that fills the wait while your agent is working. When the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
+Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns it into a small workspace: project boards where any card goes to Claude with one button, a notebook Claude keeps with you, shared by all your open sessions, and shared boards and chats for your team. And for the wait: when the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
 
 Everything in the catalog is free: the games are openly licensed, the books and audiobooks are in the public domain. You can also play online with other people who are waiting for their agents too, and chat with your friends.
 
 ![Demo: Claude Code gets a task, “play?” appears above the prompt, an NES game runs next to the chat, and Arcade calls you back when the agent finishes; books, audiobooks and articles are there too](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*31 seconds in Claude Desktop. [Watch the 720p video](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*While the agent works: 31 seconds in Claude Desktop. [Watch the 720p video](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## Features
 
-- **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt; it never steals focus unless you ask it to.
+- **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
+- **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle, see who is online, share boards, invite them to a game, and chat one-on-one or in groups.
 - **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings). In Claude Desktop it can also close the tab you're watching, so the conversation is back in front of you.
+- **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt — or later, or never, as you choose in the settings; it never steals focus unless you ask it to.
 - **One menu, six sections.** *Play*, *Read & listen*, *Watch*, *Social*, *Work* and *More* — fold the ones you don't need. On top: *Continue* the last game, *Search* and *Favorites*. The first time you open Arcade, you choose which sections to show.
 - **61 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy, adventures and board games.
 - **Read and listen.** Classic books and LibriVox audiobooks in 30 languages, straight from Project Gutenberg, Wikisource and LibriVox, plus fresh articles and podcast episodes on the topic of the agent's work.
@@ -25,8 +27,6 @@ Everything in the catalog is free: the games are openly licensed, the books and 
 - **NES and Flappy Arcade right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
 - **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, Go, draughts and reversi against people or the computer.
 - **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
-- **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle, see who is online, invite them to a game, and chat one-on-one or in groups.
-- **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too; send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page. Boards with columns and cards — share one with friends, and everyone works on the same board.
 - **Search and favorites.** One search across games and Twitch channels, grouped by section and genre; mark a game with ☆ to keep it in *★ Favorites*.
 - **Your own games.** Add ROMs you own; they stay on your machine.
 - **13 interface languages:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — picked from your system or browser, English by default.
@@ -158,6 +158,7 @@ Both are in the *Work* section of the menu.
 - **Voice.** Dictate into Claude's prompt box with the system's own dictation (Win+H on Windows, Fn twice on macOS), then press *Take from Claude's prompt box* — the text moves to the end of the page.
 - **Project board.** Columns — *To do*, *Doing*, *Done* or your own, up to 8 — and cards; a card is a notebook page with text and a checklist. Press a card to pick it and move it with the arrows, press again to open it. Claude can run a board too: *Give to Claude*, or ask it to lay out tasks on a board in Arcade.
 - **Shared boards.** Signed in with a @handle, tick friends and press *Share*: everyone has the same cards, columns and name, and changes show up within seconds. The owner invites more friends, removes people and deletes the board from the site; anyone can leave; whatever happens, everyone keeps their own copy. Up to 3 shared boards of your own, 20 people and 200 cards on a board.
+- **Several sessions at once.** All open Claude Code sessions on this computer share one notebook and its boards: what one session adds, edits or ticks off, the others see within a few seconds, so each session can work on its own card of the same board.
 
 ## Your own games
 
