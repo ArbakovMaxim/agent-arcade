@@ -5,7 +5,7 @@ import { MAX_MEMBERS, colId } from '../desks.js'
 import { S, nb } from '../app/state.js'
 import { startLogin } from '../app/profile.js'
 import { friendsCall } from '../app/talk.js'
-import { boardMembers, colName, createBoard, createCard, deskPerson, editBoard, loadBoards, modError, saveDesks, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
+import { boardMembers, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, loadBoards, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
 
 // Доска проектов: список досок и экран доски — колонки с карточками, перенос выбранной карточки кнопками,
 // колонки, общий доступ с друзьями. Карточку открывает экран страницы блокнота. Названия досок, колонок и
@@ -312,10 +312,7 @@ export function boardsScreen($, e, kit) {
                 S.dk.confirm = ''
                 if (S.notes.some((p) => p.id === nb.draft?.id && p.parent === id)) nb.draft = null
                 if (!(await editBoard($, (list) => removePage(list, id), 'Доска удалена.'))) return
-                if (share) {
-                  delete S.desks[share]
-                  saveDesks($)
-                }
+                if (share) await forgetDesk($, share)
                 S.dk.pick = ''
                 S.dk.focus = ''
                 S.menuFrom = null

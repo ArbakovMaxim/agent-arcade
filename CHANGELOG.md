@@ -1,5 +1,14 @@
 # Changelog · Список изменений
 
+## 0.35.1 — блокнот и доски общие для всех открытых сессий Claude Code: правка в одной больше не стирает правки другой · the notebook and boards are shared by all open Claude Code sessions: an edit in one no longer wipes out another's
+
+- Every edit, from the pane or through Claude's notebook tool, is applied to the notebook as it is in storage right now, not to the copy the session read when it started: pages and cards added in another session stay, deleted ones don't come back; when two sessions edit the same page, the last edit wins · каждая правка — с панели или инструментом блокнота у Claude — применяется к блокноту, каким он лежит в хранилище сейчас, а не к копии, прочитанной при запуске сессии: страницы и карточки, добавленные в другой сессии, остаются, удалённые не возвращаются; правят одну страницу две сессии — остаётся последняя правка
+- Claude's notebook tool re-reads the notebook on every call, list and read included; the notebook, board and card screens re-read it when they open and every 3 seconds while open, and redraw only when something changed · инструмент блокнота у Claude перечитывает блокнот при каждом вызове, в том числе list и read; экраны блокнота, досок и карточки — при открытии и каждые 3 секунды, пока открыты, а перерисовываются, только если что-то поменялось
+- Text you are typing lands in its own page and doesn't touch edits made elsewhere; if the open page, card or board was deleted in another session, Arcade goes back a step and says so · набранный текст ложится в свою страницу и не трогает правки, сделанные в другом месте; если открытую страницу, карточку или доску удалили в другой сессии, Arcade возвращается на шаг назад и говорит об этом
+- A shared board open in two sessions: each session sends the site only its own edits; an answer that comes back after the other session has already synced the board is dropped, and the next sync redoes it — no duplicate or lost cards on the site · общая доска, открытая в двух сессиях: каждая сессия отдаёт сайту только свои правки; ответ, пришедший после того, как другая сессия уже сверила доску, отбрасывается, и следующая сверка делает её заново — на сайте без дублей и пропавших карточек
+- /reload-plugins re-reads the notebook as well · /reload-plugins тоже перечитывает блокнот
+- New strings are translated into all 13 languages · новые строки переведены на все 13 языков
+
 ## 0.35.0 — строку «сыграть?» над полем ввода можно выключить или выбрать, через сколько она появится · the “play?” line above the input box can be turned off, or set to appear later
 
 - New first tile in Settings → Notifications: “Play?” line — after 10 s (as before), 30 s, 1 min, 2 min, 5 min, or off; a press moves to the next choice · новая первая плитка в «Настройки → Уведомления»: «Строка «сыграть?»» — через 10 с (как раньше), 30 с, 1 мин, 2 мин, 5 мин или выключена; нажатие переключает на следующий вариант
