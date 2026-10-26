@@ -10,7 +10,9 @@ Arcade to wtyczka do [Claude Code](https://claude.com/claude-code), która wype�
 
 Cały katalog jest darmowy: gry mają otwarte licencje, książki i audiobooki należą do domeny publicznej. Możesz też grać online z innymi osobami, które czekają na swoich agentów, i rozmawiać ze znajomymi.
 
-![„zagrasz?” nad promptem Claude Code po 11 sekundach pracy agenta](docs/images/prompt.png)
+![Demo: Claude Code dostaje zadanie, nad promptem pojawia się „zagrasz?”, obok czatu działa gra NES, a gdy agent skończy, Arcade woła cię z powrotem; są też książki, audiobooki i artykuły](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
+
+*31 sekund w Claude Desktop, interfejs po angielsku. [Obejrzyj film w 720p](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
 
 ## Funkcje
 
