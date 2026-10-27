@@ -127,11 +127,17 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   const blits: any[] = []
   const launches: any[] = []
   const toasts: string[] = []
+  const clipboard = { exit: 0, calls: [] as any[] } // системный буфер обмена: чем программа закончит и что ей дали
   const clock = mock.clock(on)
   // Тесты пишутся на русском интерфейсе: если окружение не задаёт язык, пусть он будет русским (без него теперь — английский)
   mock.env(on, 'LANG' in env || 'LC_ALL' in env || 'LC_MESSAGES' in env ? env : { ...env, LANG: 'ru_RU.UTF-8' })
   on('process.run', ($: any, e: any) => {
     if (e.argv[0] === 'uname') return { value: { exitCode: 0, stdout: `${uname}\n`, stderr: '' } }
+    // Системный буфер обмена: текст — во входном потоке программы
+    if (e.init?.stdin !== undefined) {
+      clipboard.calls.push({ argv: e.argv, env: e.init.env ?? {}, stdin: e.init.stdin })
+      return { value: { exitCode: clipboard.exit, stdout: '', stderr: '' } }
+    }
     // Карточка о сообщении: Windows — PowerShell с ARCADE_POPUP_*, Linux и macOS — уведомление от имени Arcade.
     // Ответ — что напечатала карточка: 'open' — по ней кликнули
     if (e.init?.env?.ARCADE_POPUP_TITLE !== undefined || e.argv.includes('--app-name=Arcade') || e.argv.some((a: string) => a.includes('subtitle "Arcade"'))) {
@@ -265,7 +271,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered }
+  return { saved, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard }
 }
 
 const BASH_MS = 2_000
@@ -7265,7 +7271,9 @@ test('блокнот: «Работа» → «Блокнот», страница 
   const id = pages()[0].id
   expect(pages()).toMatchObject([{ id, title: 'План на неделю', body: '', parent: null }])
   expect(await text('План на неделю')).toBeDefined()
-  expect(await text('Страница пустая — впиши текст или пункт ниже.')).toBeDefined()
+  expect(await text('Страница пустая — нажми «Редактировать» или впиши пункт ниже.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-edit' })).toMatchObject({ props: { label: 'Редактировать' } })
+  expect(await ui.find({ key: 'arcade-note-copy' })).toBeUndefined()
   expect(await ui.find({ key: await noteKey(ui, 'arcade-note-add-') })).toMatchObject({ props: { label: 'Новый пункт', submitLabel: 'Добавить', autoFocus: true } })
 
   // Каждая строка — пункт чек-листа, «- » и «- [ ] » не удваиваются
@@ -7276,15 +7284,28 @@ test('блокнот: «Работа» → «Блокнот», страница 
   expect(await ui.find({ key: 'arcade-note-line-0' })).toMatchObject({ props: { label: '☑ тесты', dimColor: true, autoFocus: true } })
   expect(pages()[0].body).toBe('- [x] тесты\n- [ ] ревью\n- [ ] молоко')
 
-  // Набранное в «Тексте» — черновик; отметка пункта сначала сохраняет его и находит пункт заново по тексту
-  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { label: 'Текст', value: '- [x] тесты\n- [ ] ревью\n- [ ] молоко', submitLabel: 'Сохранить' } })
-  await noteInput(ui, 'arcade-note-text-', '# Неделя\n- [x] тесты\n- [ ] ревью', 'change')
+  // Поля «Текст» нет, пока не нажата «Редактировать»: тогда оно — на месте текста и чек-листа, фокус в нём
+  expect(await ui.find({ key: 'arcade-note-copy' })).toMatchObject({ props: { label: 'Копировать' } })
+  expect(await noteKey(ui, 'arcade-note-text-')).toBeUndefined()
+  await ui.press({ key: 'arcade-note-edit' })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { label: 'Текст', value: '- [x] тесты\n- [ ] ревью\n- [ ] молоко', submitLabel: 'Сохранить', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-note-line-0' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-edit' })).toBeUndefined()
+  // «Отмена» — набранное пропадает, страница как была, фокус — на «Редактировать»
+  await noteInput(ui, 'arcade-note-text-', '# Неделя', 'change')
+  await ui.press({ key: 'arcade-note-cancel' })
   expect(pages()[0].body).toBe('- [x] тесты\n- [ ] ревью\n- [ ] молоко')
-  await ui.press({ key: 'arcade-note-line-0' })
-  expect(pages()[0].body).toBe('# Неделя\n- [ ] тесты\n- [ ] ревью')
-  expect(await ui.find({ key: 'arcade-note-line-1' })).toMatchObject({ props: { label: '☐ тесты', autoFocus: true } })
+  expect(await noteKey(ui, 'arcade-note-text-')).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-edit' })).toMatchObject({ props: { autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-note-line-0' })).toMatchObject({ props: { label: '☑ тесты' } })
+  // Enter — сохранить и закрыть правку
+  await ui.press({ key: 'arcade-note-edit' })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { value: '- [x] тесты\n- [ ] ревью\n- [ ] молоко' } })
   await noteInput(ui, 'arcade-note-text-', '# Неделя\n- [ ] тесты\n- [ ] ревью\n\n* созвон в пятницу')
   expect(await text('Сохранено.')).toBeDefined()
+  expect(await noteKey(ui, 'arcade-note-text-')).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-edit' })).toMatchObject({ props: { autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-note-line-1' })).toMatchObject({ props: { label: '☐ тесты' } })
   expect(await text('• созвон в пятницу')).toBeDefined()
   expect(pages()[0].body).toBe('# Неделя\n- [ ] тесты\n- [ ] ревью\n\n* созвон в пятницу')
 
@@ -7734,6 +7755,7 @@ test('блокнот: «Отдать Claude» — сразу, если Claude с
   await noteInput(ui, 'arcade-note-new-', 'Релиз')
   await noteInput(ui, 'arcade-note-add-', 'тег')
   // Несохранённое в «Тексте» уходит вместе со страницей
+  await ui.press({ key: 'arcade-note-edit' })
   await noteInput(ui, 'arcade-note-text-', '- [ ] тег\n- [ ] заметки', 'change')
   await ui.press({ key: 'arcade-note-send' })
   const page = `# Релиз\n- [ ] тег\n- [ ] заметки\n\nОтмечай сделанные пункты и дописывай итоги на этой странице инструментом ${NOTES}.`
@@ -7786,11 +7808,14 @@ test('блокнот: Claude ведёт его инструментом mcp__arc
 
   // Человек пишет в «Текст», Claude отмечает пункт — набранное не пропадает
   await ui.press({ key: `arcade-note-page-${id}` })
+  await ui.press({ key: 'arcade-note-edit' })
   await noteInput(ui, 'arcade-note-text-', '- [ ] тесты\n- [ ] ревью\n- [ ] деплой', 'change')
   expect(await $.tool.call({ tool: NOTES, action: 'check', page: 'план', item: 'деплой' })).toMatchObject({ result: 'Ticked: деплой.' })
   expect((saved.get('notes') as any[])[0].body).toBe('- [ ] тесты\n- [ ] ревью\n- [x] деплой')
-  expect(await ui.find({ key: 'arcade-note-line-2' })).toMatchObject({ props: { label: '☑ деплой' } })
+  // Правка не закрылась: в поле — текст с отметкой Claude
   expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { value: '- [ ] тесты\n- [ ] ревью\n- [x] деплой' } })
+  await ui.press({ key: 'arcade-note-cancel' })
+  expect(await ui.find({ key: 'arcade-note-line-2' })).toMatchObject({ props: { label: '☑ деплой' } })
   await $.tool.call({ tool: NOTES, action: 'append', page: id, text: '- итог: всё зелёное' })
   expect(await ui.find({ type: 'Text', text: '• итог: всё зелёное' })).toBeDefined()
 
@@ -7800,8 +7825,9 @@ test('блокнот: Claude ведёт его инструментом mcp__arc
   await ui.unmount()
 })
 
-test('блокнот: из $.store — после перезапуска; Desktop — заголовки крупно', async ($, on) => {
-  const stored = { notes: [{ id: 'pa', title: 'Неделя', body: '# Цели\n## Пн\n- [x] тесты\nтекст', parent: null, at: 1 }], keepMenu: true }
+test('блокнот: из $.store — после перезапуска; Desktop — текст страницы Markdown-ом', async ($, on) => {
+  const body = '# Цели\n## Пн\n- [x] тесты\nтекст\nещё строка\n* пункт\nпосле списка\n\n    абзац\n'
+  const stored = { notes: [{ id: 'pa', title: 'Неделя', body, parent: null, at: 1 }], keepMenu: true }
   const { clock } = stubs(on, { stored })
   await start($)
   await clock.advance(200)
@@ -7809,10 +7835,58 @@ test('блокнот: из $.store — после перезапуска; Deskto
   await ui.press({ key: 'arcade-menu-notes' })
   expect(await ui.find({ key: 'arcade-note-page-pa' })).toMatchObject({ props: { label: 'Неделя', autoFocus: true } })
   await ui.press({ key: 'arcade-note-page-pa' })
-  expect(await ui.find({ type: 'Text', text: 'Цели' })).toMatchObject({ props: { size: 'heading', weight: 'semibold' } })
-  expect(await ui.find({ type: 'Text', text: 'Пн' })).toMatchObject({ props: { weight: 'semibold' } })
+  // Строки между пунктами чек-листа — одним блоком: строка за строкой с переносом, после списка — новый абзац, отступ — не код
+  expect((await ui.findAll({ type: 'Markdown' })).map((m: any) => m.props.text)).toEqual(['# Цели\n## Пн', 'текст  \nещё строка\n- пункт\n\nпосле списка\n\nабзац'])
   expect(await ui.find({ key: 'arcade-note-line-2' })).toMatchObject({ props: { label: '☑ тесты', dimColor: true } })
-  expect(await ui.find({ type: 'Text', text: 'текст' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'текст' })).toBeUndefined()
+  await ui.unmount()
+
+  // В терминале Markdown-а нет — строки, как были
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ type: 'Markdown' })).toBeUndefined()
+  expect(await term.find({ type: 'Text', text: '• пункт' })).toBeDefined()
+  await term.unmount()
+})
+
+test('блокнот: «Копировать» — буфер поверхности, не дошёл — системный; не вышло — подсказать «Редактировать»', async ($, on) => {
+  const body = '# Пост\nтекст «в кавычках» ✓\n- [ ] пункт'
+  const stored = { notes: [{ id: 'pa', title: 'Пост', body, parent: null, at: 1 }], keepMenu: true }
+  const { clock, clipboard } = stubs(on, { env: WINDOWS, stored })
+  // Буфер поверхности: Desktop пока не берёт текст
+  const copies: any[] = []
+  let surfaceTakes = false
+  on('ui.copy', ($: any, e: any) => {
+    copies.push({ text: e.text, surface: e.surface })
+    return { value: surfaceTakes ? { isCopied: true } : { isCopied: false, reason: 'no-clipboard' } }
+  })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  await ui.press({ key: 'arcade-menu-notes' })
+  await ui.press({ key: 'arcade-note-page-pa' })
+
+  // Desktop не взял — текст во входном потоке PowerShell, в командной строке его нет
+  await ui.press({ key: 'arcade-note-copy' })
+  expect(copies).toEqual([{ text: body, surface: 'desktop' }])
+  expect(clipboard.calls.length).toBe(1)
+  expect(clipboard.calls[0].argv[0]).toBe('powershell.exe')
+  expect(clipboard.calls[0].stdin).toBe(body)
+  expect(clipboard.calls[0].argv.join(' ')).not.toContain('Пост')
+  expect(await text('Текст страницы скопирован.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-copy' })).toMatchObject({ props: { autoFocus: true } })
+
+  // Поверхность взяла — системный буфер не нужен
+  surfaceTakes = true
+  await ui.press({ key: 'arcade-note-copy' })
+  expect(copies.length).toBe(2)
+  expect(clipboard.calls.length).toBe(1)
+
+  // Ни там, ни там — подсказка выделить текст в поле
+  surfaceTakes = false
+  clipboard.exit = 1
+  await ui.press({ key: 'arcade-note-copy' })
+  expect(await text('Не получилось скопировать — нажми «Редактировать» и выдели текст в поле.')).toMatchObject({ props: { color: 'warning' } })
   await ui.unmount()
 })
 
@@ -7890,6 +7964,7 @@ test('блокнот в двух сессиях: экран перечитыва
 
   // B набирает текст в «Альфе», A тем временем правит «Бету»: поле B не рисуется заново, набранное — в свою страницу
   await press('arcade-note-page-pa')
+  await press('arcade-note-edit')
   await noteInput(ui, 'arcade-note-text-', '- [ ] один\n- [ ] два', 'change')
   const key = await noteKey(ui, 'arcade-note-text-')
   elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A', at: 3 } : p)))
@@ -7900,6 +7975,7 @@ test('блокнот в двух сессиях: экран перечитыва
 
   // Открытую страницу без набранного A поправил — поле рисуется с новым текстом; с набранным — остаётся последняя правка
   await press('arcade-note-page-pb')
+  await press('arcade-note-edit')
   elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A ещё', at: 4 } : p)))
   await tick()
   expect(await field()).toBe('от A ещё')
@@ -7965,7 +8041,7 @@ test('доска проектов в двух сессиях: правки по�
   // Открытую карточку удалили в A — назад к доске с заметкой
   await press('arcade-card-c1')
   await press('arcade-card-c1')
-  expect(await noteKey(ui, 'arcade-note-text-')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-edit' })).toBeDefined()
   elsewhere(saved, 'notes', (list) => list.filter((p: any) => p.id !== 'c1'))
   await tick()
   expect(await text('Открытую карточку удалили в другой сессии.')).toMatchObject({ props: { color: 'warning' } })
@@ -8082,9 +8158,14 @@ test('блокнот по-английски: экраны без русских
   expect(await cyrillic()).toEqual([])
   await noteInput(ui, 'arcade-note-new-', 'Weekly plan')
   expect(await ui.find({ key: await noteKey(ui, 'arcade-note-add-') })).toMatchObject({ props: { label: 'New item', submitLabel: 'Add' } })
+  expect(await ui.find({ key: 'arcade-note-edit' })).toMatchObject({ props: { label: 'Edit' } })
+  await ui.press({ key: 'arcade-note-edit' })
   expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { label: 'Text', submitLabel: 'Save' } })
+  expect(await ui.find({ key: 'arcade-note-cancel' })).toMatchObject({ props: { label: 'Cancel' } })
   expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-note-cancel' })
   await noteInput(ui, 'arcade-note-add-', 'tests')
+  expect(await ui.find({ key: 'arcade-note-copy' })).toMatchObject({ props: { label: 'Copy' } })
   await noteInput(ui, 'arcade-note-sub-', 'Покупки')
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-back' })
@@ -8198,6 +8279,7 @@ test('блокнот: Notion и другие приложения — прось
   expect(await noteKey(ui, 'arcade-note-app-')).toBeUndefined()
 
   // Обновить там: набранное в «Тексте» сначала ложится в страницу — Claude получает свежий текст
+  await ui.press({ key: 'arcade-note-edit' })
   await noteInput(ui, 'arcade-note-text-', '- [ ] тесты\n- [ ] ревью', 'change')
   await ui.press({ key: 'arcade-note-push' })
   expect(pages()[0].body).toBe('- [ ] тесты\n- [ ] ревью')
@@ -8231,8 +8313,9 @@ test('блокнот: Notion и другие приложения — прось
   )
   expect(await ui.find({ key: 'arcade-note-undo' })).toBeUndefined()
   expect(await $.tool.call({ tool: NOTES, action: 'replace', page: id, text: '- [x] тесты\n- [ ] деплой' })).toMatchObject({ result: 'Replaced the text of План. The user can undo it in Arcade.' })
-  expect(await ui.find({ key: 'arcade-note-line-1' })).toMatchObject({ props: { label: '☐ деплой' } })
   expect(await ui.find({ key: await noteKey(ui, 'arcade-note-text-') })).toMatchObject({ props: { value: '- [x] тесты\n- [ ] деплой' } })
+  await ui.press({ key: 'arcade-note-cancel' })
+  expect(await ui.find({ key: 'arcade-note-line-1' })).toMatchObject({ props: { label: '☐ деплой' } })
   expect(await ui.find({ key: 'arcade-note-undo' })).toMatchObject({ props: { label: 'Вернуть текст до правки Claude' } })
   await ui.press({ key: 'arcade-note-undo' })
   expect(pages()[0].body).toBe('- [ ] тесты\n- [ ] ревью')

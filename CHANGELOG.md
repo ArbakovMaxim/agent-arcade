@@ -1,5 +1,13 @@
 # Changelog · Список изменений
 
+## 0.36.2 — страница блокнота и карточка доски: текст без поля ввода, кнопки «Редактировать» и «Копировать» · notebook pages and board cards: text without an input box, “Edit” and “Copy” buttons
+
+- A page or card shows its text formatted — headings, lists, checklist — in Desktop and VS Code, and as lines in the terminal; the “Text” input box is no longer always there · страница или карточка показывает текст оформленным — заголовки, списки, чек-лист — в Desktop и VS Code, а в терминале строками; поля ввода «Текст» больше нет на экране всё время
+- “Edit” opens the “Text” box in place of the text, with the cursor in it: Enter saves and closes it, “Cancel” drops the change; what Claude or another session changes meanwhile shows up in the open box · «Редактировать» открывает поле «Текст» на месте текста, с курсором в нём: Enter сохраняет и закрывает его, «Отмена» отбрасывает правку; что тем временем поменяли Claude или другая сессия, видно в открытом поле
+- “Copy” puts the whole page into the clipboard — the surface's own, or else the system one (PowerShell, pbcopy, wl-copy, xclip or xsel, the text going in through stdin); if that fails, a note says to press “Edit” and select the text in the box · «Копировать» кладёт всю страницу в буфер обмена — в буфер самой поверхности, а если он не дошёл, в системный (PowerShell, pbcopy, wl-copy, xclip или xsel, текст — через stdin); не вышло — подсказка нажать «Редактировать» и выделить текст в поле
+- Why: Desktop's pane lets you select text only inside input boxes, so the buttons are the way to copy a page or a piece of it · зачем: панель Desktop даёт выделять текст только в полях ввода, поэтому скопировать страницу или её часть можно этими кнопками
+- New strings are translated into all 13 languages · новые строки переведены на все 13 языков
+
 ## 0.36.1 — панель Arcade идёт за тобой из сессии в сессию: открыл её в одной — новые сессии открывают её сами · the Arcade pane follows you between sessions: open it in one and new sessions open it on their own
 
 - Opened with /arcade, “Here” or a message card and left open, the pane opens by itself in a new session: in the terminal at start, in Desktop and VS Code when they connect to the session; the keyboard stays with the input box · открытая командой /arcade, кнопкой «Здесь» или с карточки сообщения и оставленная открытой, панель сама открывается в новой сессии: в терминале — при запуске, в Desktop и VS Code — когда они подключаются к сессии; клавиатура остаётся у поля ввода
