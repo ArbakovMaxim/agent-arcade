@@ -10,10 +10,10 @@ import { restoreMine } from './mine.js'
 import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
 import { NOTES_TOOL } from './notes.js'
 import { bookLang } from './books.js'
-import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_ROWS, PIXEL_DENIES, S, TICK_MS, savedKeys } from './app/state.js'
+import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PIXEL_DENIES, S, TICK_MS, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
-import { LOBBIES_EVERY_MS, log, paneColumns, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
-import { markPaneOpen, nesView, pixelMode, pressStart, readInput, releaseAll, screenContent, stepNes, toLibrary, typedFrom } from './app/play.js'
+import { LOBBIES_EVERY_MS, log, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
+import { followPane, nesView, openPane, paneClosedBy, pixelMode, pressStart, readInput, releaseAll, screenContent, stepNes, toLibrary, typedFrom } from './app/play.js'
 import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from './app/window.js'
 import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
@@ -23,6 +23,7 @@ import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
 export { ownDesktopCall } from './app/desktop.js'
+export { paneClosedBy } from './app/play.js'
 
 export function register(on) {
   on('session.start', async ($, e, next) => {
@@ -30,6 +31,7 @@ export function register(on) {
       // Модуль перезагрузили (/reload-plugins, обновление), а панель осталась открытой: движок её помнит, а наш флаг — нет.
       // Без этого после перезагрузки панель не закрывалась, когда Claude открывал игру во встроенном браузере
       S.paneOpen = (await $.ui.panes().catch(() => [])).some((p) => p.id === PANE)
+      if (S.paneOpen) S.paneSeen = true
       // Общие настройки (SYNC_KEYS): чего в $.store нет или что не подходит — остаётся по умолчанию
       for (const key of SYNC_KEYS) if (applySetting(key, await $.store.get(key))) savedKeys.add(key)
       if (!savedKeys.has('lang')) S.lang = detectLang(await $.env.get('LC_ALL'), await $.env.get('LC_MESSAGES'), await $.env.get('LANG'))
@@ -204,7 +206,17 @@ export function register(on) {
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
     }
-    return next(e)
+    const started = await next(e)
+    // Панель оставили открытой в другой сессии — открываем и здесь. Desktop и VS Code рисуют не со старта, а с session.attach
+    if (e.surface && e.surface !== 'mobile') await followPane($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+    return started
+  })
+
+  // Desktop или VS Code подключился к сессии: панель, оставленную открытой в другой сессии, открываем и здесь
+  on('session.attach', async ($, e, next) => {
+    const attached = await next(e)
+    if (e.surface === 'desktop' || e.surface === 'vscode') await followPane($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+    return attached
   })
 
   on('turn.start', async ($, e, next) => {
@@ -352,6 +364,7 @@ export function register(on) {
       S.agentAlert = null
       S.paused = false // закрытая панель и так стоит на паузе
       releaseAll() // Денди стоит на паузе, пока панель закрыта
+      await paneClosedBy($, e.origin).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
     }
     return next(e)
   })
@@ -425,8 +438,7 @@ export function register(on) {
   })
 
   on('command.run', { command: 'arcade' }, async ($) => {
-    markPaneOpen()
-    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+    await openPane($)
     $.ui.invalidate('ui.render')
     return {}
   })
@@ -437,8 +449,7 @@ export function register(on) {
     S.libraryNotice = message
     if (S.view !== 'library') toLibrary()
     S.menu = 'mine'
-    markPaneOpen()
-    await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+    await openPane($)
     $.ui.invalidate('ui.render')
     return {}
   })
@@ -517,8 +528,7 @@ export function register(on) {
           hotkey: '1',
           plain: true,
           onPress: async () => {
-            markPaneOpen()
-            await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+            await openPane($)
             $.ui.invalidate('ui.render')
           },
         }),
