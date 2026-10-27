@@ -5,10 +5,10 @@ import { HANDLE, normalHandle, parseFriends, parseInvite, parsePulse } from '../
 import { MAX_NAME, MAX_TEXT, cleanText, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread } from '../chats.js'
 import { picSvg } from '../avatars.js'
 import { avatarXaml, keepPopped, popupChats, popupCommand, restorePopped } from '../popup.js'
-import { CHAT_SHOWN, LAUNCH_TIMEOUT_MS, NO_MSG_MENU, PANE, PANE_ROWS, S } from './state.js'
+import { CHAT_SHOWN, LAUNCH_TIMEOUT_MS, NO_MSG_MENU, PANE, S } from './state.js'
 import { gameById, games } from './library.js'
-import { log, paneColumns, windowNotice } from './status.js'
-import { markPaneOpen, toLibrary } from './play.js'
+import { log, windowNotice } from './status.js'
+import { openPane, toLibrary } from './play.js'
 import { builtinBrowser, launchNotice, netWhere, openNet, windowCommand } from './window.js'
 import { desktopNotice, desktopWindow } from './desktop.js'
 import { accountFetch, accountNote, forgetSession, handleNote } from './profile.js'
@@ -633,8 +633,7 @@ async function openFromPopup($, id) {
   if (S.view !== 'library') toLibrary()
   S.menu = 'chats'
   S.libraryNotice = ''
-  markPaneOpen()
-  await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+  await openPane($)
   await openChat($, id)
   loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
 }

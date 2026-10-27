@@ -8,6 +8,13 @@
 - Why: Desktop's pane lets you select text only inside input boxes, so the buttons are the way to copy a page or a piece of it · зачем: панель Desktop даёт выделять текст только в полях ввода, поэтому скопировать страницу или её часть можно этими кнопками
 - New strings are translated into all 13 languages · новые строки переведены на все 13 языков
 
+## 0.36.1 — панель Arcade идёт за тобой из сессии в сессию: открыл её в одной — новые сессии открывают её сами · the Arcade pane follows you between sessions: open it in one and new sessions open it on their own
+
+- Opened with /arcade, “Here” or a message card and left open, the pane opens by itself in a new session: in the terminal at start, in Desktop and VS Code when they connect to the session; the keyboard stays with the input box · открытая командой /arcade, кнопкой «Здесь» или с карточки сообщения и оставленная открытой, панель сама открывается в новой сессии: в терминале — при запуске, в Desktop и VS Code — когда они подключаются к сессии; клавиатура остаётся у поля ввода
+- Closed by hand (the close mark or Esc), it stops opening by itself until you open it again; when Arcade closes it on its own (a game went to the built-in browser), that doesn't count · закрытая рукой (крестиком или Esc) — сама больше не открывается, пока не откроешь её снова; если панель закрыла сама Arcade (игра ушла во встроенный браузер), это не считается
+- It opens by itself only where it fits, once per session, and not where it was already open; a game or a book in another session stays as it was · сама она открывается только там, где помещается, один раз за сессию и не там, где её уже открывали; игра или книга в другой сессии остаются как были
+- New log lines are translated into all 13 languages · новые строки журнала переведены на все 13 языков
+
 ## 0.36.0 — свои сообщения в чатах можно поправить и удалить — в панели Arcade и на странице чатов сайта · your own chat messages can be edited and deleted, in the Arcade panel and on the site's chat page
 
 - In the panel: ⋮ next to the time of your message opens a small menu under it — “Edit” and “Delete”, no big buttons · в панели: ⋮ рядом со временем своего сообщения открывает под ним небольшое меню — «Изменить» и «Удалить», без крупных кнопок

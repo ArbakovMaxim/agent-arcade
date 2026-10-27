@@ -935,7 +935,12 @@ const RULES = [
   [/^(\d\d:\d\d(?::\d\d)?) (.+)$/, (m) => `${m[1]} ${EVENTS[m[2]] ?? event(m[2])}`],
 ]
 
-const EVENTS = { 'агент начал ход': 'the agent started a turn', 'агент закончил ход': 'the agent finished the turn', 'агент снова работает': 'the agent is working again' }
+const EVENTS = {
+  'агент начал ход': 'the agent started a turn',
+  'агент закончил ход': 'the agent finished the turn',
+  'агент снова работает': 'the agent is working again',
+  'Arcade открыта сама: в другой сессии её оставили открытой': 'Arcade opened on its own: it was left open in another session',
+}
 const event = (t) =>
   t
     .replace(/^запрос разрешения: (.+)$/, (_, tool) => `permission request: ${tool === 'инструмент' ? 'a tool' : tool}`)
@@ -943,6 +948,7 @@ const event = (t) =>
     .replace(/^не удалось найти браузеры: (.+)$/, 'could not find browsers: $1')
     .replace(/^уведомление не показалось: (.+)$/, 'the notification did not show: $1')
     .replace(/^ошибка мода: (.+)$/, 'mod error: $1')
+    .replace(/^Arcade не открылась сама: (.+)$/, 'Arcade did not open on its own: $1')
 const opener = (t) => {
   const note = (x) => ({ 'ищу браузеры…': 'looking for browsers…', 'обычное окно браузера': 'a regular browser window' })[x] ?? x
   const byDefault = t.match(/^окно браузера по умолчанию(?: \((.+)\))?$/)

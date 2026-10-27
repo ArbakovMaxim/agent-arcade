@@ -1,8 +1,9 @@
 // Arcade: Денди, Flappy, проверка клавиш, раскладка и ввод.
 import { Controller, createNes, frameToPng, frameToQuadrants } from '../nes-screen.js'
 import { createFlappy } from '../flappy.js'
-import { ACTIONS, ARROWS, COLS, DEFAULT_COLOR, FLOOR_COLOR, GRAPHICS_LABEL, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, PANE_ROWS, PLAYER_COLOR, ROWS, S, UI_ROWS } from './state.js'
+import { ACTIONS, ARROWS, COLS, DEFAULT_COLOR, FLOOR_COLOR, GRAPHICS_LABEL, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, PANE, PANE_ROWS, PLAYER_COLOR, ROWS, S, UI_ROWS } from './state.js'
 import { gameById } from './library.js'
+import { log, paneColumns } from './status.js'
 
 // Пакует строки из пар [символ, цвет] в строку для Raster — функция из документации модов
 export function cellsOf(rows) {
@@ -242,6 +243,40 @@ export function markPaneOpen() {
   S.asked = true
   S.askVisible = false
   S.paneOpen = true
+  S.paneSeen = true
+}
+
+// Панель открывает человек (команда, нажатие): в общем $.store помним, что он держит её открытой, — новые сессии
+// откроют её сами (followPane), пока он не закроет её рукой
+export async function openPane($) {
+  markPaneOpen()
+  await $.ui.open({ id: PANE, title: 'Arcade', focus: true, closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+  await $.store.set('paneWanted', true)
+}
+
+// Панель оставили открытой в другой сессии — открываем и в этой, один раз и без клавиатуры: человек пришёл к агенту.
+// Если панель здесь уже открывали, сама она не открывается: её мог закрыть мод (игра ушла во встроенный браузер).
+// Не поместилась (узкое окно, без спроса движок её не ставит) — закрываем, невидимой не держим; попробуем при следующем
+// подключении Desktop или VS Code
+export async function followPane($) {
+  if (S.paneSeen) return
+  const wanted = (await $.store.get('paneWanted')) === true
+  if (!wanted || S.paneSeen) return
+  markPaneOpen()
+  const opened = await $.ui.open({ id: PANE, title: 'Arcade', closeOnEscape: true, columns: paneColumns(), rows: PANE_ROWS })
+  if (opened?.isPlaced === false) {
+    log(`Arcade не открылась сама: ${opened.reason}`)
+    await $.ui.close({ id: PANE })
+    S.paneSeen = false
+    return
+  }
+  log('Arcade открыта сама: в другой сессии её оставили открытой')
+  $.ui.invalidate('ui.render')
+}
+
+// Панель закрыли. Человек (крестик, Esc) — новые сессии больше не открывают её сами. Мод (игра ушла в браузер) — открывают
+export async function paneClosedBy($, origin) {
+  if (origin?.kind === 'person') await $.store.set('paneWanted', false)
 }
 
 // Свободные строки под экран Денди: высота панели минус строки интерфейса вокруг экрана
