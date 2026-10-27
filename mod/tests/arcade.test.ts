@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
-import { clip, ownDesktopCall, workedText } from '../hooks/register.js'
+import { clip, ownDesktopCall, paneClosedBy, workedText } from '../hooks/register.js'
 import { detectLang, tr, fromEnglish, resetLocaleCache } from '../hooks/i18n.js'
 import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
@@ -90,7 +90,7 @@ async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, web = {}, api, popupAnswer = '' }: any = {}) {
+function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '' }: any = {}) {
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
@@ -123,6 +123,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   const widths: any[] = []
   const closed: any[] = []
   const opened: string[] = []
+  const opens: any[] = [] // всё, с чем мод открывал панель
   const blits: any[] = []
   const launches: any[] = []
   const toasts: string[] = []
@@ -194,7 +195,9 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   on('ui.open', ($: any, e: any) => {
     opened.push(e.id)
     widths.push(e.columns)
-    return { value: { isPlaced: true } }
+    opens.push(e)
+    // Не поместилась: без спроса движок ставит панель только в широком окне (placed — да или нет на каждое открытие)
+    return { value: placed() ? { isPlaced: true } : { isPlaced: false, reason: 'unasked: 144 columns, 100 now' } }
   })
   on('ui.close', ($: any, e: any) => {
     closed.push(e.id)
@@ -209,6 +212,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
     return { value: {} }
   })
   on('session.start', () => ({ cwd: '/work' }))
+  on('session.attach', ($: any, e: any) => ({ clientId: e.clientId }))
   on('turn.start', ($: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('classic.PermissionRequest', () => ({}))
@@ -261,7 +265,7 @@ function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered }
+  return { saved, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered }
 }
 
 const BASH_MS = 2_000
@@ -1715,6 +1719,99 @@ test('Desktop: мод перезагрузили (/reload-plugins), панель
   expect(mcpCalls.at(-1)).toMatchObject({ tool: 'show_pane', args: { pane: 'preview' } })
   expect(closed).toEqual(['arcade'])
   await ui.unmount()
+})
+
+// Панель идёт за человеком из сессии в сессию: открыл её — новые сессии открывают её сами, закрыл рукой — больше нет
+test('панель между сессиями: /arcade запоминает в общем хранилище, что панель открыта', async ($, on) => {
+  const { saved, opens } = stubs(on)
+  await start($)
+  expect(saved.get('paneWanted')).toBe(true)
+  expect(opens[0]).toMatchObject({ id: 'arcade', focus: true })
+})
+
+test('панель между сессиями: её оставили открытой в другой сессии — новая сессия в терминале открывает её сама, без клавиатуры', async ($, on) => {
+  const { opens } = stubs(on, { stored: { paneWanted: true } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(opens.length).toBe(1)
+  expect(opens[0]).toMatchObject({ id: 'arcade', title: 'Arcade', closeOnEscape: true })
+  expect(opens[0].focus).toBeUndefined() // клавиатура остаётся у поля ввода: человек пришёл к агенту
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('панель между сессиями: Desktop рисует не со старта — панель открывается, когда он подключился, и один раз', async ($, on) => {
+  const { opened } = stubs(on, { stored: { paneWanted: true } })
+  await $.session.start({ surface: null, isInteractive: true, cwd: '/work' })
+  expect(opened).toEqual([])
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(opened).toEqual(['arcade'])
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:second' })
+  expect(opened).toEqual(['arcade'])
+})
+
+test('панель между сессиями: панель нигде не оставляли открытой — сама она не открывается', async ($, on) => {
+  const { opened } = stubs(on)
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(opened).toEqual([])
+})
+
+test('панель между сессиями: запуск без человека (-p) и телефон панель сами не открывают', async ($, on) => {
+  const { opened } = stubs(on, { stored: { paneWanted: true } })
+  await $.session.start({ surface: null, isInteractive: false, cwd: '/work' })
+  await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' })
+  expect(opened).toEqual([])
+})
+
+// Закрыть панель «рукой» тест не может: origin person ставит сам движок. Поэтому — помощник из ui.close напрямую
+test('панель между сессиями: человек закрыл панель (крестик, Esc) — новые сессии её сами больше не открывают, закрыл мод — открывают', async () => {
+  const saved = new Map<string, unknown>([['paneWanted', true]])
+  const engine = { store: { set: async (key: string, value: unknown) => void saved.set(key, value) } }
+  await paneClosedBy(engine, { kind: 'plugin' })
+  await paneClosedBy(engine, { kind: 'unload' })
+  expect(saved.get('paneWanted')).toBe(true)
+  await paneClosedBy(engine, { kind: 'person' })
+  expect(saved.get('paneWanted')).toBe(false)
+})
+
+test('панель между сессиями, Desktop: панель закрыл мод (игра ушла во встроенный браузер) — новые сессии её всё равно откроют, эта — нет', async ($, on) => {
+  const { clock, saved, opened, closed } = stubs(on, { site: segaCatalog(), submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await go(ui, 'arcade-menu-sega')
+  await ui.press({ key: 'arcade-game-miniplanets' })
+  await $.tool.call({ tool: 'mcp__Claude_Browser__preview_start', url: `${SITE}/?game=miniplanets` })
+  expect(closed).toEqual(['arcade'])
+  expect(saved.get('paneWanted')).toBe(true)
+  // Здесь панель уже открывали: подключение Desktop не открывает её поверх игры в браузере
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(opened).toEqual(['arcade'])
+  await ui.unmount()
+})
+
+test('панель между сессиями: панель не поместилась (узкое окно) — мод её закрывает и пробует снова при следующем подключении', async ($, on) => {
+  let fits = false
+  const { saved, opened, closed } = stubs(on, { stored: { paneWanted: true }, placed: () => fits })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  expect(opened).toEqual(['arcade'])
+  expect(closed).toEqual(['arcade'])
+  expect(saved.get('paneWanted')).toBe(true)
+  fits = true
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(opened).toEqual(['arcade', 'arcade'])
+  expect(closed).toEqual(['arcade'])
+})
+
+test('панель между сессиями: мод перезагрузили, а панель открыта — второй раз её не открывают', async ($, on) => {
+  const { opened } = stubs(on, {
+    stored: { paneWanted: true },
+    panes: [{ id: 'arcade', title: 'Arcade', isShown: true, isFocused: false, isPlaced: true }],
+  })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(opened).toEqual([])
 })
 
 test('Desktop: агент свободен — просьба с адресом сразу уходит Claude, прерывать нечего', async ($, on) => {
