@@ -4,12 +4,13 @@ import { keep, tr } from '../i18n.js'
 import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, moveCard, noteLines, notesOrder, removePage, toggleLine, updatePage } from '../notes.js'
 import { NOTE_LINES, S, nb } from '../app/state.js'
 import { clip } from '../app/status.js'
-import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, colName, connectorPrompt, createPage, editNotes, giveClaude, openLink, sendNote } from '../app/work.js'
+import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, colName, connectorPrompt, copyPage, createPage, editNotes, giveClaude, openLink, sendNote } from '../app/work.js'
 
-// Блокнот: список страниц с подстраницами и экран страницы — строки текста, отметки чек-листа, поля «Новый пункт»,
-// «Текст» и «Название», «Отдать Claude», «Удалить». Названия и текст страниц — человека, без перевода (keep)
+// Блокнот: список страниц с подстраницами и экран страницы — строки текста, отметки чек-листа, «Редактировать» (поле
+// «Текст»), «Копировать», поля «Новый пункт» и «Название», «Отдать Claude», «Удалить». Названия и текст страниц — человека,
+// без перевода (keep)
 export function notesScreen($, e, kit) {
-  const { Box, Button, Input, Text, desktop, dim, gap, hint, noticeLines, open, section, tiles } = kit
+  const { Box, Button, Input, Markdown, Text, desktop, dim, gap, hint, noticeLines, open, section, tiles } = kit
   let items
   const page = S.menu.startsWith('note:') ? S.notes.find((p) => p.id === S.menu.slice(5)) : null
   if (!page && S.menu !== 'notes') S.menu = 'notes'
@@ -21,6 +22,7 @@ export function notesScreen($, e, kit) {
     nb.bad = false
     nb.confirm = null
     nb.focus = ''
+    nb.editing = ''
     open(target)()
   }
   const noteLine = nb.note ? [gap, nb.bad ? Text({ color: 'warning', children: [nb.note] }) : dim(nb.note)] : []
@@ -128,6 +130,37 @@ export function notesScreen($, e, kit) {
       if (l.kind === 'text') return keep(Text({ wrap: 'wrap', children: [l.text] }))
       return gap
     }
+    // Desktop и VS Code: строки между пунктами чек-листа — одним Markdown, как ответ Claude: заголовки, списки, абзацы
+    const textBlock = (run) => {
+      const md = []
+      run.forEach((l, i) => {
+        const next = run[i + 1]?.kind
+        if (l.kind === 'blank') md.push('')
+        else if (l.kind === 'h1' || l.kind === 'h2') md.push(`${l.kind === 'h1' ? '#' : '##'} ${l.text}`)
+        // После пункта списка — пустая строка, иначе следующий текст приклеится к пункту
+        else if (l.kind === 'bullet') md.push(`- ${l.text}`, ...(next === 'text' ? [''] : []))
+        // Строка за строкой — с переносом, а не одним абзацем
+        else md.push(`${l.text.trim()}${next === 'text' ? '  ' : ''}`)
+      })
+      const text = md.join('\n').trim()
+      if (!text) return [gap]
+      return [...(run[0].kind === 'blank' ? [gap] : []), keep(Markdown({ text })), ...(run.at(-1).kind === 'blank' ? [gap] : [])]
+    }
+    const pageItems = (list) => {
+      if (!Markdown) return list.map(lineItem)
+      const out = []
+      let run = []
+      for (const l of [...list, null]) {
+        if (l && l.kind !== 'check') {
+          run.push(l)
+          continue
+        }
+        if (run.length) out.push(...textBlock(run))
+        run = []
+        if (l) out.push(lineItem(l))
+      }
+      return out
+    }
     // Просьба про другое приложение: набранное в поле «Текст» — сначала в страницу, Claude получит свежий текст
     const askApp = async (kind, app = page.link?.app ?? '') => {
       if (!(await editNotes($, (list) => list))) return
@@ -175,12 +208,43 @@ export function notesScreen($, e, kit) {
           }),
         ]
       : []
-    items = [
-      parent ? keep(Button({ key: 'arcade-back', label: `← ${parent.title}`, onPress: leave(isBoard(parent) ? `board:${parent.id}` : `note:${parent.id}`) })) : Button({ key: 'arcade-back', label: '← Назад', onPress: leave('notes') }),
-      keep(section(page.title)),
-      ...cardPlace,
-      ...(hasText ? lines.slice(0, NOTE_LINES).map(lineItem) : [dim('Страница пустая — впиши текст или пункт ниже.')]),
-      ...(lines.length > NOTE_LINES ? [dim('Дальше — в поле «Текст» ниже.')] : []),
+    // Панель Desktop не даёт выделить текст вне полей ввода: без правки текст виден и копируется кнопкой, поле «Текст» —
+    // по «Редактировать», Enter в нём сохраняет и закрывает правку
+    const editing = nb.editing === id
+    const viewItems = [
+      ...(hasText ? pageItems(lines.slice(0, NOTE_LINES)) : [dim('Страница пустая — нажми «Редактировать» или впиши пункт ниже.')]),
+      ...(lines.length > NOTE_LINES ? [dim('Дальше — по «Редактировать».')] : []),
+      gap,
+      Box({
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        columnGap: 2,
+        children: [
+          Button({
+            key: 'arcade-note-edit',
+            label: 'Редактировать',
+            ...(nb.focus === 'edit' ? { autoFocus: true } : {}),
+            onPress: () => {
+              nb.editing = id
+              nb.focus = 'text'
+              $.ui.invalidate('ui.render')
+            },
+          }),
+          ...(hasText
+            ? [
+                Button({
+                  key: 'arcade-note-copy',
+                  label: 'Копировать',
+                  ...(nb.focus === 'copy' ? { autoFocus: true } : {}),
+                  onPress: (press) => {
+                    nb.focus = 'copy'
+                    return copyPage($, press?.surface ?? e.surface, page.body)
+                  },
+                }),
+              ]
+            : []),
+        ],
+      }),
       gap,
       Input({
         key: `arcade-note-add-${nb.field}`,
@@ -202,10 +266,13 @@ export function notesScreen($, e, kit) {
         },
       }),
       gap,
+    ]
+    const editItems = [
+      gap,
       Input({
         key: `arcade-note-text-${nb.field}`,
         label: 'Текст',
-        rows: 8,
+        rows: 12,
         value: page.body,
         placeholder: '# Заголовок, - пункт, - [ ] дело',
         submitLabel: tr('Сохранить', S.lang),
@@ -214,13 +281,35 @@ export function notesScreen($, e, kit) {
         onInput: (value) => {
           nb.draft = { id, text: String(value ?? '') }
         },
-        onSubmit: (value) => {
+        onSubmit: async (value) => {
           nb.draft = { id, text: String(value ?? '') }
           nb.focus = 'text'
-          return editNotes($, (list) => list, 'Сохранено.')
+          if (!(await editNotes($, (list) => list, 'Сохранено.'))) return
+          nb.editing = ''
+          nb.focus = 'edit'
+          $.ui.invalidate('ui.render')
         },
       }),
       dim('Enter — сохранить; новая строка — как в поле ввода Claude.'),
+      Button({
+        key: 'arcade-note-cancel',
+        label: 'Отмена',
+        onPress: () => {
+          if (nb.draft?.id === id) nb.draft = null
+          nb.editing = ''
+          nb.field++
+          nb.focus = 'edit'
+          $.ui.invalidate('ui.render')
+        },
+      }),
+      gap,
+    ]
+    items = [
+      parent ? keep(Button({ key: 'arcade-back', label: `← ${parent.title}`, onPress: leave(isBoard(parent) ? `board:${parent.id}` : `note:${parent.id}`) })) : Button({ key: 'arcade-back', label: '← Назад', onPress: leave('notes') }),
+      keep(section(page.title)),
+      ...cardPlace,
+      // Правка — поле «Текст» на месте текста; без правки — текст, чек-лист, «Редактировать», «Копировать» и новый пункт
+      ...(editing ? editItems : viewItems),
       Button({ key: 'arcade-note-take', label: 'Взять из поля ввода Claude', ...(nb.focus === 'take' ? { autoFocus: true } : {}), onPress: takePrompt }),
       dim('  Перенесёт набранное или надиктованное в поле ввода Claude в конец страницы.'),
       ...(VOICE_HINT[S.platform] ? [dim(VOICE_HINT[S.platform])] : []),
@@ -313,6 +402,7 @@ export function notesScreen($, e, kit) {
           }
           nb.confirm = null
           if (nb.draft?.id === id) nb.draft = null
+          if (nb.editing === id) nb.editing = ''
           if (!(await editNotes($, (list) => removePage(list, id), 'Страница удалена.'))) return
           nb.focus = ''
           S.menuFrom = null

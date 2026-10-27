@@ -30,7 +30,7 @@ import { notesScreen } from './notes.js'
 import { boardsScreen } from './boards.js'
 
 export async function drawPane($, e) {
-  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input } = $.ui.resolve(e)
+  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input, Markdown } = $.ui.resolve(e)
   // Готовая кнопка заморожена и свой onPress не отдаёт, а плитка Desktop пересобирает её с переносом названия:
   // пропсы каждой кнопки запоминаются здесь
   const buttonProps = new WeakMap()
@@ -448,6 +448,8 @@ export async function drawPane($, e) {
     const kit = {
       Box, Button, Input, Svg, TILE_GAP, Text, back, byGenre, desktop, dim, eventLines, gameButton, gameRows, gap, hint, inviteRows, makeButton, noticeLines,
       now, open, ownTopics, picGrid, pictures, playGame, section, sectionSwitches, tileWidth, tiles, watchLive, windowed,
+      // Текст, который можно выделить и скопировать: в Desktop и VS Code — Markdown, как ответ Claude; в терминале — нет
+      Markdown: terminal ? null : Markdown,
     }
 
     let items

@@ -133,6 +133,18 @@ export function openUrlCommand(platform, url) {
   return null
 }
 
+// Системный буфер обмена — для «Копировать» в Desktop: его панель не даёт выделить текст, а $.ui.copy туда пока не
+// доходит. Текст — во входной поток программы (stdin), не в командную строку
+export function clipboardCommand(platform) {
+  if (platform === 'windows') return { argv: powershell('[Console]::InputEncoding = [System.Text.Encoding]::UTF8\nSet-Clipboard -Value ([Console]::In.ReadToEnd())'), env: {} }
+  if (platform === 'mac') return { argv: ['pbcopy'], env: { LANG: 'en_US.UTF-8' } }
+  if (platform === 'linux') {
+    const pick = 'if [ -n "$WAYLAND_DISPLAY" ] && command -v wl-copy >/dev/null; then exec wl-copy; elif command -v xclip >/dev/null; then exec xclip -selection clipboard; else exec xsel --clipboard --input; fi'
+    return { argv: ['sh', '-c', pick], env: {} }
+  }
+  return null
+}
+
 export const DETECT_SCRIPT_TEXT = DETECT_SCRIPT
 export const LAUNCH_SCRIPT_TEXT = LAUNCH_SCRIPT
 
