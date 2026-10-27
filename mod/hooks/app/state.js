@@ -199,11 +199,12 @@ export const rssCache = new Map() // «articles:id ленты» → { at, items 
 S.myTopics = []
 // Блокнот (hooks/notes.js): страницы из $.store. note — заметка под полями (bad — о беде), confirm — какую страницу
 // удалить по второму нажатию, draft — набранное в поле «Текст» и ещё не сохранённое ({ id, text }), field — номер полей:
-// поля рисуются заново с новым текстом, когда страница поменялась не из них; focus — какое поле страницы в фокусе
+// поля рисуются заново с новым текстом, когда страница поменялась не из них; focus — какое поле страницы в фокусе;
+// editing — у какой страницы открыто поле «Текст» (кнопка «Редактировать»): без него текст только виден
 S.notes = []
-export const nb = { note: '', bad: false, confirm: null, draft: null, field: 0, focus: '' }
+export const nb = { note: '', bad: false, confirm: null, draft: null, field: 0, focus: '', editing: '' }
 export const NOTES_TOOL_NAME = `mcp__arcade__${NOTES_TOOL.name}`
-export const NOTE_LINES = 400 // строк страницы на экране; дальше — в поле «Текст»
+export const NOTE_LINES = 400 // строк страницы на экране; дальше — в поле «Текст» по «Редактировать»
 // Доска проектов: основы общих досок (desks.js), список общих досок с сайта и состояние экрана. trouble — беда сверки
 // одной доски { share, text }; picked — отмеченные друзья; syncing и again — какие доски сверяются и каким нужна ещё сверка
 S.desks = {}

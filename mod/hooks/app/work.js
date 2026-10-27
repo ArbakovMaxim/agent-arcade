@@ -1,5 +1,5 @@
 // Arcade: блокнот и доски проектов.
-import { openUrlCommand } from '../browsers.js'
+import { clipboardCommand, openUrlCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
 import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, columnCards, fits, isBoard, restoreNotes, updatePage } from '../notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../desks.js'
@@ -282,6 +282,27 @@ export async function openLink($, url) {
   }
   nb.note = opened ? 'Страница открыта в браузере.' : 'Браузер не открылся — адрес страницы написан выше.'
   nb.bad = !opened
+  $.ui.invalidate('ui.render')
+}
+
+// «Копировать» на странице: буфер поверхности (терминал), не дошёл — системный буфер через программу ОС
+export async function copyPage($, surface, text) {
+  let copied = false
+  try {
+    copied = (await $.ui.copy({ text, surface }))?.isCopied === true
+  } catch {
+    // поверхность не умеет — дальше системный буфер
+  }
+  const command = copied ? null : clipboardCommand(S.platform)
+  if (command) {
+    try {
+      copied = (await $.process.run(command.argv, { env: command.env, stdin: text, timeoutMs: LAUNCH_TIMEOUT_MS }))?.exitCode === 0
+    } catch {
+      // не вышло — заметка подскажет выделить текст в поле
+    }
+  }
+  nb.note = copied ? 'Текст страницы скопирован.' : 'Не получилось скопировать — нажми «Редактировать» и выдели текст в поле.'
+  nb.bad = !copied
   $.ui.invalidate('ui.render')
 }
 
