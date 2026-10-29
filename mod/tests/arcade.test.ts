@@ -418,6 +418,50 @@ test('незнакомая раскладка: назначение всех в�
   await ui.unmount()
 })
 
+test('без игры в панели игровой таймер не тикает, а свободный агент не перерисовывает панель каждую секунду', HEAVY, async ($, on) => {
+  // Сколько раз сработал таймер игрового цикла (33 мс) и сколько раз мод просил перерисовать панель
+  // Часы теста ставит mock.clock, а второй обработчик того же события тест завести не может — оборачиваем его обработчик
+  let ticks = 0
+  let redraws = 0
+  const counting = (event: string, ...rest: any[]) => {
+    const hook = rest.at(-1)
+    if (event !== 'clock.every') return (on as any)(event, ...rest)
+    return (on as any)(event, ...rest.slice(0, -1), ($: any, e: any, next: any) => {
+      if (e.ms === 33) ticks++
+      return hook($, e, next)
+    })
+  }
+  on('ui.invalidate', ($: any, e: any, next: any) => {
+    redraws++
+    return next(e)
+  })
+  const { clock } = stubs(counting)
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await clock.advance(5_000)
+  expect(ticks).toBe(0)
+  // Агент свободен, панель открыта: перерисовка — раз в минуту, а не каждую секунду
+  redraws = 0
+  await clock.advance(30_000)
+  expect(redraws <= 1).toBe(true)
+  // Агент работает — счётчик секунд в шапке идёт
+  await $.turn.start({ turnId: 't1' })
+  redraws = 0
+  await clock.advance(5_000)
+  expect(redraws >= 5).toBe(true)
+  expect(await ui.find({ type: 'Text', text: /^Агент работает \d+ с$/ })).toBeDefined()
+  // Игра — таймер тикает; вышли в библиотеку — снят
+  await go(ui, 'arcade-game-thwaite')
+  await clock.advance(1000)
+  expect(ticks >= 25).toBe(true)
+  await tap(ui, 'backspace')
+  await clock.advance(100)
+  const after = ticks
+  await clock.advance(2000)
+  expect(ticks).toBe(after)
+  await ui.unmount()
+})
+
 test('Thwaite в терминале с картинками: настоящие пиксели, PNG 30 раз в секунду', HEAVY, async ($, on) => {
   const { saved, blits, clock } = stubs(on)
   await start($)

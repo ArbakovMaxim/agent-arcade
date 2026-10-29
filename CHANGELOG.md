@@ -1,5 +1,11 @@
 # Changelog · Список изменений
 
+## 0.36.3 — Arcade меньше грузит процессор, когда ты не играешь · Arcade uses less CPU when you are not playing
+
+- The game loop timer runs only while a game is open in the pane; before, it fired 30 times a second in every Claude session, game or not · таймер игрового цикла идёт, только пока в панели открыта игра; раньше он срабатывал 30 раз в секунду в каждой сессии Claude, с игрой или без
+- An open pane redraws every second only while the agent is working (the seconds counter in its header); otherwise once a minute, for times like “5 min ago” · открытая панель перерисовывается каждую секунду, только пока агент работает (счётчик секунд в шапке), иначе — раз в минуту, для времени вроде «5 мин назад»
+- Measured before the fix: an idle session with the plugin used about 4% of one CPU core · замер до исправления: свободная сессия с плагином занимала около 4% одного ядра
+
 ## 0.36.2 — страница блокнота и карточка доски: текст без поля ввода, кнопки «Редактировать» и «Копировать» · notebook pages and board cards: text without an input box, “Edit” and “Copy” buttons
 
 - A page or card shows its text formatted — headings, lists, checklist — in Desktop and VS Code, and as lines in the terminal; the “Text” input box is no longer always there · страница или карточка показывает текст оформленным — заголовки, списки, чек-лист — в Desktop и VS Code, а в терминале строками; поля ввода «Текст» больше нет на экране всё время

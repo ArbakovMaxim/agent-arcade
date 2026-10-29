@@ -10,10 +10,10 @@ import { restoreMine } from './mine.js'
 import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
 import { NOTES_TOOL } from './notes.js'
 import { bookLang } from './books.js'
-import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PIXEL_DENIES, S, TICK_MS, savedKeys } from './app/state.js'
+import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, S, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
 import { LOBBIES_EVERY_MS, log, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
-import { followPane, nesView, openPane, paneClosedBy, pixelMode, pressStart, readInput, releaseAll, screenContent, stepNes, toLibrary, typedFrom } from './app/play.js'
+import { followPane, nesView, openPane, paneClosedBy, pressStart, readInput, releaseAll, runGameLoop, toLibrary, typedFrom } from './app/play.js'
 import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from './app/window.js'
 import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
@@ -164,44 +164,16 @@ export function register(on) {
         argumentHint: tr('путь к файлу .nes, .md или .bin', S.lang),
         immediate: true,
       })
-      // Раз в секунду: проверить порог вопроса и обновить счётчик секунд
+      // Раз в секунду: проверить порог вопроса и обновить счётчик секунд. Счётчик идёт, только пока агент работает;
+      // в остальное время открытую панель перерисовываем раз в минуту — «5 мин назад» в чатах и подборках
+      let quiet = 0
       $.clock.every(1000, async () => {
         const now = await $.clock.now()
         if (S.status === 'working' && S.askAfter > 0 && !S.asked && !S.paneOpen && now - S.turnStartedAt >= S.askAfter * 1000) {
           S.askVisible = true
         }
-        if (S.askVisible || S.paneOpen) $.ui.invalidate('ui.render')
-      })
-      // Игровой цикл Денди: идёт, только пока открыта панель с игрой.
-      // В Desktop и VS Code кадр уходит перерисовкой панели (Svg), в терминале — через $.ui.blit.
-      $.clock.every(TICK_MS, async () => {
-        if (!nesView() || !S.paneOpen || !S.nes || S.paused) return
-        if (S.remoteSurface) {
-          stepNes()
-          $.ui.invalidate('ui.render')
-          return
-        }
-        if (!S.screen) return
-        stepNes()
-        const pixels = pixelMode()
-        let shown = false
-        try {
-          const result = await $.ui.blit({ requestId: PANE, key: 'arcade-screen', columns: S.screen.columns, rows: S.screen.rows, ...screenContent() })
-          shown = !result?.deny
-        } catch {
-          // Экран ещё не нарисован, панель закрывается или терминал не показывает картинки
-        }
-        if (shown) {
-          S.denies = 0
-          return
-        }
-        S.denies += 1
-        if (pixels && S.graphics === 'auto' && S.denies >= PIXEL_DENIES) {
-          S.pixelsFailed = true
-          S.denies = 0
-          S.notice = 'Этот терминал не показывает картинки — рисую символами. Как получить пиксели — в README.'
-          $.ui.invalidate('ui.render')
-        }
+        quiet = S.paneOpen && S.status !== 'working' ? quiet + 1 : 0
+        if (S.askVisible || (S.paneOpen && (quiet === 0 || quiet % 60 === 0))) $.ui.invalidate('ui.render')
       })
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
@@ -581,7 +553,11 @@ export function register(on) {
 
   // Панель: библиотека игр или сама игра. Клавиши над экраном игры ловит Client (hooks/input.js)
   // после клика по экрану, в любой раскладке.
-  on('ui.render', { component: 'Pane' }, async ($, e, next) =>
-    translateTree(await (e.requestId === PANE ? drawPane($, e) : next(e)), S.lang),
-  )
+  on('ui.render', { component: 'Pane' }, async ($, e, next) => {
+    if (e.requestId !== PANE) return translateTree(await next(e), S.lang)
+    const tree = await drawPane($, e)
+    // Игру открыли в панели — заводим игровой цикл; когда игру закроют, он снимется сам
+    runGameLoop($)
+    return translateTree(tree, S.lang)
+  })
 }
