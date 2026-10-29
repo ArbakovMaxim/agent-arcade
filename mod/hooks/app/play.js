@@ -1,7 +1,7 @@
 // Arcade: Денди, Flappy, проверка клавиш, раскладка и ввод.
 import { Controller, createNes, frameToPng, frameToQuadrants } from '../nes-screen.js'
 import { createFlappy } from '../flappy.js'
-import { ACTIONS, ARROWS, COLS, DEFAULT_COLOR, FLOOR_COLOR, GRAPHICS_LABEL, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, PANE, PANE_ROWS, PLAYER_COLOR, ROWS, S, UI_ROWS } from './state.js'
+import { ACTIONS, ARROWS, COLS, DEFAULT_COLOR, FLOOR_COLOR, GRAPHICS_LABEL, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, PANE, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, ROWS, S, TICK_MS, UI_ROWS } from './state.js'
 import { gameById } from './library.js'
 import { log, paneColumns } from './status.js'
 
@@ -297,6 +297,52 @@ export function graphicsLabel() {
 // Экран Денди для Raster или Image — то, что рисуется в панели и что отправляет $.ui.blit
 export function screenContent() {
   return pixelMode() ? { source: { png: frameToPng(S.frame) } } : { cells: frameToQuadrants(S.frame, S.screen.columns, S.screen.rows) }
+}
+
+// Игровой цикл Денди: таймер есть, только пока открыта панель с игрой. Раньше он тикал 30 раз в секунду всегда,
+// в каждой сессии Claude, и впустую грузил процессор. Заводит его отрисовка панели (игру открыли — панель
+// перерисовалась), снимает сам себя. В Desktop и VS Code кадр уходит перерисовкой панели (Svg), в терминале — $.ui.blit.
+let gameLoop = null
+const gameOn = () => nesView() && S.paneOpen && Boolean(S.nes)
+
+export function runGameLoop($) {
+  if (gameLoop || !gameOn()) return
+  gameLoop = $.clock.every(TICK_MS, () => gameTick($))
+}
+
+async function gameTick($) {
+  if (!gameOn()) {
+    gameLoop?.cancel()
+    gameLoop = null
+    return
+  }
+  if (S.paused) return
+  if (S.remoteSurface) {
+    stepNes()
+    $.ui.invalidate('ui.render')
+    return
+  }
+  if (!S.screen) return
+  stepNes()
+  const pixels = pixelMode()
+  let shown = false
+  try {
+    const result = await $.ui.blit({ requestId: PANE, key: 'arcade-screen', columns: S.screen.columns, rows: S.screen.rows, ...screenContent() })
+    shown = !result?.deny
+  } catch {
+    // Экран ещё не нарисован, панель закрывается или терминал не показывает картинки
+  }
+  if (shown) {
+    S.denies = 0
+    return
+  }
+  S.denies += 1
+  if (pixels && S.graphics === 'auto' && S.denies >= PIXEL_DENIES) {
+    S.pixelsFailed = true
+    S.denies = 0
+    S.notice = 'Этот терминал не показывает картинки — рисую символами. Как получить пиксели — в README.'
+    $.ui.invalidate('ui.render')
+  }
 }
 
 export function first(id) {
