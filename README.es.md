@@ -10,16 +10,21 @@ Arcade es un plugin para [Claude Code](https://claude.com/claude-code) que lo co
 
 Todo el catálogo es gratuito: los juegos tienen licencias abiertas y los libros y audiolibros son de dominio público. También puedes jugar en línea con otras personas que esperan a sus agentes y chatear con tus amigos.
 
+![Demo: un tablero de proyectos en Claude Desktop; una tarjeta se abre como página con una lista de tareas, Dar a Claude se la pasa y Claude marca cada punto, escribe el resultado en la tarjeta y la mueve a Hecho](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
+
+*Tu tablero: una tarjeta pasa a Claude con un botón, interfaz en inglés. [Ver el vídeo de 31 segundos](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
 ![Demo: Claude Code recibe una tarea, aparece «¿jugamos?» sobre el prompt, un juego de NES corre junto al chat y Arcade te avisa cuando el agente termina; también hay libros, audiolibros y artículos](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*Mientras el agente trabaja: 31 segundos en Claude Desktop, con la interfaz en inglés. [Ver el vídeo en 720p](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*Mientras el agente trabaja: 31 segundos en Claude Desktop, con la interfaz en inglés. [Ver el vídeo en 720p](https://github.com/user-attachments/assets/bbb14c28-2813-40c0-82e6-d7375ddc2253).*
 
 ## Funciones
 
-- **Cuaderno y tableros de proyectos.** Páginas, subpáginas y listas de tareas que también lleva Claude, y tableros con columnas y tarjetas. *Dar a Claude* le pasa una página o una tarjeta a Claude: marca lo hecho y escribe ahí el resultado. Todas tus sesiones abiertas de Claude Code comparten el cuaderno, así que cada una puede tomar su propia tarjeta del mismo tablero. Comparte un tablero con tus amigos y todos trabajáis en el mismo. Envía una página a Notion u otra aplicación, o trae una desde allí, mediante los conectores de Claude; dicta en el cuadro de mensaje de Claude y pasa el texto a una página.
+- **Cuaderno y tableros de proyectos.** Páginas, subpáginas y listas de tareas que también lleva Claude, y tableros con columnas y tarjetas. *Dar a Claude* le pasa una página o una tarjeta a Claude: marca lo hecho y escribe ahí el resultado. Una página o tarjeta muestra su texto con formato, con los botones *Editar* y *Copiar*. Todas tus sesiones abiertas de Claude Code comparten el cuaderno, así que cada una puede tomar su propia tarjeta del mismo tablero. Comparte un tablero con tus amigos y todos trabajáis en el mismo. Envía una página a Notion u otra aplicación, o trae una desde allí, mediante los conectores de Claude; dicta en el cuadro de mensaje de Claude y pasa el texto a una página.
 - **Amigos y chats.** Un inicio de sesión opcional con GitHub mantiene tus ajustes iguales en todos tus ordenadores y te da un @alias; añade amigos por su alias exacto, mira quién está en línea, comparte tableros, invítalos a jugar y chatea en privado o en grupos.
 - **Sabe lo que hace el agente.** Cuando el agente termina o pide permiso, aparece un aviso sobre el juego — sigue jugando, pausa o vuelve directamente al agente (el comportamiento se elige en los ajustes). En Claude Desktop también puede cerrar la pestaña que estás viendo, para que vuelvas a tener la conversación delante.
 - **Aparece solo.** Tras 10 segundos de trabajo del agente, Arcade ofrece un juego sobre el prompt —o más tarde, o nunca, como elijas en los ajustes—; nunca roba el foco a menos que se lo pidas.
+- **Te acompaña entre sesiones.** Deja abierto el panel de Arcade y cada nueva sesión de Claude Code lo abrirá sola; ciérralo a mano y se quedará cerrado.
 - **Un menú, seis secciones.** *Jugar*, *Leer y escuchar*, *Ver*, *Social*, *Trabajo* y *Más* — pliega las que no necesites. Arriba: *Continuar* el último juego, *Buscar* y *Favoritos*. La primera vez que abres Arcade eliges qué secciones mostrar.
 - **61 juegos gratuitos** de NES (Dendy), Sega Mega Drive, Master System, PlayStation y una pestaña *Juegos* con juegos arcade, de disparos, carreras, estrategia, aventuras y juegos de mesa.
 - **Lee y escucha.** Clásicos y audiolibros de LibriVox en 30 idiomas, directamente de Project Gutenberg, Wikisource y LibriVox, además de artículos y episodios de podcast recientes sobre el tema del trabajo del agente.
@@ -73,6 +78,7 @@ En PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 ## Cómo se usa
 
 - **`/arcade`** abre el menú en cualquier momento.
+- Deja el panel abierto y las sesiones nuevas lo abrirán solas: en la terminal, al arrancar; en Desktop y VS Code, cuando se conectan a la sesión; el teclado sigue en el prompt. Ciérralo a mano (la cruz de cierre o Esc) y dejará de abrirse solo hasta que vuelvas a abrirlo.
 - Cuando el agente trabaja más de 10 segundos, aparece *«¿jugamos?»* sobre el prompt: **`1`** — jugar aquí, en el panel; **`2`** — en una ventana del navegador (si está disponible); **`3`** — ahora no. En Ajustes → Notificaciones puedes elegir cuándo aparece —de 10 segundos a 5 minutos— o desactivarlo.
 - Flechas o Tab para elegir, Enter para abrir; el ratón también funciona. Los controles se muestran bajo cada juego.
 - Cuando el agente termina o espera permiso, aparece un aviso sobre el juego: **Volver al agente** o **Seguir jugando**.
@@ -102,6 +108,47 @@ La **búsqueda** empieza a partir de dos letras y encuentra un título o un gén
 | **Claude Desktop** | en el panel | navegador integrado de Claude o ventana del navegador (se elige en los ajustes); juegos de disparos — siempre en una ventana del navegador |
 
 La ventana del navegador es una ventana de Arcade aparte (tu navegador predeterminado o el que elijas en los ajustes), no una pestaña más entre las tuyas. Los chats funcionan directamente en el panel, en la terminal y en Desktop; *Abrir como página* los abre igual en el sitio web. El cuaderno y los tableros de proyectos viven en el panel. TikTok se abre en el navegador integrado de Claude en Desktop y, en los demás entornos, en tu navegador predeterminado, donde probablemente ya tengas la sesión iniciada.
+
+## Cuaderno y tableros de proyectos
+
+Ambos están en la sección *Trabajo* del menú.
+
+- **Cuaderno.** Páginas y subpáginas; una línea que empieza por `# ` es un título, por `- ` un elemento y por `- [ ] ` un elemento de lista de tareas que se marca con una pulsación. Se guarda en este ordenador — hasta 200 páginas y 20 000 caracteres por página.
+- **Editar y Copiar.** Una página o tarjeta muestra su texto con formato — títulos, listas, lista de tareas — en Desktop y VS Code, y como líneas en la terminal. *Editar* abre en su lugar el cuadro de texto: Enter guarda, *Cancelar* descarta el cambio, y lo que Claude u otra sesión cambie mientras tanto aparece en el cuadro. *Copiar* pone la página entera en el portapapeles — en el panel de Desktop solo se puede seleccionar texto dentro de los campos de entrada, así que esta es la forma de copiar una página.
+- **Claude también lo lleva.** *Dar a Claude* le pasa una página a Claude, o simplemente pídele a Claude que anote algo en Arcade. Claude usa la herramienta `mcp__arcade__notes`, que solo cambia el cuaderno y no borra nada. Si no te gusta la edición de Claude: *Restaurar el texto de antes de la edición de Claude*.
+- **Notion y otras aplicaciones** — mediante los conectores de Claude, así que Arcade no necesita claves ni contraseñas: *Enviar a Notion*, *A otra aplicación*, *Importar de Notion u otra aplicación*. Una página vinculada se puede actualizar en la aplicación o volver a importar desde ella.
+- **Voz.** Dicta en el cuadro de mensaje de Claude con el dictado del propio sistema (Win+H en Windows, Fn dos veces en macOS) y pulsa *Tomar del cuadro de mensaje de Claude* — el texto pasa al final de la página.
+- **Tablero de proyectos.** Columnas — *Por hacer*, *En curso*, *Hecho* o las tuyas, hasta 8 — y tarjetas; una tarjeta es una página del cuaderno con texto y lista de tareas. Pulsa una tarjeta para elegirla y moverla con las flechas; pulsa otra vez para abrirla. Claude también puede llevar un tablero: *Dar a Claude*, o pídele que reparta tareas en un tablero de Arcade.
+- **Tableros compartidos.** Con la sesión iniciada y un @alias, marca a tus amigos y pulsa *Compartir*: todos tienen las mismas tarjetas, columnas y nombre, y los cambios llegan en segundos. El dueño invita a más amigos, quita participantes y elimina el tablero del sitio; cualquiera puede salir; pase lo que pase, cada uno conserva su propia copia. Hasta 3 tableros compartidos propios, 20 personas y 200 tarjetas por tablero.
+- **Varias sesiones a la vez.** Todas las sesiones abiertas de Claude Code en este ordenador comparten un mismo cuaderno y sus tableros: lo que una añade, cambia o marca, las demás lo ven en pocos segundos, así que cada sesión puede llevar su propia tarjeta del mismo tablero.
+
+## Para equipos
+
+Un equipo pequeño puede llevar sus tareas en Arcade: un tablero compartido, y quien toma una tarjeta se la pasa a su propio Claude.
+
+1. Todos instalan Arcade (Claude Code 2.1.275 o posterior) — consulta [Instalación](#instalación).
+2. `/arcade` → **Social** → **Iniciar sesión con GitHub**: la página de GitHub se abre en tu navegador; confirma allí y luego pulsa *Sign in* en la página de Arcade (su código debe coincidir con el del panel). Si no funciona, *Iniciar sesión con un código*.
+3. Toma un @alias — tu nombre de GitHub con un clic, o uno propio.
+4. Añadíos como amigos por el @alias exacto; la otra persona acepta.
+5. **Trabajo** → crea un tablero → marca a tus compañeros → **Compartir**.
+6. ¿Solo te interesan los tableros y los chats? La primera vez que abras Arcade, deja solo **Trabajo** y **Social**. Luego, en **Ajustes → Notificaciones**, pulsa **Línea «¿jugamos?»** hasta que diga *desactivada*: no aparecerá nada sobre el prompt mientras el agente trabaja.
+
+A partir de ahí: abre el tablero, elige una tarjeta, **Dar a Claude**. Si Claude está libre, la tarjeta le llega al momento; si está ocupado, la tarjeta espera en el cuadro de mensaje hasta que la envíes. Claude marca lo hecho y escribe el resultado en la tarjeta, y todos en el tablero lo ven en segundos. Los chats están en **Social**.
+
+Conviene saber: los tableros compartidos y los chats se guardan en el sitio de Arcade y no están cifrados, así que no pongas en ellos contraseñas ni claves. Arcade solo conoce el nombre y la imagen de tu perfil de GitHub. Hasta 3 tableros compartidos propios, 20 personas y 200 tarjetas por tablero. *Eliminar cuenta* (pulsa dos veces) hace que el sitio olvide tu cuenta y tus ajustes.
+
+## Cuenta, amigos y chats
+
+Iniciar sesión es opcional: sin ello, todo lo demás funciona igual que antes.
+
+- **Iniciar sesión con GitHub** (en *Social*): la página de inicio de sesión de GitHub se abre en tu navegador habitual; confirma allí y luego pulsa *Sign in* en la página de Arcade — su código debe coincidir con el del panel. Si por el navegador no funciona, usa *Iniciar sesión con un código*: Arcade muestra un código y lo introduces en la página de GitHub. Arcade solo conoce el nombre y la imagen de tu perfil de GitHub — sin correo ni acceso a repositorios.
+- **Sincronización.** Tu idioma, teclas, notificaciones, tamaño del panel, qué hacer con el juego cuando el agente avisa, las opciones del navegador de Desktop, tus temas, canales de Twitch, favoritos, secciones plegadas, secciones ocultas y récord de Flappy Arcade pasan a ser iguales en todos tus ordenadores. Tus propios juegos, el navegador y el modo gráfico se quedan en cada ordenador.
+- **@alias.** Toma tu nombre de GitHub con un clic o inventa uno: de 4 a 32 caracteres — letras latinas, dígitos y `_`. Puedes cambiarlo hasta 5 veces al día.
+- **Amigos.** Añade a alguien por su @alias exacto: esa persona acepta la solicitud en su lado y aparecéis en la lista del otro. No hay sugerencias al escribir, así que nadie puede curiosear quién usa Arcade. Rechazar y eliminar son silenciosos.
+- **En línea e invitaciones a jugar.** Mientras el menú de Arcade está abierto, tus amigos te ven *en línea*, y tú a ellos; para no aparecer, desactiva *Mostrar a mis amigos que estoy en línea* en la pantalla *Amigos*. *Invitar* junto a un amigo ofrece los juegos en red: un juego de mesa abre una sala propia para dos, un juego de Doom su lobby. El juego se abre para ti al momento; tu amigo recibe un aviso y *Aceptar* arriba del menú, y la invitación vale 10 minutos. Puedes invitar donde los juegos en red se abren en un navegador: el integrado de Desktop o una ventana del navegador.
+- **Chats.** En privado con un amigo, grupos de amigos o un grupo con todos tus amigos de una vez. Escribe directamente en el panel de Arcade o abre la página de chats en el sitio web. Puedes editar o eliminar tus propios mensajes desde el menú ⋮ junto a ellos; en el sitio web, el clic derecho abre el mismo menú. Los mensajes se guardan en el sitio de Arcade y no están cifrados — no escribas ahí contraseñas ni claves.
+- **Avatares y notificaciones de mensajes.** Elige uno de 24 avatares listos en *Cuenta* — los chats solo lo muestran; sin avatar, aparece la primera letra de tu @alias. La imagen de un grupo la elige su dueño entre los mismos 24. Tu imagen de GitHub nunca se muestra a otros. Cuando un amigo te escribe, aparece una tarjeta abajo a la izquierda sobre todas las ventanas (Windows) o una notificación del sistema (macOS, Linux); un clic en la tarjeta abre ese chat.
+- **Cerrar sesión** detiene la sincronización en este ordenador; **Eliminar cuenta** (pulsa dos veces) hace que el sitio olvide tu cuenta y tus ajustes.
 
 ## El catálogo
 
@@ -134,31 +181,6 @@ La ficha de cada juego enlaza a su licencia y su código fuente.
 - **Doom.** **FreeDM** y **BlasphDM** son salas de deathmatch con rondas de 5 minutos para hasta cuatro jugadores; **Freedoom** y **Blasphemer** tienen cooperativo mediante **En línea**. Quien llega espera a la siguiente ronda: el motor no permite unirse a una partida en curso.
 - **Juegos de mesa.** *Buscar rival*, *Invitar a un amigo* con un enlace o *Contra la máquina*. La partida se guarda en el servidor: haz un movimiento, vuelve con tu agente, abre el enlace más tarde — el tablero está donde lo dejaste. Con la sesión iniciada y un @alias, tu rival lo ve junto a tu color.
 - **Quién espera.** Una vez por minuto, Arcade comprueba si alguien espera compañero y lo muestra en Claude Code — por ejemplo, *«¿jugamos? Esperando en línea: FreeDM (1)»* — con un botón **Unirse** en el menú.
-
-## Cuenta, amigos y chats
-
-Iniciar sesión es opcional: sin ello, todo lo demás funciona igual que antes.
-
-- **Iniciar sesión con GitHub** (en *Social*): la página de inicio de sesión de GitHub se abre en tu navegador habitual; confirma allí y luego pulsa *Sign in* en la página de Arcade — su código debe coincidir con el del panel. Si por el navegador no funciona, usa *Iniciar sesión con un código*: Arcade muestra un código y lo introduces en la página de GitHub. Arcade solo conoce el nombre y la imagen de tu perfil de GitHub — sin correo ni acceso a repositorios.
-- **Sincronización.** Tu idioma, teclas, notificaciones, tamaño del panel, qué hacer con el juego cuando el agente avisa, las opciones del navegador de Desktop, tus temas, canales de Twitch, favoritos, secciones plegadas, secciones ocultas y récord de Flappy Arcade pasan a ser iguales en todos tus ordenadores. Tus propios juegos, el navegador y el modo gráfico se quedan en cada ordenador.
-- **@alias.** Toma tu nombre de GitHub con un clic o inventa uno: de 4 a 32 caracteres — letras latinas, dígitos y `_`. Puedes cambiarlo hasta 5 veces al día.
-- **Amigos.** Añade a alguien por su @alias exacto: esa persona acepta la solicitud en su lado y aparecéis en la lista del otro. No hay sugerencias al escribir, así que nadie puede curiosear quién usa Arcade. Rechazar y eliminar son silenciosos.
-- **En línea e invitaciones a jugar.** Mientras el menú de Arcade está abierto, tus amigos te ven *en línea*, y tú a ellos; para no aparecer, desactiva *Mostrar a mis amigos que estoy en línea* en la pantalla *Amigos*. *Invitar* junto a un amigo ofrece los juegos en red: un juego de mesa abre una sala propia para dos, un juego de Doom su lobby. El juego se abre para ti al momento; tu amigo recibe un aviso y *Aceptar* arriba del menú, y la invitación vale 10 minutos. Puedes invitar donde los juegos en red se abren en un navegador: el integrado de Desktop o una ventana del navegador.
-- **Chats.** En privado con un amigo, grupos de amigos o un grupo con todos tus amigos de una vez. Escribe directamente en el panel de Arcade o abre la página de chats en el sitio web. Puedes editar o eliminar tus propios mensajes desde el menú ⋮ junto a ellos; en el sitio web, el clic derecho abre el mismo menú. Los mensajes se guardan en el sitio de Arcade y no están cifrados — no escribas ahí contraseñas ni claves.
-- **Avatares y notificaciones de mensajes.** Elige uno de 24 avatares listos en *Cuenta* — los chats solo lo muestran; sin avatar, aparece la primera letra de tu @alias. La imagen de un grupo la elige su dueño entre los mismos 24. Tu imagen de GitHub nunca se muestra a otros. Cuando un amigo te escribe, aparece una tarjeta abajo a la izquierda sobre todas las ventanas (Windows) o una notificación del sistema (macOS, Linux); un clic en la tarjeta abre ese chat.
-- **Cerrar sesión** detiene la sincronización en este ordenador; **Eliminar cuenta** (pulsa dos veces) hace que el sitio olvide tu cuenta y tus ajustes.
-
-## Cuaderno y tableros de proyectos
-
-Ambos están en la sección *Trabajo* del menú.
-
-- **Cuaderno.** Páginas y subpáginas; una línea que empieza por `# ` es un título, por `- ` un elemento y por `- [ ] ` un elemento de lista de tareas que se marca con una pulsación. Se guarda en este ordenador — hasta 200 páginas y 20 000 caracteres por página.
-- **Claude también lo lleva.** *Dar a Claude* le pasa una página a Claude, o simplemente pídele a Claude que anote algo en Arcade. Claude usa la herramienta `mcp__arcade__notes`, que solo cambia el cuaderno y no borra nada. Si no te gusta la edición de Claude: *Restaurar el texto de antes de la edición de Claude*.
-- **Notion y otras aplicaciones** — mediante los conectores de Claude, así que Arcade no necesita claves ni contraseñas: *Enviar a Notion*, *A otra aplicación*, *Importar de Notion u otra aplicación*. Una página vinculada se puede actualizar en la aplicación o volver a importar desde ella.
-- **Voz.** Dicta en el cuadro de mensaje de Claude con el dictado del propio sistema (Win+H en Windows, Fn dos veces en macOS) y pulsa *Tomar del cuadro de mensaje de Claude* — el texto pasa al final de la página.
-- **Tablero de proyectos.** Columnas — *Por hacer*, *En curso*, *Hecho* o las tuyas, hasta 8 — y tarjetas; una tarjeta es una página del cuaderno con texto y lista de tareas. Pulsa una tarjeta para elegirla y moverla con las flechas; pulsa otra vez para abrirla. Claude también puede llevar un tablero: *Dar a Claude*, o pídele que reparta tareas en un tablero de Arcade.
-- **Tableros compartidos.** Con la sesión iniciada y un @alias, marca a tus amigos y pulsa *Compartir*: todos tienen las mismas tarjetas, columnas y nombre, y los cambios llegan en segundos. El dueño invita a más amigos, quita participantes y elimina el tablero del sitio; cualquiera puede salir; pase lo que pase, cada uno conserva su propia copia. Hasta 3 tableros compartidos propios, 20 personas y 200 tarjetas por tablero.
-- **Varias sesiones a la vez.** Todas las sesiones abiertas de Claude Code en este ordenador comparten un mismo cuaderno y sus tableros: lo que una añade, cambia o marca, las demás lo ven en pocos segundos, así que cada sesión puede llevar su propia tarjeta del mismo tablero.
 
 ## Tus propios juegos
 
