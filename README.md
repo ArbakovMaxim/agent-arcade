@@ -10,16 +10,21 @@ Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns 
 
 Everything in the catalog is free: the games are openly licensed, the books and audiobooks are in the public domain. You can also play online with other people who are waiting for their agents too, and chat with your friends.
 
+![Demo: a project board in Claude Desktop; a card opens as a page with a checklist, Give to Claude hands it over, and Claude ticks off each item, writes the result on the card and moves it to Done](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
+
+*Your board: a card goes to Claude with one button. [Watch the 31-second video](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
 ![Demo: Claude Code gets a task, “play?” appears above the prompt, an NES game runs next to the chat, and Arcade calls you back when the agent finishes; books, audiobooks and articles are there too](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-*While the agent works: 31 seconds in Claude Desktop. [Watch the 720p video](https://github.com/user-attachments/assets/1c21bf5c-f5c7-4671-a453-bdcf6aa4b287).*
+*While the agent works: 31 seconds in Claude Desktop. [Watch the 720p video](https://github.com/user-attachments/assets/bbb14c28-2813-40c0-82e6-d7375ddc2253).*
 
 ## Features
 
-- **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
+- **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. A page or card shows its text formatted, with *Edit* and *Copy* buttons. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
 - **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle, see who is online, share boards, invite them to a game, and chat one-on-one or in groups.
 - **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings). In Claude Desktop it can also close the tab you're watching, so the conversation is back in front of you.
 - **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt — or later, or never, as you choose in the settings; it never steals focus unless you ask it to.
+- **Follows you between sessions.** Leave the Arcade pane open, and every new Claude Code session opens it on its own; close it by hand, and it stays closed.
 - **One menu, six sections.** *Play*, *Read & listen*, *Watch*, *Social*, *Work* and *More* — fold the ones you don't need. On top: *Continue* the last game, *Search* and *Favorites*. The first time you open Arcade, you choose which sections to show.
 - **61 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy, adventures and board games.
 - **Read and listen.** Classic books and LibriVox audiobooks in 30 languages, straight from Project Gutenberg, Wikisource and LibriVox, plus fresh articles and podcast episodes on the topic of the agent's work.
@@ -73,6 +78,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 ## How to use
 
 - **`/arcade`** opens the menu at any time.
+- Leave the pane open, and new sessions open it on their own: in the terminal at start, in Desktop and VS Code when they connect to the session; the keyboard stays with the prompt. Close it by hand (the close mark or Esc), and it stops opening by itself until you open it again.
 - When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now. In Settings → Notifications you can choose when it appears — from 10 seconds to 5 minutes — or turn it off.
 - Arrow keys or Tab to choose, Enter to open; the mouse works too. Game controls are shown under each game.
 - When the agent finishes or waits for permission, a banner appears over the game: **Back to agent** or **Keep playing**.
@@ -102,6 +108,47 @@ Press a section's title to fold or unfold it. A folded section shows `▸` and h
 | **Claude Desktop** | in the panel | Claude's built-in browser, or a browser window (pick in settings); shooters — always a browser window |
 
 The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing. Chats work right in the panel in the terminal and in Desktop; *Open as a page* opens them on the site the same way. The notebook and project boards live in the panel. TikTok opens in Claude's built-in browser in Desktop and in your default browser elsewhere, where you are likely signed in already.
+
+## Notebook and project boards
+
+Both are in the *Work* section of the menu.
+
+- **Notebook.** Pages and subpages; a line starting with `# ` is a heading, `- ` an item, `- [ ] ` a checklist item that ticks with a press. It is kept on this computer — up to 200 pages, 20,000 characters on a page.
+- **Edit and Copy.** A page or card shows its text formatted — headings, lists, checklist — in Desktop and VS Code, and as lines in the terminal. *Edit* opens the text box in its place: Enter saves, *Cancel* drops the change, and what Claude or another session changes meanwhile shows up in the box. *Copy* puts the whole page into the clipboard — in Desktop's pane you can select text only inside input boxes, so this is the way to copy a page.
+- **Claude keeps it too.** *Give to Claude* passes a page to Claude, or just ask Claude to write something down in Arcade. Claude uses the `mcp__arcade__notes` tool, which changes only the notebook and deletes nothing. If you don't like Claude's edit, *Restore the text from before Claude's edit*.
+- **Notion and other apps** — through Claude's connectors, so Arcade needs no keys or passwords: *Send to Notion*, *To another app*, *Import from Notion or another app*. A linked page can be updated in the app or imported again from it.
+- **Voice.** Dictate into Claude's prompt box with the system's own dictation (Win+H on Windows, Fn twice on macOS), then press *Take from Claude's prompt box* — the text moves to the end of the page.
+- **Project board.** Columns — *To do*, *Doing*, *Done* or your own, up to 8 — and cards; a card is a notebook page with text and a checklist. Press a card to pick it and move it with the arrows, press again to open it. Claude can run a board too: *Give to Claude*, or ask it to lay out tasks on a board in Arcade.
+- **Shared boards.** Signed in with a @handle, tick friends and press *Share*: everyone has the same cards, columns and name, and changes show up within seconds. The owner invites more friends, removes people and deletes the board from the site; anyone can leave; whatever happens, everyone keeps their own copy. Up to 3 shared boards of your own, 20 people and 200 cards on a board.
+- **Several sessions at once.** All open Claude Code sessions on this computer share one notebook and its boards: what one session adds, edits or ticks off, the others see within a few seconds, so each session can work on its own card of the same board.
+
+## For teams
+
+A small team can keep its tasks in Arcade: one shared board, and whoever takes a card hands it to their own Claude.
+
+1. Everyone installs Arcade (Claude Code 2.1.275 or newer) — see [Install](#install).
+2. `/arcade` → **Social** → **Sign in with GitHub**: GitHub's page opens in your browser; confirm there, then press *Sign in* on Arcade's page (its code should match the one in the panel). If that doesn't work, *Sign in with a code*.
+3. Take an @handle — your GitHub name in one click, or your own.
+4. Add each other as friends by exact @handle; the other person accepts.
+5. **Work** → make a board → tick teammates → **Share**.
+6. Only here for boards and chats? The first time you open Arcade, keep just **Work** and **Social**. Then in **Settings → Notifications**, press **“Play?” line** until it says *off*: nothing will appear above the prompt while the agent works.
+
+From then on: open the board, pick a card, **Give to Claude**. If Claude is free, the card goes to it at once; if it's busy, the card waits in the prompt box until you send it. Claude ticks off what's done and writes the result on the card, and everyone on the board sees it within seconds. Chats are in **Social**.
+
+Good to know: shared boards and chats are stored on Arcade's site and are not encrypted, so keep passwords and keys out of them. Arcade learns only your GitHub profile name and picture. Up to 3 shared boards of your own, 20 people and 200 cards on a board. *Delete account* (press twice) makes the site forget you and your settings.
+
+## Account, friends and chats
+
+Signing in is optional — without it everything else works as before.
+
+- **Sign in with GitHub** (in *Social*): GitHub’s sign-in page opens in your regular browser; confirm there, then press *Sign in* on Arcade’s page — its code should match the one in the panel. If signing in through the browser doesn’t work, use *Sign in with a code*: Arcade shows a code, you enter it on GitHub’s page. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
+- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded and hidden sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
+- **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
+- **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
+- **Online and game invitations.** While the Arcade menu is open, your friends see you as *online*, and you see them; to stay unseen, turn off *Show friends that I am online* on the *Friends* screen. *Invite* next to a friend offers the online games: a board game opens a private room for two, a Doom game its lobby. The game opens for you at once; your friend gets a notification and *Accept* at the top of the menu, and the invitation is valid for 10 minutes. You can invite where online games open in a browser — the built-in one in Desktop or a browser window.
+- **Chats.** One-on-one with a friend, groups of friends, or a group with all your friends in one press. Write right in the Arcade panel or open the chats page on the site. Your own message can be edited or deleted from the ⋮ menu next to it; on the site, a right click opens the same menu. Messages are stored on Arcade's site and are not encrypted — don't write passwords or keys there.
+- **Avatars and message notifications.** Pick one of 24 ready-made avatars in *Account* — chats only show it; without one, the first letter of your @handle. A group’s owner picks its picture from the same 24. Your GitHub picture is never shown to others. When a friend writes, a card pops up in the bottom left on top of all windows (Windows) or a system notification appears (macOS, Linux); a click on the card opens that chat.
+- **Sign out** stops syncing on this computer; **Delete account** (press twice) makes the site forget you and your settings.
 
 ## The catalog
 
@@ -134,31 +181,6 @@ Each game's card links to its license and source code.
 - **Doom.** **FreeDM** and **BlasphDM** are deathmatch lobbies with 5-minute rounds for up to four players; **Freedoom** and **Blasphemer** have co-op via **Online**. Newcomers wait for the next round — the engine doesn't allow joining a match in progress.
 - **Board games.** *Find an opponent*, *Invite a friend* by link, or *Against the computer*. The game is stored on the server: make a move, go back to your agent, open the link later — the board is where you left it. Signed in with an @handle, your opponent sees it next to your colour.
 - **Who's waiting.** Once a minute Arcade checks whether anyone is waiting for a partner and shows it in Claude Code — for example *“play? Waiting online: FreeDM (1)”* — with a **Join** button in the menu.
-
-## Account, friends and chats
-
-Signing in is optional — without it everything else works as before.
-
-- **Sign in with GitHub** (in *Social*): GitHub’s sign-in page opens in your regular browser; confirm there, then press *Sign in* on Arcade’s page — its code should match the one in the panel. If signing in through the browser doesn’t work, use *Sign in with a code*: Arcade shows a code, you enter it on GitHub’s page. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
-- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded and hidden sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
-- **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
-- **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
-- **Online and game invitations.** While the Arcade menu is open, your friends see you as *online*, and you see them; to stay unseen, turn off *Show friends that I am online* on the *Friends* screen. *Invite* next to a friend offers the online games: a board game opens a private room for two, a Doom game its lobby. The game opens for you at once; your friend gets a notification and *Accept* at the top of the menu, and the invitation is valid for 10 minutes. You can invite where online games open in a browser — the built-in one in Desktop or a browser window.
-- **Chats.** One-on-one with a friend, groups of friends, or a group with all your friends in one press. Write right in the Arcade panel or open the chats page on the site. Your own message can be edited or deleted from the ⋮ menu next to it; on the site, a right click opens the same menu. Messages are stored on Arcade's site and are not encrypted — don't write passwords or keys there.
-- **Avatars and message notifications.** Pick one of 24 ready-made avatars in *Account* — chats only show it; without one, the first letter of your @handle. A group’s owner picks its picture from the same 24. Your GitHub picture is never shown to others. When a friend writes, a card pops up in the bottom left on top of all windows (Windows) or a system notification appears (macOS, Linux); a click on the card opens that chat.
-- **Sign out** stops syncing on this computer; **Delete account** (press twice) makes the site forget you and your settings.
-
-## Notebook and project boards
-
-Both are in the *Work* section of the menu.
-
-- **Notebook.** Pages and subpages; a line starting with `# ` is a heading, `- ` an item, `- [ ] ` a checklist item that ticks with a press. It is kept on this computer — up to 200 pages, 20,000 characters on a page.
-- **Claude keeps it too.** *Give to Claude* passes a page to Claude, or just ask Claude to write something down in Arcade. Claude uses the `mcp__arcade__notes` tool, which changes only the notebook and deletes nothing. If you don't like Claude's edit, *Restore the text from before Claude's edit*.
-- **Notion and other apps** — through Claude's connectors, so Arcade needs no keys or passwords: *Send to Notion*, *To another app*, *Import from Notion or another app*. A linked page can be updated in the app or imported again from it.
-- **Voice.** Dictate into Claude's prompt box with the system's own dictation (Win+H on Windows, Fn twice on macOS), then press *Take from Claude's prompt box* — the text moves to the end of the page.
-- **Project board.** Columns — *To do*, *Doing*, *Done* or your own, up to 8 — and cards; a card is a notebook page with text and a checklist. Press a card to pick it and move it with the arrows, press again to open it. Claude can run a board too: *Give to Claude*, or ask it to lay out tasks on a board in Arcade.
-- **Shared boards.** Signed in with a @handle, tick friends and press *Share*: everyone has the same cards, columns and name, and changes show up within seconds. The owner invites more friends, removes people and deletes the board from the site; anyone can leave; whatever happens, everyone keeps their own copy. Up to 3 shared boards of your own, 20 people and 200 cards on a board.
-- **Several sessions at once.** All open Claude Code sessions on this computer share one notebook and its boards: what one session adds, edits or ticks off, the others see within a few seconds, so each session can work on its own card of the same board.
 
 ## Your own games
 
