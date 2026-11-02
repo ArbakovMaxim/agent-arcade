@@ -18,6 +18,7 @@ export const BOARD_ID = /^b[A-Za-z0-9_-]{16}$/
 export const CARD_ID = /^[a-z0-9]{1,20}$/
 const COL_ID = /^[a-z0-9]{1,12}$/
 const ACCOUNT_ID = /^\d{1,20}$/
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/
 // Колонки новой доски; их названия — в моде, на языке человека. Своё название колонки — name
 export const DEFAULT_COLS = [{ id: 'todo' }, { id: 'doing' }, { id: 'done' }]
 
@@ -47,27 +48,46 @@ export function cleanCols(list) {
   return out
 }
 
-// Карточка из правки put: { id, title, body, col, pos }. Колонки такой нет — первая. Не так — null
-function cardFrom(raw, cols) {
+// Срок карточки: «ГГГГ-ММ-ДД», и такой день есть в календаре
+function isDay(text) {
+  const m = DAY.exec(text)
+  if (!m) return false
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  const date = new Date(Date.UTC(y, mo - 1, d))
+  return y >= 1970 && y <= 2999 && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d
+}
+
+// Карточка из правки put: { id, title, body, col, pos, taken?, due? }. Колонки такой нет — первая. taken — кто из
+// участников отдал карточку своему Claude (уже не участник — никто), due — срок, день «ГГГГ-ММ-ДД». Поля taken или due
+// в правке нет — остаётся как было (old): моды старых версий этих полей не знают; null — убрать. Не так — null
+function cardFrom(raw, cols, members, old) {
   if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !CARD_ID.test(raw.id)) return null
   const title = cleanTitle(raw.title)
   const body = raw.body === undefined ? '' : cleanBody(raw.body)
   if (!title || body === null || body.length > MAX_BODY || !Number.isFinite(raw.pos)) return null
-  return { id: raw.id, title, body, col: cols.some((c) => c.id === raw.col) ? raw.col : cols[0].id, pos: raw.pos }
+  const card = { id: raw.id, title, body, col: cols.some((c) => c.id === raw.col) ? raw.col : cols[0].id, pos: raw.pos }
+  for (const key of ['taken', 'due']) {
+    const value = raw[key] === undefined ? old?.[key] : raw[key]
+    if (value === undefined || value === null) continue
+    if (typeof value !== 'string' || !(key === 'taken' ? ACCOUNT_ID.test(value) : isDay(value))) return null
+    if (key === 'taken' && !has(members, value)) continue
+    card[key] = value
+  }
+  return card
 }
 
 const refuse = (error, status) => Response.json({ error }, { status })
 const has = (members, id) => Object.hasOwn(members, id)
 const ids = (list) => (Array.isArray(list) ? [...new Set(list.filter((id) => typeof id === 'string' && ACCOUNT_ID.test(id)))] : [])
 const weight = (card) => card.title.length + card.body.length
-const same = (a, b) => a.title === b.title && a.body === b.body && a.col === b.col && a.pos === b.pos
+const same = (a, b) => a.title === b.title && a.body === b.body && a.col === b.col && a.pos === b.pos && a.taken === b.taken && a.due === b.due
 
 // Что о доске знают участники: название, хозяин, участники, колонки и номер последней правки
 const summary = (meta) => ({ id: meta.id, name: meta.name, owner: meta.owner, members: Object.keys(meta.members), cols: meta.cols, rev: meta.rev })
 
 // meta — { id, name, owner, members: { номер: с какого времени на доске }, cols, rev — номер последней правки, floor —
 // до какой правки следы удаления забыты, cards и size — сколько карточек и знаков в них, gone — сколько следов
-// удаления, created }. Карточка c:<id> — { id, title, body, col, pos, rev, by, at }: pos — место в колонке, rev —
+// удаления, created }. Карточка c:<id> — { id, title, body, col, pos, taken?, due?, rev, by, at }: pos — место в колонке, rev —
 // номер её правки, by и at — кто и когда правил; удалённая — след { id, rev, gone: true }
 export class Desk {
   constructor(ctx, env) {
@@ -131,10 +151,10 @@ export class Desk {
         if (!cols) return refuse('bad request', 400)
         if (JSON.stringify(cols) !== JSON.stringify(next.cols)) Object.assign(next, { cols, rev: next.rev + 1 })
       } else if (op.put !== undefined) {
-        const card = cardFrom(op.put, next.cols)
-        if (!card) return refuse('bad request', 400)
-        const old = current(card.id)
+        const old = typeof op.put?.id === 'string' && CARD_ID.test(op.put.id) ? current(op.put.id) : undefined
         const live = old && !old.gone
+        const card = cardFrom(op.put, next.cols, next.members, live ? old : null)
+        if (!card) return refuse('bad request', 400)
         if (live && same(old, card)) continue
         const size = next.size - (live ? weight(old) : 0) + weight(card)
         if ((!live && next.cards >= MAX_CARDS) || size > MAX_TOTAL) {
