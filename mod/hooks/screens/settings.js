@@ -242,6 +242,27 @@ export function settingsScreen($, e, kit) {
           dim(S.platform === 'windows' ? '  всплывают внизу слева поверх всех окон; клик открывает чат' : '  системное уведомление, когда друг пишет в чат'),
         ]
       : []),
+    // Другие сессии Claude Code на этом компьютере (вкладка «Агенты»): всплывашка в этой панели, без звука
+    Button({
+      key: 'arcade-agents-notify',
+      label: `Другая сессия ждёт разрешения: ${S.agNotify ? 'да' : 'нет'}`,
+      onPress: async () => {
+        S.agNotify = !S.agNotify
+        $.ui.invalidate('ui.render')
+        await $.store.set('agentsNotify', S.agNotify)
+      },
+    }),
+    dim('  всплывашка в панели Arcade, без звука и системного уведомления'),
+    Button({
+      key: 'arcade-agents-done',
+      label: `Другая сессия закончила ход: ${S.agDone ? 'да' : 'нет'}`,
+      onPress: async () => {
+        S.agDone = !S.agDone
+        $.ui.invalidate('ui.render')
+        await $.store.set('agentsDone', S.agDone)
+      },
+    }),
+    dim('  всплывашка в панели Arcade, без звука'),
   ]
   // Проверка и назначение клавиш — только в терминале: в VS Code клавиши идут через строку 🎮, в Desktop поля нет
   const keyTiles =

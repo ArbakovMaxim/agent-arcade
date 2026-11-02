@@ -1,4 +1,5 @@
 // Arcade: экран досок проектов.
+import { fill } from '../chats.js'
 import { keep, tr } from '../i18n.js'
 import { addColumn, checkStats, cleanTitle, columnCards, isBoard, moveCard, notesOrder, removeColumn, removePage, renameColumn, updatePage } from '../notes.js'
 import { MAX_MEMBERS, colId } from '../desks.js'
@@ -7,7 +8,8 @@ import { startLogin } from '../app/profile.js'
 import { friendsCall } from '../app/talk.js'
 import { dayKey } from '../calendar.js'
 import { dayText } from '../app/calendar.js'
-import { endQueue, startQueue } from '../app/queue.js'
+import { endQueue, startQueue, stopEverywhere } from '../app/queue.js'
+import { boardMates, sessionOf } from '../app/agents.js'
 import { boardMembers, cardTaker, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, importIssues, loadBoards, makeSummary, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
 
 // Доска проектов: список досок и экран доски — колонки с карточками, перенос выбранной карточки кнопками,
@@ -162,15 +164,17 @@ export function boardsScreen($, e, kit) {
       }
       return keep(desktop ? makeButton({ ...props, children: [Text({ wrap: 'wrap', children: [label] })] }) : Button(props))
     }
-    // Под карточкой: сколько пунктов отмечено, срок (прошёл, а карточка не в последней колонке, — цветом беды) и кто
-    // её взял на общей доске
+    // Под карточкой: сколько пунктов отмечено, срок (прошёл, а карточка не в последней колонке, — цветом беды), кто
+    // её взял на общей доске и какая сессия Claude Code на этом компьютере её делает
     const today = dayKey(now)
     const lastCol = board.board.cols.at(-1).id
     const cardAbout = (card, col) => {
       const { done, total } = checkStats(card.body)
       const { taken } = cardTaker(card)
       const late = card.due && card.due < today && col !== lastCol
-      const parts = [total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '']
+      const by = col === lastCol ? null : sessionOf(card.id)
+      const session = by ? (by.me ? tr('у этой сессии', S.lang) : fill(tr('у сессии «{0}»', S.lang), [by.name])) : ''
+      const parts = [total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '', session]
       const text = parts.filter(Boolean).join(' · ')
       if (!text) return []
       return [keep(late ? Text({ color: 'warning', children: [`  ${text}`] }) : dim(`  ${text}`))]
@@ -323,6 +327,17 @@ export function boardsScreen($, e, kit) {
     const queued = S.queue?.board === id
     const queueCard = queued ? S.notes.find((p) => p.id === S.queue.card) : null
     const queueLine = queued && queueCard ? [keep(dim(`  ${tr('Очередь: Claude делает', S.lang)} «${queueCard.title}» · ${tr('отдано карточек', S.lang)} — ${S.queue.given.length}`))] : []
+    // Очередь этой доски в других сессиях на этом компьютере: какие — по папке
+    const mates = boardMates(id)
+    const matesLine = mates.length ? [keep(dim(`  ${fill(tr('Очередь идёт и в других сессиях: {0}', S.lang), [mates.map((r) => `«${r.name}»`).join(', ')])}`))] : []
+    // «Остановить везде» — пока очередь идёт здесь или в другой сессии
+    const stopAll =
+      queued || mates.length
+        ? [
+            Button({ key: 'arcade-board-queue-all', label: 'Остановить везде', onPress: () => stopEverywhere($, id) }),
+            dim('  Все сессии доделают текущие карточки и новых не возьмут.'),
+          ]
+        : []
     // Удалить доску можно, пока она не общая: общую сначала удаляют с сайта или выходят с неё. Плитка — рядом
     // с «Отдать Claude»
     const deleteItems =
@@ -384,11 +399,13 @@ export function boardsScreen($, e, kit) {
           dim('  Claude получит доску с карточками и сможет добавлять, править и переносить их.'),
           Button({ key: 'arcade-board-queue', label: queued ? 'Остановить очередь' : 'Очередь для Claude', onPress: () => (queued ? endQueue($) : startQueue($, id)) }),
           dim('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Спросит разрешения или не доделает — очередь встанет.'),
+          ...stopAll,
           ...deleteItems,
         ],
         40,
       ),
       ...queueLine,
+      ...matesLine,
       gap,
       // Задачи GitHub — карточками через коннектор Claude: Arcade с GitHub не говорит, ключи ему не нужны
       Input({
