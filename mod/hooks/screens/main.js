@@ -1,7 +1,7 @@
 // Arcade: главное меню библиотеки и приветствие первого запуска.
 import { openUrlCommand } from '../browsers.js'
 import { LANG_NAMES, keep, tr } from '../i18n.js'
-import { LAUNCH_TIMEOUT_MS, S, nb } from '../app/state.js'
+import { LAUNCH_TIMEOUT_MS, S, cal, nb } from '../app/state.js'
 import { consoleNote, consoles, favoriteGames, gameById, menuTabs, supportUrl } from '../app/library.js'
 import { plural, waitingText, windowNotice } from '../app/status.js'
 import { builtinBrowser, launchNotice, netWhere, openNet, settingsNote, windowCommand } from '../app/window.js'
@@ -279,7 +279,7 @@ export function mainScreen($, e, kit) {
       ],
       `${S.acct.unread ? ` · 💬 ${S.acct.unread}` : ''}${S.acct.requests ? ` · 👥 ${S.acct.requests}` : ''}${S.ol.online.size ? ` · 🟢 ${S.ol.online.size}` : ''}`,
     ),
-    // Работа: блокнот и доска проектов, которые ведут и человек, и Claude
+    // Работа: блокнот, доска проектов и календарь, которые ведут и человек, и Claude
     ...foldable('work', 'Работа', [
       Button({
         key: 'arcade-menu-notes',
@@ -302,6 +302,20 @@ export function mainScreen($, e, kit) {
         },
       }),
       dim('  колонки и карточки; общие — с друзьями'),
+      Button({
+        key: 'arcade-menu-calendar',
+        label: 'Календарь',
+        ...(S.menuFrom === 'calendar' ? { autoFocus: true } : {}),
+        onPress: () => {
+          cal.note = ''
+          cal.bad = false
+          cal.focus = ''
+          cal.month = ''
+          cal.day = ''
+          open('calendar')()
+        },
+      }),
+      dim('  события и напоминания; Claude может записывать'),
     ]),
     ...foldable('more', 'Ещё', [
       ...windowTiles,
