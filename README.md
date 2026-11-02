@@ -6,7 +6,7 @@
 
 > **Beta (0.39).** Everything described here works and is used every day; what changes from now on is mostly the details. Bug reports are very welcome — see [Feedback](#feedback).
 
-Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns it into a small workspace: project boards where any card goes to Claude with one button, a notebook Claude keeps with you, shared by all your open sessions, and shared boards and chats for your team. And for the wait: when the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
+Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns it into a small workspace: project boards where Claude works through the cards one by one, even in several sessions at once; a notebook Claude keeps with you, shared by all your open sessions; a calendar; and shared boards and chats for your team. And for the wait: when the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
 
 Everything in the catalog is free: the games are openly licensed, the books and audiobooks are in the public domain. You can also play online with other people who are waiting for their agents too, and chat with your friends.
 
