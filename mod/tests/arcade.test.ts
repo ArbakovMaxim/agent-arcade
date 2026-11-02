@@ -8851,9 +8851,11 @@ test('календарь в Desktop: сетка месяца, события д�
   expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { label: '2', variant: 'primary' } })
   expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { label: '12' } })
   expect(await ui.find({ key: 'arcade-cal-day-2026-10-26' })).toMatchObject({ props: { label: '26', dimColor: true } })
-  // Плитки одного размера: выбранный день — в рамке цвета выбора, на дне с событием — точка его цвета
+  // Плитки одного размера, растянуты на ширину панели, с боковыми полями — иначе Desktop даёт рамке поля pad.lg и
+  // число на узкой плитке обрезается; выбранный день — в рамке цвета выбора, на дне с событием — точка его цвета
   const tiles = await Promise.all(['2026-11-02', '2026-11-12', '2026-10-26'].map((day) => ui.find({ key: `cal-cell-${day}` })))
-  expect(new Set(tiles.map((t: any) => t.props.width)).size).toBe(1)
+  expect(new Set(tiles.map((t: any) => `${t.props.width} ${t.props.flexGrow} ${t.props.minWidth} ${t.props.paddingX}`))).toEqual(new Set(['0 1 8 xs']))
+  expect(await ui.find({ key: 'cal-wd-Пн' })).toMatchObject({ props: { width: 0, flexGrow: 1, minWidth: 8 } })
   expect(tiles.map((t: any) => t.props.borderColor)).toEqual(['suggestion', 'subtle', 'subtle'])
   expect([await dots('2026-11-12'), await dots('2026-11-02')]).toEqual([['#22A06B'], []])
   expect(await ui.find({ key: 'arcade-cal-today' })).toBeUndefined()

@@ -1,7 +1,7 @@
 // Arcade: экран календаря.
 import { keep, tr } from '../i18n.js'
 import { ALL_DAY_HOUR, COLORS, DEFAULT_COLOR, addDays, addMonths, between, colorOf, dayKey, monthGrid, parseRemind, quickParse, weekday } from '../calendar.js'
-import { PANE_COLUMNS, S, cal } from '../app/state.js'
+import { S, cal } from '../app/state.js'
 import { addFromScreen, deleteEvent, editEvent, nextRemind, remindChoices, whenText } from '../app/calendar.js'
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
@@ -12,9 +12,9 @@ const COLOR_NAMES = { blue: 'синий', green: 'зелёный', yellow: 'жё
 // «Ближайшее»: события на UPCOMING_DAYS дней вперёд, не больше UPCOMING_MAX
 const UPCOMING_DAYS = 30
 const UPCOMING_MAX = 10
-// Плитка дня в Desktop: ширина в клетках — от ширины панели, в этих пределах; цветных точек событий — не больше DOTS_MAX
-const CELL_MIN = 6
-const CELL_MAX = 11
+// Плитка дня в Desktop: семь плиток делят ширину панели поровну, но не уже CELL_MIN клеток — столько нужно кнопке с
+// двузначным числом и её полями; цветных точек событий — не больше DOTS_MAX
+const CELL_MIN = 8
 const CELL_GAP = 1
 const DOTS_MAX = 3
 // Сегодняшний день — с голубой подложкой, плитка под мышью — с серой
@@ -300,10 +300,11 @@ export function calendarScreen($, e, kit) {
   const reminders = [gap, dim('Напоминания приходят системным уведомлением, пока открыт Claude Code; пропущенные — при следующем запуске.')]
   if (!desktop) return [Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') }), gap, ...addField, ...noteLine, ...upcomingList, ...reminders, ...noticeLines, ...hint]
 
-  // Сетка месяца: 7 плиток одного размера в ряд. На плитке — число кнопкой и цветные точки событий дня; выбранный
-  // день — в рамке цвета выбора, сегодняшний — с подложкой
-  const room = (e.viewport?.columns ?? PANE_COLUMNS) - 4
-  const width = Math.max(CELL_MIN, Math.min(CELL_MAX, Math.floor((room - 6 * CELL_GAP) / 7)))
+  // Сетка месяца: 7 плиток одного размера в ряд, растянутых на всю ширину панели — плитка шире, чем выше. На плитке —
+  // число кнопкой и цветные точки событий дня; выбранный день — в рамке цвета выбора, сегодняшний — с подложкой.
+  // Боковые поля плитки заданы явно: Box с рамкой Desktop сам обводит полями pad.lg, и на узкой плитке кнопке с числом
+  // не оставалось места — число обрезалось целиком
+  const cell = { width: 0, flexGrow: 1, minWidth: CELL_MIN }
   const byDay = new Map()
   for (const x of S.calendar) byDay.set(x.day, [...(byDay.get(x.day) ?? []), x])
   const dots = (list) =>
@@ -314,10 +315,11 @@ export function calendarScreen($, e, kit) {
   const dayTile = (d) =>
     Box({
       key: `cal-cell-${d.day}`,
-      width,
+      ...cell,
       flexDirection: 'column',
       alignItems: 'center',
       rowGap: 'xs',
+      paddingX: 'xs',
       paddingY: 'xs',
       overflow: 'hidden',
       borderStyle: 'round',
@@ -354,7 +356,7 @@ export function calendarScreen($, e, kit) {
     flexDirection: 'column',
     rowGap: CELL_GAP,
     children: [
-      Box({ flexDirection: 'row', columnGap: CELL_GAP, children: WEEKDAYS.map((w) => Box({ key: `cal-wd-${w}`, width, alignItems: 'center', children: [dim(w)] })) }),
+      Box({ flexDirection: 'row', columnGap: CELL_GAP, children: WEEKDAYS.map((w) => Box({ key: `cal-wd-${w}`, ...cell, alignItems: 'center', children: [dim(w)] })) }),
       ...monthGrid(cal.month).map((week) => Box({ key: `cal-week-${week[0].day}`, flexDirection: 'row', columnGap: CELL_GAP, children: week.map(dayTile) })),
     ],
   })

@@ -1,5 +1,10 @@
 # Changelog · Список изменений
 
+## 0.37.2 — календарь: плитки дней шире, числа снова видно · calendar: wider day tiles, the dates show again
+
+- In Desktop the seven day tiles of a row now share the pane's width, so a tile is wider than it is tall · в Desktop семь плиток ряда теперь делят ширину панели поровну — плитка шире, чем выше
+- The dates on the tiles were cut off entirely: Desktop gives a framed box wide side padding, and on a narrow tile the date button had no room left. The tile's side padding is now set explicitly and a tile is at least 8 cells wide · числа на плитках обрезались целиком: Desktop даёт рамке широкие боковые поля, и на узкой плитке кнопке с числом не оставалось места. Теперь боковые поля плитки заданы явно, а плитка не уже 8 клеток
+
 ## 0.37.1 — календарь уютнее: плитки дней одного размера, цвет события, напоминание из списка или своё · a cosier calendar: same-size day tiles, event colors, a reminder from a list or your own
 
 - In Desktop the month grid is made of same-size day tiles: the date on top, below it a dot in each event's color (up to three, then “+N”); the chosen day has a highlighted frame, today a tinted background · в Desktop сетка месяца — из плиток дней одного размера: сверху число, под ним точка цвета каждого события (до трёх, дальше «+N»); у выбранного дня — выделенная рамка, у сегодняшнего — подложка
