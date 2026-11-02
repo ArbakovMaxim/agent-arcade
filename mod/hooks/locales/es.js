@@ -330,6 +330,7 @@ export default {
   "Nothing here yet. Mark games with the ☆ star — they gather here.": "Aún está vacío. Marca juegos con la estrella ☆ y se reunirán aquí.",
   "Nothing in the coming month.": "No hay nada en el próximo mes.",
   "Nothing on this day.": "Nada este día.",
+  "Nothing this month.": "Nada este mes.",
   "Nothing turned up on this topic — try putting it another way.": "No se encontró nada sobre este tema — prueba a decirlo de otra manera.",
   "Notifications": "Notificaciones",
   "Notifications while playing in a window: off": "Notificaciones al jugar en una ventana: desactivadas",

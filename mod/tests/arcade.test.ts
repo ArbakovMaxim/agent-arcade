@@ -8848,12 +8848,16 @@ test('календарь в Desktop: сетка месяца, события д�
   }
 
   expect(await text('Ноябрь 2026')).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { label: '2', variant: 'primary' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { label: '2', plain: true } })
   expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { label: '12' } })
   expect(await ui.find({ key: 'arcade-cal-day-2026-10-26' })).toMatchObject({ props: { label: '26', dimColor: true } })
-  // Плитки одного размера: выбранный день — в рамке цвета выбора, на дне с событием — точка его цвета
+  // Плитки одного размера, растянуты на ширину панели и ужимаются с ней до нуля — ряд не уезжает за край; боковые поля
+  // заданы — иначе Desktop даёт рамке поля pad.lg и число на узкой плитке обрезается. Число — без «пилюли» (plain),
+  // выбранный день — в рамке цвета выбора, на дне с событием — точка его цвета
   const tiles = await Promise.all(['2026-11-02', '2026-11-12', '2026-10-26'].map((day) => ui.find({ key: `cal-cell-${day}` })))
-  expect(new Set(tiles.map((t: any) => t.props.width)).size).toBe(1)
+  expect(new Set(tiles.map((t: any) => `${t.props.width} ${t.props.flexGrow} ${t.props.minWidth} ${t.props.overflow} ${t.props.paddingX}`))).toEqual(new Set(['0 1 0 hidden xs']))
+  expect(await ui.find({ key: 'cal-wd-Пн' })).toMatchObject({ props: { width: 0, flexGrow: 1, minWidth: 0, overflow: 'hidden' } })
+  expect(await ui.find({ key: 'cal-list' })).toBeUndefined()
   expect(tiles.map((t: any) => t.props.borderColor)).toEqual(['suggestion', 'subtle', 'subtle'])
   expect([await dots('2026-11-12'), await dots('2026-11-02')]).toEqual([['#22A06B'], []])
   expect(await ui.find({ key: 'arcade-cal-today' })).toBeUndefined()
@@ -8870,7 +8874,7 @@ test('календарь в Desktop: сетка месяца, события д�
   expect(await ui.find({ key: 'arcade-cal-dayev-e1' })).toMatchObject({ props: { label: 'Ревью' } })
   expect(await text('10:00 · 🔔 за 15 мин')).toBeDefined()
   expect((await ui.find({ key: 'cal-cell-2026-11-12' })).props.borderColor).toBe('suggestion')
-  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { plain: true, autoFocus: true } })
   expect(await ui.find({ key: 'arcade-cal-today' })).toBeDefined()
   await noteInput(ui, 'arcade-cal-add-', '16:00 Демо')
   const demo = (saved.get('calendar') as any[]).find((e) => e.title === 'Демо')
@@ -8881,7 +8885,8 @@ test('календарь в Desktop: сетка месяца, события д�
   await noteInput(ui, 'arcade-cal-add-', '03.12 Релиз')
   expect(await text('Декабрь 2026')).toBeDefined()
   expect(await text('Четверг · 03.12')).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-day-2026-12-03' })).toMatchObject({ props: { label: '3', variant: 'primary' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-12-03' })).toMatchObject({ props: { label: '3' } })
+  expect((await ui.find({ key: 'cal-cell-2026-12-03' })).props.borderColor).toBe('suggestion')
 
   // Листать месяцы; «Сегодня» — назад к сегодняшнему дню
   await ui.press({ key: 'arcade-cal-prev' })
@@ -8891,11 +8896,54 @@ test('календарь в Desktop: сетка месяца, события д�
   expect(await text('Октябрь 2026')).toBeDefined()
   await ui.press({ key: 'arcade-cal-today' })
   expect(await text('Ноябрь 2026')).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { autoFocus: true } })
+  expect((await ui.find({ key: 'cal-cell-2026-11-02' })).props.borderColor).toBe('suggestion')
   expect(await ui.find({ key: 'arcade-cal-today' })).toBeUndefined()
   // День соседнего месяца — открывает его месяц
   await ui.press({ key: 'arcade-cal-day-2026-10-26' })
   expect(await text('Октябрь 2026')).toBeDefined()
+  await ui.unmount()
+})
+
+test('календарь в узкой панели Desktop: месяц списком дней вместо сетки', async ($, on) => {
+  const { clock } = stubs(on, {
+    stored: {
+      calendar: [
+        { id: 'e1', title: 'Ревью', day: '2026-11-12', time: '10:00', remind: 15, at: 0, color: 'green' },
+        { id: 'e2', title: 'Отпуск', day: '2026-11-20', remind: null, at: 0 },
+      ],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  // На границе — ещё сетка
+  const wide = await $.ui.mount({ ...PANE, surface: 'desktop', viewport: { columns: 44, rows: 40 } })
+  await wide.press({ key: 'arcade-menu-calendar' })
+  expect(await wide.find({ key: 'cal-grid' })).toBeDefined()
+  expect(await wide.find({ key: 'cal-list' })).toBeUndefined()
+  await wide.unmount()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', viewport: { columns: 43, rows: 40 } })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  expect(await ui.find({ key: 'cal-grid' })).toBeUndefined()
+  // В списке — сегодняшний день (он же выбранный) и дни с событиями; день — кнопкой, под ним его события
+  const days = async () => ((await ui.find({ key: 'cal-list' })).children ?? []).map((c: any) => c.props.key)
+  expect(await days()).toEqual(['cal-list-2026-11-02', 'cal-list-2026-11-12', 'cal-list-2026-11-20'])
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { label: 'Сегодня · 02.11', variant: 'primary' } })
+  expect(await text('Свободный день — запиши что-нибудь ниже.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { label: 'Четверг · 12.11' } })
+  expect(await ui.find({ key: 'arcade-cal-dayev-e1' })).toMatchObject({ props: { label: 'Ревью' } })
+  expect(await ui.find({ key: 'arcade-cal-dayev-e2' })).toMatchObject({ props: { label: 'Отпуск' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-05' })).toBeUndefined()
+  // Выбрать день — он в рамке выбора; запись без дня ложится на него
+  await ui.press({ key: 'arcade-cal-day-2026-11-12' })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  expect((await ui.find({ key: 'arcade-cal-day-2026-11-02' })).props.variant).toBeUndefined()
+  // Месяц без событий, сегодняшнего и выбранного дня
+  await ui.press({ key: 'arcade-cal-prev' })
+  expect(await text('Октябрь 2026')).toBeDefined()
+  expect(await text('В этом месяце событий нет.')).toBeDefined()
   await ui.unmount()
 })
 

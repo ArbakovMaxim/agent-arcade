@@ -871,6 +871,7 @@ const EXACT = {
     '  Color and reminder are set in the event itself. Claude keeps the calendar too: “add a call on Friday at 15:00”, “what do I have tomorrow?”.',
   'Ближайшее': 'Coming up',
   'В ближайший месяц событий нет.': 'Nothing in the coming month.',
+  'В этом месяце событий нет.': 'Nothing this month.',
   'Календарь пуст — запиши первое событие.': 'The calendar is empty — add the first event.',
   'Напоминания приходят системным уведомлением, пока открыт Claude Code; пропущенные — при следующем запуске.': 'Reminders arrive as system notifications while Claude Code is open; missed ones — on the next start.',
   'В этот день ничего не было.': 'Nothing on this day.',

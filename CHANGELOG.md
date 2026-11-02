@@ -1,5 +1,13 @@
 # Changelog · Список изменений
 
+## 0.37.2 — календарь: плитки дней шире и ужимаются с панелью, в узкой — список · calendar: wider day tiles that shrink with the pane, a list in a narrow one
+
+- In Desktop the seven day tiles of a row now share the pane's width, so a tile is wider than it is tall · в Desktop семь плиток ряда теперь делят ширину панели поровну — плитка шире, чем выше
+- The dates on the tiles were cut off entirely: Desktop gives a framed box wide side padding, and on a narrow tile the date button had no room left. The tile's side padding is now set explicitly · числа на плитках обрезались целиком: Desktop даёт рамке широкие боковые поля, и на узкой плитке кнопке с числом не оставалось места. Теперь боковые поля плитки заданы явно
+- The tiles shrink with the pane and the row no longer runs past its edge: the date is plain text without a pill, the chosen day is shown by the tile's frame · плитки ужимаются вместе с панелью, и ряд больше не уезжает за её край: число — без «пилюли», выбранный день видно по рамке плитки
+- In a narrow pane (under about 360 px) the month is a list instead of a grid: today, the chosen day and the days with events, each with its event cards below · в узкой панели (меньше примерно 360 px) месяц — не сеткой, а списком: сегодняшний, выбранный и дни с событиями, под каждым — карточки его событий
+- The new string is translated into all 13 languages · новая строка переведена на все 13 языков
+
 ## 0.37.1 — календарь уютнее: плитки дней одного размера, цвет события, напоминание из списка или своё · a cosier calendar: same-size day tiles, event colors, a reminder from a list or your own
 
 - In Desktop the month grid is made of same-size day tiles: the date on top, below it a dot in each event's color (up to three, then “+N”); the chosen day has a highlighted frame, today a tinted background · в Desktop сетка месяца — из плиток дней одного размера: сверху число, под ним точка цвета каждого события (до трёх, дальше «+N»); у выбранного дня — выделенная рамка, у сегодняшнего — подложка

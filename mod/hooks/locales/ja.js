@@ -330,6 +330,7 @@ export default {
   "Nothing here yet. Mark games with the ☆ star — they gather here.": "まだ空です。ゲームに☆を付けると、ここに集まります。",
   "Nothing in the coming month.": "今後1か月の予定はありません。",
   "Nothing on this day.": "この日は何もありませんでした。",
+  "Nothing this month.": "今月の予定はありません。",
   "Nothing turned up on this topic — try putting it another way.": "このトピックでは何も見つかりませんでした。別の言い方を試してください。",
   "Notifications": "通知",
   "Notifications while playing in a window: off": "ウィンドウでプレイ中の通知：オフ",

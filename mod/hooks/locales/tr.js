@@ -330,6 +330,7 @@ export default {
   "Nothing here yet. Mark games with the ☆ star — they gather here.": "Henüz boş. Oyunları ☆ yıldızıyla işaretle — burada toplanırlar.",
   "Nothing in the coming month.": "Önümüzdeki bir ay içinde etkinlik yok.",
   "Nothing on this day.": "Bu günde bir şey yoktu.",
+  "Nothing this month.": "Bu ay hiçbir şey yok.",
   "Nothing turned up on this topic — try putting it another way.": "Bu konuda bir şey bulunamadı — başka türlü söylemeyi dene.",
   "Notifications": "Bildirimler",
   "Notifications while playing in a window: off": "Pencerede oynarken bildirimler: kapalı",
