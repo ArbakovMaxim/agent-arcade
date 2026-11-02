@@ -12,11 +12,11 @@ const COLOR_NAMES = { blue: 'синий', green: 'зелёный', yellow: 'жё
 // «Ближайшее»: события на UPCOMING_DAYS дней вперёд, не больше UPCOMING_MAX
 const UPCOMING_DAYS = 30
 const UPCOMING_MAX = 10
-// Плитка дня в Desktop: семь плиток делят ширину панели поровну, но не уже CELL_MIN клеток — столько нужно кнопке с
-// двузначным числом и её полями; цветных точек событий — не больше DOTS_MAX
-const CELL_MIN = 8
-const CELL_GAP = 1
+// Плитка дня в Desktop: семь плиток делят ширину панели поровну и ужимаются вместе с ней; цветных точек событий —
+// не больше DOTS_MAX. Панель уже LIST_BELOW знаков (около 360 px) — месяц не сеткой, а списком дней
+const CELL_GAP = 'xs'
 const DOTS_MAX = 3
+const LIST_BELOW = 44
 // Сегодняшний день — с голубой подложкой, плитка под мышью — с серой
 const TODAY_BG = '#3a78b526'
 const HOVER_BG = '#8080801a'
@@ -303,10 +303,22 @@ export function calendarScreen($, e, kit) {
   // Сетка месяца: 7 плиток одного размера в ряд, растянутых на всю ширину панели — плитка шире, чем выше. На плитке —
   // число кнопкой и цветные точки событий дня; выбранный день — в рамке цвета выбора, сегодняшний — с подложкой.
   // Боковые поля плитки заданы явно: Box с рамкой Desktop сам обводит полями pad.lg, и на узкой плитке кнопке с числом
-  // не оставалось места — число обрезалось целиком
-  const cell = { width: 0, flexGrow: 1, minWidth: CELL_MIN }
+  // не оставалось места — число обрезалось целиком. Кнопка с числом — без «пилюли» (plain): та шире самого числа и не
+  // давала плиткам ужаться, ряд уезжал за край панели. Плитка ужимается до нуля, лишнее обрезается — но не ряд
+  const cell = { width: 0, flexGrow: 1, minWidth: 0, overflow: 'hidden' }
   const byDay = new Map()
   for (const x of S.calendar) byDay.set(x.day, [...(byDay.get(x.day) ?? []), x])
+  const pickDay = (d) => () => {
+    cal.day = d.day
+    if (!d.inMonth) cal.month = d.day.slice(0, 7)
+    cal.focus = `day-${d.day}`
+    cal.note = ''
+    $.ui.invalidate('ui.render')
+  }
+  const dayName = (day) =>
+    `${day === today ? tr('Сегодня', S.lang) : day === addDays(today, 1) ? tr('Завтра', S.lang) : tr(WEEKDAYS_FULL[weekday(day)], S.lang)} · ${dm(day)}`
+  const freeDay = (day) => dim(day < today ? 'В этот день ничего не было.' : 'Свободный день — запиши что-нибудь ниже.')
+  const dayCards = (list) => list.map((x) => eventCard(x, x.time ?? tr('весь день', S.lang), 'dayev'))
   const dots = (list) =>
     Text({
       size: 'caption',
@@ -321,7 +333,6 @@ export function calendarScreen($, e, kit) {
       rowGap: 'xs',
       paddingX: 'xs',
       paddingY: 'xs',
-      overflow: 'hidden',
       borderStyle: 'round',
       borderColor: d.day === selected ? 'suggestion' : 'subtle',
       ...(d.day === today ? { backgroundColor: TODAY_BG } : {}),
@@ -330,16 +341,10 @@ export function calendarScreen($, e, kit) {
         Button({
           key: `arcade-cal-day-${d.day}`,
           label: String(d.date),
-          ...(d.day === selected ? { variant: 'primary' } : {}),
+          plain: true,
           ...(d.inMonth ? {} : { dimColor: true }),
           ...focusOn(`day-${d.day}`),
-          onPress: () => {
-            cal.day = d.day
-            if (!d.inMonth) cal.month = d.day.slice(0, 7)
-            cal.focus = `day-${d.day}`
-            cal.note = ''
-            $.ui.invalidate('ui.render')
-          },
+          onPress: pickDay(d),
         }),
         dots(byDay.get(d.day) ?? []),
       ],
@@ -350,7 +355,6 @@ export function calendarScreen($, e, kit) {
     $.ui.invalidate('ui.render')
   }
   const monthTitle = `${tr(MONTHS[Number(cal.month.slice(5)) - 1], S.lang)} ${cal.month.slice(0, 4)}`
-  const dayTitle = `${selected === today ? tr('Сегодня', S.lang) : selected === addDays(today, 1) ? tr('Завтра', S.lang) : tr(WEEKDAYS_FULL[weekday(selected)], S.lang)} · ${dm(selected)}`
   const grid = Box({
     key: 'cal-grid',
     flexDirection: 'column',
@@ -360,6 +364,33 @@ export function calendarScreen($, e, kit) {
       ...monthGrid(cal.month).map((week) => Box({ key: `cal-week-${week[0].day}`, flexDirection: 'row', columnGap: CELL_GAP, children: week.map(dayTile) })),
     ],
   })
+  // Узкая панель — месяц списком, как «Расписание» в календаре телефона: дни с событиями, сегодняшний и выбранный;
+  // день — кнопкой, под ним карточки его событий
+  const monthList = () => {
+    const listed = monthGrid(cal.month)
+      .flat()
+      .filter((d) => d.inMonth && (byDay.has(d.day) || d.day === today || d.day === selected))
+    return Box({
+    key: 'cal-list',
+    flexDirection: 'column',
+    rowGap: 'md',
+    children: listed.length
+      ? listed.map((d) => {
+          const cards = dayCards(between(S.calendar, d.day, 1))
+          return Box({
+            key: `cal-list-${d.day}`,
+            flexDirection: 'column',
+            rowGap: 'xs',
+            children: [
+              Button({ key: `arcade-cal-day-${d.day}`, label: dayName(d.day), ...(d.day === selected ? { variant: 'primary' } : {}), ...focusOn(`day-${d.day}`), onPress: pickDay(d) }),
+              ...(cards.length ? [Box({ key: `cal-list-cards-${d.day}`, flexDirection: 'column', rowGap: 'sm', children: cards })] : [freeDay(d.day)]),
+            ],
+          })
+        })
+      : [dim('В этом месяце событий нет.')],
+  })
+  }
+  const narrow = (e.viewport?.columns ?? Infinity) < LIST_BELOW
   return [
     Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') }),
     gap,
@@ -384,14 +415,7 @@ export function calendarScreen($, e, kit) {
           ]),
     ]),
     gap,
-    grid,
-    keep(section(dayTitle)),
-    ...(dayEvents.length
-      ? stack(
-          'cal-day',
-          dayEvents.map((x) => eventCard(x, x.time ?? tr('весь день', S.lang), 'dayev')),
-        )
-      : [dim(selected < today ? 'В этот день ничего не было.' : 'Свободный день — запиши что-нибудь ниже.')]),
+    ...(narrow ? [monthList()] : [grid, keep(section(dayName(selected))), ...(dayEvents.length ? stack('cal-day', dayCards(dayEvents)) : [freeDay(selected)])]),
     gap,
     ...addField,
     ...noteLine,

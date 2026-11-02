@@ -330,6 +330,7 @@ export default {
   "Nothing here yet. Mark games with the ☆ star — they gather here.": "还是空的。给游戏点上 ☆，它们就会汇集到这里。",
   "Nothing in the coming month.": "接下来一个月没有日程。",
   "Nothing on this day.": "这一天什么也没有。",
+  "Nothing this month.": "这个月什么也没有。",
   "Nothing turned up on this topic — try putting it another way.": "这个主题下什么也没找到——换个说法试试。",
   "Notifications": "通知",
   "Notifications while playing in a window: off": "在窗口中游戏时通知：关",
