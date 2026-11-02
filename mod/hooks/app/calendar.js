@@ -1,7 +1,7 @@
 // Arcade: календарь — хранилище, правки с экрана, инструмент Claude и напоминания.
 import { notifyCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
-import { REMIND_STEPS, addDays, addEvent, applyCalendarTool, dayKey, dueReminders, markAlerted, nextReminder, quickParse, remindAt, removeEvent, restoreCalendar, updateEvent } from '../calendar.js'
+import { REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, addDays, addEvent, applyCalendarTool, dayKey, dueReminders, markAlerted, nextReminder, quickParse, remindAt, removeEvent, restoreCalendar, updateEvent } from '../calendar.js'
 import { S, cal } from './state.js'
 import { log } from './status.js'
 
@@ -41,7 +41,7 @@ async function readCalendar($) {
 
 // Календарь поменялся в другой сессии: экран идёт за ним, напоминания — тоже. Поля открытого события рисуются заново,
 // только если поменялось само событие, а не отметка о показанном напоминании
-const sameEvent = (a, b) => ['title', 'day', 'time', 'note', 'remind'].every((k) => a[k] === b[k])
+const sameEvent = (a, b) => ['title', 'day', 'time', 'note', 'remind', 'color'].every((k) => a[k] === b[k])
 function follow($, list) {
   const open = S.menu.startsWith('calendar:') ? S.menu.slice(9) : ''
   const was = open ? S.calendar.find((e) => e.id === open) : null
@@ -95,6 +95,7 @@ const PROBLEMS = {
   day: 'Такого дня нет в календаре.',
   time: 'Время пиши как 15:00.',
   remind: 'Такого напоминания нет.',
+  color: 'Такого цвета нет.',
   full: 'Календарь полон — удали старые события.',
   missing: 'Событие удалили в другой сессии.',
 }
@@ -147,9 +148,15 @@ export function editEvent($, id, changes, saved = 'Сохранено.') {
   return editCalendar($, (list, now) => updateEvent(list, id, changes, now), saved)
 }
 
-// Напоминание по кругу; у события на весь день — без него, в 9:00 или за сутки
+// Что предложить в выборе напоминания: готовые варианты и, если Claude поставил другое, — его тоже, по порядку
+export function remindChoices(ev) {
+  const base = ev.time ? REMIND_CHOICES : REMIND_CHOICES_ALL_DAY
+  if (base.includes(ev.remind)) return base
+  return [...base.filter((m) => m !== null && m < ev.remind), ev.remind, ...base.filter((m) => m === null || m > ev.remind)]
+}
+// Напоминание по кругу — где нет выбора из списка (Claude на телефоне)
 export function nextRemind(ev) {
-  const steps = ev.time ? REMIND_STEPS : [null, 0, 1440]
+  const steps = remindChoices(ev)
   return steps[(steps.indexOf(ev.remind) + 1) % steps.length]
 }
 

@@ -10,11 +10,27 @@ export const MAX_EVENTS = 300
 export const MAX_NOTE = 1_000
 // Напоминание — за сколько минут до начала: не раньше чем за неделю
 export const MAX_REMIND = 7 * 24 * 60
-// Что предлагает экран по кругу: без напоминания, в момент начала, за 5, 15, 30 минут, за час, за сутки
-export const REMIND_STEPS = [null, 0, 5, 15, 30, 60, 1440]
+// Что предлагает экран. У события со временем — в момент начала, за 5, 10, 15, 30 минут, за 1 и 2 часа, за сутки,
+// двое, неделю или без напоминания. У события на весь день минуты считаются до 9:00 этого дня: в 9:00, 8:00, 7:00,
+// накануне в 21:00, 18:00 и 9:00, за два дня и за неделю в 9:00
+export const REMIND_CHOICES = [0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080, null]
+export const REMIND_CHOICES_ALL_DAY = [0, 60, 120, 720, 900, 1440, 2880, 10080, null]
 // Напоминание нового события: за 15 минут, а о событии на весь день — в 9:00 этого дня
 export const defaultRemind = (time) => (time ? 15 : 0)
-const ALL_DAY_HOUR = 9
+export const ALL_DAY_HOUR = 9
+// Цвета событий: в событии хранится название, без цвета — синий
+export const COLORS = {
+  blue: '#3B82F6',
+  green: '#22A06B',
+  yellow: '#E2B203',
+  orange: '#F97316',
+  red: '#E5484D',
+  purple: '#8B5CF6',
+  pink: '#E2489B',
+  gray: '#8C8F98',
+}
+export const DEFAULT_COLOR = 'blue'
+export const colorOf = (ev) => COLORS[ev?.color] ?? COLORS[DEFAULT_COLOR]
 // Напоминания, пропущенные, пока Claude Code был закрыт, показываем, если событие было не раньше суток назад
 export const MISSED_MS = 24 * 3600_000
 // Сколько дней показывает list у Claude по умолчанию и самое большее
@@ -55,6 +71,8 @@ export function cleanTime(text) {
 export const cleanNote = (text) => cleanBody(text).trim().slice(0, MAX_NOTE)
 // Напоминание: null — без него, иначе минуты до начала; не подходит — undefined
 export const cleanRemind = (v) => (v === null || v === undefined ? null : Number.isInteger(v) && v >= 0 && v <= MAX_REMIND ? v : undefined)
+// Цвет: '' — по умолчанию, иначе название из COLORS; не подходит — undefined
+export const cleanColor = (v) => (v === null || v === undefined || v === '' ? '' : typeof v === 'string' && Object.hasOwn(COLORS, v) ? v : undefined)
 
 // Сдвиг дня и месяца («ГГГГ-ММ»)
 export function addDays(day, n) {
@@ -113,6 +131,7 @@ export function restoreCalendar(saved) {
     const ev = { id: e.id, title, day, ...(time ? { time } : {}), remind: remind === undefined ? null : remind, at: Number.isFinite(e.at) ? e.at : 0 }
     const note = cleanNote(e.note)
     if (note) ev.note = note
+    if (cleanColor(e.color)) ev.color = e.color
     if (Number.isFinite(e.alerted)) ev.alerted = e.alerted
     if (ev.alerted !== undefined && typeof e.alertedBy === 'string' && e.alertedBy.length <= 20) ev.alertedBy = e.alertedBy
     out.push(ev)
@@ -130,7 +149,7 @@ function settle(ev, now) {
 }
 
 // Новое событие. Календарь полон — уходит самое старое событие, прошедшее больше месяца назад; таких нет — { error }
-export function addEvent(list, { title, day, time = '', note = '', remind }, now) {
+export function addEvent(list, { title, day, time = '', note = '', remind, color = '' }, now) {
   const name = cleanTitle(title)
   if (!name) return { error: 'title' }
   const d = cleanDay(day)
@@ -139,6 +158,8 @@ export function addEvent(list, { title, day, time = '', note = '', remind }, now
   if (time && !t) return { error: 'time' }
   const r = remind === undefined ? defaultRemind(t) : cleanRemind(remind)
   if (r === undefined) return { error: 'remind' }
+  const c = cleanColor(color)
+  if (c === undefined) return { error: 'color' }
   let base = list
   if (base.length >= MAX_EVENTS) {
     const old = base.find((e) => e.day < addDays(dayKey(now), -30))
@@ -151,11 +172,13 @@ export function addEvent(list, { title, day, time = '', note = '', remind }, now
   const ev = { id, title: name, day: d, ...(t ? { time: t } : {}), remind: r, at: now }
   const n = cleanNote(note)
   if (n) ev.note = n
+  if (c) ev.color = c
   settle(ev, now)
   return { list: [...base, ev].sort(compareEvents), event: ev }
 }
 
-// Правка события: меняется только то, что передано; time: '' — на весь день, note: '' — без заметки. Не вышло — { error }
+// Правка события: меняется только то, что передано; time: '' — на весь день, note: '' — без заметки, color: '' — цвет по
+// умолчанию. Не вышло — { error }
 export function updateEvent(list, id, changes, now) {
   const old = list.find((e) => e.id === id)
   if (!old) return { error: 'missing' }
@@ -183,6 +206,12 @@ export function updateEvent(list, id, changes, now) {
     const r = cleanRemind(changes.remind)
     if (r === undefined) return { error: 'remind' }
     ev.remind = r
+  }
+  if (changes.color !== undefined) {
+    const c = cleanColor(changes.color)
+    if (c === undefined) return { error: 'color' }
+    if (c) ev.color = c
+    else delete ev.color
   }
   // Сдвинули время напоминания — оно снова впереди (или уже прошло — тогда не показываем)
   if (remindAt(ev) !== remindAt(old)) settle(ev, now)
@@ -242,6 +271,73 @@ export function monthGrid(month) {
     start = addDays(start, 7)
   } while (start.startsWith(month))
   return weeks
+}
+
+// Своё напоминание словами, по-русски или по-английски: «за 45 мин», «за 1 ч 30 мин», «за час», «в 8:30», «накануне
+// в 20:00», «за 2 дня в 18:00», «нет»; «45 min», «2 hours before», «the day before at 20:00». Время без «накануне» и «за N
+// дней» — в день события. → минуты до начала (у события на весь день — до 9:00), null — без напоминания; не понял или
+// не подходит (позже начала, раньше чем за неделю) — undefined
+const REMIND_UNITS = [
+  [/^(m|min|mins|minutes?|м|мин|минуту|минуты|минут)$/, 1],
+  [/^(h|hr|hrs|hours?|ч|час|часа|часов)$/, 60],
+  [/^(d|days?|д|дн|день|дня|дней|сут|сутки|суток)$/, 1440],
+  [/^(w|weeks?|нед|неделю|недели|недель)$/, 10080],
+  [/^полчаса$/, 30],
+]
+const REMIND_NONE = /^(нет|без|без напоминания|не напоминать|никогда|no|none|off|never|no reminder)$/
+const REMIND_START = /^(в начале|вовремя|в момент начала|at (the )?start|on time)$/
+const remindUnit = (word) => REMIND_UNITS.find(([re]) => re.test(word.replace(/\.$/, '')))?.[1]
+export function parseRemind(text, ev) {
+  let s = String(text ?? '')
+    .toLowerCase()
+    .replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/[,!]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!s) return undefined
+  if (REMIND_NONE.test(s)) return null
+  if (REMIND_START.test(s)) return 0
+  let clock = null
+  const t = /(\d{1,2}):(\d{2})/.exec(s)
+  if (t) {
+    if (!cleanTime(t[0])) return undefined
+    clock = Number(t[1]) * 60 + Number(t[2])
+    s = s.replace(t[0], ' ')
+  }
+  let back = 0
+  s = s.replace(/накануне|(the )?day before/, () => {
+    back = 1
+    return ' '
+  })
+  // Служебные слова: «за», «в», «before», «at», «напомнить»
+  s = s.replace(/(^|\s)(за|в|во|a|an|at|before|earlier|remind|me|напомни|напомнить)(?=\s|$)/g, ' ')
+  let span = 0
+  let bad = false
+  s = s.replace(/(\d+(?:\.\d+)?)\s*([a-zа-яё]+\.?)?/g, (_, n, unit) => {
+    const k = unit ? remindUnit(unit) : 1
+    if (k === undefined) bad = true
+    else span += Number(n) * k
+    return ' '
+  })
+  // Единица без числа: «за час», «за сутки», «an hour»
+  s = s.replace(/(^|\s)([a-zа-яё]+\.?)(?=\s|$)/g, (all, sp, word) => {
+    const k = remindUnit(word)
+    if (k === undefined) return all
+    span += k
+    return ' '
+  })
+  if (bad || s.trim()) return undefined
+  let minutes
+  if (clock === null) {
+    if (back || !span) return undefined
+    minutes = Math.round(span)
+  } else {
+    // «за 2 дня в 18:00» — дни назад и время; «за 2 часа в 18:00» не понять
+    if (span % 1440) return undefined
+    const start = ev?.time ? Number(ev.time.slice(0, 2)) * 60 + Number(ev.time.slice(3)) : ALL_DAY_HOUR * 60
+    minutes = start - (clock - (back + span / 1440) * 1440)
+  }
+  return cleanRemind(minutes) ?? undefined
 }
 
 // Быстрая запись одной строкой: «завтра 15:00 Созвон», «пт в 9:30 стендап», «12.11 Ревью», «Созвон 2026-11-20 10:00».
@@ -304,7 +400,7 @@ const remindLabel = (ev) => {
   return `reminder ${span} before${ev.time ? '' : ' 9:00'}`
 }
 const whenLabel = (ev) => `${WEEKDAYS_EN[dateOf(ev.day).getDay()]} ${ev.day} ${ev.time ?? 'all day'}`
-const eventLine = (ev) => `- ${ev.id}: ${whenLabel(ev)} — ${ev.title} (${remindLabel(ev)})${ev.note ? `\n  note: ${ev.note.replace(/\n/g, ' / ')}` : ''}`
+const eventLine = (ev) => `- ${ev.id}: ${whenLabel(ev)} — ${ev.title} (${remindLabel(ev)}${ev.color ? `, ${ev.color}` : ''})${ev.note ? `\n  note: ${ev.note.replace(/\n/g, ' / ')}` : ''}`
 const todayLine = (now) => {
   const d = new Date(now)
   return `Today is ${WEEKDAYS_EN[d.getDay()]} ${dayKey(now)}, ${pad(d.getHours())}:${pad(d.getMinutes())} local time.`
@@ -313,13 +409,14 @@ const todayLine = (now) => {
 export const CALENDAR_TOOL = {
   name: 'calendar',
   description:
-    "The user's Arcade calendar: events with a day, a time or all day, a note and a reminder. Arcade shows reminders as system notifications while Claude Code runs. " +
+    "The user's Arcade calendar: events with a day, a time or all day, a note, a reminder and a color. Arcade shows reminders as system notifications while Claude Code runs. " +
     'Use it when the user asks to put something on their calendar, to be reminded of something at a time, or what they have planned. ' +
     "Days are YYYY-MM-DD and times HH:MM (24-hour) in the local time of the user's computer; work out words like Friday or tomorrow from today's date, which every answer starts with. " +
     'Actions: list (events from day, default today, for days days, default 7), add (title and day; without time the event lasts all day; note and remind are optional), ' +
     'update (an event by id or exact title: only the fields given change; time "" makes it all-day, note "" removes the note), remove (delete an event by id or exact title). ' +
     'remind is minutes before the start: 0 is at the start, for an all-day event counted from 9:00 that day; -1 is no reminder. ' +
-    'Without remind a new event reminds 15 minutes before, an all-day one at 9:00.',
+    'Without remind a new event reminds 15 minutes before, an all-day one at 9:00. ' +
+    `color is one of ${Object.keys(COLORS).join(', ')}; without it the event is ${DEFAULT_COLOR}, color "" resets it.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -330,6 +427,7 @@ export const CALENDAR_TOOL = {
       time: { type: 'string', description: 'HH:MM, 24-hour; empty for an all-day event (add, update)' },
       note: { type: 'string', description: `Note, up to ${MAX_NOTE} characters (add, update)` },
       remind: { type: 'integer', description: `Minutes before the start, 0 to ${MAX_REMIND}; -1 for no reminder (add, update)` },
+      color: { type: 'string', enum: [...Object.keys(COLORS), ''], description: `Event color, default ${DEFAULT_COLOR} (add, update)` },
       days: { type: 'integer', description: `How many days to show, 1 to ${MAX_LIST_DAYS} (list, default ${LIST_DAYS})` },
     },
     required: ['action'],
@@ -342,6 +440,7 @@ const ERRORS = {
   day: 'day must be a real date as YYYY-MM-DD.',
   time: 'time must be HH:MM, 24-hour, e.g. 15:00, or empty for all day.',
   remind: `remind is minutes before the start, 0 to ${MAX_REMIND}, or -1 for no reminder.`,
+  color: `color is one of ${Object.keys(COLORS).join(', ')}, or "" for the default.`,
   full: `The calendar is full: ${MAX_EVENTS} events. The user can delete old ones in Arcade.`,
 }
 // Событие по id или точному названию; несколько с таким названием — { error }
@@ -372,7 +471,7 @@ export function applyCalendarTool(list, input, now) {
     return { list, text: `${head}\nEvents from ${span}:\n${shown.map(eventLine).join('\n')}` }
   }
   if (action === 'add') {
-    const out = addEvent(list, { title: input.title, day: input.day, time: input.time ?? '', note: input.note ?? '', remind: remindFrom(input.remind) }, now)
+    const out = addEvent(list, { title: input.title, day: input.day, time: input.time ?? '', note: input.note ?? '', remind: remindFrom(input.remind), color: input.color ?? '' }, now)
     if (out.error) return fail(ERRORS[out.error])
     return { list: out.list, text: `${head}\nAdded:\n${eventLine(out.event)}`, changed: true }
   }
@@ -381,9 +480,9 @@ export function applyCalendarTool(list, input, now) {
     if (found.error) return fail(found.error)
     if (action === 'remove') return { list: removeEvent(list, found.event.id), text: `${head}\nRemoved: ${found.event.title} (${whenLabel(found.event)}).`, changed: true }
     const changes = {}
-    for (const key of ['title', 'day', 'time', 'note']) if (input[key] !== undefined) changes[key] = input[key]
+    for (const key of ['title', 'day', 'time', 'note', 'color']) if (input[key] !== undefined) changes[key] = input[key]
     if (input.remind !== undefined) changes.remind = remindFrom(input.remind)
-    if (!Object.keys(changes).length) return fail('Nothing to change: pass title, day, time, note or remind.')
+    if (!Object.keys(changes).length) return fail('Nothing to change: pass title, day, time, note, remind or color.')
     const out = updateEvent(list, found.event.id, changes, now)
     if (out.error) return fail(ERRORS[out.error])
     return { list: out.list, text: `${head}\nUpdated:\n${eventLine(out.event)}`, changed: true }

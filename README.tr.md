@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · **Türkçe** · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.36).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
+> **Beta (0.37).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
 
 Arcade, [Claude Code](https://claude.com/claude-code) için bir eklentidir ve onu küçük bir çalışma alanına dönüştürür: her kartın tek tuşla Claude’a gittiği proje panoları, Claude’un seninle birlikte tuttuğu ve açık tüm oturumlarının paylaştığı bir defter, ekibin için ortak panolar ve sohbetler. Bekleme için de: ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
 
@@ -21,6 +21,7 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 ## Özellikler
 
 - **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri, sütunlu ve kartlı panolar. *Claude'a ver* bir sayfayı ya da kartı Claude’a iletir: Claude yapılanları işaretler ve sonucu oraya yazar. Sayfa ya da kart, metnini *Düzenle* ve *Kopyala* düğmeleriyle biçimlendirilmiş olarak gösterir. Açık tüm Claude Code oturumları defteri paylaşır, böylece her biri aynı panodan kendi kartını alabilir. Bir panoyu arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın. Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı.
+- **Takvim.** Desktop’ta aynı boyda gün kutucuklarından bir ay, her etkinliğin renginde bir noktayla; terminalde ve VS Code’da yaklaşanların listesi. Bir etkinlik tek satırla eklenir, örneğin «fri 9:30 standup». Rengini ve ne zaman hatırlatılacağını listeden ya da kendi sözlerinle seç (örneğin «45 min before» ya da «the day before at 20:00»); hatırlatma sistem bildirimi olarak gelir. Claude da etkinlik ekler ve değiştirir: «cuma 15:00’e bir görüşme ekle».
 - **Arkadaşlar ve sohbetler.** İsteğe bağlı GitHub girişi ayarlarını tüm bilgisayarlarında aynı tutar ve sana bir @takma ad verir; arkadaşlarını tam takma adlarıyla ekle, kimin çevrimiçi olduğunu gör, panolarını paylaş, onları oyuna davet et, ikili ya da grup halinde sohbet et.
 - **Ajanın ne yaptığını bilir.** Ajan bitirdiğinde ya da izin istediğinde oyunun üstünde bir bildirim çıkar — oynamaya devam et, duraklat ya da doğrudan ajana dön (davranışı ayarlardan seçersin). Claude Desktop’ta izlediğin sekmeyi de kapatabilir, böylece sohbet yeniden önüne gelir.
 - **Kendiliğinden belirir.** Ajan 10 saniye çalıştıktan sonra Arcade istemin üstünde bir oyun önerir — ya da ayarlarda seçtiğin gibi daha sonra veya hiç; sen istemedikçe odağı asla almaz.
@@ -92,7 +93,7 @@ PowerShell’de: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 | **Oku ve dinle** | Kitaplar, Sesli kitaplar, Makaleler, Podcast’ler |
 | **İzle** | YouTube, Twitch, TikTok |
 | **Sosyal** | Arkadaşlar, Sohbetler, **GitHub ile giriş yap** (giriş yaptıktan sonra **Hesap**) |
-| **İş** | Defter, Proje panosu |
+| **İş** | Defter, Proje panosu, Takvim |
 | **Diğer** | Arcade penceresi, Ayarlar, 🌐 dil, 🐞 Hata bildir, ☕ Projeye destek ol |
 
 Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltılmış bölüm `▸` ve içindeki kutucuk sayısını gösterir; *Sosyal* ayrıca yeni mesajları 💬 ve arkadaşlık isteklerini 👥 gösterir. Arcade hangi bölümlerin daraltıldığını hatırlar. İhtiyacın olmayan bir bölümü **Ayarlar**’dan gizleyebilirsin: başlığı ve kutucuklarıyla birlikte menüden tamamen kalkar; ayarların bulunduğu *Diğer* her zaman kalır. Giriş yaptıktan sonra menü başlığı @takma adını aynı sayaçlarla gösterir.
@@ -107,7 +108,7 @@ Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltıl
 | **VS Code** | panelde | tarayıcı penceresi |
 | **Claude Desktop** | panelde | Claude’un yerleşik tarayıcısı ya da tarayıcı penceresi (ayarlardan seçilir); nişancı oyunları — her zaman tarayıcı penceresi |
 
-Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya da ayarlarda seçtiğin tarayıcıda), sıradan sekmelerinin arasında bir sekme değil. Sohbetler doğrudan panelde çalışır — terminalde ve Desktop’ta; *Sayfada aç* onları sitede aynı şekilde açar. Defter ve proje panoları panelde çalışır. TikTok, Desktop’ta Claude’un yerleşik tarayıcısında, diğer yerlerde ise büyük ihtimalle zaten giriş yapmış olduğun varsayılan tarayıcında açılır.
+Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya da ayarlarda seçtiğin tarayıcıda), sıradan sekmelerinin arasında bir sekme değil. Sohbetler doğrudan panelde çalışır — terminalde ve Desktop’ta; *Sayfada aç* onları sitede aynı şekilde açar. Defter, proje panoları ve takvim panelde çalışır. TikTok, Desktop’ta Claude’un yerleşik tarayıcısında, diğer yerlerde ise büyük ihtimalle zaten giriş yapmış olduğun varsayılan tarayıcında açılır.
 
 ## Defter ve proje panoları
 
@@ -121,6 +122,18 @@ Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya
 - **Proje panosu.** Sütunlar — *Yapılacak*, *Yapılıyor*, *Bitti* ya da kendi sütunların, en fazla 8 — ve kartlar; kart, metin ve kontrol listesi olan bir defter sayfasıdır. Bir kartı seçip oklarla taşımak için ona bas, açmak için bir kez daha bas. Claude da pano yönetebilir: *Claude’a ver* ya da ondan görevleri Arcade’de bir panoya dağıtmasını iste.
 - **Ortak panolar.** @takma adla giriş yaptıysan arkadaşlarını işaretle ve *Paylaş*’a bas: herkeste aynı kartlar, sütunlar ve ad olur, değişiklikler birkaç saniye içinde görünür. Sahip başka arkadaşlarını da davet eder, kişileri çıkarır ve panoyu siteden siler; panodan herkes çıkabilir; ne olursa olsun herkesin kendi kopyası kalır. Kendine ait en fazla 3 ortak pano, bir panoda en fazla 20 kişi ve 200 kart.
 - **Aynı anda birkaç oturum.** Bu bilgisayarda açık olan tüm Claude Code oturumları tek bir defteri ve panolarını paylaşır: bir oturumun eklediğini, değiştirdiğini ya da işaretlediğini diğerleri birkaç saniye içinde görür; böylece her oturum aynı panonun kendi kartı üzerinde çalışabilir.
+
+## Takvim
+
+Menünün *İş* bölümündedir. Defter gibi takvim de bu bilgisayarda, Claude Code’un eklenti deposunda tutulur ve açık tüm oturumlar onu paylaşır.
+
+- **Ay ve gün.** Desktop’ta oklar ve *Bugün* düğmesiyle, aynı boyda gün kutucuklarından oluşan bir ay ızgarası: üstte tarih, altında her etkinliğin renginde bir nokta (üçe kadar, sonra «+N»). Seçili günün çerçevesi vurgulu, bugünün arka planı renklidir. Izgaranın altında seçili günün etkinlikleri, ardından önümüzdeki 30 gün için *Yaklaşanlar* durur, her etkinliğin renginde kartlar olarak. Terminalde ve VS Code’da *Yaklaşanlar* listesidir.
+- **Tek satır bir etkinlik ekler:** «fri 9:30 standup», «tomorrow 15:00 call», «12.11 review», «2026-11-20 10:00 demo». Gün yoksa ızgarada seçili gün (terminalde bugün), saat yoksa tüm gün. Gün sözcükleri İngilizce ve Rusça anlaşılır.
+- **Renk.** Mavi, yeşil, sarı, turuncu, kırmızı, mor, pembe ya da gri; varsayılan mavi.
+- **Hatırlatma.** Listeden seç: başlangıçta, 5, 10, 15 ya da 30 dakika, 1 ya da 2 saat, bir gün, iki gün ya da bir hafta önce; tüm gün süren bir etkinlikte o gün 9:00, 8:00 ya da 7:00’de, bir gün önce 21:00, 18:00 ya da 9:00’da, iki gün ya da bir hafta önce 9:00’da. Ya da kendi zamanını İngilizce veya Rusça yaz: «45 min before», «at 14:30», «the day before at 20:00» — başlangıçtan geç ve bir haftadan erken olamaz. Listesi olmayan telefondaki Claude uygulamasında bir düğme seçenekler arasında sırayla geçer.
+- **Bildirimler.** Hatırlatma, açık bir Claude Code oturumu olduğu sürece sistem bildirimi ve kısa bir uyarı olarak gelir; onu tüm oturumlar değil, bir oturum gösterir. Claude Code kapalıyken kaçırılan hatırlatma, etkinliğin üzerinden bir günden az geçtiyse bir sonraki açılışta *Kaçırıldı* olarak görünür.
+- **Claude da tutar**, yalnızca takvimi değiştiren `mcp__arcade__calendar` aracıyla: «cuma 15:00’e bir görüşme ekle», «yarın neyim var?», «demoyu kırmızı yap».
+- Google ya da Apple takvimleriyle eşitlenmez; tekrarlanan etkinlikler ve pano kartlarında son tarihler yoktur.
 
 ## Ekipler için
 
@@ -211,11 +224,11 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 
 Arcade, Claude Code’un eklentilere verdiği erişimle Claude Code içinde çalışır. Kodunun tamamı bu depodadır ve `claude plugin validate ./mod` bağlandığı her olayı ve yaptığı her çağrıyı listeler. Kısaca:
 
-- **Ajanın araçları.** Arcade bir aracın ne zaman başlayıp bittiğini ve ajanın ne zaman izin istediğini görür — bildirimini ne zaman göstereceğini böyle bilir. Ajanın araç çağrılarını asla değiştirmez ya da engellemez. Kendisi yalnızca iki tür çağrıyı onaylar, o da yalnızca Claude Code’un aksi halde sana soracağı yerlerde: yalnızca defteri değiştiren ve hiçbir şey silmeyen `mcp__arcade__notes` ve panelde bastığın bir oyunun Desktop’un yerleşik tarayıcısında açılması. İzin verme ve reddetme kuralların olduğu gibi geçerlidir.
+- **Ajanın araçları.** Arcade bir aracın ne zaman başlayıp bittiğini ve ajanın ne zaman izin istediğini görür — bildirimini ne zaman göstereceğini böyle bilir. Ajanın araç çağrılarını asla değiştirmez ya da engellemez. Kendisi yalnızca üç tür çağrıyı onaylar, o da yalnızca Claude Code’un aksi halde sana soracağı yerlerde: yalnızca defteri değiştiren ve hiçbir şey silmeyen `mcp__arcade__notes`, yalnızca takvimi değiştiren `mcp__arcade__calendar` ve panelde bastığın bir oyunun Desktop’un yerleşik tarayıcısında açılması. İzin verme ve reddetme kuralların olduğu gibi geçerlidir.
 - **Ajanı durdurma.** Yalnızca Claude Desktop’ta, ajan çalışırken yerleşik tarayıcıda bir şey açtığında: Desktop bir eklentinin tarayıcıyı kendi başına açmasına izin vermez. Arcade o anki aracın bitmesini bekler (10 saniye sonra onu keser, ama ekranda bir izin sorusu olduğu sürece bekler), ajanı durdurur ve Claude’dan sayfayı açıp işine dönmesini ister. Bundan kaçınmak için *Ayarlar → Oyunları aç* bölümünden bir tarayıcı penceresi seç.
 - **Sohbetin.** Konular için senin oturumundaki Haiku sohbetin sonunu, birkaç bin karakteri alır; bu, Claude kullanımına sayılır. Arcade sitesi sohbeti asla görmez. Arcade giriş kutusuna yalnızca sen istediğinde yazar ya da onu gönderir — örneğin defterdeki *Claude’a ver* — ya da yukarıda anlatıldığı gibi bir sayfa açmak için.
-- **Programlar.** Arcade penceresi için tarayıcın (Windows’ta `%LOCALAPPDATA%\claude-arcade` içinde kendi profiliyle); bildirimler — Windows’ta PowerShell, macOS’ta `osascript`, Linux’ta `notify-send`; hangi tarayıcıların kurulu olduğunun (Windows) ya da hangi sistem olduğunun (`uname`) kontrolü.
-- **Dosyalar.** Yalnızca `/arcade-add` ile eklediğin ROM’ları `~/.claude/arcade/roms` içine yazar; yalnızca belirttiğin dosyayı, bu kopyaları ve kendi dosyalarını okur. Ayarlar, defter ve favoriler Claude Code’un eklenti deposunda durur.
+- **Programlar.** Arcade penceresi için tarayıcın (Windows’ta `%LOCALAPPDATA%\claude-arcade` içinde kendi profiliyle); takvim hatırlatmaları dahil bildirimler — Windows’ta PowerShell, macOS’ta `osascript`, Linux’ta `notify-send`; hangi tarayıcıların kurulu olduğunun (Windows) ya da hangi sistem olduğunun (`uname`) kontrolü.
+- **Dosyalar.** Yalnızca `/arcade-add` ile eklediğin ROM’ları `~/.claude/arcade/roms` içine yazar; yalnızca belirttiğin dosyayı, bu kopyaları ve kendi dosyalarını okur. Ayarlar, defter, takvim ve favoriler Claude Code’un eklenti deposunda durur.
 - **Ortam değişkenleri.** `HOME` ya da `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` ve `OS` değişkenlerini okur; hiçbirini değiştirmez.
 - **Ağ.** Eklentinin kendisi yalnızca Arcade sitesiyle (`agent-arcade.fefaodessa.workers.dev`), YouTube kanallarının RSS akışlarıyla ve gösterdiği blog ve podcast’lerin akışlarıyla konuşur. Desktop panelindeki resimler, örneğin Twitch avatarları, doğrudan bu hizmetlerden yüklenir. Oyunları, kitapları ve videoları tarayıcıda açtığın sayfa yükler.
 
@@ -230,7 +243,7 @@ Ayrıntılar sitenin [Gizlilik Politikası](https://agent-arcade.fefaodessa.work
 - Konuları kendi Claude Code oturumunda Haiku önerir; Arcade sitesi sohbetini asla görmez — *Kendi konun*’u kullandığında yalnızca kısa bir İngilizce arama sorgusu gider. Bir makalenin adresi `#` işaretinden sonra gelir, bu yüzden Arcade sunucusuna asla ulaşmaz.
 - *Kendi konun* araması YouTube API Services üzerinden yapılır ve videolar YouTube’un kendi oynatıcısında oynar; bu yüzden [YouTube Hizmet Şartları](https://www.youtube.com/t/terms) ve [Google Gizlilik Politikası](https://policies.google.com/privacy) da geçerlidir. Kendi oturumundaki Haiku, başlıklarına ve kısa açıklamalarına bakarak en fazla altı video seçer; Arcade sitesi arama sonuçlarını ortak bir önbellekte bir gün tutar.
 - Giriş yaptıktan sonra site eşitlenen ayarlarını, favorilerini, @takma adını, arkadaşlarını, sohbetlerini ve ortak panolarını saklar; oyun davetlerini ise 10 dakika tutar. Kimin çevrimiçi olduğunu yalnızca bellekte, bir buçuk dakika tutar. Oturum anahtarı yalnızca Arcade sitesine gönderilir.
-- Defter bilgisayarında kalır. Ortak panolar, tıpkı sohbetler gibi Arcade sitesinde saklanır ve şifrelenmez. Sayfalar Notion’a ya da başka bir uygulamaya yalnızca sen istediğinde, kendi Claude bağlayıcıların üzerinden gider.
+- Defter ve takvim bilgisayarında kalır. Ortak panolar, tıpkı sohbetler gibi Arcade sitesinde saklanır ve şifrelenmez. Sayfalar Notion’a ya da başka bir uygulamaya yalnızca sen istediğinde, kendi Claude bağlayıcıların üzerinden gider.
 - Bir hata raporu metnini, Arcade sürümünü, nerede açık olduğunu, arayüz dilini ve işletim sistemini içerir — başka hiçbir şey; giriş yapmadan imzasız gider ve site hiçbir adres saklamaz.
 - Bazı oyunlar internete yalnızca sen istersen çıkar — örneğin OpenTTD’nin isteğe bağlı anketi ve *Online Content* düğmesi.
 
