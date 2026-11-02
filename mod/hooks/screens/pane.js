@@ -32,7 +32,7 @@ import { boardsScreen } from './boards.js'
 import { calendarScreen } from './calendar.js'
 
 export async function drawPane($, e) {
-  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input, Markdown } = $.ui.resolve(e)
+  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input, Markdown, Select } = $.ui.resolve(e)
   // Готовая кнопка заморожена и свой onPress не отдаёт, а плитка Desktop пересобирает её с переносом названия:
   // пропсы каждой кнопки запоминаются здесь
   const buttonProps = new WeakMap()
@@ -453,6 +453,8 @@ export async function drawPane($, e) {
       now, open, ownTopics, picGrid, pictures, playGame, section, sectionSwitches, tileWidth, tiles, watchLive, windowed,
       // Текст, который можно выделить и скопировать: в Desktop и VS Code — Markdown, как ответ Claude; в терминале — нет
       Markdown: terminal ? null : Markdown,
+      // Выбор из списка (напоминание в календаре); на телефоне его нет
+      Select: Select ?? null,
     }
 
     let items
