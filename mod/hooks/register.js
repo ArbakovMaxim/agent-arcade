@@ -21,7 +21,8 @@ import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/pro
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
-import { queueNext, queuePermission, queueTurnDone, queueTurnStart } from './app/queue.js'
+import { queueNext, queuePermission, queueStopCheck, queueTurnDone, queueTurnStart } from './app/queue.js'
+import { AGENT_TICK_MS, agentsTick, leaveAgents, startAgents } from './app/agents.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
@@ -42,6 +43,8 @@ export function register(on) {
       S.bk = { ...S.bk, lang: bookLang(await $.store.get('booksLang'), S.lang) }
       S.stamps = restoreStamps(await $.store.get('syncAt'))
       S.msgNotify = (await $.store.get('msgNotify')) !== false
+      S.agNotify = (await $.store.get('agentsNotify')) !== false
+      S.agDone = (await $.store.get('agentsDone')) === true
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
       await loadNotes($)
@@ -51,6 +54,8 @@ export function register(on) {
         S.sep = home.includes('\\') ? '\\' : '/'
         S.dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(S.sep)
       }
+      // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
+      await startAgents($, home)
       S.catalog = restoreCatalog(await $.store.get('catalog')) ?? S.catalog
       const savedGame = await $.store.get('lastGame')
       S.played = games().some((g) => g.id === savedGame)
@@ -119,6 +124,12 @@ export function register(on) {
       $.clock.every(NOTES_POLL_MS, () => {
         if (S.paneOpen && S.view === 'library' && notesShown()) refreshNotes($).catch(chatError)
         if (S.paneOpen && S.view === 'library' && calendarShown()) refreshCalendar($).catch(chatError)
+      })
+      // Отметка сессии — маленькая запись раз в несколько секунд; чужие читаем, только когда они нужны. Очередь, которую
+      // остановили во всех сессиях, — тут же
+      $.clock.every(AGENT_TICK_MS, async () => {
+        await agentsTick($)
+        if (S.queue) await queueStopCheck($).catch(chatError)
       })
       // Напоминания календаря: пропущенные, пока Claude Code был закрыт, — чуть погодя после старта; дальше таймер сам
       $.clock.after(5_000, () => remindNow($).catch(chatError))
@@ -191,6 +202,12 @@ export function register(on) {
     // Панель оставили открытой в другой сессии — открываем и здесь. Desktop и VS Code рисуют не со старта, а с session.attach
     if (e.surface && e.surface !== 'mobile') await followPane($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
     return started
+  })
+
+  // Сессия закрывается: место её отметки — свободно (после /clear сессия та же, место остаётся за ней)
+  on('session.end', async ($, e, next) => {
+    await leaveAgents($, e.reason).catch((err) => log(`отметка сессии: ${err?.message ?? err}`))
+    return next(e)
   })
 
   // Desktop или VS Code подключился к сессии: панель, оставленную открытой в другой сессии, открываем и здесь

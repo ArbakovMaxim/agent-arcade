@@ -4,7 +4,7 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · **Polski** · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.38).** Wszystko, co tu opisano, działa i jest używane na co dzień; teraz zmieniają się głównie szczegóły. Zgłoszenia błędów są bardzo mile widziane — zobacz [Opinie](#opinie).
+> **Beta (0.39).** Wszystko, co tu opisano, działa i jest używane na co dzień; teraz zmieniają się głównie szczegóły. Zgłoszenia błędów są bardzo mile widziane — zobacz [Opinie](#opinie).
 
 Arcade to wtyczka do [Claude Code](https://claude.com/claude-code), która zmienia go w małe miejsce pracy: tablice projektów, z których każdą kartę jednym przyciskiem przekażesz Claude, notatnik, który Claude prowadzi razem z tobą i który dzielą wszystkie otwarte sesje, oraz wspólne tablice i czaty dla twojego zespołu. A na czas czekania: kiedy agent jest zajęty dłużej niż 10 sekund, nad promptem pojawia się małe *„zagrasz?”*. Zagraj w coś — NES, Sega, PlayStation, Doom, szachy i więcej — przeczytaj książkę, posłuchaj audiobooka lub podcastu albo obejrzyj film na temat, nad którym pracuje agent. Arcade daje znać, gdy tylko agent skończy albo będzie potrzebować twojej zgody — nic cię nie ominie.
 
@@ -22,6 +22,7 @@ Cały katalog jest darmowy: gry mają otwarte licencje, książki i audiobooki n
 
 - **Notatnik i tablice projektów.** Strony, podstrony i listy kontrolne, które prowadzi też Claude, oraz tablice z kolumnami i kartami. *Wyślij do Claude* przekazuje Claude stronę lub kartę: odhacza to, co zrobione, i dopisuje tam wynik. Strona lub karta pokazuje sformatowany tekst z przyciskami *Edytuj* i *Kopiuj*. Wszystkie otwarte sesje Claude Code dzielą notatnik, więc każda może wziąć własną kartę z tej samej tablicy. Udostępnij tablicę znajomym, a wszyscy pracują na tej samej. Wyślij stronę do Notion lub innej aplikacji albo sprowadź ją stamtąd przez konektory Claude; podyktuj tekst w polu wpisywania Claude i przenieś go na stronę.
 - **Claude przechodzi przez twoją tablicę.** *Kolejka dla Claude* przekazuje Claude karty z pierwszej kolumny po jednej: następna idzie, gdy poprzednia jest już w *Gotowe*, a pytanie o zgodę zatrzymuje kolejkę. Karty mają terminy widoczne w kalendarzu, a na wspólnej tablicy wszyscy widzą, kto wziął którą kartę. Zgłoszenia z GitHuba trafiają na tablicę jako karty, a wynik wraca do nich jako komentarz — przez konektor GitHub w Claude. *Podsumowanie dnia* tworzy stronę na standup — co trafiło do Claude, co zrobione, co w toku — do wysłania do czatu zespołu.
+- **Agenci.** *Agenci* w sekcji *Praca* pokazują każdą sesję Claude Code z Arcade na tym komputerze, według folderu: czy Claude w niej pracuje, czeka na zgodę, skończył odpowiadać, czy sesja jest wolna, i od jak dawna, a także jej kartę i miejsce w kolejce. Gdy inna sesja prosi o zgodę, mówi o tym komunikat w twoim własnym panelu. Kolejka tablicy może działać w kilku sesjach naraz, a dwie sesje nie dostaną tej samej karty.
 - **Kalendarz.** W Desktop miesiąc z kafelków dni tej samej wielkości, z kropką w kolorze każdego wydarzenia; w terminalu i VS Code lista najbliższych. Wydarzenie dodaje się jedną linijką, np. „fri 9:30 standup”, i może się powtarzać codziennie, w dni robocze, co tydzień, co miesiąc albo co roku. Wybierz jego kolor i kiedy przypomnieć, z listy albo własnymi słowami (np. „45 min before” albo „the day before at 20:00”); przypomnienie przychodzi jako powiadomienie systemowe. Są tam również terminy kart z tablic. Claude też dodaje i zmienia wydarzenia: „dodaj rozmowę w piątek o 15:00”.
 - **Znajomi i czaty.** Opcjonalne logowanie przez GitHub utrzymuje te same ustawienia na wszystkich twoich komputerach i daje ci @nick; dodawaj znajomych po dokładnym nicku, sprawdzaj, kto jest online, udostępniaj tablice, zapraszaj do gry i rozmawiaj we dwoje lub w grupach.
 - **Wie, co robi agent.** Gdy agent skończy lub poprosi o zgodę, nad grą pojawia się baner — graj dalej, zatrzymaj grę albo wróć prosto do agenta (zachowanie wybierasz w ustawieniach). W Claude Desktop Arcade może też zamknąć kartę, w której coś oglądasz, żeby rozmowa znów była przed tobą.
@@ -94,7 +95,7 @@ W PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mark
 | **Czytaj i słuchaj** | Książki, Audiobooki, Artykuły, Podcasty |
 | **Oglądaj** | YouTube, Twitch, TikTok |
 | **Społeczność** | Znajomi, Czaty, **Zaloguj się przez GitHub** (albo **Konto** po zalogowaniu) |
-| **Praca** | Notatnik, Tablica projektów, Kalendarz |
+| **Praca** | Notatnik, Tablica projektów, Kalendarz, Agenci |
 | **Więcej** | Okno Arcade, Ustawienia, 🌐 język, 🐞 Zgłoś błąd, ☕ Wesprzyj projekt |
 
 Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuje `▸` i liczbę kafelków w środku, a *Społeczność* także nowe wiadomości 💬 i zaproszenia do znajomych 👥. Arcade pamięta, które sekcje są zwinięte. Niepotrzebną sekcję można ukryć w **Ustawieniach**: znika wtedy z menu całkowicie, razem z tytułem i kafelkami; *Więcej* z ustawieniami zostaje zawsze. Po zalogowaniu nagłówek menu pokazuje twój @nick z tymi samymi licznikami.
@@ -109,7 +110,7 @@ Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuj
 | **VS Code** | w panelu | okno przeglądarki |
 | **Claude Desktop** | w panelu | wbudowana przeglądarka Claude lub okno przeglądarki (wybór w ustawieniach); strzelanki — zawsze okno przeglądarki |
 
-Okno przeglądarki to osobne okno Arcade (w domyślnej przeglądarce lub tej wybranej w ustawieniach), a nie karta między twoimi zwykłymi. Czaty działają bezpośrednio w panelu — w terminalu i w Desktop; *Otwórz jako stronę* otwiera je tak samo na stronie. Notatnik, tablice projektów i kalendarz działają w panelu. TikTok otwiera się w Desktop we wbudowanej przeglądarce Claude, a gdzie indziej — w domyślnej przeglądarce, w której najpewniej masz już zalogowane konto.
+Okno przeglądarki to osobne okno Arcade (w domyślnej przeglądarce lub tej wybranej w ustawieniach), a nie karta między twoimi zwykłymi. Czaty działają bezpośrednio w panelu — w terminalu i w Desktop; *Otwórz jako stronę* otwiera je tak samo na stronie. Notatnik, tablice projektów, kalendarz i agenci działają w panelu. TikTok otwiera się w Desktop we wbudowanej przeglądarce Claude, a gdzie indziej — w domyślnej przeglądarce, w której najpewniej masz już zalogowane konto.
 
 ## Notatnik i tablice projektów
 
@@ -123,7 +124,7 @@ Oba są w sekcji *Praca* menu.
 - **Tablica projektów.** Kolumny — *Do zrobienia*, *W toku*, *Gotowe* albo własne, do 8 — i karty; karta to strona notatnika z tekstem i listą kontrolną. Naciśnij kartę, aby ją wybrać i przenosić strzałkami, a jeszcze raz — aby ją otworzyć. Claude też może prowadzić tablicę: *Wyślij do Claude* albo poproś go, żeby rozłożył zadania na tablicy w Arcade.
 - **Wspólne tablice.** Po zalogowaniu z @nickiem zaznacz znajomych i naciśnij *Udostępnij*: wszyscy mają te same karty, kolumny i nazwę, a zmiany docierają w ciągu kilku sekund. Właściciel zaprasza kolejnych znajomych, usuwa uczestników i kasuje tablicę ze strony Arcade; opuścić ją może każdy; cokolwiek się stanie, każdy zachowuje własną kopię. Do 3 własnych wspólnych tablic, do 20 osób i 200 kart na tablicy.
 - **Kilka sesji naraz.** Wszystkie otwarte sesje Claude Code na tym komputerze dzielą jeden notatnik i jego tablice: co jedna sesja doda, zmieni lub odhaczy, pozostałe widzą po kilku sekundach, więc każda sesja może prowadzić własną kartę tej samej tablicy.
-- **Kolejka dla Claude.** Na tablicy *Kolejka dla Claude* przekazuje Claude pierwszą kartę z pierwszej kolumny i przenosi ją do drugiej kolumny, jeśli tablica ma ich więcej niż dwie. Gdy Claude skończy odpowiadać, a ta karta jest już w ostatniej kolumnie, następna idzie sama — do 10 kart na jedno uruchomienie. Kolejka się zatrzymuje, gdy Claude prosi o zgodę, jego odpowiedź zostaje przerwana lub kończy się błędem, karta nie jest w ostatniej kolumnie albo wyślesz Claude coś innego — dalej decydujesz ty. *Zatrzymaj kolejkę* pozwala Claude dokończyć bieżącą kartę, ale następnej już nie dostanie. Na wspólnej tablicy karty wzięte przez kogoś innego są pomijane.
+- **Kolejka dla Claude.** Na tablicy *Kolejka dla Claude* przekazuje Claude pierwszą kartę z pierwszej kolumny i przenosi ją do drugiej kolumny, jeśli tablica ma ich więcej niż dwie. Gdy Claude skończy odpowiadać, a ta karta jest już w ostatniej kolumnie, następna idzie sama — do 10 kart na jedno uruchomienie. Kolejka się zatrzymuje, gdy Claude prosi o zgodę, jego odpowiedź zostaje przerwana lub kończy się błędem, karta nie jest w ostatniej kolumnie albo wyślesz Claude coś innego — dalej decydujesz ty. *Zatrzymaj kolejkę* pozwala Claude dokończyć bieżącą kartę, ale następnej już nie dostanie. Na wspólnej tablicy karty wzięte przez kogoś innego są pomijane. Kolejka może działać w kilku sesjach naraz — zobacz [Agenci](#agenci).
 - **Terminy.** Pole *Termin* karty przyjmuje „fri”, „tomorrow”, „20.11” albo „2026-11-20”. Data jest widoczna pod kartą na tablicy — w kolorze ostrzeżenia, gdy minęła, a karta nie jest zrobiona — i w kalendarzu, który przypomni o 9:00 tego dnia, chyba że karta jest już w ostatniej kolumnie. Claude też ustawia terminy.
 - **Kto wziął kartę.** Na wspólnej tablicy *Wyślij do Claude* oznacza kartę jako twoją, a wszyscy widzą pod nią „w toku u @nick”. Jeśli wziął ją już ktoś inny, Arcade najpierw o tym powie; naciśnij jeszcze raz, żeby mimo to wysłać ją do swojego Claude. *Zwolnij kartę* ją zwalnia.
 - **Zgłoszenia GitHub.** Pole *Zgłoszenia z GitHuba* na tablicy przyjmuje `owner/repo` albo link do zgłoszeń: Claude czyta do 20 otwartych zgłoszeń (issues) przez swój konektor GitHub i dodaje jako karty te, których jeszcze nie ma na tablicy. Na takiej karcie *Wynik do GitHuba* sprawia, że Claude pisze w zgłoszeniu krótki komentarz o tym, co zrobiono; zgłoszenia nie zamyka. Arcade nigdy nie łączy się bezpośrednio z GitHubem i nie potrzebuje kluczy.
@@ -144,6 +145,17 @@ Jest w sekcji *Praca* menu. Tak jak notatnik, kalendarz jest przechowywany na ty
 - **Terminy kart.** Karty z tablic, które mają termin, widać w ich dniu jako wpisy na cały dzień, oznaczone jako *zrobione*, gdy karta jest w ostatniej kolumnie; zmienia się je na samej karcie.
 - Nie synchronizuje się jeszcze z kalendarzami Google ani Apple.
 
+## Agenci
+
+Są w sekcji *Praca* menu: sesje Claude Code z Arcade na tym komputerze, każda nazwana według swojego folderu, twoja oznaczona jako *ta sesja*.
+
+- **Co robi każda.** *Czeka na zgodę*, *skończył odpowiadać*, *pracuje* lub *wolna* — i od jak dawna, z kartą, nad którą pracuje, i miejscem w kolejce, np. *Kolejka: karta 3 z 10*. Sesje czekające na zgodę są na początku. W Desktop każda sesja to karta, w terminalu i VS Code — wiersz. Zamknięta sesja znika w mniej niż minutę.
+- **Znajdź ją po folderze.** Arcade nie może otworzyć za ciebie innej sesji; nazwa folderu podpowie, które to okno lub zakładka.
+- **Jedna kolejka, kilka sesji.** Naciśnij *Kolejka dla Claude* na tej samej tablicy w każdej sesji, a następną kartę weźmie ta, która jest wolna; dwie sesje nie dostaną tej samej karty. Sesja, która dołącza, mówi o tym: *Na tej tablicy kolejka już działa w sesji „api”*. Każda sesja zatrzymuje własną kolejkę według tych samych zasad — pytanie o zgodę, przerwana odpowiedź, inna prośba — i daje do 10 kart na jedno uruchomienie. *Zatrzymaj kolejkę* zatrzymuje tylko tę sesję; *Zatrzymaj wszędzie* zatrzymuje wszystkie, a każda dokończy bieżącą kartę. Pod kartą tablica pokazuje, która sesja ją ma: *w sesji „api”*.
+- **Ten sam folder.** Jeśli sesja, która jest już w kolejce, pracuje w tym samym folderze, Arcade ostrzega, że obie sesje mogą edytować te same pliki, i dołącza dopiero po ponownym naciśnięciu *Kolejka dla Claude*. Bezpieczniej użyć osobnego folderu albo git worktree.
+- **Komunikaty.** Gdy inna sesja prosi o zgodę, krótki komunikat w twoim panelu Arcade mówi *Sesja „api” czeka na zgodę* — bez dźwięku i bez powiadomienia systemowego. Wyłącz go albo włącz komunikat o zakończonej odpowiedzi (domyślnie wyłączony) w *Ustawienia → Powiadomienia*.
+- **Zostaje na tym komputerze.** Każda sesja trzyma mały plik w `~/.claude/arcade/agents` ze swoim folderem, stanem i kartą; nic nie trafia na stronę Arcade.
+
 ## Dla zespołów
 
 Mały zespół może prowadzić swoje zadania w Arcade: jedna wspólna tablica, a kto weźmie kartę, przekazuje ją własnemu Claude.
@@ -156,6 +168,8 @@ Mały zespół może prowadzić swoje zadania w Arcade: jedna wspólna tablica, 
 6. Potrzebujesz tylko tablic i czatów? Przy pierwszym otwarciu Arcade zostaw tylko **Praca** i **Społeczność**. Potem w **Ustawienia → Powiadomienia** naciskaj **Wiersz „Zagrasz?”**, aż pojawi się *wyłączony*: gdy agent pracuje, nad promptem nic się nie pojawi.
 
 Od tej pory: otwórz tablicę, wybierz kartę, **Wyślij do Claude**. Jeśli Claude jest wolny, karta trafia do niego od razu; jeśli jest zajęty, karta czeka w polu wpisywania, aż ją wyślesz. Claude odhacza to, co zrobione, i dopisuje wynik na karcie, a wszyscy na tablicy widzą to w ciągu kilku sekund — i to, kto wziął którą kartę. Ustaw każdej karcie termin, a pojawi się w twoim kalendarzu. Na koniec dnia *Podsumowanie dnia* → *Wyślij do czatu* wrzuci twój standup do czatu zespołu. Czaty są w sekcji **Społeczność**.
+
+Sam prowadzisz kilka sesji Claude Code? Naciśnij *Kolejka dla Claude* na tej samej tablicy w każdej z nich: wolna sesja weźmie następną kartę, a **Praca** → **Agenci** pokazuje, co robi każda sesja.
 
 Dobrze wiedzieć: wspólne tablice i czaty są przechowywane na stronie Arcade i nie są szyfrowane, więc nie trzymaj w nich haseł ani kluczy. Arcade poznaje tylko nazwę i zdjęcie twojego profilu GitHub. Do 3 własnych wspólnych tablic, do 20 osób i 200 kart na tablicy. *Usuń konto* (naciśnij dwa razy) sprawia, że strona zapomina twoje konto i ustawienia.
 
@@ -226,6 +240,7 @@ Otwórz **Ustawienia** w sekcji *Więcej* menu `/arcade`:
 - **Agent skończył, gdy oglądasz** (Claude Desktop) — zamknięcie karty, którą Arcade otworzył dla filmu, transmisji, TikToka, artykułu lub odcinka, żeby czat z Claude znów był przed tobą, albo tylko powiadomienie.
 - **Powiadomienia podczas gry w oknie.**
 - **Powiadomienia o wiadomościach** — karta w lewym dolnym rogu, gdy znajoma osoba pisze na czacie (w macOS i Linuksie — powiadomienie systemowe).
+- **Inna sesja czeka na zgodę** i **W innej sesji Claude skończył odpowiadać** — komunikat w panelu Arcade o innych sesjach na tym komputerze, bez dźwięku (zobacz [Agenci](#agenci)); pierwszy jest domyślnie włączony, drugi wyłączony.
 - **Test klawiszy i zmiana przypisań** (terminal).
 - **Warunki i prywatność** — Warunki korzystania i Polityka prywatności strony, w twojej zwykłej przeglądarce.
 
@@ -237,7 +252,7 @@ Arcade działa wewnątrz Claude Code z takim dostępem, jaki Claude Code daje wt
 - **Przerwanie agenta.** Tylko w Claude Desktop, gdy otwierasz coś we wbudowanej przeglądarce, kiedy agent pracuje: Desktop nie pozwala wtyczce samej otworzyć przeglądarki. Arcade czeka, aż skończy się bieżące narzędzie (po 10 sekundach je przerywa, ale czeka, dopóki na ekranie jest pytanie o zgodę), przerywa agenta i prosi Claude, żeby otworzył stronę i wrócił do pracy. Żeby tego uniknąć, wybierz okno przeglądarki w *Ustawienia → Otwieranie gier*.
 - **Twoja rozmowa.** Do tematów Haiku w twojej własnej sesji dostaje końcówkę rozmowy, kilka tysięcy znaków; to wlicza się do twojego użycia Claude. Strona Arcade nigdy nie widzi rozmowy. Arcade pisze w polu wpisywania Claude lub je wysyła tylko na twoją prośbę — na przykład *Wyślij do Claude* w notatniku albo następną kartę z kolejki, którą uruchomiłeś przyciskiem *Kolejka dla Claude* — albo żeby otworzyć stronę, jak opisano wyżej.
 - **Programy.** Twoja przeglądarka dla okna Arcade (w Windows z osobnym profilem w `%LOCALAPPDATA%\claude-arcade`); powiadomienia, w tym przypomnienia kalendarza — PowerShell w Windows, `osascript` w macOS, `notify-send` w Linuksie; sprawdzenie, jakie przeglądarki są zainstalowane (Windows) albo jaki to system (`uname`).
-- **Pliki.** Zapisuje tylko ROM-y, które dodajesz przez `/arcade-add`, w `~/.claude/arcade/roms`, i czyta tylko wskazany przez ciebie plik, te kopie i własne pliki. Ustawienia, notatnik, kalendarz i ulubione są w magazynie wtyczek Claude Code.
+- **Pliki.** Zapisuje tylko ROM-y, które dodajesz przez `/arcade-add`, w `~/.claude/arcade/roms`, oraz mały znacznik każdej sesji dla *Agentów*, w `~/.claude/arcade/agents`; czyta tylko wskazany przez ciebie plik, te kopie, te znaczniki i własne pliki. Ustawienia, notatnik, kalendarz i ulubione są w magazynie wtyczek Claude Code.
 - **Zmienne środowiskowe.** Czyta `HOME` lub `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` i `OS`; żadnej nie zmienia.
 - **Sieć.** Sama wtyczka łączy się tylko ze stroną Arcade (`agent-arcade.fefaodessa.workers.dev`), z feedami RSS kanałów YouTube oraz blogów i podcastów, które pokazuje. Obrazki w panelu Desktop, na przykład awatary Twitcha, ładują się prosto z tych serwisów. Gry, książki i filmy ładuje strona otwarta w przeglądarce.
 
@@ -253,6 +268,7 @@ Szczegóły są w [Polityce prywatności](https://agent-arcade.fefaodessa.worker
 - Wyszukiwanie w *Własny temat* idzie przez YouTube API Services, a filmy odtwarza odtwarzacz samego YouTube, więc obowiązują też [Warunki korzystania z YouTube](https://www.youtube.com/t/terms) i [Polityka prywatności Google](https://policies.google.com/privacy). Do sześciu filmów wybiera Haiku w twojej własnej sesji — na podstawie tytułów i krótkich opisów; strona Arcade trzyma wyniki wyszukiwania we wspólnej pamięci podręcznej przez dobę.
 - Po zalogowaniu strona przechowuje twoje zsynchronizowane ustawienia, ulubione, @nick, znajomych, czaty i wspólne tablice, a zaproszenia do gry — przez 10 minut. Kto jest online, trzyma tylko w pamięci, przez półtorej minuty. Klucz sesji jest wysyłany tylko do strony Arcade.
 - Notatnik i kalendarz zostają na twoim komputerze. Wspólne tablice są przechowywane na stronie Arcade i nie są szyfrowane — tak jak czaty. Strony notatnika trafiają do Notion lub innej aplikacji tylko wtedy, gdy o to poprosisz, przez twoje własne konektory Claude; zgłoszenia i komentarze GitHub też — Arcade nigdy nie łączy się bezpośrednio z GitHubem.
+- *Agenci* widzą twoje inne sesje dzięki małym plikom w `~/.claude/arcade/agents` — folder, stan i karta każdej sesji. Zostają one na tym komputerze i nigdy nie trafiają na stronę Arcade; na wspólnej tablicy znajomi widzą tylko „w toku u @nick”, jak dotąd.
 - Zgłoszenie błędu zawiera twój tekst, wersję Arcade, miejsce, w którym jest otwarty, język interfejsu i system operacyjny — nic więcej; bez logowania idzie bez podpisu, a strona nie przechowuje żadnego adresu.
 - Niektóre gry łączą się z internetem tylko na twoje życzenie — na przykład opcjonalna ankieta OpenTTD i jego przycisk *Online Content*.
 

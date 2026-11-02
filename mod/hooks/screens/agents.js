@@ -1,0 +1,70 @@
+// Arcade: экран «Агенты» — сессии Claude Code с Arcade на этом компьютере: что делает каждая, какую карточку, где очередь
+import { fill } from '../chats.js'
+import { keep, tr } from '../i18n.js'
+import { S } from '../app/state.js'
+import { STATUS_LABEL, agentsList, agoText } from '../app/agents.js'
+
+// Цвет состояния: ждёт разрешения — бедой, закончил ход — успехом, работает — подсказкой, свободна — серым
+const STATUS_COLOR = { permission: 'error', done: 'success', working: 'suggestion', idle: '' }
+// Те же цвета для рамки и подложки карточки в Desktop
+const STATUS_HEX = { permission: '#e5484d', done: '#30a46c', working: '#3e63dd', idle: '#8b8d98' }
+
+// Сессии — в Desktop карточками, как события календаря, в терминале и VS Code — строками. Имена папок и названия
+// карточек — человека, без перевода (keep)
+export function agentsScreen($, e, kit) {
+  const { Box, Button, Text, desktop, dim, gap, hint, noticeLines, now, open } = kit
+  const list = agentsList(now)
+  const strong = (text) => Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [text] } : { bold: true, children: [text] })
+  const nameOf = (r) => (r.me ? `${r.name} · ${tr('эта сессия', S.lang)}` : r.name)
+  const stateOf = (r) => `${tr(STATUS_LABEL[r.status] ?? STATUS_LABEL.idle, S.lang)} · ${tr(agoText(now - r.since), S.lang)}`
+  const cardOf = (r) => (r.card ? (r.card.boardTitle ? fill(tr('«{0}» на доске «{1}»', S.lang), [r.card.title, r.card.boardTitle]) : `«${r.card.title}»`) : '')
+  const queueOf = (r) => (r.queue?.of ? fill(tr('Очередь: карточка {0} из {1}', S.lang), [r.queue.n, r.queue.of]) : '')
+  const status = (r) => {
+    const color = STATUS_COLOR[r.status]
+    return keep(Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] }))
+  }
+  const card = (r) => {
+    const hex = STATUS_HEX[r.status] ?? STATUS_HEX.idle
+    const lines = [cardOf(r), queueOf(r)].filter(Boolean)
+    return Box({
+      key: `agents-card-${r.sid || 'me'}`,
+      flexDirection: 'column',
+      alignItems: 'flex-start',
+      rowGap: 'xs',
+      borderStyle: 'round',
+      borderColor: `${hex}80`,
+      backgroundColor: `${hex}14`,
+      paddingX: 'sm',
+      paddingY: 'xs',
+      children: [keep(strong(nameOf(r))), status(r), ...lines.map((x) => keep(dim(x)))],
+    })
+  }
+  const line = (r) => {
+    const color = STATUS_COLOR[r.status]
+    const rest = [cardOf(r), queueOf(r)].filter(Boolean).join(' · ')
+    return Box({
+      key: `agents-line-${r.sid || 'me'}`,
+      flexDirection: 'column',
+      children: [
+        keep(Text({ children: [Text({ bold: true, children: [nameOf(r)] }), ' — ', Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] })] })),
+        ...(rest ? [keep(dim(`  ${rest}`))] : []),
+      ],
+    })
+  }
+  const off = !S.ag?.on ? [gap, dim('Другие сессии здесь не видны: у этой сессии нет домашней папки.')] : []
+  const others = list.length > 1 ? [] : [gap, dim('Других сессий с Arcade сейчас нет. Открой ещё одну сессию Claude Code — она появится здесь.')]
+  const rows = desktop ? [Box({ key: 'agents-list', flexDirection: 'column', rowGap: 'sm', children: list.map(card) })] : list.map(line)
+  return [
+    Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') }),
+    gap,
+    dim('Сессии Claude Code с Arcade на этом компьютере — по папке. Закрытая сессия пропадает отсюда меньше чем за минуту. Всё это видно только на этом компьютере.'),
+    gap,
+    ...rows,
+    ...off,
+    ...others,
+    gap,
+    dim('Очередь доски можно запустить в нескольких сессиях: нажми «Очередь для Claude» на той же доске в каждой — свободная сессия возьмёт следующую карточку.'),
+    ...noticeLines,
+    ...hint,
+  ]
+}

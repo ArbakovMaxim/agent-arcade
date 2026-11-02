@@ -29,6 +29,7 @@ import { tiktokScreen, twitchScreen, youtubeScreen, youtubeTopicScreen } from '.
 import { booksScreen, readsScreen, readsTopicScreen } from './read.js'
 import { notesScreen } from './notes.js'
 import { boardsScreen } from './boards.js'
+import { agentsScreen } from './agents.js'
 import { calendarScreen } from './calendar.js'
 
 export async function drawPane($, e) {
@@ -472,6 +473,7 @@ export async function drawPane($, e) {
     else if (S.menu === 'boards' || S.menu.startsWith('board:') || (S.menu.startsWith('note:') && isBoard(S.notes.find((p) => p.id === S.menu.slice(5))))) items = boardsScreen($, e, kit)
     else if (S.menu === 'notes' || S.menu.startsWith('note:')) items = notesScreen($, e, kit)
     else if (calendarShown()) items = calendarScreen($, e, kit)
+    else if (S.menu === 'agents') items = agentsScreen($, e, kit)
     else if (S.menu === 'tiktok') items = tiktokScreen($, e, kit)
     else if (S.menu === 'twitch' || S.menu.startsWith('twitch:')) items = twitchScreen($, e, kit)
     else if (S.menu === 'articles' || S.menu === 'podcasts') items = readsScreen($, e, kit)

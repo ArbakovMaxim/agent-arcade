@@ -5,6 +5,7 @@ import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, co
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../desks.js'
 import { LAUNCH_TIMEOUT_MS, S, nb } from './state.js'
 import { log } from './status.js'
+import { holdCard } from './agents.js'
 import { accountNote } from './profile.js'
 import { chatFetch, chatNote, chatTitle, friendsCall } from './talk.js'
 import { addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../daylog.js'
@@ -293,6 +294,8 @@ export async function sendNote($, id, queued = false) {
   if (issue) lines.push(`${t('Это задача GitHub')}: ${issue} — ${t('подробности, обсуждение и код читай там инструментами коннектора GitHub, если он подключён.')}`)
   if (queued) lines.push(t('Карточки идут очередью Arcade: перенесёшь эту в последнюю колонку — следующую Arcade даст сам. Нужно решение человека — не переноси, спроси.'))
   const sent = await giveClaude($, lines.join('\n'), 'page')
+  // Карточку отдали этой сессии кнопкой — другие сессии видят «у сессии «…»» и очередью её не берут (очередь отмечает сама)
+  if (!queued && sent && last && columnOf(page, board.board.cols) !== last.id) holdCard(page.id)
   await logGave($, page, board)
   return sent
 }
