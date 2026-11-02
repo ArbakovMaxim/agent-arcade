@@ -1,5 +1,5 @@
 // Arcade: экраны друзей и приглашения.
-import { keep } from '../i18n.js'
+import { keep, tr } from '../i18n.js'
 import { S } from '../app/state.js'
 import { saveSetting, startLogin, syncAccount } from '../app/profile.js'
 import { INVITE_MINUTES, addFriend, friendsCall, inviteFriend, inviteGames, pulseSoon } from '../app/talk.js'
@@ -24,7 +24,7 @@ export function inviteScreen($, e, kit) {
 
 // Друзья: взаимные заявки по точному @нику. Без входа и без ника — что сделать сначала
 export function friendsScreen($, e, kit) {
-  const { Box, Button, Input, Text, back, dim, gap, hint, inviteRows, noticeLines, open, section, windowed } = kit
+  const { Box, Button, Input, Text, back, desktop, dim, gap, hint, inviteRows, noticeLines, open, section, windowed } = kit
   let items
   const login = Button({
     key: 'arcade-friends-login',
@@ -39,6 +39,9 @@ export function friendsScreen($, e, kit) {
   const note = S.fr.note ? [S.fr.bad ? Text({ color: 'warning', children: [S.fr.note] }) : dim(S.fr.note)] : []
   const person = (p) => keep(Text({ children: [`@${p.handle}`] }))
   const row = (children) => Box({ flexDirection: 'row', columnGap: 2, children })
+  // В Desktop кнопки в рамках друг под другом слипаются: строки — столбиком с промежутком, действия — рядом
+  const stack = (key, list) => (desktop ? [Box({ key, flexDirection: 'column', rowGap: 'sm', children: list })] : list)
+  const actions = (key, list) => (desktop ? [Box({ key, flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, rowGap: 'sm', children: list })] : list)
   if (!S.acct.session) {
     items = [
       back,
@@ -81,8 +84,11 @@ export function friendsScreen($, e, kit) {
       gap,
       dim('Кого удалить из друзей? Уведомления не будет; у друга ты тоже пропадёшь из списка.'),
       gap,
-      ...(S.fr.list?.friends ?? []).map((p, k) =>
-        keep(Button({ key: `arcade-fr-remove-${p.id}`, label: `@${p.handle}`, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `@${p.handle} больше не в друзьях.`) })),
+      ...stack(
+        'fr-remove-list',
+        (S.fr.list?.friends ?? []).map((p, k) =>
+          keep(Button({ key: `arcade-fr-remove-${p.id}`, label: `@${p.handle}`, ...(k === 0 ? { autoFocus: true } : {}), onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `@${p.handle} больше не в друзьях.`) })),
+        ),
       ),
       ...(note.length ? [gap, ...note] : []),
       ...hint,
@@ -122,48 +128,61 @@ export function friendsScreen($, e, kit) {
       Text({ children: [`Твой ник: @${S.acct.handle}`] }),
       dim('Друзья добавляют тебя по нему, а ты их — по их @нику.'),
       gap,
-      Input({ key: 'arcade-friends-add', label: 'Добавить друга', placeholder: '@ник друга, точно как есть', onSubmit: (value) => addFriend($, value) }),
+      // В Desktop подпись слева сжимала поле, и подсказка в нём обрезалась: там она — в самом поле
+      Input({
+        key: 'arcade-friends-add',
+        ...(desktop ? { placeholder: 'Добавить друга: @ник, точно как есть', submitLabel: tr('Добавить', S.lang) } : { label: 'Добавить друга', placeholder: '@ник друга, точно как есть' }),
+        onSubmit: (value) => addFriend($, value),
+      }),
       ...(S.fr.busy === 'friends' ? [dim('Отправляю заявку…')] : note.length ? note : [dim('Подсказок по буквам нет: заявка дойдёт, только если ник написан точно.')]),
       ...(S.ol.invites.length ? [section('Зовут сыграть'), ...S.ol.invites.flatMap((invite, k) => inviteRows(invite, k === 0 && !fromRemove))] : []),
       ...(incoming.length
         ? [
             section('Заявки тебе'),
-            ...incoming.map((p, k) =>
-              row([
-                person(p),
-                Button({ key: `arcade-fr-accept-${p.id}`, label: 'Принять', ...(k === 0 && !fromRemove ? { autoFocus: true } : {}), onPress: () => friendsCall($, 'accept', { id: p.id }, p.handle, `Теперь вы с @${p.handle} друзья.`) }),
-                Button({ key: `arcade-fr-decline-${p.id}`, label: 'Отклонить', onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `Заявка от @${p.handle} отклонена.`) }),
-              ]),
+            ...stack(
+              'fr-incoming',
+              incoming.map((p, k) =>
+                row([
+                  person(p),
+                  Button({ key: `arcade-fr-accept-${p.id}`, label: 'Принять', ...(k === 0 && !fromRemove ? { autoFocus: true } : {}), onPress: () => friendsCall($, 'accept', { id: p.id }, p.handle, `Теперь вы с @${p.handle} друзья.`) }),
+                  Button({ key: `arcade-fr-decline-${p.id}`, label: 'Отклонить', onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `Заявка от @${p.handle} отклонена.`) }),
+                ]),
+              ),
             ),
           ]
         : []),
       section('Друзья'),
       ...(friends.length
-        ? shown.map(friendRow)
+        ? stack('fr-list', shown.map(friendRow))
         : [dim(list ? 'Друзей пока нет — добавь кого-нибудь по @нику.' : S.fr.loading ? 'Загружаю друзей…' : 'Список друзей не загрузился.')]),
       ...(olNote.length ? [gap, ...olNote] : []),
       ...(friends.length ? [gap, Button({ key: 'arcade-fr-remove', label: 'Удалить друга', ...(fromRemove ? { autoFocus: true } : {}), onPress: open('friends:remove') })] : []),
       ...(outgoing.length
         ? [
             section('Твои заявки'),
-            ...outgoing.map((p) =>
-              row([person(p), dim('ждёт ответа'), Button({ key: `arcade-fr-cancel-${p.id}`, label: 'Отменить', onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `Заявка для @${p.handle} отменена.`) })]),
+            ...stack(
+              'fr-outgoing',
+              outgoing.map((p) =>
+                row([person(p), dim('ждёт ответа'), Button({ key: `arcade-fr-cancel-${p.id}`, label: 'Отменить', onPress: () => friendsCall($, 'unfriend', { id: p.id }, p.handle, `Заявка для @${p.handle} отменена.`) })]),
+              ),
             ),
           ]
         : []),
       gap,
-      // Прятаться можно: тогда друзья не видят тебя в сети, а ты их видишь
-      Button({
-        key: 'arcade-fr-hide',
-        label: `Показывать друзьям, что я в сети: ${S.hideOnline ? 'нет' : 'да'}`,
-        onPress: async () => {
-          S.hideOnline = !S.hideOnline
-          $.ui.invalidate('ui.render')
-          await saveSetting($, 'hideOnline', S.hideOnline)
-          pulseSoon($)
-        },
-      }),
-      Button({ key: 'arcade-fr-refresh', label: S.fr.loading ? 'Обновляю…' : 'Обновить', onPress: () => friendsCall($, 'friends') }),
+      ...actions('fr-actions', [
+        // Прятаться можно: тогда друзья не видят тебя в сети, а ты их видишь
+        Button({
+          key: 'arcade-fr-hide',
+          label: `Показывать друзьям, что я в сети: ${S.hideOnline ? 'нет' : 'да'}`,
+          onPress: async () => {
+            S.hideOnline = !S.hideOnline
+            $.ui.invalidate('ui.render')
+            await saveSetting($, 'hideOnline', S.hideOnline)
+            pulseSoon($)
+          },
+        }),
+        Button({ key: 'arcade-fr-refresh', label: S.fr.loading ? 'Обновляю…' : 'Обновить', onPress: () => friendsCall($, 'friends') }),
+      ]),
       ...noticeLines,
       ...hint,
     ]

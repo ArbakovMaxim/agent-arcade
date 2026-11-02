@@ -7,6 +7,7 @@
 - Older plugin versions still get there: the page links to the library, and an own game (#mine=…) goes straight to the window · старые версии плагина тоже доходят: на странице есть ссылка на библиотеку, а своя игра (#mine=…) сразу уходит в окно
 - An own game opened in the window in another language now opens in that language: the language goes in the query, before the part after # · своя игра, открытая в окне на другом языке, теперь открывается на нём: язык идёт в строке запроса, до части после #
 - The plugin's homepage is now the site · домашняя страница плагина — теперь сайт
+- Friends in Desktop: the add field has its hint inside it and no longer gets squeezed by a label on its left; friends, requests and buttons no longer stick to each other edge to edge · друзья в Desktop: подсказка поля «Добавить друга» — в самом поле, подпись слева его больше не сжимает; друзья, заявки и кнопки больше не слипаются рамками
 
 ## 0.36.3 — Arcade меньше грузит процессор, когда ты не играешь · Arcade uses less CPU when you are not playing
 

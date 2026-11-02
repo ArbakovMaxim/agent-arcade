@@ -4980,6 +4980,45 @@ test('друзья по-английски: экран, заметки и пли
   await ui.press({ key: 'arcade-fr-remove' })
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
+  // Desktop: подсказка в самом поле — тоже по-английски
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await desk.press({ key: 'arcade-back' })
+  expect(await desk.find({ key: 'arcade-friends-add' })).toMatchObject({ props: { placeholder: 'Add a friend: their @handle, exactly', submitLabel: 'Add' } })
+  expect((await drawnTexts(desk)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')).toEqual([])
+  await desk.unmount()
+})
+
+test('Desktop: друзья — поле без подписи слева, строки и кнопки не слипаются', HEAVY, async ($, on) => {
+  const { api } = friendsSite()
+  const { clock } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-friends' })
+  await clock.settle()
+  // Подпись слева сжимала поле, и подсказка в нём обрезалась: подсказка — в самом поле
+  const add = await ui.find({ key: 'arcade-friends-add' })
+  expect(add).toMatchObject({ props: { placeholder: 'Добавить друга: @ник, точно как есть', submitLabel: 'Добавить' } })
+  expect(add.props.label).toBeUndefined()
+  await ui.input({ key: 'arcade-friends-add', text: 'new_pal', kind: 'submit' })
+  await clock.settle()
+  // Заявки, друзья и свои заявки — столбиком с промежутком по высоте
+  const block = async (key: string, inside: string[]) => {
+    const box = await ui.find({ key })
+    expect(box).toMatchObject({ props: { flexDirection: 'column', rowGap: 'sm' } })
+    for (const k of inside) expect(JSON.stringify(box)).toContain(k)
+  }
+  await block('fr-incoming', ['"arcade-fr-accept-12"', '"arcade-fr-accept-15"', '"arcade-fr-accept-18"'])
+  await block('fr-list', ['@octo_pal'])
+  await block('fr-outgoing', ['"arcade-fr-cancel-21"'])
+  // «Показывать друзьям…» и «Обновить» — рядом, с промежутками, а не рамка к рамке
+  const acts = await ui.find({ key: 'fr-actions' })
+  expect(acts).toMatchObject({ props: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 'sm' } })
+  for (const k of ['"arcade-fr-hide"', '"arcade-fr-refresh"']) expect(JSON.stringify(acts)).toContain(k)
+  // Кого удалить — тоже столбиком с промежутком
+  await ui.press({ key: 'arcade-fr-remove' })
+  expect(await ui.find({ key: 'fr-remove-list' })).toMatchObject({ props: { flexDirection: 'column', rowGap: 'sm' } })
+  await ui.unmount()
 })
 
 // --- В сети и приглашения в игру ---
