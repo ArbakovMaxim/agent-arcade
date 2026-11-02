@@ -21,6 +21,7 @@ import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/pro
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
+import { queueNext, queuePermission, queueTurnDone, queueTurnStart } from './app/queue.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
@@ -211,6 +212,7 @@ export function register(on) {
       S.askVisible = false
       S.agentAlert = null
       S.paused = false
+      queueTurnStart($, e)
       log('агент начал ход')
       if (DEBUG) await $.ui.toast('arcade: агент начал ход')
     } catch (err) {
@@ -223,6 +225,7 @@ export function register(on) {
     try {
       S.status = 'permission'
       S.askVisible = false
+      queuePermission($)
       if (S.paneOpen && S.view !== 'library') {
         S.agentAlert = 'permission'
         if (S.onPermission === 'pause') {
@@ -286,6 +289,8 @@ export function register(on) {
       }
       S.status = 'done'
       S.askVisible = false
+      // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
+      if (S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
       if (S.paneOpen && S.view !== 'library') {
         S.agentAlert = 'done'
         if (S.onDone === 'pause') {

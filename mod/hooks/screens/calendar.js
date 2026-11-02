@@ -1,14 +1,17 @@
 // Arcade: экран календаря.
 import { keep, tr } from '../i18n.js'
-import { ALL_DAY_HOUR, COLORS, DEFAULT_COLOR, addDays, addMonths, between, colorOf, dayKey, monthGrid, parseRemind, quickParse, weekday } from '../calendar.js'
+import { ALL_DAY_HOUR, COLORS, DEFAULT_COLOR, REPEATS, addDays, addMonths, between, cardDues, colorOf, compareEvents, dayKey, monthGrid, parseRemind, quickParse, weekday } from '../calendar.js'
 import { S, cal } from '../app/state.js'
-import { addFromScreen, deleteEvent, editEvent, nextRemind, remindChoices, whenText } from '../app/calendar.js'
+import { addFromScreen, dayText, deleteEvent, editEvent, nextRemind, remindChoices, whenText } from '../app/calendar.js'
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const WEEKDAYS_FULL = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 // Цвета событий словами — в выборе цвета
 const COLOR_NAMES = { blue: 'синий', green: 'зелёный', yellow: 'жёлтый', orange: 'оранжевый', red: 'красный', purple: 'фиолетовый', pink: 'розовый', gray: 'серый' }
+// Повтор словами — в выборе повтора и в строках событий
+const REPEAT_NAMES = { '': 'Не повторять', daily: 'Каждый день', weekdays: 'По будням', weekly: 'Каждую неделю', monthly: 'Каждый месяц', yearly: 'Каждый год' }
+const repeatText = (r) => tr(REPEAT_NAMES[r ?? ''], S.lang)
 // «Ближайшее»: события на UPCOMING_DAYS дней вперёд, не больше UPCOMING_MAX
 const UPCOMING_DAYS = 30
 const UPCOMING_MAX = 10
@@ -68,14 +71,17 @@ export function calendarScreen($, e, kit) {
   const stack = (key, list) => (desktop ? [Box({ key, flexDirection: 'column', rowGap: 'sm', children: list })] : list)
   const strong = (text) => Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [text] } : { bold: true, children: [text] })
   const dot = (x, more = {}) => Text({ color: colorOf(x), ...more, children: ['●'] })
-  // Открыть событие; назад — фокус на той же кнопке (cal.back — её список)
+  // Серия бывает в списке несколько раз — ключ и фокус у каждого её раза свои, с днём
+  const ref = (x) => (x.first ? `${x.id}-${x.day}` : x.id)
+  // Открыть событие; назад — фокус на той же кнопке (cal.back — её фокус). Срок карточки доски открывает саму карточку,
+  // раз серии — всю серию
   const openEvent = (x, list) => () => {
     cal.note = ''
     cal.bad = false
     cal.confirm = false
     cal.focus = ''
-    cal.back = list
-    open(`calendar:${x.id}`)()
+    cal.back = `${list}-${ref(x)}`
+    open(x.card ? `note:${x.card}` : `calendar:${x.id}`)()
   }
 
   if (ev) {
@@ -83,7 +89,7 @@ export function calendarScreen($, e, kit) {
       cal.note = ''
       cal.bad = false
       cal.confirm = false
-      cal.focus = `${cal.back || 'ev'}-${ev.id}`
+      cal.focus = cal.back || `ev-${ev.id}`
       open('calendar')()
     }
     const confirm = cal.confirm
@@ -174,12 +180,44 @@ export function calendarScreen($, e, kit) {
         }
       },
     })
+    // Повтор — выбором из списка, где выбора нет — кнопкой по кругу. Серия по будням с выходного дня начинается с
+    // понедельника: день первого раза поменялся — поле «Когда» рисуется заново
+    const repeats = ['', ...REPEATS]
+    const setRepeat = async (repeat) => {
+      cal.focus = 'repeat'
+      const day = ev.day
+      if ((await editEvent($, ev.id, { repeat }, '')) && S.calendar.find((x) => x.id === ev.id)?.day !== day) {
+        cal.field++
+        $.ui.invalidate('ui.render')
+      }
+    }
+    const repeatPick = Select
+      ? keep(
+          Select({
+            key: 'arcade-cal-repeat',
+            label: tr('Повтор', S.lang),
+            options: repeats.map((r) => ({ value: r || 'none', label: repeatText(r) })),
+            value: ev.repeat || 'none',
+            ...focusOn('repeat'),
+            onSelect: (value) => setRepeat(value === 'none' ? '' : value),
+          }),
+        )
+      : keep(
+          Button({
+            key: 'arcade-cal-repeat',
+            label: `${tr('Повтор', S.lang)}: ${repeatText(ev.repeat)}`,
+            ...focusOn('repeat'),
+            onPress: () => setRepeat(repeats[(repeats.indexOf(ev.repeat ?? '') + 1) % repeats.length]),
+          }),
+        )
+    // Когда: «Завтра 15:00»; у серии — «🔁 По будням, 09:30 · первый раз сегодня»
+    const when = ev.repeat ? `🔁 ${repeatText(ev.repeat)}, ${ev.time || tr('весь день', S.lang)} · ${tr('первый раз', S.lang)} ${dayText(ev.day, today)}` : cap(whenText(ev, today))
     const title = desktop ? { size: 'heading', weight: 'semibold', wrap: 'wrap' } : { bold: true }
     return [
       Button({ key: 'arcade-back', label: '← Назад', onPress: leave }),
       gap,
       keep(Box({ flexDirection: 'row', columnGap: 1, alignItems: 'center', children: [dot(ev, desktop ? { size: 'heading' } : {}), Text({ ...title, children: [ev.title] })] })),
-      keep(dim(`${cap(whenText(ev, today))}${ev.remind === null ? '' : ` · 🔔 ${remindText(ev)}`}`)),
+      keep(dim(`${when}${ev.remind === null ? '' : ` · 🔔 ${remindText(ev)}`}`)),
       gap,
       ...stack('cal-event-fields', [
         Input({
@@ -199,13 +237,15 @@ export function calendarScreen($, e, kit) {
           onSubmit: async (value) => {
             const when = quickParse(value, ev.day, today)
             if (when.title) return say('Не понял, когда: пиши как «пт 15:00» или «2026-11-20 10:00».')
-            if (await editEvent($, ev.id, { day: when.day, time: when.time })) {
+            if (await editEvent($, ev.id, { day: when.day, time: when.time, ...(when.repeat ? { repeat: when.repeat } : {}) })) {
               cal.field++
               $.ui.invalidate('ui.render')
             }
           },
         }),
         dim('  Без времени — на весь день.'),
+        ...(ev.repeat ? [dim('  У повторяющегося события здесь — день первого раза.')] : []),
+        repeatPick,
         Input({
           key: `arcade-cal-note-${cal.field}`,
           label: 'Заметка',
@@ -247,14 +287,14 @@ export function calendarScreen($, e, kit) {
   // Событие кнопкой с цветным кружком: время (или «весь день») и название; в «Ближайшем» — ещё и день. Событие бывает
   // в обоих списках разом — ключи у списков свои
   const eventButton = (x, label, list) =>
-    keep(Button({ key: `arcade-cal-${list}-${x.id}`, label, ...focusOn(`${list}-${x.id}`), children: [dot(x), ` ${label}`], onPress: openEvent(x, list) }))
+    keep(Button({ key: `arcade-cal-${list}-${ref(x)}`, label, ...focusOn(`${list}-${ref(x)}`), children: [dot(x), ` ${label}`], onPress: openEvent(x, list) }))
   // В Desktop событие — карточка его цвета: название кнопкой, ниже когда и напоминание, первая строка заметки
   const eventCard = (x, when, list) => {
     const hex = colorOf(x)
-    const line = [when, x.remind === null ? '' : `🔔 ${remindText(x)}`].filter(Boolean).join(' · ')
+    const line = (x.card ? [when, `${tr('доска', S.lang)} ${x.board}`, x.done ? tr('сделано', S.lang) : ''] : [when, x.repeat ? `🔁 ${repeatText(x.repeat)}` : '', x.remind === null ? '' : `🔔 ${remindText(x)}`]).filter(Boolean).join(' · ')
     const first = x.note?.split('\n')[0] ?? ''
     return Box({
-      key: `cal-card-${list}-${x.id}`,
+      key: `cal-card-${list}-${ref(x)}`,
       flexDirection: 'column',
       alignItems: 'flex-start',
       rowGap: 'xs',
@@ -271,8 +311,15 @@ export function calendarScreen($, e, kit) {
       ],
     })
   }
-  const dayEvents = between(S.calendar, selected, 1)
-  const upcoming = between(S.calendar, today, UPCOMING_DAYS).slice(0, UPCOMING_MAX)
+  // События и сроки карточек досок вместе; в «Ближайшем» — без сделанных карточек, серия — один раз, ближайшим
+  const all = [...S.calendar, ...cardDues(S.notes)].sort(compareEvents)
+  const dayEvents = between(all, selected, 1)
+  const seen = new Set()
+  const upcoming = between(all, today, UPCOMING_DAYS)
+    .filter((x) => !x.done && !seen.has(x.id) && seen.add(x.id))
+    .slice(0, UPCOMING_MAX)
+  // Когда: «Сегодня, весь день», «Завтра 15:00»; у карточки — «Сегодня, срок карточки»
+  const whenOf = (x) => cap(x.card ? `${dayText(x.day, today)}, ${tr('срок карточки', S.lang)}` : whenText(x, today))
   const addField = [
     Input({
       key: `arcade-cal-add-${cal.field}`,
@@ -293,7 +340,7 @@ export function calendarScreen($, e, kit) {
     ...(upcoming.length
       ? stack(
           'cal-upcoming',
-          upcoming.map((x) => (desktop ? eventCard(x, cap(whenText(x, today)), 'ev') : eventButton(x, `${cap(whenText(x, today))} · ${x.title}`, 'ev'))),
+          upcoming.map((x) => (desktop ? eventCard(x, whenOf(x), 'ev') : eventButton(x, `${whenOf(x)} · ${x.title}${x.repeat ? ' 🔁' : ''}`, 'ev'))),
         )
       : [dim(S.calendar.length ? 'В ближайший месяц событий нет.' : 'Календарь пуст — запиши первое событие.')]),
   ]
@@ -306,8 +353,10 @@ export function calendarScreen($, e, kit) {
   // не оставалось места — число обрезалось целиком. Кнопка с числом — без «пилюли» (plain): та шире самого числа и не
   // давала плиткам ужаться, ряд уезжал за край панели. Плитка ужимается до нуля, лишнее обрезается — но не ряд
   const cell = { width: 0, flexGrow: 1, minWidth: 0, overflow: 'hidden' }
+  // События по дням всей сетки месяца — с разами серий
+  const weeks = monthGrid(cal.month)
   const byDay = new Map()
-  for (const x of S.calendar) byDay.set(x.day, [...(byDay.get(x.day) ?? []), x])
+  for (const x of between(all, weeks[0][0].day, weeks.length * 7)) byDay.set(x.day, [...(byDay.get(x.day) ?? []), x])
   const pickDay = (d) => () => {
     cal.day = d.day
     if (!d.inMonth) cal.month = d.day.slice(0, 7)
@@ -318,7 +367,7 @@ export function calendarScreen($, e, kit) {
   const dayName = (day) =>
     `${day === today ? tr('Сегодня', S.lang) : day === addDays(today, 1) ? tr('Завтра', S.lang) : tr(WEEKDAYS_FULL[weekday(day)], S.lang)} · ${dm(day)}`
   const freeDay = (day) => dim(day < today ? 'В этот день ничего не было.' : 'Свободный день — запиши что-нибудь ниже.')
-  const dayCards = (list) => list.map((x) => eventCard(x, x.time ?? tr('весь день', S.lang), 'dayev'))
+  const dayCards = (list) => list.map((x) => eventCard(x, x.card ? tr('срок карточки', S.lang) : (x.time ?? tr('весь день', S.lang)), 'dayev'))
   const dots = (list) =>
     Text({
       size: 'caption',
@@ -361,13 +410,13 @@ export function calendarScreen($, e, kit) {
     rowGap: CELL_GAP,
     children: [
       Box({ flexDirection: 'row', columnGap: CELL_GAP, children: WEEKDAYS.map((w) => Box({ key: `cal-wd-${w}`, ...cell, alignItems: 'center', children: [dim(w)] })) }),
-      ...monthGrid(cal.month).map((week) => Box({ key: `cal-week-${week[0].day}`, flexDirection: 'row', columnGap: CELL_GAP, children: week.map(dayTile) })),
+      ...weeks.map((week) => Box({ key: `cal-week-${week[0].day}`, flexDirection: 'row', columnGap: CELL_GAP, children: week.map(dayTile) })),
     ],
   })
   // Узкая панель — месяц списком, как «Расписание» в календаре телефона: дни с событиями, сегодняшний и выбранный;
   // день — кнопкой, под ним карточки его событий
   const monthList = () => {
-    const listed = monthGrid(cal.month)
+    const listed = weeks
       .flat()
       .filter((d) => d.inMonth && (byDay.has(d.day) || d.day === today || d.day === selected))
     return Box({
@@ -376,7 +425,7 @@ export function calendarScreen($, e, kit) {
     rowGap: 'md',
     children: listed.length
       ? listed.map((d) => {
-          const cards = dayCards(between(S.calendar, d.day, 1))
+          const cards = dayCards(byDay.get(d.day) ?? [])
           return Box({
             key: `cal-list-${d.day}`,
             flexDirection: 'column',

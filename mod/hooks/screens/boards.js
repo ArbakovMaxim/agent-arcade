@@ -5,13 +5,16 @@ import { MAX_MEMBERS, colId } from '../desks.js'
 import { S, nb } from '../app/state.js'
 import { startLogin } from '../app/profile.js'
 import { friendsCall } from '../app/talk.js'
-import { boardMembers, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, loadBoards, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
+import { dayKey } from '../calendar.js'
+import { dayText } from '../app/calendar.js'
+import { endQueue, startQueue } from '../app/queue.js'
+import { boardMembers, cardTaker, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, importIssues, loadBoards, makeSummary, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
 
 // Доска проектов: список досок и экран доски — колонки с карточками, перенос выбранной карточки кнопками,
 // колонки, общий доступ с друзьями. Карточку открывает экран страницы блокнота. Названия досок, колонок и
 // карточек, ники — человека, без перевода (keep)
 export function boardsScreen($, e, kit) {
-  const { Box, Button, Input, TILE_GAP, Text, desktop, dim, gap, hint, makeButton, noticeLines, open, section, tileWidth, tiles } = kit
+  const { Box, Button, Input, TILE_GAP, Text, desktop, dim, gap, hint, makeButton, noticeLines, now, open, section, tileWidth, tiles } = kit
   let items
   if (S.menu.startsWith('note:')) S.menu = `board:${S.menu.slice(5)}`
   const board = S.menu.startsWith('board:') ? S.notes.find((p) => p.id === S.menu.slice(6) && isBoard(p)) : null
@@ -108,6 +111,17 @@ export function boardsScreen($, e, kit) {
       section('Доски'),
       ...(boards.length ? [column(boards.flatMap(boardTile))] : [dim('Досок пока нет — впиши название новой выше.')]),
       gap,
+      Button({
+        key: 'arcade-board-summary',
+        label: 'Итоги дня',
+        onPress: () => {
+          S.dk.note = ''
+          S.dk.bad = false
+          return makeSummary($)
+        },
+      }),
+      dim('  страница для стендапа: что сегодня ушло Claude, что сделано и что ещё в работе'),
+      gap,
       dim(
         S.acct.session
           ? S.dk.loading && !S.dk.list
@@ -148,14 +162,24 @@ export function boardsScreen($, e, kit) {
       }
       return keep(desktop ? makeButton({ ...props, children: [Text({ wrap: 'wrap', children: [label] })] }) : Button(props))
     }
+    // Под карточкой: сколько пунктов отмечено, срок (прошёл, а карточка не в последней колонке, — цветом беды) и кто
+    // её взял на общей доске
+    const today = dayKey(now)
+    const lastCol = board.board.cols.at(-1).id
+    const cardAbout = (card, col) => {
+      const { done, total } = checkStats(card.body)
+      const { taken } = cardTaker(card)
+      const late = card.due && card.due < today && col !== lastCol
+      const parts = [total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '']
+      const text = parts.filter(Boolean).join(' · ')
+      if (!text) return []
+      return [keep(late ? Text({ color: 'warning', children: [`  ${text}`] }) : dim(`  ${text}`))]
+    }
     const columnBox = (c) => {
       const cards = columnCards(S.notes, board, c.id)
       const children = [
         keep(strong(`${colName(c)} · ${cards.length}`)),
-        ...cards.flatMap((card) => {
-          const { done, total } = checkStats(card.body)
-          return [cardButton(card), ...(total ? [keep(dim(`  ☑ ${done}/${total}`))] : [])]
-        }),
+        ...cards.flatMap((card) => [cardButton(card), ...cardAbout(card, c.id)]),
         ...(cards.length ? [] : [dim('пусто')]),
         // В Desktop колонка узкая: без подписи слева поле занимает всю её ширину, подсказка — в самом поле
         Input({
@@ -295,6 +319,10 @@ export function boardsScreen($, e, kit) {
         ),
       ]
     }
+    // Очередь для Claude на этой доске: какую карточку он делает и сколько уже отдано
+    const queued = S.queue?.board === id
+    const queueCard = queued ? S.notes.find((p) => p.id === S.queue.card) : null
+    const queueLine = queued && queueCard ? [keep(dim(`  ${tr('Очередь: Claude делает', S.lang)} «${queueCard.title}» · ${tr('отдано карточек', S.lang)} — ${S.queue.given.length}`))] : []
     // Удалить доску можно, пока она не общая: общую сначала удаляют с сайта или выходят с неё. Плитка — рядом
     // с «Отдать Claude»
     const deleteItems =
@@ -354,10 +382,27 @@ export function boardsScreen($, e, kit) {
         [
           Button({ key: 'arcade-board-send', label: 'Отдать Claude', onPress: () => sendBoard($, id) }),
           dim('  Claude получит доску с карточками и сможет добавлять, править и переносить их.'),
+          Button({ key: 'arcade-board-queue', label: queued ? 'Остановить очередь' : 'Очередь для Claude', onPress: () => (queued ? endQueue($) : startQueue($, id)) }),
+          dim('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Спросит разрешения или не доделает — очередь встанет.'),
           ...deleteItems,
         ],
         40,
       ),
+      ...queueLine,
+      gap,
+      // Задачи GitHub — карточками через коннектор Claude: Arcade с GitHub не говорит, ключи ему не нужны
+      Input({
+        key: `arcade-board-github-${field}`,
+        label: 'Задачи из GitHub',
+        placeholder: 'owner/repo или ссылка на задачи',
+        submitLabel: tr('Забрать', S.lang),
+        onSubmit: (value) => {
+          const what = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 300)
+          if (!what) return say('Впиши репозиторий GitHub (owner/repo) или ссылку на задачи.')
+          return importIssues($, id, what)
+        },
+      }),
+      dim('  Claude заберёт открытые задачи карточками через коннектор GitHub. Итог по карточке он напишет в задачу кнопкой «Итог — в GitHub» на карточке.'),
       section('Колонки'),
       // В Desktop у полей колонок нет подписи слева (название и так в поле): подписи разной длины сдвигали поля
       // и кнопки вразнобой. «Убрать колонку» — в той же строке, что и поле

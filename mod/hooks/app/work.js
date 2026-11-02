@@ -1,12 +1,15 @@
 // Arcade: блокнот и доски проектов.
 import { clipboardCommand, openUrlCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
-import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, columnCards, fits, isBoard, restoreNotes, updatePage } from '../notes.js'
+import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, issueUrl, restoreNotes, updateCard, updatePage } from '../notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../desks.js'
 import { LAUNCH_TIMEOUT_MS, S, nb } from './state.js'
 import { log } from './status.js'
 import { accountNote } from './profile.js'
-import { chatFetch, friendsCall } from './talk.js'
+import { chatFetch, chatNote, chatTitle, friendsCall } from './talk.js'
+import { addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../daylog.js'
+import { dayKey } from '../calendar.js'
+import { MAX_TEXT, parseSent } from '../chats.js'
 
 // --- Блокнот ------------------------------------------------------------------------------------------------------
 const NOTES_FULL = 'Блокнот полон — удали ненужные страницы.'
@@ -141,14 +144,22 @@ function follow($, list, site = false) {
   return gone
 }
 
-// Блокнот поменялся: поля страницы рисуются заново с новым текстом
-async function notesChanged($, list) {
+// Блокнот поменялся: поля страницы рисуются заново с новым текстом. entries — что из этого записать в итоги дня
+async function notesChanged($, list, entries = []) {
   S.notes = list
   nb.draft = null
   nb.field++
   $.ui.invalidate('ui.render')
   await saveNotes($)
   pushBoards($)
+  await logDay($, entries)
+}
+
+// Итоги дня: записи — в журнал в $.store (daylog.js), один на все сессии, поверх свежего. Только в очереди (fresh)
+async function logDay($, entries) {
+  if (!entries.length) return
+  const raw = await $.store.get('daylog').catch(() => null)
+  await $.store.set('daylog', addLog(restoreLog(raw), entries, entries[0].at)).catch(modError)
 }
 
 // Набранное в поле «Текст» — в страницу (в списке list). Не помещается — null
@@ -176,7 +187,7 @@ export function editNotes($, change, saved = '') {
       $.ui.invalidate('ui.render')
       return false
     }
-    if (next !== S.notes) await notesChanged($, next)
+    if (next !== S.notes) await notesChanged($, next, noteChanges(S.notes, next, at, 'me'))
     else $.ui.invalidate('ui.render')
     return true
   })
@@ -189,7 +200,7 @@ export function notesTool($, input) {
     const at = await $.clock.now()
     const base = withDraft(S.notes, at) ?? S.notes
     const out = applyNotesTool(base, input, at, cardId)
-    if (out.changed || base !== S.notes) await notesChanged($, out.notes)
+    if (out.changed || base !== S.notes) await notesChanged($, out.notes, [...noteChanges(S.notes, base, at, 'me'), ...noteChanges(base, out.notes, at, 'claude')])
     return out
   })
 }
@@ -217,7 +228,7 @@ const GIVEN = {
   board: ['Доска ушла Claude.', 'Claude занят — доска ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось отдать доску — попробуй ещё раз, когда Claude освободится.'],
 }
 
-// Текст — Claude: сразу, если он свободен, иначе — в поле ввода, к тому, что там уже набрано
+// Текст — Claude: сразу, если он свободен, иначе — в поле ввода, к тому, что там уже набрано. true — ушёл сразу
 export async function giveClaude($, text, what) {
   const [sentNote, busyNote, failNote] = GIVEN[what]
   if (S.status === 'idle' || S.status === 'done') {
@@ -226,7 +237,7 @@ export async function giveClaude($, text, what) {
       nb.note = sentNote
       nb.bad = false
       $.ui.invalidate('ui.render')
-      return
+      return true
     }
     log(`ошибка мода: ${sent.drop.slice(0, 200)}`)
   }
@@ -235,15 +246,138 @@ export async function giveClaude($, text, what) {
   nb.note = filled.isFilled ? busyNote : failNote
   nb.bad = !filled.isFilled
   $.ui.invalidate('ui.render')
+  return false
 }
 
-// Страницу — Claude
-export async function sendNote($, id) {
+// Карточка общей доски: доска, её основа с сайта, мой номер аккаунта и кто взял карточку — если он ещё на доске (пока
+// участников не знаем — показываем как есть)
+export function cardTaker(page) {
+  const board = page?.parent ? S.notes.find((p) => p.id === page.parent && isBoard(p)) : null
+  const share = board?.board.share ?? ''
+  const base = share ? S.desks[share] : null
+  const me = S.dk.me || S.ch.me || ''
+  const taken = base && page.taken && (!base.members.length || base.members.includes(page.taken)) ? page.taken : ''
+  return { board, share, base, me, taken }
+}
+
+// Страницу — Claude. Карточку общей доски — ещё и пометить, что её взял я: прежде сверить доску с сайтом, и если её уже
+// взял другой — сказать об этом, отдать только по второму нажатию. queued — карточку даёт очередь Claude: ей нужно
+// знать, ушла ли карточка (true — ушла сразу, 'taken' — её уже взял другой, очередь берёт следующую)
+export async function sendNote($, id, queued = false) {
+  if (!(await editNotes($, (list) => list))) return false
+  const start = cardTaker(S.notes.find((p) => p.id === id))
+  if (start.base && start.me) await syncBoard($, start.share).catch(modError)
+  let page = S.notes.find((p) => p.id === id)
+  if (!page) return false
+  const { board, base, me, taken } = cardTaker(page)
+  if (base && me && taken !== me) {
+    if (taken && queued) return 'taken'
+    if (taken && nb.take !== id) {
+      nb.take = id
+      nb.note = `${tr('Карточку уже взял', S.lang)} ${deskPerson(taken, base)}. ${tr('Нажми «Отдать Claude» ещё раз, чтобы всё равно отдать её своему Claude.', S.lang)}`
+      nb.bad = true
+      $.ui.invalidate('ui.render')
+      return false
+    }
+    if (!(await editNotes($, (list, at) => updateCard(list, id, { taken: me }, at)))) return false
+    page = S.notes.find((p) => p.id === id) ?? page
+  }
+  nb.take = ''
+  const t = (text) => tr(text, S.lang)
+  const lines = [`${t('Страница из моего блокнота Arcade')} (id ${page.id}):`, '', `# ${page.title}`, page.body, '', t('Отмечай сделанные пункты и дописывай итоги на этой странице инструментом mcp__arcade__notes.')]
+  const last = board?.board.cols.at(-1)
+  if (last && columnOf(page, board.board.cols) !== last.id)
+    lines.push(`${t('Это карточка доски')} «${board.title}». ${t('Когда сделаешь — перенеси её в колонку')} «${colName(last)}» (${t('колонка')} ${last.id}) ${t('действием move того же инструмента.')}`)
+  // Задача GitHub — Claude прочитает её коннектором, если нужно больше. Комментарий в задачу — только кнопкой «Итог — в GitHub»
+  const issue = issueUrl(page)
+  if (issue) lines.push(`${t('Это задача GitHub')}: ${issue} — ${t('подробности, обсуждение и код читай там инструментами коннектора GitHub, если он подключён.')}`)
+  if (queued) lines.push(t('Карточки идут очередью Arcade: перенесёшь эту в последнюю колонку — следующую Arcade даст сам. Нужно решение человека — не переноси, спроси.'))
+  const sent = await giveClaude($, lines.join('\n'), 'page')
+  await logGave($, page, board)
+  return sent
+}
+
+// «Итог — в GitHub» на карточке: Claude пишет комментарий в задачу карточки
+export async function issueComment($, id) {
   if (!(await editNotes($, (list) => list))) return
   const page = S.notes.find((p) => p.id === id)
-  if (!page) return
-  const text = [`${tr('Страница из моего блокнота Arcade', S.lang)} (id ${page.id}):`, '', `# ${page.title}`, page.body, '', tr('Отмечай сделанные пункты и дописывай итоги на этой странице инструментом mcp__arcade__notes.', S.lang)].join('\n')
-  await giveClaude($, text, 'page')
+  if (page && issueUrl(page)) await giveClaude($, githubPrompt('comment', { page }), 'ask')
+}
+
+// Страницу отдали Claude — в итоги дня; не вышло отдать — нет
+async function logGave($, page, board) {
+  if (nb.bad) return
+  await fresh($, async () => logDay($, [{ at: await $.clock.now(), kind: 'gave', id: page.id, title: page.title, ...(board ? { board: board.title } : {}) }]))
+}
+
+// «Итоги дня»: страница «Итоги ДД.ММ» — что сегодня ушло Claude, что сделано и что ещё в работе (daylog.js). Сегодняшняя
+// уже есть — её текст собирается заново. Потом — открыть её: оттуда итоги можно отдать Claude или отправить в чат команды
+export async function makeSummary($) {
+  const day = dayKey(await $.clock.now())
+  const log = restoreLog(await $.store.get('daylog').catch(() => null))
+  const title = `${tr('Итоги', S.lang)} ${day.slice(8)}.${day.slice(5, 7)}`
+  let id = ''
+  const done = await editNotes(
+    $,
+    (list, at) => {
+      const page = list.find((p) => !p.parent && !isBoard(p) && p.title === title)
+      // Сами итоги, отданные Claude, в итоги не идут
+      const sum = daySummary(page ? log.filter((x) => x.id !== page.id) : log, list, day, S.dk.me || S.ch.me || '')
+      const body = summaryBody(sum, (text) => tr(text, S.lang), colName)
+      if (page) {
+        id = page.id
+        return page.body === body ? list : updatePage(list, page.id, { body }, at)
+      }
+      const made = addPage(list, { title, body }, at)
+      if (made.error) return NOTES_FULL
+      id = made.page.id
+      return made.notes
+    },
+    'Итоги собраны: отдай их Claude, отправь в чат или поправь.',
+  )
+  if (!done || !id) {
+    // Не вышло — заметку туда, где её видно: под списком досок
+    if (S.menu === 'boards') {
+      S.dk.note = nb.note
+      S.dk.bad = nb.bad
+      nb.note = ''
+      nb.bad = false
+    }
+    return $.ui.invalidate('ui.render')
+  }
+  nb.focus = ''
+  nb.confirm = null
+  S.menuFrom = S.menu
+  S.menu = `note:${id}`
+  $.ui.invalidate('ui.render')
+}
+
+// Страницу — в чат с друзьями или командой (chat — id чата): текстом, как пишут в чате (chatText). Заметка — под страницей
+export async function pageToChat($, id, chat) {
+  const page = S.notes.find((p) => p.id === id)
+  if (!page || !S.acct.session || nb.sending) return
+  nb.sending = chat
+  nb.note = ''
+  nb.bad = false
+  $.ui.invalidate('ui.render')
+  const answer = await chatFetch($, 'send', parseSent, { body: { chat, text: chatText(page, MAX_TEXT) } })
+  nb.sending = ''
+  if (answer?.error) {
+    nb.note = chatNote(answer.error)
+    nb.bad = true
+  } else if (answer) {
+    const entry = S.ch.list?.find((c) => c.id === chat)
+    nb.note = `${tr('Ушло в чат', S.lang)} ${entry ? chatTitle(entry) : ''}`.trim()
+    nb.bad = false
+    nb.chat = ''
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Отпустить карточку общей доски: её снова может взять любой
+export function releaseCard($, id) {
+  nb.take = ''
+  return editNotes($, (list, at) => updateCard(list, id, { taken: '' }, at), 'Карточка свободна.')
 }
 
 // Просьба к Claude про другое приложение: перенести страницу туда (push), обновить её там (update), забрать текст
@@ -267,6 +401,38 @@ export function connectorPrompt(kind, { page = null, app = '', what = '' }) {
   const data = kind === 'import' ? [`${t('Что забрать')}: ${what}`] : [`${t('Приложение')}: ${app}`, ...(kind === 'push' ? [] : [`${t('Адрес')}: ${page.link?.url ?? ''}`]), `${t('Страница блокнота')}: ${page.id}`]
   const content = kind === 'push' || kind === 'update' ? ['', `# ${page.title}`, page.body] : []
   return [t(intro), ...data, ...content, '', t(todo), t('Нет инструментов этого приложения — ничего не делай, только объясни, как подключить его коннектор в Claude.')].join('\n')
+}
+
+// Просьба к Claude про GitHub — тоже через коннектор, без ключей: забрать открытые задачи на доску карточками (import:
+// board — доска, what — откуда, как вписал человек) или написать итог карточки комментарием в её задаче (comment:
+// page — карточка). Уже взятые на доску задачи Claude пропускает — их адреса в просьбе
+export const GITHUB_ISSUES = 20 // задач за раз, не больше
+export function githubPrompt(kind, { board = null, page = null, what = '', notes = [] }) {
+  const t = (text) => tr(text, S.lang)
+  const none = t('Нет инструментов GitHub — ничего не делай, только объясни, как подключить коннектор GitHub в Claude.')
+  if (kind === 'import') {
+    const have = [...new Set(notes.filter((p) => p.parent === board.id).map(issueUrl).filter(Boolean))]
+    return [
+      t('Забери задачи из GitHub на доску из моего блокнота Arcade.'),
+      `${t('Доска')}: «${board.title}» (id ${board.id})`,
+      `${t('Откуда')}: ${what}`,
+      ...(have.length ? [`${t('Уже на доске')}: ${have.join(', ')}`] : []),
+      '',
+      `${t('Прочитай открытые задачи (issues) инструментами коннектора GitHub — не больше')} ${GITHUB_ISSUES}. ${t('Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — адрес задачи и коротко её суть, app — GitHub, url — адрес задачи.')}`,
+      none,
+    ].join('\n')
+  }
+  return [
+    t('Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче GitHub.'),
+    `${t('Задача')}: ${issueUrl(page)}`,
+    `${t('Страница блокнота')}: ${page.id}`,
+    '',
+    `# ${page.title}`,
+    page.body,
+    '',
+    t('Оставь в задаче короткий комментарий инструментами коннектора GitHub: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай, если об этом не просят.'),
+    none,
+  ].join('\n')
 }
 
 // Страница из другого приложения — в браузере по умолчанию (там человек вошёл в Notion); только https
@@ -701,6 +867,20 @@ export async function sendBoard($, id) {
   }
   lines.push('', t('Добавляй, правь и переноси карточки этой доски инструментом mcp__arcade__notes.'))
   await giveClaude($, lines.join('\n'), 'board')
+  noteToBoard($)
+}
+
+// «Задачи из GitHub»: Claude забирает открытые задачи на доску карточками; what — репозиторий или ссылка, как вписали
+export async function importIssues($, id, what) {
+  if (!(await editBoard($, (list) => list))) return
+  const board = S.notes.find((p) => p.id === id && isBoard(p))
+  if (!board) return
+  await giveClaude($, githubPrompt('import', { board, what, notes: S.notes }), 'ask')
+  noteToBoard($)
+}
+
+// Заметка giveClaude — на экран доски
+function noteToBoard($) {
   S.dk.note = nb.note
   S.dk.bad = nb.bad
   nb.note = ''

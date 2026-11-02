@@ -1,7 +1,7 @@
 // Arcade: календарь — хранилище, правки с экрана, инструмент Claude и напоминания.
 import { notifyCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
-import { REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, addDays, addEvent, applyCalendarTool, dayKey, dueReminders, markAlerted, nextReminder, quickParse, remindAt, removeEvent, restoreCalendar, updateEvent } from '../calendar.js'
+import { REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, addDays, addEvent, applyCalendarTool, cardDues, dayKey, dueReminders, markAlerted, nextReminder, quickParse, remindAt, removeEvent, restoreCalendar, updateEvent } from '../calendar.js'
 import { S, cal } from './state.js'
 import { log } from './status.js'
 
@@ -41,7 +41,7 @@ async function readCalendar($) {
 
 // Календарь поменялся в другой сессии: экран идёт за ним, напоминания — тоже. Поля открытого события рисуются заново,
 // только если поменялось само событие, а не отметка о показанном напоминании
-const sameEvent = (a, b) => ['title', 'day', 'time', 'note', 'remind', 'color'].every((k) => a[k] === b[k])
+const sameEvent = (a, b) => ['title', 'day', 'time', 'note', 'remind', 'color', 'repeat'].every((k) => a[k] === b[k])
 function follow($, list) {
   const open = S.menu.startsWith('calendar:') ? S.menu.slice(9) : ''
   const was = open ? S.calendar.find((e) => e.id === open) : null
@@ -83,7 +83,7 @@ async function calendarChanged($, list) {
 export function calendarTool($, input) {
   return fresh($, async () => {
     const at = await $.clock.now()
-    const out = applyCalendarTool(S.calendar, input, at)
+    const out = applyCalendarTool(S.calendar, input, at, cardDues(S.notes))
     if (out.changed) await calendarChanged($, out.list)
     return out
   })
@@ -96,6 +96,7 @@ const PROBLEMS = {
   time: 'Время пиши как 15:00.',
   remind: 'Такого напоминания нет.',
   color: 'Такого цвета нет.',
+  repeat: 'Такого повтора нет.',
   full: 'Календарь полон — удали старые события.',
   missing: 'Событие удалили в другой сессии.',
 }
@@ -182,15 +183,35 @@ const me = `s${Math.random().toString(36).slice(2, 10)}`
 let timer = null
 let gen = 0
 
+// Сроки карточек досок напоминают как события на весь день (cardDues). Отметки о показанном — отдельно от календаря, в
+// $.store под ключом cardAlerts: id карточки → { alerted, alertedBy }. Блокнот — из памяти сессии (S.notes): его
+// перечитывают по таймеру, пока он на экране, и всякая его правка
+async function cardEvents($) {
+  const raw = await $.store.get('cardAlerts').catch(() => null)
+  const marks = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  return cardDues(S.notes)
+    .filter((x) => x.remind !== null)
+    .map((x) => {
+      const m = marks[x.card]
+      return { ...x, ...(Number.isFinite(m?.alerted) ? { alerted: m.alerted } : {}), ...(typeof m?.alertedBy === 'string' ? { alertedBy: m.alertedBy } : {}) }
+    })
+}
+async function saveCardAlerts($, cards) {
+  const marks = {}
+  for (const x of cards) if (x.alerted !== undefined) marks[x.card] = { alerted: x.alerted, ...(x.alertedBy ? { alertedBy: x.alertedBy } : {}) }
+  await $.store.set('cardAlerts', marks).catch(modError)
+}
+
 export function schedule($) {
   const my = ++gen
   timer?.cancel?.()
   timer = null
   $.clock
     .now()
-    .then((now) => {
+    .then(async (now) => {
+      const cards = await cardEvents($)
       if (my !== gen) return
-      const next = nextReminder(S.calendar, now)
+      const next = nextReminder([...S.calendar, ...cards], now)
       const wait = next === null ? RECHECK_MS : Math.max(0, Math.min(next - now, RECHECK_MS))
       timer = $.clock.after(wait, () => {
         timer = null
@@ -204,38 +225,54 @@ export function schedule($) {
 export async function remindNow($) {
   const mine = await fresh($, async () => {
     const now = await $.clock.now()
-    const { due, stale } = dueReminders(S.calendar, now)
+    const cards = await cardEvents($)
+    const { due, stale } = dueReminders([...S.calendar, ...cards], now)
     if (!due.length && !stale.length) {
       schedule($)
       return []
     }
-    const list = markAlerted(
+    const mark = (list) =>
       markAlerted(
-        S.calendar,
-        stale.map((e) => e.id),
-      ),
-      due.map((e) => e.id),
-      me,
-    )
-    await calendarChanged($, list)
-    return due.map((e) => e.id)
+        markAlerted(
+          list,
+          stale.map((e) => e.id),
+          '',
+          now,
+        ),
+        due.map((e) => e.id),
+        me,
+        now,
+      )
+    const touched = new Set([...due, ...stale].map((e) => e.id))
+    if (cards.some((x) => touched.has(x.id))) await saveCardAlerts($, mark(cards))
+    if (S.calendar.some((e) => touched.has(e.id))) await calendarChanged($, mark(S.calendar))
+    else schedule($)
+    return due
   })
   if (!mine.length) return
   await new Promise((done) => $.clock.after(CLAIM_MS, done))
-  const shown = await fresh($, async () => S.calendar.filter((e) => mine.includes(e.id) && e.alertedBy === me))
+  // Показывает та сессия, чья отметка осталась; у серии показываем тот её раз, которому было пора (из due)
+  const shown = await fresh($, async () => {
+    const claimed = new Set([...S.calendar, ...(await cardEvents($))].filter((e) => e.alertedBy === me).map((e) => e.id))
+    return mine.filter((x) => claimed.has(x.id))
+  })
   if (shown.length) await showReminders($, shown, await $.clock.now())
 }
 
+// «сегодня», «завтра», «вчера», «06.11»
+export const dayText = (day, today) =>
+  day === today ? tr('сегодня', S.lang) : day === addDays(today, 1) ? tr('завтра', S.lang) : day === addDays(today, -1) ? tr('вчера', S.lang) : `${day.slice(8)}.${day.slice(5, 7)}`
+
 // «сегодня 15:00», «завтра, весь день», «06.11 9:30»
 export function whenText(ev, today) {
-  const day =
-    ev.day === today ? tr('сегодня', S.lang) : ev.day === addDays(today, 1) ? tr('завтра', S.lang) : ev.day === addDays(today, -1) ? tr('вчера', S.lang) : `${ev.day.slice(8)}.${ev.day.slice(5, 7)}`
+  const day = dayText(ev.day, today)
   return ev.time ? `${day} ${ev.time}` : `${day}, ${tr('весь день', S.lang)}`
 }
 
 async function showReminders($, events, now) {
   const today = dayKey(now)
-  const line = (ev) => `${now - remindAt(ev) > LATE_MS ? `${tr('Пропущено', S.lang)}: ` : ''}${ev.title} — ${whenText(ev, today)}`
+  const line = (ev) =>
+    `${now - remindAt(ev) > LATE_MS ? `${tr('Пропущено', S.lang)}: ` : ''}${ev.card ? `${tr('Срок карточки', S.lang)}: ${ev.title} — ${dayText(ev.day, today)}` : `${ev.title} — ${whenText(ev, today)}`}`
   const lines = events.slice(0, SHOW_MAX).map(line)
   if (events.length > SHOW_MAX) lines.push(`${tr('и ещё', S.lang)} ${events.length - SHOW_MAX}`)
   await $.ui.toast(`${tr('Календарь', S.lang)}: ${lines.join('; ')}`)
