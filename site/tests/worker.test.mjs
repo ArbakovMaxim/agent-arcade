@@ -25,6 +25,16 @@ import worker, { Room, DoomRoom, EjsGame, Presence, BoardRoom, Discover, Twitch,
   await go('/net/doom/round-1', { Upgrade: 'websocket' })
   await go('/?tab=sega')
   assert.deepEqual(calls, [['room', 'id:lobby'], ['doom', 'doom:round-1'], ['assets', '/']])
+  // Голый корень — страница о проекте; корень с любым запросом, даже пустым «/?», — окно
+  calls.length = 0
+  for (const path of ['/', '/?', '/?library', '/?library#mine=x', '/?game=thwaite']) await go(path)
+  assert.deepEqual(calls.map((c) => c[1]), ['/about', '/', '/', '/', '/'])
+  // Страница о проекте — с заголовками исходного запроса (304 по ETag) и тем же методом
+  let seen
+  await worker.fetch(new Request('https://arcade.test/', { method: 'HEAD', headers: { 'If-None-Match': '"v1"' } }), { ASSETS: { fetch: async (req) => { seen = req; return new Response(null) } } })
+  assert.equal(new URL(seen.url).pathname, '/about')
+  assert.equal(seen.method, 'HEAD')
+  assert.equal(seen.headers.get('If-None-Match'), '"v1"')
 }
 
 // --- Изоляция плеера (Warzone 2100) --------------------------------------------------------------------------------

@@ -754,7 +754,7 @@ test('browsers.js: разбор ответа, размер окна, адрес 
 
   expect(pageUrl('thwaite')).toBe('https://agent-arcade.fefaodessa.workers.dev/?game=thwaite')
   expect(pageUrl('robot kitten')).toBe('https://agent-arcade.fefaodessa.workers.dev/?game=robot%20kitten')
-  expect(pageUrl(null)).toBe('https://agent-arcade.fefaodessa.workers.dev/')
+  expect(pageUrl(null)).toBe('https://agent-arcade.fefaodessa.workers.dev/?library')
 
   const encoded = encodePowerShell('Write-Output "Привет"')
   const bytes = Uint8Array.fromBase64(encoded)
@@ -788,7 +788,7 @@ test('Windows: «Открыть Arcade» открывает окно с библ
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await go(ui, 'arcade-open-library')
-  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/`)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?library`)
   expect(await ui.find({ type: 'Text', text: 'Arcade открыт в Google Chrome: выбирай приставку и игру.' })).toBeDefined()
   await go(ui, 'arcade-game-croom')
   expect(launches[1].env.ARCADE_URL).toMatch(/\?game=croom$/)
@@ -1394,7 +1394,7 @@ test('Desktop: окно браузера выбрано в прошлый раз
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-open-library' })
   expect(launches.length).toBe(2)
-  expect(launches[1].env.ARCADE_URL).toBe(`${SITE}/`)
+  expect(launches[1].env.ARCADE_URL).toBe(`${SITE}/?library`)
   expect(mcpCalls).toEqual([])
   await ui.unmount()
 })
@@ -1903,16 +1903,16 @@ test('Desktop: сервер браузера ответил ошибкой — C
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-open-library' })
-  expect(browserCalls[0]).toMatchObject({ args: { url: `${SITE}/` } })
+  expect(browserCalls[0]).toMatchObject({ args: { url: `${SITE}/?library` } })
   expect(submits).toEqual([])
   expect(fills.length).toBe(1)
-  expect(fills[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/`, mode: 'append' })
+  expect(fills[0]).toMatchObject({ text: `Открой во встроенном браузере: ${SITE}/?library`, mode: 'append' })
   expect(await ui.find({ type: 'Text', text: 'Ссылка — в поле ввода: нажми Enter, и Claude откроет её во встроенном браузере.' })).toBeDefined()
   await ui.unmount()
 })
 
 test('Desktop: ссылка уже в поле ввода — второй раз её не дописываем', async ($, on) => {
-  const { clock, fills } = stubs(on, { draft: `Открой во встроенном браузере: ${SITE}/` })
+  const { clock, fills } = stubs(on, { draft: `Открой во встроенном браузере: ${SITE}/?library` })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -1929,7 +1929,7 @@ test('Desktop: поле ввода не взяло просьбу, а почем
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-open-library' })
   expect(fills.length).toBe(1)
-  const ask = `Попроси Claude открыть во встроенном браузере: ${SITE}/`
+  const ask = `Попроси Claude открыть во встроенном браузере: ${SITE}/?library`
   expect(await ui.find({ type: 'Text', text: ask })).toBeDefined()
   await clock.advance(20_000)
   expect(await ui.find({ type: 'Text', text: ask })).toBeDefined()
@@ -1957,7 +1957,7 @@ test('Desktop по-английски: просьба в поле ввода и 
   await $.command.run({ command: 'arcade', args: '' })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-open-library' })
-  expect(fills[0]).toMatchObject({ text: `Open in the built-in browser: ${SITE}/?lang=en` })
+  expect(fills[0]).toMatchObject({ text: `Open in the built-in browser: ${SITE}/?library&lang=en` })
   expect(await ui.find({ type: 'Text', text: 'The link is in the prompt box: press Enter, and Claude will open it in the built-in browser.' })).toBeDefined()
   await ui.unmount()
   expect(tr('Miniplanets открыт во встроенном браузере Claude.', 'en')).toBe("Miniplanets is open in Claude's built-in browser.")
@@ -1979,7 +1979,20 @@ test('свои игры в окне: Sega из «Моих игр» на Windows 
   const [entry] = saved.get('mine') as any[]
   await ui.press({ key: `arcade-game-${entry.id}` })
   expect(launches.length).toBe(1)
-  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/#mine=${entry.id}&console=sega&sha=${entry.sha256}&title=Sonic%20Clone`)
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?library#mine=${entry.id}&console=sega&sha=${entry.sha256}&title=Sonic%20Clone`)
+  await ui.unmount()
+})
+
+test('свои игры в окне по-английски: язык — в строке запроса до #, окно читает его только оттуда', async ($, on) => {
+  const bytes = mySegaRom()
+  const { clock, launches, saved } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8', USERPROFILE: 'C:\\Users\\Ivan' }, disk: { 'D:\\Games\\Sonic Clone.md': bytes } })
+  await start($)
+  await clock.advance(200)
+  await $.command.run({ command: 'arcade-add', args: 'D:\\Games\\Sonic Clone.md' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'vscode' })
+  const [entry] = saved.get('mine') as any[]
+  await ui.press({ key: `arcade-game-${entry.id}` })
+  expect(launches[0].env.ARCADE_URL).toBe(`${SITE}/?library&lang=en#mine=${entry.id}&console=sega&sha=${entry.sha256}&title=Sonic%20Clone`)
   await ui.unmount()
 })
 

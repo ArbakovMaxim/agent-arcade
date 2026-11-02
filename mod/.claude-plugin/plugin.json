@@ -1,11 +1,11 @@
 {
   "name": "arcade",
-  "version": "0.36.3",
+  "version": "0.36.4",
   "description": "Task boards Claude picks up, a notebook it keeps with you, team chats — and games while the agent works · Доски задач для Claude, блокнот, чаты команды — и игры, пока агент работает",
   "author": {
     "name": "Max Arbakov"
   },
-  "homepage": "https://github.com/ArbakovMaxim/agent-arcade",
+  "homepage": "https://agent-arcade.fefaodessa.workers.dev/",
   "repository": "https://github.com/ArbakovMaxim/agent-arcade",
   "license": "AGPL-3.0-only"
 }

@@ -542,7 +542,8 @@
     return text
   }
 
-  // Переключить язык: запоминаем и открываем страницу заново
+  // Переключить язык: запоминаем и открываем страницу заново. Без других параметров — библиотека: голый корень
+  // сайта без запроса — страница о проекте, не окно
   function set(next) {
     try {
       localStorage.setItem('arcade:lang', next)
@@ -550,7 +551,7 @@
     const params = new URLSearchParams(location.search)
     params.delete('lang')
     const search = params.toString()
-    location.search = search ? `?${search}` : '?'
+    location.search = search ? `?${search}` : '?library'
   }
 
   const lang = pick()

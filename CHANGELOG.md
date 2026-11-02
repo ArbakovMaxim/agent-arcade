@@ -1,5 +1,13 @@
 # Changelog · Список изменений
 
+## 0.36.4 — у сайта Arcade есть страница о проекте, библиотека переехала на /?library · Arcade's site has an about page, the library moved to /?library
+
+- The bare site address now shows a page about Arcade: what it does, a short video of the board, how to install it; no external scripts, fonts, counters or cookies · голый адрес сайта теперь показывает страницу об Arcade: что он умеет, короткий ролик доски, как установить; без чужих скриптов, шрифтов, счётчиков и cookie
+- The window is the same address with any query: the plugin opens the library as /?library, games, books and tabs as before (?game=, ?book=, ?tab=) · окно — тот же адрес с любым запросом: плагин открывает библиотеку как /?library, игры, книги и вкладки — как раньше (?game=, ?book=, ?tab=)
+- Older plugin versions still get there: the page links to the library, and an own game (#mine=…) goes straight to the window · старые версии плагина тоже доходят: на странице есть ссылка на библиотеку, а своя игра (#mine=…) сразу уходит в окно
+- An own game opened in the window in another language now opens in that language: the language goes in the query, before the part after # · своя игра, открытая в окне на другом языке, теперь открывается на нём: язык идёт в строке запроса, до части после #
+- The plugin's homepage is now the site · домашняя страница плагина — теперь сайт
+
 ## 0.36.3 — Arcade меньше грузит процессор, когда ты не играешь · Arcade uses less CPU when you are not playing
 
 - The game loop timer runs only while a game is open in the pane; before, it fired 30 times a second in every Claude session, game or not · таймер игрового цикла идёт, только пока в панели открыта игра; раньше он срабатывал 30 раз в секунду в каждой сессии Claude, с игрой или без
