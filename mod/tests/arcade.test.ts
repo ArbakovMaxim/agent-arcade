@@ -20,6 +20,7 @@ import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, 
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
+import { addDays, addEvent, addMonths, applyCalendarTool, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
 import { BOOK_LANGS, BOOK_SECTIONS, bookLang, bookQuery, booksPath, parseBooks } from '../hooks/books.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
@@ -7839,7 +7840,7 @@ test('блокнот: Claude ведёт его инструментом mcp__arc
   const { clock, saved, registered } = stubs(on)
   await start($)
   await clock.advance(200)
-  expect(registered.map((t) => [t.name, t.isDeferred])).toEqual([['notes', true]])
+  expect(registered.map((t) => [t.name, t.isDeferred])).toEqual([['notes', true], ['calendar', true]])
   expect(await $.tool.check({ tool: NOTES, input: { action: 'list' } })).toMatchObject({ decision: 'allow' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'arcade-menu-notes' })
@@ -8504,4 +8505,369 @@ test('блокнот по-английски: Notion, другие прилож�
   expect(await text('The page is unlinked.')).toBeDefined()
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
+})
+
+// Календарь: события — в $.store мода (ключ calendar); Claude ведёт его инструментом mcp__arcade__calendar.
+// Часы тестов начинаются с 1970 года — календарные тесты сначала переводят их на понедельник 2 ноября 2026, 12:00
+const CAL = 'mcp__arcade__calendar'
+const T0 = new Date(2026, 10, 2, 12, 0).getTime()
+const at = (day: string, time = '00:00') => new Date(`${day}T${time}:00`).getTime()
+
+test('календарь: дни, быстрая запись, сетка месяца', () => {
+  expect([dayKey(T0), weekday('2026-11-02'), weekday('2026-11-08'), addDays('2026-12-31', 1), addMonths('2026-12', 1), addMonths('2026-01', -1)]).toEqual(['2026-11-02', 0, 6, '2027-01-01', '2027-01', '2025-12'])
+  expect([cleanDay('2026-02-29'), cleanDay('2028-02-29'), cleanDay('2026-13-01'), cleanDay(' 2026-11-20 '), cleanDay('20.11.2026')]).toEqual(['', '2028-02-29', '', '2026-11-20', ''])
+  expect([cleanTime('9:05'), cleanTime('09:05'), cleanTime('24:00'), cleanTime('12.11'), cleanTime('')]).toEqual(['09:05', '09:05', '', '', ''])
+
+  // День и время — где угодно в строке, остальное — название; без дня — день base, без времени — весь день
+  const today = '2026-11-02'
+  expect(quickParse('завтра 15:00 Созвон', today)).toEqual({ title: 'Созвон', day: '2026-11-03', time: '15:00' })
+  expect(quickParse('пт в 9:30 стендап', today)).toEqual({ title: 'стендап', day: '2026-11-06', time: '09:30' })
+  expect(quickParse('Tomorrow at 9:05 standup', today)).toEqual({ title: 'standup', day: '2026-11-03', time: '09:05' })
+  expect(quickParse('Созвон 2026-11-20 10:00', today)).toEqual({ title: 'Созвон', day: '2026-11-20', time: '10:00' })
+  expect(quickParse('12.11 Ревью', today)).toEqual({ title: 'Ревью', day: '2026-11-12', time: '' })
+  // Число, которое в этом году уже прошло, — в следующем; понедельник в понедельник — сегодня
+  expect(quickParse('01.11 Ревью', today).day).toBe('2027-11-01')
+  expect(quickParse('пн отчёт', today)).toEqual({ title: 'отчёт', day: today, time: '' })
+  expect(quickParse('Отчёт', '2026-11-12', today)).toEqual({ title: 'Отчёт', day: '2026-11-12', time: '' })
+  expect(quickParse('в 25:00 праздник', today)).toEqual({ title: 'в 25:00 праздник', day: today, time: '' })
+
+  // Недели с понедельника, дни соседних месяцев — по краям
+  const nov = monthGrid('2026-11')
+  expect(nov.length).toBe(6)
+  expect(nov.every((w) => w.length === 7)).toBe(true)
+  expect(nov[0][0]).toEqual({ day: '2026-10-26', date: 26, inMonth: false })
+  expect(nov[0][6]).toEqual({ day: '2026-11-01', date: 1, inMonth: true })
+  expect(nov[5].map((d) => d.date)).toEqual([30, 1, 2, 3, 4, 5, 6])
+  expect(monthGrid('2026-06').map((w) => w[0].day)).toEqual(['2026-06-01', '2026-06-08', '2026-06-15', '2026-06-22', '2026-06-29'])
+})
+
+test('календарь: хранилище, правки и напоминания', () => {
+  // Что не сходится — мимо; события на весь день — первыми в своём дне
+  expect(restoreCalendar(null)).toEqual([])
+  expect(
+    restoreCalendar([
+      { id: 'e1', title: ' Созвон ', day: '2026-11-03', time: '9:00', remind: 15, at: 5, alerted: 7, alertedBy: 'sx' },
+      { id: 'e2', title: 'Нет такого дня', day: '2026-02-30' },
+      { id: 'E!', title: 'Плохой id', day: '2026-11-03' },
+      { id: 'e1', title: 'Дубль', day: '2026-11-03' },
+      { id: 'e3', title: 'Весь день', day: '2026-11-03', remind: -5, note: '  ссылка  ' },
+      { id: 'e4', title: 'Плохое время', day: '2026-11-01', time: '25:00' },
+      { id: 'e5', title: '  ', day: '2026-11-01' },
+    ]),
+  ).toEqual([
+    { id: 'e3', title: 'Весь день', day: '2026-11-03', remind: null, at: 0, note: 'ссылка' },
+    { id: 'e1', title: 'Созвон', day: '2026-11-03', time: '09:00', remind: 15, at: 5, alerted: 7, alertedBy: 'sx' },
+  ])
+
+  // Новое событие: за 15 минут, на весь день — в 9:00; id — от времени, занятый — с номером
+  const one: any = addEvent([], { title: 'Созвон', day: '2026-11-03', time: '15:00' }, T0)
+  expect(one.event).toEqual({ id: `e${T0.toString(36)}`, title: 'Созвон', day: '2026-11-03', time: '15:00', remind: 15, at: T0 })
+  const two: any = addEvent(one.list, { title: 'Отчёт', day: '2026-11-03', note: 'итоги\r\nнедели' }, T0)
+  expect(two.event).toMatchObject({ id: `e${T0.toString(36)}1`, remind: 0, note: 'итоги\nнедели' })
+  expect(two.list.map((e: any) => e.title)).toEqual(['Отчёт', 'Созвон'])
+  expect([addEvent([], { title: ' ', day: '2026-11-03' }, T0), addEvent([], { title: 'x', day: '2026-02-30' }, T0), addEvent([], { title: 'x', day: '2026-11-03', time: '25:00' }, T0), addEvent([], { title: 'x', day: '2026-11-03', remind: -1 }, T0)]).toEqual([{ error: 'title' }, { error: 'day' }, { error: 'time' }, { error: 'remind' }])
+  // Напоминание, время которого уже прошло, когда событие записали, — не пропущенное: его не покажут
+  const soon: any = addEvent([], { title: 'Скоро', day: '2026-11-02', time: '12:10' }, T0).event
+  expect(soon.alerted).toBe(at('2026-11-02', '11:55'))
+  expect(dueReminders([soon], T0)).toEqual({ due: [], stale: [] })
+
+  // Правка: только переданное; time '' — на весь день, и напоминание снова впереди
+  const id = one.event.id
+  const moved: any = updateEvent(two.list, id, { time: '', note: 'ссылка' }, T0)
+  expect(moved.event).toEqual({ id, title: 'Созвон', day: '2026-11-03', remind: 15, at: T0, note: 'ссылка' })
+  expect(remindAt(moved.event)).toBe(at('2026-11-03', '08:45'))
+  expect([updateEvent(two.list, 'enope', { title: 'x' }, T0), updateEvent(two.list, id, { time: '9' }, T0), updateEvent(two.list, id, { remind: 99999 }, T0)]).toEqual([{ error: 'missing' }, { error: 'time' }, { error: 'remind' }])
+  expect((updateEvent(two.list, id, { remind: null }, T0) as any).event.remind).toBe(null)
+
+  // Пора: due — показать (пропущенные — если событие было не раньше суток назад), stale — отметить молча
+  const list = restoreCalendar([
+    { id: 'ea', title: 'Сейчас', day: '2026-11-02', time: '12:10', remind: 10 },
+    { id: 'eb', title: 'Утром', day: '2026-11-02', time: '10:00', remind: 15 },
+    { id: 'ec', title: 'Давно', day: '2026-10-20', remind: 0 },
+    { id: 'ed', title: 'Позже', day: '2026-11-02', time: '18:00', remind: 30 },
+    { id: 'ee', title: 'Без', day: '2026-11-02', time: '11:00', remind: null },
+  ])
+  const due = dueReminders(list, T0)
+  expect([due.due.map((e: any) => e.id), due.stale.map((e: any) => e.id)]).toEqual([['eb', 'ea'], ['ec']])
+  const marked = markAlerted(markAlerted(list, ['ec']), ['ea', 'eb'], 'sme')
+  expect(marked.find((e: any) => e.id === 'ea')).toMatchObject({ alerted: at('2026-11-02', '12:00'), alertedBy: 'sme' })
+  expect(marked.find((e: any) => e.id === 'ec')).toMatchObject({ alerted: at('2026-10-20', '09:00') })
+  expect(marked.find((e: any) => e.id === 'ec').alertedBy).toBeUndefined()
+  expect(dueReminders(marked, T0)).toEqual({ due: [], stale: [] })
+  expect(nextReminder(marked, T0)).toBe(at('2026-11-02', '17:30'))
+  expect(nextReminder([], T0)).toBe(null)
+})
+
+test('календарь: инструмент Claude — ответы по-английски, с сегодняшним днём', () => {
+  const head = 'Today is Mon 2026-11-02, 12:00 local time.'
+  expect(applyCalendarTool([], { action: 'list' }, T0)).toEqual({ list: [], text: `${head}\nNo events from 2026-11-02 to 2026-11-08. The calendar is empty.` })
+  const added: any = applyCalendarTool([], { action: 'add', title: 'Созвон', day: '2026-11-03', time: '15:00' }, T0)
+  const id = `e${T0.toString(36)}`
+  expect(added).toMatchObject({ text: `${head}\nAdded:\n- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder 15 min before)`, changed: true })
+  let list = added.list
+  const day: any = applyCalendarTool(list, { action: 'add', title: 'Отпуск', day: '2026-11-20', remind: 1440 }, T0 + 1)
+  expect(day.text.endsWith('Fri 2026-11-20 all day — Отпуск (reminder 1 d before 9:00)')).toBe(true)
+  list = day.list
+  expect(applyCalendarTool(list, { action: 'list' }, T0).text).toBe(`${head}\nEvents from 2026-11-02 to 2026-11-08:\n- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder 15 min before)`)
+  expect(applyCalendarTool(list, { action: 'list', day: '2026-11-15', days: 7 }, T0).text.split('\n')[1]).toBe('Events from 2026-11-15 to 2026-11-21:')
+  expect(applyCalendarTool(list, { action: 'list', day: '2026-12-01' }, T0).text).toBe(`${head}\nNo events from 2026-12-01 to 2026-12-07.`)
+
+  // Правка — по id или точному названию без учёта регистра; меняется только переданное
+  const upd: any = applyCalendarTool(list, { action: 'update', event: 'созвон', remind: 60, note: 'ссылка\nвторая строка' }, T0)
+  expect(upd.text).toBe(`${head}\nUpdated:\n- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder 1 h before)\n  note: ссылка / вторая строка`)
+  list = upd.list
+  expect(applyCalendarTool(list, { action: 'update', event: id, remind: -1, time: '' }, T0).text.split('\n')[2]).toBe(`- ${id}: Tue 2026-11-03 all day — Созвон (no reminder)`)
+  expect(applyCalendarTool(list, { action: 'update', event: id, remind: 0 }, T0).text.split('\n')[2]).toBe(`- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder at the start)`)
+
+  // Ошибки — с подсказкой, что делать; календарь не меняется
+  const fails: any[] = [
+    applyCalendarTool(list, { action: 'add', title: 'x', day: '2026-11-03', time: '3pm' }, T0),
+    applyCalendarTool(list, { action: 'add', title: 'x', day: 'tomorrow' }, T0),
+    applyCalendarTool(list, { action: 'update', event: id }, T0),
+    applyCalendarTool(list, { action: 'remove', event: 'Ужин' }, T0),
+    applyCalendarTool(list, { action: 'list', days: 0 }, T0),
+    applyCalendarTool(list, { action: 'move' }, T0),
+  ]
+  expect(fails.every((f) => f.isError && f.list === list && f.text.startsWith(`${head}\n`))).toBe(true)
+  expect(fails.map((f) => f.text.split('\n')[1])).toEqual([
+    'time must be HH:MM, 24-hour, e.g. 15:00, or empty for all day.',
+    'day must be a real date as YYYY-MM-DD.',
+    'Nothing to change: pass title, day, time, note or remind.',
+    'No event "Ужин". Use list to see the events and their ids.',
+    'days is 1 to 92.',
+    'Unknown action: use list, add, update or remove.',
+  ])
+  const twin = applyCalendarTool(list, { action: 'add', title: 'Созвон', day: '2026-11-04', time: '10:00' }, T0 + 2).list
+  expect(applyCalendarTool(twin, { action: 'remove', event: 'Созвон' }, T0).text.split('\n')[1]).toBe(`Several events are called "Созвон": ${id} (Tue 2026-11-03 15:00), e${(T0 + 2).toString(36)} (Wed 2026-11-04 10:00). Pass the id.`)
+
+  const gone: any = applyCalendarTool(list, { action: 'remove', event: id }, T0)
+  expect(gone).toMatchObject({ text: `${head}\nRemoved: Созвон (Tue 2026-11-03 15:00).`, changed: true })
+  expect(gone.list.map((e: any) => e.title)).toEqual(['Отпуск'])
+})
+
+test('календарь: Claude ведёт его инструментом mcp__arcade__calendar без вопроса человеку, экран идёт следом', async ($, on) => {
+  const { clock, saved, registered } = stubs(on)
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  expect(registered.find((t: any) => t.name === 'calendar')).toMatchObject({ isDeferred: true })
+  expect(await $.tool.check({ tool: CAL, input: { action: 'list' } })).toMatchObject({ decision: 'allow' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  expect(await ui.find({ type: 'Text', text: 'Календарь пуст — запиши первое событие.' })).toBeDefined()
+
+  const made: any = await $.tool.call({ tool: CAL, action: 'add', title: 'Созвон', day: '2026-11-03', time: '15:00' })
+  const id = /Added:\n- (e[a-z0-9]+): Tue 2026-11-03 15:00 — Созвон \(reminder 15 min before\)$/.exec(made.result)?.[1]
+  expect(id).toBeDefined()
+  expect(saved.get('calendar')).toMatchObject([{ id, title: 'Созвон', day: '2026-11-03', time: '15:00', remind: 15 }])
+  // Экран рисуется заново: событие в «Ближайшем»
+  expect(await ui.find({ key: `arcade-cal-ev-${id}` })).toMatchObject({ props: { label: 'Завтра 15:00 · Созвон' } })
+  // Событие записали в другой сессии — list его видит
+  saved.set('calendar', [...(saved.get('calendar') as any[]), { id: 'e1', title: 'Ревью', day: '2026-11-04', remind: 0, at: 0 }])
+  const listed: any = await $.tool.call({ tool: CAL, action: 'list' })
+  expect(listed.result.split('\n').slice(1)).toEqual(['Events from 2026-11-02 to 2026-11-08:', `- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder 15 min before)`, '- e1: Wed 2026-11-04 all day — Ревью (reminder at 9:00)'])
+  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: '04.11, весь день · Ревью' } })
+  // Ошибка — отказом, с подсказкой для Claude
+  const missing: any = await $.tool.call({ tool: CAL, action: 'remove', event: 'Ужин' })
+  expect(missing.deny).toContain('No event "Ужин"')
+  await $.tool.call({ tool: CAL, action: 'remove', event: 'Ревью' })
+  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toBeUndefined()
+  expect((saved.get('calendar') as any[]).map((e) => e.id)).toEqual([id])
+  await ui.unmount()
+})
+
+test('календарь в терминале: быстрая запись, событие, напоминание, перенос и удаление', async ($, on) => {
+  const { clock, saved } = stubs(on)
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  const events = () => saved.get('calendar') as any[]
+
+  await noteInput(ui, 'arcade-cal-add-', 'завтра 15:00 Созвон')
+  expect(await text('Записано.')).toBeDefined()
+  // Без дня в терминале — на сегодня, а не на день прошлой записи
+  await noteInput(ui, 'arcade-cal-add-', 'Отчёт')
+  expect(events().map((e) => [e.title, e.day, e.time, e.remind])).toEqual([
+    ['Отчёт', '2026-11-02', undefined, 0],
+    ['Созвон', '2026-11-03', '15:00', 15],
+  ])
+  const [report, call] = events().map((e) => e.id)
+  expect(await ui.find({ key: `arcade-cal-ev-${report}` })).toMatchObject({ props: { label: 'Сегодня, весь день · Отчёт' } })
+  expect(await ui.find({ key: `arcade-cal-ev-${call}` })).toMatchObject({ props: { label: 'Завтра 15:00 · Созвон' } })
+  await noteInput(ui, 'arcade-cal-add-', 'завтра 16:00')
+  expect(await text('Впиши, что за событие.')).toMatchObject({ props: { color: 'warning' } })
+  expect(events().length).toBe(2)
+
+  // Событие: напоминание по кругу — за 30 минут, за час…
+  await ui.press({ key: `arcade-cal-ev-${call}` })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за 15 мин' } })
+  await ui.press({ key: 'arcade-cal-remind' })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за 30 мин', autoFocus: true } })
+  await ui.press({ key: 'arcade-cal-remind' })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за час' } })
+  expect(events().find((e) => e.id === call).remind).toBe(60)
+  // Когда — как в быстрой записи; непонятное — предупреждение, событие не меняется
+  await noteInput(ui, 'arcade-cal-when-', 'пт 9:30')
+  expect(events().find((e) => e.id === call)).toMatchObject({ day: '2026-11-06', time: '09:30' })
+  expect(await text('06.11 09:30')).toBeDefined()
+  await noteInput(ui, 'arcade-cal-when-', 'когда-нибудь')
+  expect(await text('Не понял, когда: пиши как «пт 15:00» или «2026-11-20 10:00».')).toMatchObject({ props: { color: 'warning' } })
+  expect(events().find((e) => e.id === call)).toMatchObject({ day: '2026-11-06', time: '09:30' })
+  await noteInput(ui, 'arcade-cal-note-', 'ссылка на встречу')
+  expect(events().find((e) => e.id === call).note).toBe('ссылка на встречу')
+  await noteInput(ui, 'arcade-cal-title-', 'Созвон с командой')
+  expect(await text('Сохранено.')).toBeDefined()
+
+  // Удаление — с подтверждением; «Отмена» возвращает фокус на кнопку
+  await ui.press({ key: 'arcade-cal-delete' })
+  expect(await text('Удалить событие насовсем?')).toBeDefined()
+  await ui.press({ key: 'arcade-cal-delete-no' })
+  expect(await text('Удалить событие насовсем?')).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-cal-delete' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-cal-delete' })
+  await ui.press({ key: 'arcade-cal-delete-yes' })
+  expect(await text('Событие удалено.')).toBeDefined()
+  expect(events().map((e) => e.title)).toEqual(['Отчёт'])
+  expect(await ui.find({ key: `arcade-cal-ev-${call}` })).toBeUndefined()
+
+  // У события на весь день — в 9:00, за сутки или без напоминания
+  await ui.press({ key: `arcade-cal-ev-${report}` })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: в 9:00' } })
+  await ui.press({ key: 'arcade-cal-remind' })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за сутки' } })
+  await ui.press({ key: 'arcade-cal-remind' })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: нет' } })
+  // Назад — фокус на том же событии
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: `arcade-cal-ev-${report}` })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+})
+
+test('календарь в Desktop: сетка месяца, события дня, запись на выбранный день', async ($, on) => {
+  const { clock, saved } = stubs(on, { stored: { calendar: [{ id: 'e1', title: 'Ревью', day: '2026-11-12', time: '10:00', remind: 15, at: 0 }] } })
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+
+  expect(await text('Ноябрь 2026')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { label: '2', variant: 'primary' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { label: '12•' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-10-26' })).toMatchObject({ props: { label: '26', dimColor: true } })
+  expect(await ui.find({ key: 'arcade-cal-today' })).toBeUndefined()
+  expect(await text('Сегодня · 02.11')).toBeDefined()
+  expect(await text('В этот день событий нет.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: '12.11 10:00 · Ревью' } })
+
+  // Выбранный день: его события; запись без дня ложится на него
+  await ui.press({ key: 'arcade-cal-day-2026-11-12' })
+  expect(await text('Четверг · 12.11')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-dayev-e1' })).toMatchObject({ props: { label: '10:00 · Ревью' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-cal-today' })).toBeDefined()
+  await noteInput(ui, 'arcade-cal-add-', '16:00 Демо')
+  const demo = (saved.get('calendar') as any[]).find((e) => e.title === 'Демо')
+  expect(demo).toMatchObject({ day: '2026-11-12', time: '16:00' })
+  expect(await ui.find({ key: `arcade-cal-dayev-${demo.id}` })).toMatchObject({ props: { label: '16:00 · Демо' } })
+  // Запись с днём — экран переходит к нему
+  await noteInput(ui, 'arcade-cal-add-', '03.12 Релиз')
+  expect(await text('Декабрь 2026')).toBeDefined()
+  expect(await text('Четверг · 03.12')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-day-2026-12-03' })).toMatchObject({ props: { label: '3•', variant: 'primary' } })
+
+  // Листать месяцы; «Сегодня» — назад к сегодняшнему дню
+  await ui.press({ key: 'arcade-cal-prev' })
+  expect(await text('Ноябрь 2026')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-prev' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-cal-prev' })
+  expect(await text('Октябрь 2026')).toBeDefined()
+  await ui.press({ key: 'arcade-cal-today' })
+  expect(await text('Ноябрь 2026')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  expect(await ui.find({ key: 'arcade-cal-today' })).toBeUndefined()
+  // День соседнего месяца — открывает его месяц
+  await ui.press({ key: 'arcade-cal-day-2026-10-26' })
+  expect(await text('Октябрь 2026')).toBeDefined()
+  await ui.unmount()
+})
+
+test('календарь: напоминания — тостом и системным уведомлением, пропущенные — при запуске', HEAVY, async ($, on) => {
+  const { clock, saved, toasts, notifies } = stubs(on, {
+    env: WINDOWS,
+    stored: {
+      calendar: [
+        { id: 'e1', title: 'Созвон', day: '2026-11-02', time: '12:02', remind: 1, at: 0 },
+        { id: 'e2', title: 'Стендап', day: '2026-11-02', time: '10:00', remind: 15, at: 0 },
+        { id: 'e3', title: 'Старое', day: '2026-10-20', remind: 0, at: 0 },
+      ],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  const shown = () => toasts.filter((t) => t.startsWith('Календарь'))
+  const sent = () => notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').map((n) => n.env.ARCADE_TEXT)
+  // Чуть погодя после старта — пропущенное; давнее — отмечено молча
+  await clock.advance(6_000)
+  expect(shown()).toEqual(['Календарь: Пропущено: Стендап — сегодня 10:00'])
+  expect(sent()).toEqual(['Пропущено: Стендап — сегодня 10:00'])
+  expect(notifies.find((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').argv[0]).toBe('powershell.exe')
+  const events = () => saved.get('calendar') as any[]
+  expect(events().find((e) => e.id === 'e3')).toMatchObject({ alerted: at('2026-10-20', '09:00') })
+  expect(events().find((e) => e.id === 'e3').alertedBy).toBeUndefined()
+  expect(events().find((e) => e.id === 'e2')).toMatchObject({ alerted: at('2026-11-02', '09:45') })
+  // В своё время — без «Пропущено»; дважды одно и то же не показывается
+  await clock.advance(60_000)
+  expect(shown()).toEqual(['Календарь: Пропущено: Стендап — сегодня 10:00', 'Календарь: Созвон — сегодня 12:02'])
+  expect(sent()).toEqual(['Пропущено: Стендап — сегодня 10:00', 'Созвон — сегодня 12:02'])
+  await clock.advance(11 * 60_000)
+  expect(shown().length).toBe(2)
+})
+
+test('календарь: напоминание показывает одна сессия из всех открытых', HEAVY, async ($, on) => {
+  const { clock, saved, toasts } = stubs(on, { env: WINDOWS, stored: { calendar: [{ id: 'e2', title: 'Стендап', day: '2026-11-02', time: '11:50', remind: 15, at: 0 }] } })
+  await clock.advance(T0)
+  await start($)
+  // Таймер сработал — сессия пометила напоминание своей отметкой; пока она ждёт, другая сессия пометила его своей
+  await clock.advance(5_200)
+  const mine = (saved.get('calendar') as any[])[0]
+  expect(mine.alertedBy).toMatch(/^s[a-z0-9]+$/)
+  saved.set('calendar', [{ ...mine, alertedBy: 'sother' }])
+  await clock.advance(1_000)
+  expect(toasts.filter((t) => t.startsWith('Календарь'))).toEqual([])
+})
+
+test('календарь по-английски: экраны без русского, названия событий — как есть', async ($, on) => {
+  const { clock } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, stored: { calendar: [{ id: 'e1', title: 'Review', day: '2026-11-12', time: '10:00', remind: 15, at: 0 }] } })
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  expect(await ui.find({ key: 'arcade-menu-calendar' })).toMatchObject({ props: { label: 'Calendar' } })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  expect(await cyrillic()).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'November 2026' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: '12.11 10:00 · Review' } })
+  await ui.press({ key: 'arcade-cal-day-2026-11-12' })
+  expect(await cyrillic()).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Thursday · 12.11' })).toBeDefined()
+  await ui.press({ key: 'arcade-cal-dayev-e1' })
+  expect(await cyrillic()).toEqual([])
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Reminder: 15 min before' } })
+  await ui.press({ key: 'arcade-cal-delete' })
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-cal-delete-yes' })
+  expect(await cyrillic()).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Event deleted.' })).toBeDefined()
+  await ui.unmount()
+  // В терминале — тоже
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await drawnTexts(term)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')).toEqual([])
+  expect(await term.find({ type: 'Text', text: 'The calendar is empty — add the first event.' })).toBeDefined()
+  await term.unmount()
 })
