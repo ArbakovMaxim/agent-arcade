@@ -279,7 +279,7 @@ export function mainScreen($, e, kit) {
       ],
       `${S.acct.unread ? ` · 💬 ${S.acct.unread}` : ''}${S.acct.requests ? ` · 👥 ${S.acct.requests}` : ''}${S.ol.online.size ? ` · 🟢 ${S.ol.online.size}` : ''}`,
     ),
-    // Работа: блокнот, доска проектов и календарь, которые ведут и человек, и Claude
+    // Работа: блокнот, доска проектов и календарь, которые ведут и человек, и Claude, и сессии Claude Code на этом компьютере
     ...foldable('work', 'Работа', [
       Button({
         key: 'arcade-menu-notes',
@@ -316,6 +316,13 @@ export function mainScreen($, e, kit) {
         },
       }),
       dim('  события и напоминания; Claude может записывать'),
+      Button({
+        key: 'arcade-menu-agents',
+        label: 'Агенты',
+        ...(S.menuFrom === 'agents' ? { autoFocus: true } : {}),
+        onPress: open('agents'),
+      }),
+      dim('  сессии Claude Code на этом компьютере: что делает каждая'),
     ]),
     ...foldable('more', 'Ещё', [
       ...windowTiles,

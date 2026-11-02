@@ -122,7 +122,7 @@ export const SECTION_NOTES = {
   read: 'книги, аудиокниги, статьи и подкасты',
   watch: 'YouTube, Twitch и TikTok',
   talk: 'друзья, чаты и аккаунт',
-  work: 'блокнот, доска проектов и календарь',
+  work: 'блокнот, доска проектов, календарь и агенты',
 }
 export const SECTION_ICONS = { play: 'games', read: 'books', watch: 'youtube', talk: 'friends', work: 'boards' }
 export const FAV_LIMIT = 100

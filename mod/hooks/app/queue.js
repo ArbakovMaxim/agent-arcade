@@ -1,24 +1,33 @@
 // Arcade: очередь карточек доски для Claude. Claude получает карточку первой колонки, а когда закончит ход и карточка
 // уже в последней колонке — следующую. Спросил разрешения, ход прервали или кончился ошибкой, карточка не доделана,
-// Claude получил другую просьбу — очередь встаёт: решает человек.
+// Claude получил другую просьбу — очередь встаёт: решает человек. Очередь одной доски может идти в нескольких сессиях
+// Claude Code: каждая свободная берёт следующую карточку, и две сессии одну карточку не получат (agents.js, takeCard).
+import { fill } from '../chats.js'
 import { tr } from '../i18n.js'
 import { columnCards, columnOf, isBoard, moveCard } from '../notes.js'
 import { S, nb } from './state.js'
 import { log } from './status.js'
+import { boardMates, dropCard, queueMates, samePath, takeCard } from './agents.js'
 import { cardTaker, colName, editNotes, modError, refreshNotes, sendNote } from './work.js'
 
 export const QUEUE_MAX = 10 // карточек за один запуск очереди, не больше: дальше — снова кнопкой
 // Очередь сейчас: board — id доски, card — карточка у Claude, given — какие уже отданы, sent — карточка ушла, а её ход
-// ещё не начался, turn — ход Claude с этой карточкой
+// ещё не начался, turn — ход Claude с этой карточкой, started — когда запущена, of — сколько карточек будет в этом
+// запуске (для «карточка 3 из 10»), joined — с какой сессией эта присоединилась (заметка после первой карточки)
 S.queue = null
+// «Остановить везде»: в $.store под этим ключом — { [id доски]: когда }; очередь, запущенная раньше, встаёт
+const STOP_KEY = 'queueStop'
+const STOP_KEEP_MS = 24 * 3_600_000 // старые остановки — не храним
 
 const t = (text) => tr(text, S.lang)
 
-// Следующая карточка — первая в первой колонке, которую очередь ещё не давала и которую не взял кто-то другой
-function nextCard(board) {
+// Свободные карточки — в первой колонке, которые очередь ещё не давала, которые не взял кто-то другой и которые не
+// делает и не заявила другая сессия (others — их отметки); первая из них — следующая
+function freeCards(board, others) {
+  const busy = new Set(others.flatMap((r) => [r.card?.id, r.claim?.card]).filter(Boolean))
   const cards = columnCards(S.notes, board, board.board.cols[0].id)
-  return cards.find((p) => {
-    if (S.queue.given.includes(p.id)) return false
+  return cards.filter((p) => {
+    if (S.queue.given.includes(p.id) || busy.has(p.id)) return false
     const { me, taken } = cardTaker(p)
     return !taken || taken === me
   })
@@ -42,16 +51,34 @@ async function giveNext($) {
   const board = S.notes.find((p) => p.id === queue.board && isBoard(p))
   if (!board) return stopQueue($, t('Очередь остановлена: доску удалили.'))
   if (queue.given.length >= QUEUE_MAX) return stopQueue($, `${t('Очередь пройдена: Claude сделал карточек')} — ${queue.given.length}. ${t('Запусти её снова, чтобы продолжить.')}`, false)
-  for (let card = nextCard(board); card; card = nextCard(board)) {
+  if (await stoppedEverywhere($, queue)) return stopQueue($, t('Очередь остановили во всех сессиях. Claude доделает текущую карточку, следующую не получит.'), false)
+  for (;;) {
+    // Карточку заявляем так, чтобы её не взяла другая сессия; отметок нет (нет домашней папки) — очередь одна, как раньше.
+    // Перед каждым выбором блокнот — свежий: карточку, которую другая сессия уже перенесла в последнюю колонку, не взять
+    let seen = []
+    const pick = (others) => {
+      seen = others
+      return freeCards(board, others)[0]?.id ?? ''
+    }
+    const id = await takeCard($, pick, () => refreshNotes($).catch(() => {}))
+    if (S.queue !== queue) return
+    if (id === null) return stopQueue($, t('Очередь остановлена: не получилось занять карточку так, чтобы её не взяла другая сессия. Запусти очередь снова.'))
+    const card = id === 'off' ? freeCards(board, [])[0] : S.notes.find((p) => p.id === id)
+    if (!card) break
     queue.card = card.id
     queue.given.push(card.id)
     // Ход начинается раньше, чем submit ответит: отметка — заранее
     queue.sent = true
+    queue.of = Math.min(QUEUE_MAX, queue.given.length + freeCards(board, seen).length)
     const sent = await sendNote($, card.id, true)
     if (S.queue !== queue) return
-    if (sent === 'taken') continue
+    if (sent === 'taken') {
+      dropCard()
+      continue
+    }
     nb.note = ''
     nb.bad = false
+    if (!sent) dropCard()
     if (!sent) return stopQueue($, `${t('Очередь остановлена: не получилось отдать карточку')} «${card.title}». ${t('Если она в поле ввода — отправь её сам.')}`)
     // Отданная карточка — во вторую колонку («В работе»), если в доске их больше двух
     const cols = board.board.cols
@@ -64,8 +91,10 @@ async function giveNext($) {
       nb.note = ''
       nb.bad = false
     }
-    S.dk.note = ''
+    // Присоединилась к очереди другой сессии — так и сказать, когда пошла первая карточка
+    S.dk.note = queue.joined ? fill(t('Очередь на этой доске уже идёт в сессии «{0}». Эта сессия тоже будет брать карточки.'), [queue.joined]) : ''
     S.dk.bad = false
+    queue.joined = ''
     $.ui.invalidate('ui.render')
     return
   }
@@ -88,8 +117,46 @@ export async function startQueue($, id) {
   if (!(await editNotes($, (list) => list))) return
   nb.note = ''
   if (!S.notes.some((p) => p.id === id && isBoard(p))) return
-  S.queue = { board: id, card: '', given: [], sent: false, turn: '' }
+  // Очередь на этой доске уже идёт в других сессиях — эта присоединяется. Сессия в той же папке может править те же
+  // файлы — присоединить только по второму нажатию
+  const mates = await queueMates($, id)
+  const same = mates.find((r) => samePath(r.path, S.ag?.path))
+  if (same && S.ag.joinWarn !== id) {
+    S.ag.joinWarn = id
+    return say(`${fill(t('Эта сессия в той же папке, что «{0}»: две сессии могут править одни и те же файлы. Надёжнее — отдельная папка или git worktree.'), [same.name])} ${t('Нажми «Очередь для Claude» ещё раз, чтобы всё равно присоединиться.')}`)
+  }
+  if (S.ag) S.ag.joinWarn = ''
+  if (S.queue) return
+  S.queue = { board: id, card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '' }
   await queueNext($)
+}
+
+// «Остановить везде»: эта сессия и все другие с очередью на доске id доделывают текущие карточки и новых не берут
+export async function stopEverywhere($, id) {
+  const now = await $.clock.now()
+  const old = await $.store.get(STOP_KEY).catch(() => null)
+  const stops = Object.fromEntries(Object.entries(old && typeof old === 'object' ? old : {}).filter(([, at]) => now - Number(at) < STOP_KEEP_MS))
+  stops[id] = now
+  await $.store.set(STOP_KEY, stops)
+  const why = t('Очередь остановлена во всех сессиях: каждая доделает текущую карточку, новую не возьмёт.')
+  if (S.queue?.board === id) return stopQueue($, why, false)
+  S.dk.note = why
+  S.dk.bad = false
+  $.ui.toast(why)
+  $.ui.invalidate('ui.render')
+}
+
+// Очередь этой сессии остановили во всех сессиях после её запуска
+async function stoppedEverywhere($, queue) {
+  const stops = await $.store.get(STOP_KEY).catch(() => null)
+  return Boolean(stops && typeof stops === 'object' && Number(stops[queue.board]) > queue.started)
+}
+
+// Таймером, пока идёт очередь: её остановили в другой сессии — встать, текущую карточку Claude доделает
+export async function queueStopCheck($) {
+  const queue = S.queue
+  if (!queue || !(await stoppedEverywhere($, queue)) || S.queue !== queue) return
+  stopQueue($, t('Очередь остановили во всех сессиях. Claude доделает текущую карточку, следующую не получит.'), false)
 }
 
 // Следующая карточка очереди: после старта — сразу, после хода Claude — таймером, новым ходом (не изнутри конца прошлого)
@@ -103,7 +170,8 @@ export async function queueNext($) {
 
 // Кнопка «Остановить очередь»: текущую карточку Claude доделает, следующую не получит
 export function endQueue($) {
-  stopQueue($, t('Очередь остановлена. Claude доделает текущую карточку, следующую не получит.'), false)
+  const others = S.queue ? boardMates(S.queue.board).length : 0
+  stopQueue($, `${t('Очередь остановлена. Claude доделает текущую карточку, следующую не получит.')}${others ? ` ${t('В других сессиях она идёт дальше.')}` : ''}`, false)
 }
 
 // Начался ход Claude. Ход с карточкой очереди — её; продолжение без текста и ход, где Claude по просьбе Arcade открывает

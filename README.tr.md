@@ -4,9 +4,9 @@
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · **Türkçe** · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.38).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
+> **Beta (0.39).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
 
-Arcade, [Claude Code](https://claude.com/claude-code) için bir eklentidir ve onu küçük bir çalışma alanına dönüştürür: her kartın tek tuşla Claude’a gittiği proje panoları, Claude’un seninle birlikte tuttuğu ve açık tüm oturumlarının paylaştığı bir defter, ekibin için ortak panolar ve sohbetler. Bekleme için de: ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
+Arcade, [Claude Code](https://claude.com/claude-code) için bir eklentidir ve onu küçük bir çalışma alanına dönüştürür: Claude’un kartları birer birer, hatta aynı anda birkaç oturumda işlediği proje panoları; Claude’un seninle birlikte tuttuğu ve açık tüm oturumlarının paylaştığı bir defter; bir takvim; ekibin için ortak panolar ve sohbetler. Bekleme için de: ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
 
 Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kitaplar kamu malı. Ajanlarını bekleyen başka kişilerle çevrim içi oynayabilir ve arkadaşlarınla sohbet edebilirsin.
 
@@ -22,6 +22,7 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 
 - **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri, sütunlu ve kartlı panolar. *Claude'a ver* bir sayfayı ya da kartı Claude’a iletir: Claude yapılanları işaretler ve sonucu oraya yazar. Sayfa ya da kart, metnini *Düzenle* ve *Kopyala* düğmeleriyle biçimlendirilmiş olarak gösterir. Açık tüm Claude Code oturumları defteri paylaşır, böylece her biri aynı panodan kendi kartını alabilir. Bir panoyu arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın. Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı.
 - **Claude panondaki işleri sırayla halleder.** *Claude için kuyruk* ilk sütundaki kartları Claude’a tek tek verir: bir önceki *Bitti*’ye geçince sıradaki gider, bir izin sorusu da kuyruğu durdurur. Kartların takvimde görünen son tarihleri vardır, ortak panoda da kimin hangi kartı üstlendiğini herkes görür. GitHub issue’larını panoya kart olarak getir ve sonucu, Claude’un GitHub bağlayıcısıyla issue’ya yorum olarak geri yaz. *Günün özeti* bir stand-up sayfası hazırlar — Claude’a ne gitti, ne bitti, ne sürüyor — ekibinin sohbetine göndermen için.
+- **Ajanlar.** *İş* bölümündeki *Ajanlar*, bu bilgisayarda Arcade açık her Claude Code oturumunu klasörüne göre gösterir: çalışıyor, izin bekliyor, yanıtını bitirdi ya da boşta, ne kadar süredir öyle olduğu, kartı ve kuyruktaki yeri. Başka bir oturum izin istediğinde kendi panelinde kısa bir uyarı bunu söyler. Bir panonun kuyruğu aynı anda birkaç oturumda çalışabilir ve iki oturum aynı kartı almaz.
 - **Takvim.** Desktop’ta aynı boyda gün kutucuklarından bir ay, her etkinliğin renginde bir noktayla; terminalde ve VS Code’da yaklaşanların listesi. Bir etkinlik tek satırla eklenir, örneğin «fri 9:30 standup», ve her gün, hafta içi, her hafta, her ay ya da her yıl tekrarlanabilir. Rengini ve ne zaman hatırlatılacağını listeden ya da kendi sözlerinle seç (örneğin «45 min before» ya da «the day before at 20:00»); hatırlatma sistem bildirimi olarak gelir. Pano kartlarının son tarihleri de burada görünür. Claude da etkinlik ekler ve değiştirir: «cuma 15:00’e bir görüşme ekle».
 - **Arkadaşlar ve sohbetler.** İsteğe bağlı GitHub girişi ayarlarını tüm bilgisayarlarında aynı tutar ve sana bir @takma ad verir; arkadaşlarını tam takma adlarıyla ekle, kimin çevrimiçi olduğunu gör, panolarını paylaş, onları oyuna davet et, ikili ya da grup halinde sohbet et.
 - **Ajanın ne yaptığını bilir.** Ajan bitirdiğinde ya da izin istediğinde oyunun üstünde bir bildirim çıkar — oynamaya devam et, duraklat ya da doğrudan ajana dön (davranışı ayarlardan seçersin). Claude Desktop’ta izlediğin sekmeyi de kapatabilir, böylece sohbet yeniden önüne gelir.
@@ -94,7 +95,7 @@ PowerShell’de: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 | **Oku ve dinle** | Kitaplar, Sesli kitaplar, Makaleler, Podcast’ler |
 | **İzle** | YouTube, Twitch, TikTok |
 | **Sosyal** | Arkadaşlar, Sohbetler, **GitHub ile giriş yap** (giriş yaptıktan sonra **Hesap**) |
-| **İş** | Defter, Proje panosu, Takvim |
+| **İş** | Defter, Proje panosu, Takvim, Ajanlar |
 | **Diğer** | Arcade penceresi, Ayarlar, 🌐 dil, 🐞 Hata bildir, ☕ Projeye destek ol |
 
 Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltılmış bölüm `▸` ve içindeki kutucuk sayısını gösterir; *Sosyal* ayrıca yeni mesajları 💬 ve arkadaşlık isteklerini 👥 gösterir. Arcade hangi bölümlerin daraltıldığını hatırlar. İhtiyacın olmayan bir bölümü **Ayarlar**’dan gizleyebilirsin: başlığı ve kutucuklarıyla birlikte menüden tamamen kalkar; ayarların bulunduğu *Diğer* her zaman kalır. Giriş yaptıktan sonra menü başlığı @takma adını aynı sayaçlarla gösterir.
@@ -109,7 +110,7 @@ Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltıl
 | **VS Code** | panelde | tarayıcı penceresi |
 | **Claude Desktop** | panelde | Claude’un yerleşik tarayıcısı ya da tarayıcı penceresi (ayarlardan seçilir); nişancı oyunları — her zaman tarayıcı penceresi |
 
-Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya da ayarlarda seçtiğin tarayıcıda), sıradan sekmelerinin arasında bir sekme değil. Sohbetler doğrudan panelde çalışır — terminalde ve Desktop’ta; *Sayfada aç* onları sitede aynı şekilde açar. Defter, proje panoları ve takvim panelde çalışır. TikTok, Desktop’ta Claude’un yerleşik tarayıcısında, diğer yerlerde ise büyük ihtimalle zaten giriş yapmış olduğun varsayılan tarayıcında açılır.
+Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya da ayarlarda seçtiğin tarayıcıda), sıradan sekmelerinin arasında bir sekme değil. Sohbetler doğrudan panelde çalışır — terminalde ve Desktop’ta; *Sayfada aç* onları sitede aynı şekilde açar. Defter, proje panoları, takvim ve ajanlar panelde çalışır. TikTok, Desktop’ta Claude’un yerleşik tarayıcısında, diğer yerlerde ise büyük ihtimalle zaten giriş yapmış olduğun varsayılan tarayıcında açılır.
 
 ## Defter ve proje panoları
 
@@ -123,7 +124,7 @@ Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya
 - **Proje panosu.** Sütunlar — *Yapılacak*, *Yapılıyor*, *Bitti* ya da kendi sütunların, en fazla 8 — ve kartlar; kart, metin ve kontrol listesi olan bir defter sayfasıdır. Bir kartı seçip oklarla taşımak için ona bas, açmak için bir kez daha bas. Claude da pano yönetebilir: *Claude’a ver* ya da ondan görevleri Arcade’de bir panoya dağıtmasını iste.
 - **Ortak panolar.** @takma adla giriş yaptıysan arkadaşlarını işaretle ve *Paylaş*’a bas: herkeste aynı kartlar, sütunlar ve ad olur, değişiklikler birkaç saniye içinde görünür. Sahip başka arkadaşlarını da davet eder, kişileri çıkarır ve panoyu siteden siler; panodan herkes çıkabilir; ne olursa olsun herkesin kendi kopyası kalır. Kendine ait en fazla 3 ortak pano, bir panoda en fazla 20 kişi ve 200 kart.
 - **Aynı anda birkaç oturum.** Bu bilgisayarda açık olan tüm Claude Code oturumları tek bir defteri ve panolarını paylaşır: bir oturumun eklediğini, değiştirdiğini ya da işaretlediğini diğerleri birkaç saniye içinde görür; böylece her oturum aynı panonun kendi kartı üzerinde çalışabilir.
-- **Claude için kuyruk.** Bir panoda *Claude için kuyruk* ilk sütunun ilk kartını Claude’a verir ve panoda ikiden fazla sütun varsa kartı ikinci sütuna taşır. Claude yanıtını bitirdiğinde o kart son sütundaysa sıradaki kart kendiliğinden gider; bir çalıştırmada en fazla 10 kart. Claude izin isterse, yanıtı yarıda kesilir ya da hatayla biterse, kart son sütunda değilse veya Claude’a başka bir şey gönderirsen kuyruk durur — bundan sonrasına sen karar verirsin. *Kuyruğu durdur* Claude’un mevcut kartı bitirmesine izin verir ama ona sıradakini vermez. Ortak panoda başkasının üstlendiği kartlar atlanır.
+- **Claude için kuyruk.** Bir panoda *Claude için kuyruk* ilk sütunun ilk kartını Claude’a verir ve panoda ikiden fazla sütun varsa kartı ikinci sütuna taşır. Claude yanıtını bitirdiğinde o kart son sütundaysa sıradaki kart kendiliğinden gider; bir çalıştırmada en fazla 10 kart. Claude izin isterse, yanıtı yarıda kesilir ya da hatayla biterse, kart son sütunda değilse veya Claude’a başka bir şey gönderirsen kuyruk durur — bundan sonrasına sen karar verirsin. *Kuyruğu durdur* Claude’un mevcut kartı bitirmesine izin verir ama ona sıradakini vermez. Ortak panoda başkasının üstlendiği kartlar atlanır. Kuyruk aynı anda birkaç oturumda çalışabilir — bkz. [Ajanlar](#ajanlar).
 - **Son tarihler.** Kartın *Son tarih* alanı «fri», «tomorrow», «20.11» ya da «2026-11-20» kabul eder. Tarih panoda kartın altında görünür — geçmişse ve kart bitmemişse uyarı renginde — ve takvimde de yer alır; kart o gün hâlâ son sütunda değilse takvim 9:00’da hatırlatır. Claude da son tarih koyar.
 - **Kartı kim üstlendi.** Ortak panoda *Claude’a ver* kartı senin olarak işaretler ve herkes kartın altında «üstlenen: @kullanıcı» görür. Kartı başkası üstlendiyse Arcade önce bunu söyler; yine de kendi Claude’una vermek için bir kez daha bas. *Kartı bırak* kartı serbest bırakır.
 - **GitHub issue’ları.** Panodaki *GitHub’dan issue’lar* alanı `owner/repo` ya da issue’lara bir bağlantı alır: Claude, GitHub bağlayıcısıyla en fazla 20 açık issue okur ve panoda henüz olmayanları kart olarak ekler. Böyle bir kartta *Sonuç GitHub’a* düğmesiyle Claude, issue’ya ne yapıldığını anlatan kısa bir yorum yazar; issue’yu kapatmaz. Arcade’in kendisi GitHub’la hiç konuşmaz ve anahtara ihtiyaç duymaz.
@@ -144,6 +145,17 @@ Menünün *İş* bölümündedir. Defter gibi takvim de bu bilgisayarda, Claude 
 - **Kart son tarihleri.** Son tarihi olan pano kartları kendi günlerinde tüm gün süren kayıtlar olarak görünür, kart son sütuna geçince *bitti* olarak; onları kartın üzerinden değiştirirsin.
 - Google ya da Apple takvimleriyle henüz eşitlenmez.
 
+## Ajanlar
+
+Menünün *İş* bölümündedir: bu bilgisayarda Arcade açık Claude Code oturumları, her biri klasörünün adıyla; seninki *bu oturum* olarak işaretli.
+
+- **Her biri ne yapıyor.** *İzin bekliyor*, *yanıtını bitirdi*, *çalışıyor* ya da *boşta* ve ne kadar süredir; üzerinde çalıştığı kart ve kuyruktaki yeriyle, örneğin *Kuyruk: kart 3 / 10*. İzin bekleyen oturumlar en üstte. Desktop’ta her oturum bir kart, terminalde ve VS Code’da bir satırdır. Kapanan oturum bir dakikadan kısa sürede kaybolur.
+- **Klasöründen bul.** Arcade başka bir oturumu senin yerine açamaz; klasörün adı onun hangi pencere ya da sekme olduğunu söyler.
+- **Tek kuyruk, birkaç oturum.** Her oturumda aynı panoda *Claude için kuyruk*’a bas; sıradaki kartı hangisi boştaysa o alır, iki oturum aynı kartı almaz. Katılan oturum bunu söyler: *Bu panoda kuyruk zaten “api” oturumunda çalışıyor*. Her oturum kendi kuyruğunu aynı kurallarla durdurur — bir izin sorusu, yarıda kesilen bir yanıt, başka bir istek — ve bir çalıştırmada en fazla 10 kart verir. *Kuyruğu durdur* yalnızca bu oturumu durdurur; *Her yerde durdur* hepsini durdurur ve her biri mevcut kartını bitirir. Panoda kartın altında kartın kimde olduğu görünür: *“api” oturumunda*.
+- **Aynı klasör.** Kuyruktaki bir oturum aynı klasörde çalışıyorsa Arcade, iki oturumun aynı dosyaları düzenleyebileceği konusunda uyarır ve oturum ancak *Claude için kuyruk*’a bir kez daha bastığında katılır. Ayrı bir klasör ya da git worktree daha güvenli.
+- **Uyarılar.** Başka bir oturum izin istediğinde kendi Arcade panelindeki kısa bir uyarı *“api” oturumu izin bekliyor* der — ses yok, sistem bildirimi yok. *Ayarlar → Bildirimler*’de bunu kapatabilir ya da biten yanıt için de bir uyarı açabilirsin (varsayılan olarak kapalı).
+- **Bu bilgisayarda kalır.** Her oturum `~/.claude/arcade/agents` içinde klasörünü, durumunu ve kartını tutan küçük bir dosya saklar; Arcade sitesine hiçbir şey gitmez.
+
 ## Ekipler için
 
 Küçük bir ekip görevlerini Arcade’de tutabilir: tek bir ortak pano, kartı alan da onu kendi Claude’una verir.
@@ -156,6 +168,8 @@ Küçük bir ekip görevlerini Arcade’de tutabilir: tek bir ortak pano, kartı
 6. Yalnızca panolar ve sohbetler için mi buradasın? Arcade’i ilk açtığında sadece **İş** ve **Sosyal**’i bırak. Sonra **Ayarlar → Bildirimler**’de **“Oynamak ister misin?” satırı**’na *kapalı* yazana kadar bas: ajan çalışırken istemin üstünde hiçbir şey belirmez.
 
 Bundan sonra: panoyu aç, bir kart seç, **Claude’a ver**. Claude boştaysa kart ona hemen gider; meşgulse sen gönderene kadar giriş kutusunda bekler. Claude yapılanları işaretler ve sonucu karta yazar, panodaki herkes bunu — ve kimin hangi kartı üstlendiğini — birkaç saniye içinde görür. Her karta bir son tarih ver, takviminde görünsün. Gün sonunda *Günün özeti* → *Sohbete gönder* stand-up’ını ekip sohbetine gönderir. Sohbetler **Sosyal**’de.
+
+Birkaç Claude Code oturumunu kendin mi yürütüyorsun? Her birinde aynı panoda *Claude için kuyruk*’a bas: boştaki oturum sıradaki kartı alır, **İş** → **Ajanlar** da her oturumun ne yaptığını gösterir.
 
 Bilmekte fayda var: ortak panolar ve sohbetler Arcade sitesinde saklanır ve şifrelenmez, bu yüzden oraya parola ya da anahtar koyma. Arcade yalnızca GitHub profilinin adını ve resmini öğrenir. Kendine ait en fazla 3 ortak pano, bir panoda en fazla 20 kişi ve 200 kart. *Hesabı sil* (iki kez bas) sitenin seni ve ayarlarını unutmasını sağlar.
 
@@ -226,6 +240,7 @@ Yalnızca hakkına sahip olduğun dosyaları ekle.
 - **İzlerken ajan bitirdi** (Claude Desktop) — Arcade’in bir video, yayın, TikTok, makale ya da bölüm için açtığı sekmeyi kapat, böylece Claude ile sohbet yeniden önüne gelir; ya da sadece haber ver.
 - **Pencerede oynarken bildirimler.**
 - **Mesaj bildirimleri** — bir arkadaşın sohbete yazdığında sol altta bir kart (macOS ve Linux’ta sistem bildirimi).
+- **Başka bir oturum izin bekliyor** ve **Başka bir oturumda Claude yanıtını bitirdi** — bu bilgisayardaki diğer oturumlar hakkında Arcade panelinde kısa bir uyarı, sessiz (bkz. [Ajanlar](#ajanlar)); ilki varsayılan olarak açık, ikincisi kapalı.
 - **Tuş testi ve tuş atama** (terminal).
 - **Koşullar ve gizlilik** — sitenin Kullanım Koşulları ve Gizlilik Politikası, her zamanki tarayıcında açılır.
 
@@ -237,7 +252,7 @@ Arcade, Claude Code’un eklentilere verdiği erişimle Claude Code içinde çal
 - **Ajanı durdurma.** Yalnızca Claude Desktop’ta, ajan çalışırken yerleşik tarayıcıda bir şey açtığında: Desktop bir eklentinin tarayıcıyı kendi başına açmasına izin vermez. Arcade o anki aracın bitmesini bekler (10 saniye sonra onu keser, ama ekranda bir izin sorusu olduğu sürece bekler), ajanı durdurur ve Claude’dan sayfayı açıp işine dönmesini ister. Bundan kaçınmak için *Ayarlar → Oyunları aç* bölümünden bir tarayıcı penceresi seç.
 - **Sohbetin.** Konular için senin oturumundaki Haiku sohbetin sonunu, birkaç bin karakteri alır; bu, Claude kullanımına sayılır. Arcade sitesi sohbeti asla görmez. Arcade giriş kutusuna yalnızca sen istediğinde yazar ya da onu gönderir — örneğin defterdeki *Claude’a ver* ya da başlattığın *Claude için kuyruk*’un sıradaki kartı — ya da yukarıda anlatıldığı gibi bir sayfa açmak için.
 - **Programlar.** Arcade penceresi için tarayıcın (Windows’ta `%LOCALAPPDATA%\claude-arcade` içinde kendi profiliyle); takvim hatırlatmaları dahil bildirimler — Windows’ta PowerShell, macOS’ta `osascript`, Linux’ta `notify-send`; hangi tarayıcıların kurulu olduğunun (Windows) ya da hangi sistem olduğunun (`uname`) kontrolü.
-- **Dosyalar.** Yalnızca `/arcade-add` ile eklediğin ROM’ları `~/.claude/arcade/roms` içine yazar; yalnızca belirttiğin dosyayı, bu kopyaları ve kendi dosyalarını okur. Ayarlar, defter, takvim ve favoriler Claude Code’un eklenti deposunda durur.
+- **Dosyalar.** Yalnızca `/arcade-add` ile eklediğin ROM’ları `~/.claude/arcade/roms` içine, *Ajanlar* için her oturumun küçük işaretini de `~/.claude/arcade/agents` içine yazar; yalnızca belirttiğin dosyayı, bu kopyaları, bu işaretleri ve kendi dosyalarını okur. Ayarlar, defter, takvim ve favoriler Claude Code’un eklenti deposunda durur.
 - **Ortam değişkenleri.** `HOME` ya da `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` ve `OS` değişkenlerini okur; hiçbirini değiştirmez.
 - **Ağ.** Eklentinin kendisi yalnızca Arcade sitesiyle (`agent-arcade.fefaodessa.workers.dev`), YouTube kanallarının RSS akışlarıyla ve gösterdiği blog ve podcast’lerin akışlarıyla konuşur. Desktop panelindeki resimler, örneğin Twitch avatarları, doğrudan bu hizmetlerden yüklenir. Oyunları, kitapları ve videoları tarayıcıda açtığın sayfa yükler.
 
@@ -253,6 +268,7 @@ Ayrıntılar sitenin [Gizlilik Politikası](https://agent-arcade.fefaodessa.work
 - *Kendi konun* araması YouTube API Services üzerinden yapılır ve videolar YouTube’un kendi oynatıcısında oynar; bu yüzden [YouTube Hizmet Şartları](https://www.youtube.com/t/terms) ve [Google Gizlilik Politikası](https://policies.google.com/privacy) da geçerlidir. Kendi oturumundaki Haiku, başlıklarına ve kısa açıklamalarına bakarak en fazla altı video seçer; Arcade sitesi arama sonuçlarını ortak bir önbellekte bir gün tutar.
 - Giriş yaptıktan sonra site eşitlenen ayarlarını, favorilerini, @takma adını, arkadaşlarını, sohbetlerini ve ortak panolarını saklar; oyun davetlerini ise 10 dakika tutar. Kimin çevrimiçi olduğunu yalnızca bellekte, bir buçuk dakika tutar. Oturum anahtarı yalnızca Arcade sitesine gönderilir.
 - Defter ve takvim bilgisayarında kalır. Ortak panolar, tıpkı sohbetler gibi Arcade sitesinde saklanır ve şifrelenmez. Sayfalar Notion’a ya da başka bir uygulamaya yalnızca sen istediğinde, kendi Claude bağlayıcıların üzerinden gider; GitHub issue’ları ve yorumları da öyle — Arcade’in kendisi GitHub’la hiç konuşmaz.
+- *Ajanlar* diğer oturumlarını `~/.claude/arcade/agents` içindeki küçük dosyalardan görür — her oturumun klasörü, durumu ve kartı. Bu dosyalar bu bilgisayarda kalır ve asla Arcade sitesine gitmez; ortak panoda arkadaşların, eskisi gibi, yalnızca «üstlenen: @kullanıcı» görür.
 - Bir hata raporu metnini, Arcade sürümünü, nerede açık olduğunu, arayüz dilini ve işletim sistemini içerir — başka hiçbir şey; giriş yapmadan imzasız gider ve site hiçbir adres saklamaz.
 - Bazı oyunlar internete yalnızca sen istersen çıkar — örneğin OpenTTD’nin isteğe bağlı anketi ve *Online Content* düğmesi.
 
