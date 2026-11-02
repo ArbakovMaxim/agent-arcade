@@ -4,7 +4,7 @@
 
 **English** · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.36).** Everything described here works and is used every day; what changes from now on is mostly the details. Bug reports are very welcome — see [Feedback](#feedback).
+> **Beta (0.37).** Everything described here works and is used every day; what changes from now on is mostly the details. Bug reports are very welcome — see [Feedback](#feedback).
 
 Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns it into a small workspace: project boards where any card goes to Claude with one button, a notebook Claude keeps with you, shared by all your open sessions, and shared boards and chats for your team. And for the wait: when the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
 
@@ -21,6 +21,7 @@ Everything in the catalog is free: the games are openly licensed, the books and 
 ## Features
 
 - **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. A page or card shows its text formatted, with *Edit* and *Copy* buttons. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
+- **Calendar.** In Desktop, a month of same-size day tiles with a dot in each event's color; in the terminal and VS Code, the list of what's coming up. An event goes in with one line, like “fri 9:30 standup”. Pick its color and when to be reminded, from a list or in your own words (like “45 min before” or “the day before at 20:00”); the reminder comes as a system notification. Claude adds and changes events too: “add a call on Friday at 15:00”.
 - **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle, see who is online, share boards, invite them to a game, and chat one-on-one or in groups.
 - **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings). In Claude Desktop it can also close the tab you're watching, so the conversation is back in front of you.
 - **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt — or later, or never, as you choose in the settings; it never steals focus unless you ask it to.
@@ -92,7 +93,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Read & listen** | Books, Audiobooks, Articles, Podcasts |
 | **Watch** | YouTube, Twitch, TikTok |
 | **Social** | Friends, Chats, **Sign in with GitHub** (or **Account** once you're signed in) |
-| **Work** | Notebook, Project board |
+| **Work** | Notebook, Project board, Calendar |
 | **More** | Arcade window, Settings, 🌐 language, 🐞 Report a bug, ☕ Support the project |
 
 Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. A section you don't need can be hidden in **Settings**: it is gone from the menu entirely, title and tiles; *More*, which holds the settings, always stays. Signed in, the menu header shows your @handle with the same counters.
@@ -107,7 +108,7 @@ Press a section's title to fold or unfold it. A folded section shows `▸` and h
 | **VS Code** | in the panel | browser window |
 | **Claude Desktop** | in the panel | Claude's built-in browser, or a browser window (pick in settings); shooters — always a browser window |
 
-The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing. Chats work right in the panel in the terminal and in Desktop; *Open as a page* opens them on the site the same way. The notebook and project boards live in the panel. TikTok opens in Claude's built-in browser in Desktop and in your default browser elsewhere, where you are likely signed in already.
+The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing. Chats work right in the panel in the terminal and in Desktop; *Open as a page* opens them on the site the same way. The notebook, project boards and calendar live in the panel. TikTok opens in Claude's built-in browser in Desktop and in your default browser elsewhere, where you are likely signed in already.
 
 ## Notebook and project boards
 
@@ -121,6 +122,18 @@ Both are in the *Work* section of the menu.
 - **Project board.** Columns — *To do*, *Doing*, *Done* or your own, up to 8 — and cards; a card is a notebook page with text and a checklist. Press a card to pick it and move it with the arrows, press again to open it. Claude can run a board too: *Give to Claude*, or ask it to lay out tasks on a board in Arcade.
 - **Shared boards.** Signed in with a @handle, tick friends and press *Share*: everyone has the same cards, columns and name, and changes show up within seconds. The owner invites more friends, removes people and deletes the board from the site; anyone can leave; whatever happens, everyone keeps their own copy. Up to 3 shared boards of your own, 20 people and 200 cards on a board.
 - **Several sessions at once.** All open Claude Code sessions on this computer share one notebook and its boards: what one session adds, edits or ticks off, the others see within a few seconds, so each session can work on its own card of the same board.
+
+## Calendar
+
+It's in the *Work* section of the menu. Like the notebook, the calendar is kept on this computer, in Claude Code's plugin storage, and all your open sessions share it.
+
+- **Month and day.** In Desktop, a month grid of same-size day tiles with arrows and *Today*: the date on top, below it a dot in each event's color (up to three, then “+N”). The chosen day has a highlighted frame, today a tinted background. Under the grid are the chosen day's events, then *Coming up* for the next 30 days, as cards in each event's color. In the terminal and VS Code it's the *Coming up* list.
+- **One line adds an event:** “fri 9:30 standup”, “tomorrow 15:00 call”, “12.11 review”, “2026-11-20 10:00 demo”. No day — the day chosen in the grid (in the terminal, today); no time — all day. Day words are understood in English and Russian.
+- **Color.** Blue, green, yellow, orange, red, purple, pink or gray; blue by default.
+- **Reminder.** Pick it from a list: at the start, 5, 10, 15 or 30 minutes, 1 or 2 hours, a day, two days or a week before; for an all-day event, at 9:00, 8:00 or 7:00 that day, the day before at 21:00, 18:00 or 9:00, two days or a week before at 9:00. Or type your own, in English or Russian: “45 min before”, “at 14:30”, “the day before at 20:00” — no later than the start and no earlier than a week before. In the Claude mobile app, which has no list, a button steps through the choices.
+- **Notifications.** A reminder comes as a system notification and a toast while any Claude Code session is open; one session shows it, not all of them. One missed while Claude Code was closed shows on the next start as *Missed*, if the event was less than a day ago.
+- **Claude keeps it too**, with the `mcp__arcade__calendar` tool, which changes only the calendar: “add a call on Friday at 15:00”, “what do I have tomorrow?”, “make the demo red”.
+- It doesn't sync with Google or Apple calendars, and there are no recurring events or due dates on board cards.
 
 ## For teams
 
@@ -211,11 +224,11 @@ Open **Settings** in the *More* section of the `/arcade` menu:
 
 Arcade runs inside Claude Code with the access Claude Code gives plugins. All of its code is in this repository, and `claude plugin validate ./mod` lists every event it hooks and every call it makes. In short:
 
-- **The agent's tools.** Arcade sees when a tool starts and finishes and when the agent asks for permission — that's how it knows when to show its banner. It never changes or blocks the agent's tool calls. It approves only two kinds of calls itself, and only where Claude Code would otherwise ask you: `mcp__arcade__notes`, which changes only the notebook and deletes nothing, and opening a game in Desktop's built-in browser after you press it in the panel. Your allow and deny rules apply as they are.
+- **The agent's tools.** Arcade sees when a tool starts and finishes and when the agent asks for permission — that's how it knows when to show its banner. It never changes or blocks the agent's tool calls. It approves only three kinds of calls itself, and only where Claude Code would otherwise ask you: `mcp__arcade__notes`, which changes only the notebook and deletes nothing; `mcp__arcade__calendar`, which changes only the calendar; and opening a game in Desktop's built-in browser after you press it in the panel. Your allow and deny rules apply as they are.
 - **Interrupting the agent.** Only in Claude Desktop, when you open something in the built-in browser while the agent is working: Desktop doesn't let a plugin open the browser by itself. Arcade waits for the current tool to finish (after 10 seconds it cuts it off, but it waits as long as a permission prompt is on screen), interrupts the agent and asks Claude to open the page and get back to work. To avoid this, choose a browser window in *Settings → Open games*.
 - **Your conversation.** For topics, Haiku in your own session gets the end of the conversation, a few thousand characters; this counts toward your Claude usage. Arcade's site never sees the conversation. Arcade types into the prompt box or submits it only when you ask — for example *Give to Claude* in the notebook — or to open a page as described above.
-- **Programs it runs.** Your browser for the Arcade window (on Windows with its own profile in `%LOCALAPPDATA%\claude-arcade`); notifications — PowerShell on Windows, `osascript` on macOS, `notify-send` on Linux; a check of which browsers are installed (Windows) or which OS this is (`uname`).
-- **Files.** It writes only the ROMs you add with `/arcade-add`, into `~/.claude/arcade/roms`, and reads only the file you name, those copies and its own files. Settings, the notebook and favorites live in Claude Code's plugin storage.
+- **Programs it runs.** Your browser for the Arcade window (on Windows with its own profile in `%LOCALAPPDATA%\claude-arcade`); notifications, calendar reminders among them — PowerShell on Windows, `osascript` on macOS, `notify-send` on Linux; a check of which browsers are installed (Windows) or which OS this is (`uname`).
+- **Files.** It writes only the ROMs you add with `/arcade-add`, into `~/.claude/arcade/roms`, and reads only the file you name, those copies and its own files. Settings, the notebook, the calendar and favorites live in Claude Code's plugin storage.
 - **Environment variables.** It reads `HOME` or `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` and `OS`, and changes none.
 - **Network.** The plugin itself talks only to Arcade's site (`agent-arcade.fefaodessa.workers.dev`), the RSS feeds of YouTube channels and the feeds of the blogs and podcasts it shows. Pictures in the Desktop panel, such as Twitch avatars, load straight from those services. Games, books and videos are loaded by the page you open in the browser.
 
@@ -230,7 +243,7 @@ The site's [Privacy Policy](https://agent-arcade.fefaodessa.workers.dev/privacy)
 - Topics are suggested by Haiku in your own Claude Code session; Arcade's site never sees your conversation — only a short English search query when you use *Your own topic*. An article's address goes after `#`, so it never reaches Arcade's server.
 - A search for *Your own topic* goes through YouTube API Services, and videos play in YouTube's own player, so the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the [Google Privacy Policy](https://policies.google.com/privacy) apply too. Haiku in your own session picks up to six videos from their titles and short descriptions; Arcade's site keeps search results in a shared cache for a day.
 - Signed in, the site keeps your synced settings, favorites, @handle, friends, chats and shared boards, and game invitations for 10 minutes. Who is online it holds only in memory, for a minute and a half. The session key goes only to Arcade's site.
-- The notebook stays on your computer. Shared boards are stored on Arcade's site and are not encrypted, like chats. Pages go to Notion or another app only when you ask, through your own Claude connectors.
+- The notebook and the calendar stay on your computer. Shared boards are stored on Arcade's site and are not encrypted, like chats. Pages go to Notion or another app only when you ask, through your own Claude connectors.
 - A bug report carries your text, the Arcade version, where it is open, the interface language and the OS — nothing else; without signing in it goes unsigned, and the site keeps no address.
 - Some games can reach the internet only when you ask them to — for example OpenTTD's optional survey and its *Online Content* button.
 

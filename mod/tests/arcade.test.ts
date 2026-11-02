@@ -20,7 +20,8 @@ import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, 
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
-import { addDays, addEvent, addMonths, applyCalendarTool, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
+import { addDays, addEvent, addMonths, applyCalendarTool, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
+import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOOK_LANGS, BOOK_SECTIONS, bookLang, bookQuery, booksPath, parseBooks } from '../hooks/books.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
@@ -8596,6 +8597,50 @@ test('календарь: хранилище, правки и напоминан
   expect(dueReminders(marked, T0)).toEqual({ due: [], stale: [] })
   expect(nextReminder(marked, T0)).toBe(at('2026-11-02', '17:30'))
   expect(nextReminder([], T0)).toBe(null)
+
+  // Цвет: название из набора; без цвета — синий, в событии не хранится
+  expect(restoreCalendar([{ id: 'e1', title: 'a', day: '2026-11-03', color: 'red' }, { id: 'e2', title: 'b', day: '2026-11-03', color: 'teal' }]).map((e: any) => e.color)).toEqual(['red', undefined])
+  const red: any = addEvent([], { title: 'Ревью', day: '2026-11-03', color: 'red' }, T0)
+  expect(red.event.color).toBe('red')
+  expect(addEvent([], { title: 'x', day: '2026-11-03', color: 'teal' }, T0)).toEqual({ error: 'color' })
+  expect((updateEvent(red.list, red.event.id, { color: 'green' }, T0) as any).event.color).toBe('green')
+  expect('color' in (updateEvent(red.list, red.event.id, { color: '' }, T0) as any).event).toBe(false)
+  expect(updateEvent(red.list, red.event.id, { color: '#ff0000' }, T0)).toEqual({ error: 'color' })
+})
+
+test('календарь: своё напоминание словами, выбор из списка', () => {
+  // Минуты до начала; у события на весь день — до 9:00 этого дня. Позже начала, раньше чем за неделю, непонятное — undefined
+  const call = { time: '15:00' }
+  const allDay = {}
+  const cases: [string, number | null | undefined, number | null | undefined][] = [
+    ['за 45 мин', 45, 45],
+    ['за 1 ч 30 мин', 90, 90],
+    ['за час', 60, 60],
+    ['за полчаса', 30, 30],
+    ['1,5 ч', 90, 90],
+    ['15', 15, 15],
+    ['в начале', 0, 0],
+    ['в 14:30', 30, undefined],
+    ['в 8:30', 390, 30],
+    ['накануне в 20:00', 1140, 780],
+    ['за 2 дня в 18:00', 2700, 2340],
+    ['2 hours before', 120, 120],
+    ['the day before at 20:00', 1140, 780],
+    ['нет', null, null],
+    ['в 16:00', undefined, undefined],
+    ['за 8 дней', undefined, undefined],
+    ['за 2 часа в 18:00', undefined, undefined],
+    ['когда-нибудь', undefined, undefined],
+    ['', undefined, undefined],
+  ]
+  expect(cases.map(([text]) => [text, parseRemind(text, call), parseRemind(text, allDay)])).toEqual(cases)
+
+  // Выбор: готовые варианты; своё значение встаёт по порядку
+  expect(remindChoices({ time: '15:00', remind: 15 })).toEqual([0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080, null])
+  expect(remindChoices({ time: '15:00', remind: 45 })).toEqual([0, 5, 10, 15, 30, 45, 60, 120, 1440, 2880, 10080, null])
+  expect(remindChoices({ remind: 780 })).toEqual([0, 60, 120, 720, 780, 900, 1440, 2880, 10080, null])
+  // Где выбора нет — по кругу
+  expect([nextRemind({ time: '15:00', remind: 45 }), nextRemind({ time: '15:00', remind: null }), nextRemind({ remind: 0 }), nextRemind({ remind: 10080 })]).toEqual([60, 0, 60, null])
 })
 
 test('календарь: инструмент Claude — ответы по-английски, с сегодняшним днём', () => {
@@ -8618,12 +8663,17 @@ test('календарь: инструмент Claude — ответы по-ан
   list = upd.list
   expect(applyCalendarTool(list, { action: 'update', event: id, remind: -1, time: '' }, T0).text.split('\n')[2]).toBe(`- ${id}: Tue 2026-11-03 all day — Созвон (no reminder)`)
   expect(applyCalendarTool(list, { action: 'update', event: id, remind: 0 }, T0).text.split('\n')[2]).toBe(`- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder at the start)`)
+  const red: any = applyCalendarTool(list, { action: 'update', event: id, color: 'red' }, T0)
+  expect(red.text.split('\n')[2]).toBe(`- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder 1 h before, red)`)
+  expect(red.list.find((e: any) => e.id === id).color).toBe('red')
+  expect(applyCalendarTool(red.list, { action: 'update', event: id, color: '' }, T0).text.split('\n')[2]).toBe(`- ${id}: Tue 2026-11-03 15:00 — Созвон (reminder 1 h before)`)
 
   // Ошибки — с подсказкой, что делать; календарь не меняется
   const fails: any[] = [
     applyCalendarTool(list, { action: 'add', title: 'x', day: '2026-11-03', time: '3pm' }, T0),
     applyCalendarTool(list, { action: 'add', title: 'x', day: 'tomorrow' }, T0),
     applyCalendarTool(list, { action: 'update', event: id }, T0),
+    applyCalendarTool(list, { action: 'add', title: 'x', day: '2026-11-03', color: 'teal' }, T0),
     applyCalendarTool(list, { action: 'remove', event: 'Ужин' }, T0),
     applyCalendarTool(list, { action: 'list', days: 0 }, T0),
     applyCalendarTool(list, { action: 'move' }, T0),
@@ -8632,7 +8682,8 @@ test('календарь: инструмент Claude — ответы по-ан
   expect(fails.map((f) => f.text.split('\n')[1])).toEqual([
     'time must be HH:MM, 24-hour, e.g. 15:00, or empty for all day.',
     'day must be a real date as YYYY-MM-DD.',
-    'Nothing to change: pass title, day, time, note or remind.',
+    'Nothing to change: pass title, day, time, note, remind or color.',
+    'color is one of blue, green, yellow, orange, red, purple, pink, gray, or "" for the default.',
     'No event "Ужин". Use list to see the events and their ids.',
     'days is 1 to 92.',
     'Unknown action: use list, add, update or remove.',
@@ -8676,7 +8727,7 @@ test('календарь: Claude ведёт его инструментом mcp_
   await ui.unmount()
 })
 
-test('календарь в терминале: быстрая запись, событие, напоминание, перенос и удаление', async ($, on) => {
+test('календарь в терминале: быстрая запись, событие, напоминание, цвет, перенос и удаление', async ($, on) => {
   const { clock, saved } = stubs(on)
   await clock.advance(T0)
   await start($)
@@ -8701,14 +8752,40 @@ test('календарь в терминале: быстрая запись, с�
   expect(await text('Впиши, что за событие.')).toMatchObject({ props: { color: 'warning' } })
   expect(events().length).toBe(2)
 
-  // Событие: напоминание по кругу — за 30 минут, за час…
+  // Событие: напоминание — выбором из списка
   await ui.press({ key: `arcade-cal-ev-${call}` })
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за 15 мин' } })
-  await ui.press({ key: 'arcade-cal-remind' })
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за 30 мин', autoFocus: true } })
-  await ui.press({ key: 'arcade-cal-remind' })
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за час' } })
+  const remind = () => ui.find({ key: 'arcade-cal-remind' })
+  const options = async () => (await remind()).props.options.map((o: any) => o.label)
+  expect(await remind()).toMatchObject({ props: { label: 'Напомнить', value: '15' } })
+  expect(await options()).toEqual(['в начале', 'за 5 мин', 'за 10 мин', 'за 15 мин', 'за 30 мин', 'за час', 'за 2 ч', 'за сутки', 'за 2 дн.', 'за неделю', 'без напоминания'])
+  expect(await text('Завтра 15:00 · 🔔 за 15 мин')).toBeDefined()
+  await ui.select({ key: 'arcade-cal-remind', value: '30' })
+  expect(events().find((e) => e.id === call).remind).toBe(30)
+  expect(await remind()).toMatchObject({ props: { value: '30', autoFocus: true } })
+  // Своё время словами — встаёт в список; позже начала — предупреждение, напоминание не меняется
+  await noteInput(ui, 'arcade-cal-remind-own-', 'за 1 ч 30 мин')
+  expect(events().find((e) => e.id === call).remind).toBe(90)
+  expect(await remind()).toMatchObject({ props: { value: '90' } })
+  expect((await options()).slice(5, 8)).toEqual(['за час', 'за 1 ч 30 мин', 'за 2 ч'])
+  await noteInput(ui, 'arcade-cal-remind-own-', 'в 16:00')
+  expect(await text('Не понял, когда напомнить: пиши как «за 45 мин», «в 14:30» или «накануне в 20:00» — не позже начала и не раньше чем за неделю.')).toMatchObject({ props: { color: 'warning' } })
+  expect(events().find((e) => e.id === call).remind).toBe(90)
+  await ui.select({ key: 'arcade-cal-remind', value: 'none' })
+  expect(events().find((e) => e.id === call).remind).toBe(null)
+  expect(await text('Завтра 15:00')).toBeDefined()
+  await ui.select({ key: 'arcade-cal-remind', value: '60' })
   expect(events().find((e) => e.id === call).remind).toBe(60)
+
+  // Цвет — кнопками; синий по умолчанию и в событии не хранится
+  expect(await ui.find({ key: 'arcade-cal-color-blue' })).toMatchObject({ props: { label: 'синий', variant: 'primary' } })
+  await ui.press({ key: 'arcade-cal-color-red' })
+  expect(events().find((e) => e.id === call).color).toBe('red')
+  expect(await ui.find({ key: 'arcade-cal-color-red' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
+  expect((await ui.find({ key: 'arcade-cal-color-blue' })).props.variant).toBeUndefined()
+  await ui.press({ key: 'arcade-cal-color-blue' })
+  expect('color' in events().find((e) => e.id === call)).toBe(false)
+  await ui.press({ key: 'arcade-cal-color-green' })
+  expect(events().find((e) => e.id === call).color).toBe('green')
   // Когда — как в быстрой записи; непонятное — предупреждение, событие не меняется
   await noteInput(ui, 'arcade-cal-when-', 'пт 9:30')
   expect(events().find((e) => e.id === call)).toMatchObject({ day: '2026-11-06', time: '09:30' })
@@ -8733,13 +8810,17 @@ test('календарь в терминале: быстрая запись, с�
   expect(events().map((e) => e.title)).toEqual(['Отчёт'])
   expect(await ui.find({ key: `arcade-cal-ev-${call}` })).toBeUndefined()
 
-  // У события на весь день — в 9:00, за сутки или без напоминания
+  // У события на весь день — часами: в 9:00 этого дня, накануне вечером, за неделю
   await ui.press({ key: `arcade-cal-ev-${report}` })
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: в 9:00' } })
-  await ui.press({ key: 'arcade-cal-remind' })
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: за сутки' } })
-  await ui.press({ key: 'arcade-cal-remind' })
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Напоминание: нет' } })
+  expect(await remind()).toMatchObject({ props: { value: '0' } })
+  expect(await options()).toEqual(['в 9:00', 'в 8:00', 'в 7:00', 'накануне в 21:00', 'накануне в 18:00', 'накануне в 9:00', 'за 2 дн. в 9:00', 'за неделю в 9:00', 'без напоминания'])
+  await noteInput(ui, 'arcade-cal-remind-own-', 'накануне в 20:00')
+  expect(events().find((e) => e.id === report).remind).toBe(780)
+  expect(await text('Сегодня, весь день · 🔔 накануне в 20:00')).toBeDefined()
+  await noteInput(ui, 'arcade-cal-remind-own-', 'в 10:00')
+  expect(await text('Не понял, когда напомнить: пиши как «в 8:30», «накануне в 20:00» или «за 3 дня в 9:00» — не позже 9:00 этого дня и не раньше чем за неделю.')).toMatchObject({ props: { color: 'warning' } })
+  await ui.select({ key: 'arcade-cal-remind', value: '1440' })
+  expect(events().find((e) => e.id === report).remind).toBe(1440)
   // Назад — фокус на том же событии
   await ui.press({ key: 'arcade-back' })
   expect(await ui.find({ key: `arcade-cal-ev-${report}` })).toMatchObject({ props: { autoFocus: true } })
@@ -8747,38 +8828,60 @@ test('календарь в терминале: быстрая запись, с�
 })
 
 test('календарь в Desktop: сетка месяца, события дня, запись на выбранный день', async ($, on) => {
-  const { clock, saved } = stubs(on, { stored: { calendar: [{ id: 'e1', title: 'Ревью', day: '2026-11-12', time: '10:00', remind: 15, at: 0 }] } })
+  const { clock, saved } = stubs(on, { stored: { calendar: [{ id: 'e1', title: 'Ревью', day: '2026-11-12', time: '10:00', remind: 15, at: 0, color: 'green' }] } })
   await clock.advance(T0)
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-menu-calendar' })
   const text = (t: string) => ui.find({ type: 'Text', text: t })
+  // Цветные точки событий на плитке дня
+  const dots = async (day: string) => {
+    const found: string[] = []
+    const walk = (n: any) => {
+      if (!n || typeof n !== 'object') return
+      if (n.props?.color && (n.children ?? []).includes('●')) found.push(n.props.color)
+      for (const c of n.children ?? []) walk(c)
+    }
+    walk(await ui.find({ key: `cal-cell-${day}` }))
+    return found
+  }
 
   expect(await text('Ноябрь 2026')).toBeDefined()
   expect(await ui.find({ key: 'arcade-cal-day-2026-11-02' })).toMatchObject({ props: { label: '2', variant: 'primary' } })
-  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { label: '12•' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { label: '12' } })
   expect(await ui.find({ key: 'arcade-cal-day-2026-10-26' })).toMatchObject({ props: { label: '26', dimColor: true } })
+  // Плитки одного размера: выбранный день — в рамке цвета выбора, на дне с событием — точка его цвета
+  const tiles = await Promise.all(['2026-11-02', '2026-11-12', '2026-10-26'].map((day) => ui.find({ key: `cal-cell-${day}` })))
+  expect(new Set(tiles.map((t: any) => t.props.width)).size).toBe(1)
+  expect(tiles.map((t: any) => t.props.borderColor)).toEqual(['suggestion', 'subtle', 'subtle'])
+  expect([await dots('2026-11-12'), await dots('2026-11-02')]).toEqual([['#22A06B'], []])
   expect(await ui.find({ key: 'arcade-cal-today' })).toBeUndefined()
   expect(await text('Сегодня · 02.11')).toBeDefined()
-  expect(await text('В этот день событий нет.')).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: '12.11 10:00 · Ревью' } })
+  expect(await text('Свободный день — запиши что-нибудь ниже.')).toBeDefined()
+  // «Ближайшее» — карточками цвета события: название кнопкой, ниже когда и напоминание
+  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: 'Ревью' } })
+  expect(await ui.find({ key: 'cal-card-ev-e1' })).toMatchObject({ props: { borderColor: '#22A06B80' } })
+  expect(await text('12.11 10:00 · 🔔 за 15 мин')).toBeDefined()
 
   // Выбранный день: его события; запись без дня ложится на него
   await ui.press({ key: 'arcade-cal-day-2026-11-12' })
   expect(await text('Четверг · 12.11')).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-dayev-e1' })).toMatchObject({ props: { label: '10:00 · Ревью' } })
+  expect(await ui.find({ key: 'arcade-cal-dayev-e1' })).toMatchObject({ props: { label: 'Ревью' } })
+  expect(await text('10:00 · 🔔 за 15 мин')).toBeDefined()
+  expect((await ui.find({ key: 'cal-cell-2026-11-12' })).props.borderColor).toBe('suggestion')
   expect(await ui.find({ key: 'arcade-cal-day-2026-11-12' })).toMatchObject({ props: { variant: 'primary', autoFocus: true } })
   expect(await ui.find({ key: 'arcade-cal-today' })).toBeDefined()
   await noteInput(ui, 'arcade-cal-add-', '16:00 Демо')
   const demo = (saved.get('calendar') as any[]).find((e) => e.title === 'Демо')
   expect(demo).toMatchObject({ day: '2026-11-12', time: '16:00' })
-  expect(await ui.find({ key: `arcade-cal-dayev-${demo.id}` })).toMatchObject({ props: { label: '16:00 · Демо' } })
+  expect(await ui.find({ key: `arcade-cal-dayev-${demo.id}` })).toMatchObject({ props: { label: 'Демо' } })
+  expect(await dots('2026-11-12')).toEqual(['#22A06B', '#3B82F6'])
   // Запись с днём — экран переходит к нему
   await noteInput(ui, 'arcade-cal-add-', '03.12 Релиз')
   expect(await text('Декабрь 2026')).toBeDefined()
   expect(await text('Четверг · 03.12')).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-day-2026-12-03' })).toMatchObject({ props: { label: '3•', variant: 'primary' } })
+  expect(await ui.find({ key: 'arcade-cal-day-2026-12-03' })).toMatchObject({ props: { label: '3', variant: 'primary' } })
 
   // Листать месяцы; «Сегодня» — назад к сегодняшнему дню
   await ui.press({ key: 'arcade-cal-prev' })
@@ -8852,13 +8955,25 @@ test('календарь по-английски: экраны без русск
   await ui.press({ key: 'arcade-menu-calendar' })
   expect(await cyrillic()).toEqual([])
   expect(await ui.find({ type: 'Text', text: 'November 2026' })).toBeDefined()
-  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: '12.11 10:00 · Review' } })
+  expect(await ui.find({ key: 'arcade-cal-ev-e1' })).toMatchObject({ props: { label: 'Review' } })
+  expect(await ui.find({ type: 'Text', text: '12.11 10:00 · 🔔 15 min before' })).toBeDefined()
   await ui.press({ key: 'arcade-cal-day-2026-11-12' })
   expect(await cyrillic()).toEqual([])
   expect(await ui.find({ type: 'Text', text: 'Thursday · 12.11' })).toBeDefined()
   await ui.press({ key: 'arcade-cal-dayev-e1' })
   expect(await cyrillic()).toEqual([])
-  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Reminder: 15 min before' } })
+  const remind: any = await ui.find({ key: 'arcade-cal-remind' })
+  expect(remind).toMatchObject({ props: { label: 'Remind', value: '15' } })
+  const labels = remind.props.options.map((o: any) => o.label)
+  expect(labels.filter((x: string) => /[А-Яа-яЁё]/.test(x))).toEqual([])
+  expect([labels[0], labels[3], labels[5], labels[9], labels[10]]).toEqual(['at the start', '15 min before', '1 hour before', '1 week before', 'no reminder'])
+  expect(await ui.find({ key: 'arcade-cal-color-red' })).toMatchObject({ props: { label: 'red' } })
+  await noteInput(ui, 'arcade-cal-remind-own-', 'someday')
+  expect(await cyrillic()).toEqual([])
+  expect(await ui.find({ type: 'Text', text: "Couldn't tell when to remind: write it like “45 min before”, “at 14:30” or “the day before at 20:00” — no later than the start and no earlier than a week before." })).toBeDefined()
+  await noteInput(ui, 'arcade-cal-remind-own-', 'the day before at 20:00')
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { value: '840' } })
+  expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-cal-delete' })
   expect(await cyrillic()).toEqual([])
   await ui.press({ key: 'arcade-cal-delete-yes' })
