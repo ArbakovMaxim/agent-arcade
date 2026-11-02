@@ -330,6 +330,7 @@ export default {
   "Nothing here yet. Mark games with the ☆ star — they gather here.": "아직 비어 있습니다. 게임에 ☆ 표시를 하면 여기에 모입니다.",
   "Nothing in the coming month.": "앞으로 한 달 동안 일정이 없어요.",
   "Nothing on this day.": "이 날에는 아무것도 없었어요.",
+  "Nothing this month.": "이번 달에는 일정이 없어요.",
   "Nothing turned up on this topic — try putting it another way.": "이 주제로는 아무것도 찾지 못했습니다. 다르게 표현해 보세요.",
   "Notifications": "알림",
   "Notifications while playing in a window: off": "창에서 플레이 중 알림: 끔",

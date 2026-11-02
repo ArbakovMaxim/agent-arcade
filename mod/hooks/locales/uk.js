@@ -330,6 +330,7 @@ export default {
   "Nothing here yet. Mark games with the ☆ star — they gather here.": "Поки порожньо. Позначай зірочкою ☆ ігри — вони зберуться тут.",
   "Nothing in the coming month.": "Найближчого місяця подій немає.",
   "Nothing on this day.": "Цього дня нічого не було.",
+  "Nothing this month.": "Цього місяця подій немає.",
   "Nothing turned up on this topic — try putting it another way.": "За цією темою нічого не знайшлося — спробуй сказати інакше.",
   "Notifications": "Сповіщення",
   "Notifications while playing in a window: off": "Сповіщення під час гри у вікні: вимкнено",
