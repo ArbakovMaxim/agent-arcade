@@ -7,7 +7,7 @@
 // уйдёт следующей сверкой. Чужой текст (карточки, названия, ники) приходит с сайта — его чистят cleanTitle и cleanBody
 import { count, trouble } from './account.js'
 import { namesFrom } from './chats.js'
-import { addPage, cleanBody, cleanCols, cleanTitle, fits, isBoard, updatePage } from './notes.js'
+import { addPage, cardExtra, cleanBody, cleanCols, cleanTitle, fits, isBoard, updateCard, updatePage } from './notes.js'
 import { jsonFrom } from './youtube.js'
 
 export const BOARD_ID = /^b[A-Za-z0-9_-]{16}$/
@@ -55,13 +55,15 @@ function boardFrom(b) {
   return { id: b.id, name, owner, members: people(b.members), cols, rev: b.rev }
 }
 
-// Карточка из ответа: { id, title, body, col, pos } или след удаления { id, gone: true }; не сходится — null
+// Карточка из ответа: { id, title, body, col, pos, due?, taken? } или след удаления { id, gone: true }; не сходится —
+// null. Срок и «кто взял» не сходятся — карточка без них
 function cardFrom(c) {
   if (!c || typeof c !== 'object' || typeof c.id !== 'string' || !CARD_ID.test(c.id)) return null
   if (c.gone === true) return { id: c.id, gone: true }
   const title = cleanTitle(c.title)
   if (!title || typeof c.body !== 'string' || !Number.isFinite(c.pos)) return null
-  return { id: c.id, title, body: cleanBody(c.body), col: typeof c.col === 'string' && COL_ID.test(c.col) ? c.col : '', pos: c.pos }
+  const col = typeof c.col === 'string' && COL_ID.test(c.col) ? c.col : ''
+  return { id: c.id, title, body: cleanBody(c.body), col, pos: c.pos, ...cardExtra({ due: c.due, taken: accountId(c.taken) }) }
 }
 
 // Доска из списка: { id, name, owner, rev, at }
@@ -151,7 +153,7 @@ export function restoreDesks(saved, notes) {
 
 // Что отдать сайту: { ops, sent } — правки по порядку (название, колонки, удалённые карточки, новые и поправленные) и
 // что именно ушло (sent: { name?, cols?, puts: { id: at }, dels }), чтобы после ответа сдвинуть основу. Карточку,
-// которую доска не взяла (held), не шлём, пока её снова не поправят
+// которую доска не взяла (held), не шлём, пока её снова не поправят. Срока и «кто взял» нет — null: сайт их уберёт
 export function planSync(notes, base) {
   const ops = []
   const sent = { puts: {}, dels: [] }
@@ -172,7 +174,7 @@ export function planSync(notes, base) {
   for (const cid of Object.keys(base.cards)) if (!here.has(cid) && add({ del: cid })) sent.dels.push(cid)
   for (const c of cards) {
     if (c.at === base.cards[c.id] || c.at === base.held[c.id]) continue
-    if (add({ put: { id: c.id, title: c.title, body: c.body, col: c.col, pos: c.pos } })) sent.puts[c.id] = c.at
+    if (add({ put: { id: c.id, title: c.title, body: c.body, col: c.col, pos: c.pos, taken: c.taken ?? null, due: c.due ?? null } })) sent.puts[c.id] = c.at
   }
   return { ops, sent }
 }
@@ -217,14 +219,16 @@ export function applySync(notes, base, answer, sent, now) {
     // id занят другой страницей; карточку здесь поправили; здесь её удалили — удаление уйдёт следующей сверкой
     if ((mine && mine.parent !== page.id) || (mine && dirty(mine)) || (!mine && Object.hasOwn(cards, card.id))) continue
     if (mine) {
-      if (mine.title !== card.title || mine.body !== card.body || mine.col !== card.col || mine.pos !== card.pos) {
+      const fields = ['title', 'body', 'col', 'pos', 'due', 'taken']
+      if (fields.some((k) => mine[k] !== card[k])) {
         list = updatePage(list, card.id, { title: card.title, body: card.body, col: card.col, pos: card.pos }, now)
+        list = updateCard(list, card.id, { due: card.due ?? '', taken: card.taken ?? '' }, now)
         changed.add(card.id)
       }
       cards[card.id] = list.find((p) => p.id === card.id).at
       continue
     }
-    const made = addPage(list, { title: card.title, body: card.body, parent: page.id, id: card.id, col: card.col, pos: card.pos }, now)
+    const made = addPage(list, { title: card.title, body: card.body, parent: page.id, id: card.id, col: card.col, pos: card.pos, due: card.due, taken: card.taken }, now)
     if (made.error || made.page.id !== card.id || !fits(made.notes)) {
       missed = true
       continue

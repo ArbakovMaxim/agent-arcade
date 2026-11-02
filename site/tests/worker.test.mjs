@@ -1666,6 +1666,24 @@ try {
     for (let i = box7.syncs.length; i < SYNCS_PER_MINUTE; i++) assert.equal((await sync({ board: plan, since: deskMeta().rev }, t7)).status, 200)
     assert.deepEqual(await sync({ board: plan, since: deskMeta().rev }, t7), { status: 429, body: { error: 'often' } })
     box7.syncs = []
+    // Кто взял карточку и срок: правка без этих полей их не трогает (моды старых версий), null — убирает; взял не
+    // участник — никто; неверный день или номер — вся пачка не годится
+    const extra = (id, title, col, pos, more) => ({ put: { ...card(id, title, col, pos).put, ...more } })
+    let since = deskMeta().rev
+    const take = await sync({ board: plan, since, ops: [extra('pa3', 'Куда?', 'todo', 5, { taken: '7', due: '2026-11-20' })] }, t7)
+    assert.deepEqual(take.body.cards.map((c) => [c.id, c.taken, c.due]), [['pa3', '7', '2026-11-20']])
+    since = deskMeta().rev
+    const kept = await sync({ board: plan, since, ops: [card('pa3', 'Куда теперь?', 'todo', 5)] }, t42)
+    assert.deepEqual(kept.body.cards.map((c) => [c.title, c.taken, c.due]), [['Куда теперь?', '7', '2026-11-20']])
+    since = deskMeta().rev
+    assert.deepEqual((await sync({ board: plan, since, ops: [extra('pa3', 'Куда теперь?', 'todo', 5, { taken: '7', due: '2026-11-20' })] }, t42)).body.cards, [], 'то же — не правка')
+    const freed = await sync({ board: plan, since, ops: [extra('pa3', 'Куда теперь?', 'todo', 5, { taken: null, due: '2026-11-21' }), extra('pa1', 'Тесты!', 'done', 1, { taken: '12345' })] }, t42)
+    assert.deepEqual(freed.body.cards.map((c) => [c.id, c.taken, c.due]), [['pa3', undefined, '2026-11-21']])
+    since = deskMeta().rev
+    for (const more of [{ taken: 7 }, { due: '2026-02-30' }, { due: 'завтра' }]) {
+      assert.deepEqual(await sync({ board: plan, since, ops: [extra('pa3', 'Куда?', 'todo', 5, more)] }, t42), { status: 400, body: { error: 'bad request' } }, JSON.stringify(more))
+    }
+    assert.equal(deskMeta().rev, since, 'неверный срок не пишет ничего')
 
     // Участники: зовёт и убирает хозяин, только друзей; убранный теряет доску
     assert.deepEqual(await boardMembers({ board: plan, add: ['9'] }, t7), { status: 403, body: { error: 'friend' } })
@@ -2183,6 +2201,20 @@ try {
     notesM.notesOrder(B).map((p) => p.title),
     'доски у A и B одинаковые',
   )
+
+  // B отдаёт карточку своему Claude и ставит срок — A видит, кто взял и когда срок; A отпускает её — B видит
+  B = notesM.updateCard(B, 'c1', { taken: '2', due: '2026-11-20' }, tick())
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  assert.deepEqual([cardOf(A, 'c1').taken, cardOf(A, 'c1').due], ['2', '2026-11-20'], 'A видит, кто взял, и срок')
+  A = notesM.updateCard(A, 'c1', { taken: '' }, tick())
+  r = await sync(A, baseA, '1')
+  ;[A, baseA] = [r.notes, r.base]
+  r = await sync(B, baseB, '2')
+  ;[B, baseB] = [r.notes, r.base]
+  assert.deepEqual([cardOf(B, 'c1').taken, cardOf(B, 'c1').due], [undefined, '2026-11-20'], 'карточку отпустили — срок остался')
 
   // Основа и блокнот переживают $.store
   const restored = desks.restoreDesks(JSON.parse(JSON.stringify({ [BOARD]: baseB })), notesM.restoreNotes(JSON.parse(JSON.stringify(B))))

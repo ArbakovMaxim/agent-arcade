@@ -19,12 +19,13 @@ import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatar
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
-import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updatePage } from '../hooks/notes.js'
-import { addDays, addEvent, addMonths, applyCalendarTool, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
+import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, issueUrl, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
+import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
 import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOOK_LANGS, BOOK_SECTIONS, bookLang, bookQuery, booksPath, parseBooks } from '../hooks/books.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
+import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 
 // Что Claude Code передаёт хуку ui.render для панели, кроме приложения
 const PANE = {
@@ -7048,7 +7049,7 @@ test('блокнот: инструмент Claude — список, страни
   expect(call({ action: 'read', page: 'Nope' })).toMatchObject({ isError: true, text: 'No page "Nope". Use action list to see the pages.' })
   expect(call({ action: 'append', page: 'Notes', text: ' ' })).toMatchObject({ isError: true, text: 'Nothing to add: text is empty.' })
   expect(call({ action: 'append', page: 'Release', text: 'x'.repeat(MAX_BODY) }).text).toBe('The page would be over 20000 characters.')
-  expect(call({ action: 'delete', page: 'Release' })).toMatchObject({ isError: true, text: 'Unknown action: use list, read, create, append, check, replace, link or move.' })
+  expect(call({ action: 'delete', page: 'Release' })).toMatchObject({ isError: true, text: 'Unknown action: use list, read, create, append, check, replace, link, move or due.' })
   expect(notes.map((p) => p.id)).toEqual(['p1jk1', 'p1jk'])
 })
 
@@ -7174,6 +7175,202 @@ test('доска проектов: инструмент Claude — доска, �
   expect(call({ action: 'move', page: 'Tests', column: 'shipped' }).text).toBe('Moved Tests to Shipped.')
 })
 
+test('карточки доски: срок и кто взял — инструмент Claude, сверка с сайтом, календарь', () => {
+  // Только то, что сходится: настоящий день и номер аккаунта
+  let notes: any = addPage([], { title: 'Sprint', board: {} }, 10).notes
+  notes = addPage(notes, { title: 'Login', parent: 'pa', id: 'c1', due: '2026-11-05', taken: '583231' }, 11).notes
+  notes = addPage(notes, { title: 'Tests', parent: 'pa', id: 'c2', due: '2026-02-30', taken: '@max' }, 11).notes
+  notes = addPage(notes, { title: 'Page', id: 'p9', due: '2026-11-05' }, 11).notes
+  expect(notes.find((p: any) => p.id === 'c1')).toMatchObject({ due: '2026-11-05', taken: '583231' })
+  expect([notes.find((p: any) => p.id === 'c2'), notes.find((p: any) => p.id === 'p9')].map((p: any) => [p.due, p.taken])).toEqual([[undefined, undefined], [undefined, undefined]])
+  // Переживают $.store; у подстраницы обычной страницы их нет
+  const stored = JSON.parse(JSON.stringify([...notes, { id: 'p9a', title: 'Sub', body: '', parent: 'p9', at: 1, due: '2026-11-05', taken: '7' }]))
+  const restored = restoreNotes(stored)
+  expect(restored.find((p: any) => p.id === 'c1')).toMatchObject({ due: '2026-11-05', taken: '583231' })
+  expect(restored.find((p: any) => p.id === 'p9a')).not.toHaveProperty('due')
+
+  // updateCard: пустое — убрать, неверное — не трогать, не карточка — блокнот как был
+  expect(updateCard(notes, 'c1', { taken: '' }, 20).find((p: any) => p.id === 'c1')).not.toHaveProperty('taken')
+  expect(updateCard(notes, 'c1', { due: '2026-11-31' }, 20)).toBe(notes)
+  expect(updateCard(notes, 'c1', { due: '2026-11-05' }, 20)).toBe(notes)
+  expect(updateCard(notes, 'p9', { due: '2026-11-06' }, 20)).toBe(notes)
+  expect(updateCard(notes, 'c2', { due: '2026-11-06', taken: '7' }, 20).find((p: any) => p.id === 'c2')).toMatchObject({ due: '2026-11-06', taken: '7', at: 20 })
+
+  // Инструмент Claude: срок при создании и действием due; виден в списке и при чтении
+  let made = 0
+  const call = (input: any) => {
+    const out = applyNotesTool(notes, input, 30, () => `c${++made + 2}`)
+    notes = out.notes
+    return out
+  }
+  expect(call({ action: 'create', title: 'Docs', parent: 'Sprint', due: '2026-11-03' }).text).toBe('Created card c3: Docs (card on Sprint, column To do, due 2026-11-03).')
+  expect(call({ action: 'create', title: 'Bad', parent: 'Sprint', due: 'пт' })).toMatchObject({ isError: true, text: 'due must be a real date as YYYY-MM-DD, or "" to remove it.' })
+  expect(call({ action: 'create', title: 'Bad', due: '2026-11-03' })).toMatchObject({ isError: true })
+  expect(call({ action: 'due', page: 'Tests', due: '2026-11-04' })).toMatchObject({ text: 'Tests is due 2026-11-04.', changed: true })
+  expect(call({ action: 'due', page: 'Tests', due: '2026-11-04' }).text).toBe('Tests is already due 2026-11-04.')
+  expect(call({ action: 'due', page: 'Page', due: '2026-11-04' })).toMatchObject({ isError: true, text: 'Page is not a card on a board; only cards have a due date.' })
+  expect(call({ action: 'due', page: 'Docs', due: '' })).toMatchObject({ text: 'Removed the due date of Docs.', changed: true })
+  expect(call({ action: 'list' }).text).toBe('Notebook pages:\n- p9: Page\n- pa: Sprint [board: To do, Doing, Done]\n  - c1: Login (To do) (due 2026-11-05)\n  - c2: Tests (To do) (due 2026-11-04)\n  - c3: Docs (To do)')
+  expect(call({ action: 'read', page: 'Login' }).text.split('\n')[0]).toBe('Page c1: Login (card on board Sprint, column To do, due 2026-11-05)')
+
+  // Сверка: срок и кто взял уходят на сайт (null — нет) и приходят оттуда
+  const B = 'b' + 'Q'.repeat(16)
+  notes = updatePage(notes, 'pa', { board: { ...notes.find((p: any) => p.id === 'pa').board, share: B } }, 40)
+  const base: any = { ...freshBase(notes, notes.find((p: any) => p.id === 'pa'), '583231'), rev: 1 }
+  notes = updateCard(notes, 'c3', { due: '2026-11-09' }, 41)
+  notes = updateCard(notes, 'c1', { taken: '' }, 41)
+  expect(planSync(notes, base).ops).toEqual([
+    { put: { id: 'c3', title: 'Docs', body: '', col: 'todo', pos: 2, taken: null, due: '2026-11-09' } },
+    { put: { id: 'c1', title: 'Login', body: '', col: 'todo', pos: 0, taken: null, due: '2026-11-05' } },
+  ])
+  const answer = parseBoard({
+    status: 200,
+    ok: true,
+    headers: {},
+    text: JSON.stringify({
+      board: { id: B, name: 'Sprint', owner: '583231', members: ['583231', '7'], cols: DEFAULT_COLS, rev: 5 },
+      cards: [
+        { id: 'c2', title: 'Tests', body: '', col: 'todo', pos: 1, due: null, taken: '7' },
+        { id: 'c4', title: 'New', body: '', col: 'doing', pos: 0, due: '2026-11-02', taken: 'nobody' },
+      ],
+    }),
+  })
+  const out: any = applySync(notes, base, answer, { puts: {}, dels: [] }, 50)
+  expect(out.changed).toEqual(['c2', 'c4'])
+  expect(out.notes.find((p: any) => p.id === 'c2')).toMatchObject({ taken: '7', at: 50 })
+  expect(out.notes.find((p: any) => p.id === 'c2')).not.toHaveProperty('due')
+  expect(out.notes.find((p: any) => p.id === 'c4')).toMatchObject({ due: '2026-11-02', col: 'doing' })
+  expect(out.notes.find((p: any) => p.id === 'c4')).not.toHaveProperty('taken')
+  notes = out.notes
+
+  // Календарь: сроки — события на весь день, сделанная карточка (последняя колонка) не напоминает
+  notes = moveCard(notes, 'c1', { col: 'done' }, 60)
+  const dues = cardDues(notes)
+  expect(dues.map((x: any) => [x.id, x.day, x.remind, !!x.done])).toEqual([
+    ['card-c4', '2026-11-02', 0, false],
+    ['card-c1', '2026-11-05', null, true],
+    ['card-c3', '2026-11-09', 0, false],
+  ])
+  expect(dues[0]).toMatchObject({ card: 'c4', board: 'Sprint', title: 'New' })
+  const nine = new Date(2026, 10, 2, 9, 1).getTime()
+  expect(dueReminders(dues, nine).due.map((x: any) => x.id)).toEqual(['card-c4'])
+  expect(dueReminders(dues, nine - 2 * 60_000).due).toEqual([])
+  expect(applyCalendarTool([], { action: 'list' }, T0, dues).text).toBe(
+    'Today is Mon 2026-11-02, 12:00 local time.\nNo events from 2026-11-02 to 2026-11-08. The calendar is empty.\n' +
+      'Board cards due from 2026-11-02 to 2026-11-08 (change them with the notes tool, action due):\n' +
+      '- 2026-11-02: New (card c4 on board Sprint)\n- 2026-11-05: Login (card c1 on board Sprint, done)',
+  )
+})
+
+test('итоги дня: журнал — что ушло Claude и что сделано, страница «Итоги» и текст для чата', () => {
+  const hour = (time: string, day = '2026-11-02') => at(day, time)
+  // Журнал из $.store: чужое и сломанное — прочь
+  expect(
+    restoreLog([
+      { at: 1, kind: 'gave', id: 'p1', title: 'Релиз' },
+      { at: 2, kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'claude' },
+      { at: 3, kind: 'checked', id: 'p1', title: 'Релиз', n: 0, by: 'кто-то' },
+      { at: 4, kind: 'deleted', id: 'p1', title: 'x' },
+      { at: 5, kind: 'gave', id: 'P!', title: 'x' },
+      { at: 6, kind: 'gave', id: 'p2', title: '' },
+      null,
+    ]),
+  ).toEqual([
+    { at: 1, kind: 'gave', id: 'p1', title: 'Релиз' },
+    { at: 2, kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'claude' },
+    { at: 3, kind: 'checked', id: 'p1', title: 'Релиз', n: 1 },
+  ])
+  expect(restoreLog('x')).toEqual([])
+  // Старше двух недель — прочь; записей — не больше LOG_MAX
+  const old = { at: hour('09:00') - LOG_DAYS * 86_400_000 - 1, kind: 'gave', id: 'p0', title: 'Старое' }
+  expect(addLog([old], [{ at: hour('09:00'), kind: 'gave', id: 'p1', title: 'Релиз' }], hour('09:00')).map((x: any) => x.id)).toEqual(['p1'])
+  const kept = [old]
+  expect(addLog(kept, [], 0)).toBe(kept)
+  expect(addLog([], Array.from({ length: LOG_MAX + 3 }, (_, i) => ({ at: 10 + i, kind: 'gave', id: `p${i}`, title: 'x' })), 10).length).toBe(LOG_MAX)
+
+  // Что поменялось: карточка — в последнюю колонку своей доски, пункты чек-листа отмечены
+  let notes: any = addPage([], { title: 'Sprint', board: {} }, 10).notes
+  for (const [id, title, col] of [['c1', 'Логин', 'todo'], ['c2', 'Тесты', 'doing'], ['c3', 'Тег', 'todo'], ['c4', 'Пост', 'todo']]) notes = addPage(notes, { title, parent: 'pa', id, col }, 11).notes
+  notes = addPage(notes, { title: 'Релиз', id: 'p9', body: '- [ ] тег\n- [ ] заметки\n- [ ] пост' }, 11).notes
+  const t1 = hour('10:00')
+  let next = moveCard(notes, 'c1', { col: 'done' }, t1)
+  next = updatePage(next, 'p9', { body: '- [x] тег\n- [x] заметки\n- [ ] пост' }, t1)
+  expect(noteChanges(notes, next, t1, 'me')).toEqual([
+    { at: t1, kind: 'checked', id: 'p9', title: 'Релиз', by: 'me', n: 2 },
+    { at: t1, kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'me' },
+  ])
+  // Перенос не в последнюю колонку, снятые отметки и новые страницы — не в итоги
+  expect(noteChanges(next, moveCard(next, 'c1', { col: 'doing' }, t1), t1, 'me')).toEqual([])
+  expect(noteChanges(next, notes, t1, 'me')).toEqual([])
+  expect(noteChanges([], next, t1, 'me')).toEqual([])
+  notes = next
+
+  // Итоги дня: отданное сегодня, сделанное (кто — последним), отмеченное и что в работе
+  const log = [
+    { at: hour('09:00'), kind: 'gave', id: 'p9', title: 'Релиз' },
+    { at: hour('09:30'), kind: 'gave', id: 'c3', title: 'Тег', board: 'Sprint' },
+    { at: hour('10:00'), kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'me' },
+    { at: hour('10:00'), kind: 'checked', id: 'p9', title: 'Релиз', by: 'me', n: 2 },
+    { at: hour('11:00'), kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'claude' },
+    { at: hour('18:00', '2026-11-01'), kind: 'gave', id: 'c4', title: 'Пост', board: 'Sprint' },
+    { at: hour('18:00', '2026-11-01'), kind: 'checked', id: 'p9', title: 'Релиз', n: 1 },
+    { at: hour('11:30'), kind: 'done', id: 'c8', title: 'Удалённая', board: 'Старая' },
+  ]
+  const sum: any = daySummary(log, notes, '2026-11-02')
+  expect(sum.gave).toEqual([
+    { id: 'p9', title: 'Релиз', board: '' },
+    { id: 'c3', title: 'Тег', board: 'Sprint' },
+  ])
+  expect(sum.done.map((x: any) => [x.id, x.title, x.board, x.by])).toEqual([
+    ['c1', 'Логин', 'Sprint', 'claude'],
+    ['c8', 'Удалённая', 'Старая', 'me'],
+  ])
+  expect(sum.checked.map((x: any) => [x.id, x.n])).toEqual([['p9', 2]])
+  // На своей доске в работе — средние колонки и отданное Claude; страница — пока в чек-листе есть пункты
+  expect(sum.doing.map((x: any) => [x.title, x.board, x.col?.id ?? '', x.left ?? 0])).toEqual([
+    ['Релиз', '', '', 1],
+    ['Тег', 'Sprint', 'todo', 0],
+    ['Пост', 'Sprint', 'todo', 0],
+    ['Тесты', 'Sprint', 'doing', 0],
+  ])
+  // Отмеченных сейчас меньше, чем в журнале, — сколько есть; ни одного — не в итоги
+  const unticked = updatePage(notes, 'p9', { body: '- [x] тег\n- [ ] заметки\n- [ ] пост' }, t1)
+  expect(daySummary(log, unticked, '2026-11-02').checked.map((x: any) => x.n)).toEqual([1])
+  expect(daySummary(log, updatePage(notes, 'p9', { body: 'всё' }, t1), '2026-11-02').checked).toEqual([])
+  // Общая доска: в работе — только взятое мной и отданное моему Claude
+  const shared = updateCard(updatePage(notes, 'pa', { board: { cols: DEFAULT_COLS, share: 'b' + 'Q'.repeat(16) } }, t1), 'c4', { taken: '583231' }, t1)
+  expect(daySummary(log.slice(0, 5), shared, '2026-11-02', '583231').doing.map((x: any) => x.title)).toEqual(['Релиз', 'Тег', 'Пост'])
+
+  // Текст страницы: разделы, доска и колонка — словами; пустой раздел — «Пусто.»
+  const t = (text: string) => text
+  const name = (c: any) => COL_NAMES[c.id as keyof typeof COL_NAMES]
+  const body = summaryBody(sum, t, name)
+  expect(body).toBe(
+    [
+      '## Отдано Claude',
+      '- Релиз',
+      '- Тег · доска «Sprint»',
+      '',
+      '## Сделано',
+      '- ✓ Логин · доска «Sprint» · Claude',
+      '- ✓ Удалённая · доска «Старая»',
+      '- Релиз: отмечено пунктов — 2',
+      '',
+      '## В работе',
+      '- Релиз: осталось пунктов — 1',
+      '- Тег · доска «Sprint», колонка «Сделать»',
+      '- Пост · доска «Sprint», колонка «Сделать»',
+      '- Тесты · доска «Sprint», колонка «В работе»',
+    ].join('\n'),
+  )
+  expect(summaryBody({ gave: [], done: [], checked: [], doing: [] }, t, name)).toBe('## Отдано Claude\nПусто.\n\n## Сделано\nПусто.\n\n## В работе\nПусто.')
+
+  // В чат — текстом: заголовки с двоеточием, чек-лист значками, длинное — обрезано
+  expect(chatText({ title: 'Итоги 02.11', body }, MAX_TEXT).split('\n').slice(0, 5)).toEqual(['Итоги 02.11', '', 'Отдано Claude:', '- Релиз', '- Тег · доска «Sprint»'])
+  expect(chatText({ title: 'План', body: '## Шаги:\n- [x] тег\n  * [X] заметки\n- [ ] пост\n\n\n\nконец' }, MAX_TEXT)).toBe('План\n\nШаги:\n✓ тег\n  ✓ заметки\n☐ пост\n\nконец')
+  expect(chatText({ title: 'A', body: 'x'.repeat(50) }, 10)).toBe('A\n\nxxxxxx…')
+})
+
 test('desks.js: ответы сайта про доски, основа из $.store, сверка — что уходит и что приходит', () => {
   const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
   const B1 = 'b' + 'Q'.repeat(16)
@@ -7241,7 +7438,7 @@ test('desks.js: ответы сайта про доски, основа из $.s
   const cols = [{ id: 'todo' }, { id: 'doing' }, { id: 'done', name: 'Сдано' }]
   const plan = planSync(notes, base)
   expect(plan).toEqual({
-    ops: [{ name: 'Проект X' }, { cols }, { del: 'c2' }, { put: { id: 'c4', title: 'four', body: '', col: 'todo', pos: 3 } }, { put: { id: 'c1', title: 'one', body: 'текст', col: 'todo', pos: 0 } }],
+    ops: [{ name: 'Проект X' }, { cols }, { del: 'c2' }, { put: { id: 'c4', title: 'four', body: '', col: 'todo', pos: 3, taken: null, due: null } }, { put: { id: 'c1', title: 'one', body: 'текст', col: 'todo', pos: 0, taken: null, due: null } }],
     sent: { name: 'Проект X', cols, puts: { c4: 14, c1: 13 }, dels: ['c2'] },
   })
 
@@ -7268,7 +7465,7 @@ test('desks.js: ответы сайта про доски, основа из $.s
   expect(notes.find((p: any) => p.id === 'c5')).toMatchObject({ title: 'five', body: 'x', parent: 'pa', col: 'done', pos: 0 })
   expect(notes.find((p: any) => p.id === 'c1').body).toBe('ещё')
   // Следующая сверка: c1 — снова; c4, которую доска не взяла, — только когда её снова поправят
-  expect(planSync(notes, base).ops).toEqual([{ put: { id: 'c1', title: 'one', body: 'ещё', col: 'todo', pos: 0 } }])
+  expect(planSync(notes, base).ops).toEqual([{ put: { id: 'c1', title: 'one', body: 'ещё', col: 'todo', pos: 0, taken: null, due: null } }])
   expect(planSync(updatePage(notes, 'c4', { body: '!' }, 21), base).ops.map((op: any) => op.put.id)).toEqual(['c4', 'c1'])
 
   // На сайте: c3 удалили, доску переименовали — здесь название не трогали, значит как на сайте
@@ -7690,7 +7887,7 @@ test('доска проектов с друзьями: поделиться, п�
   const share = pages().find(isBoard).board.share
   expect(share).toMatch(BOARD_ID)
   // Карточки уходят первой сверкой
-  expect(sent(requests, 'api/me/boards/sync', 'POST')[0].body).toEqual({ board: share, since: 1, ops: [{ put: { id: login, title: 'Логин', body: '', col: 'todo', pos: 0 } }], names: true })
+  expect(sent(requests, 'api/me/boards/sync', 'POST')[0].body).toEqual({ board: share, since: 1, ops: [{ put: { id: login, title: 'Логин', body: '', col: 'todo', pos: 0, taken: null, due: null } }], names: true })
   expect(Object.values(boards[share].cards).map((c: any) => c.title)).toEqual(['Логин'])
   expect(await text('Доска общая — друзья увидят её в своей «Доске проектов».')).toBeDefined()
   expect(await text('Общая доска — ты хозяин.')).toBeDefined()
@@ -7834,6 +8031,128 @@ test('блокнот: поле ввода не взяло страницу — �
   expect(fills.length).toBe(1)
   expect(fills[0].text.startsWith('Страница из моего блокнота Arcade')).toBe(true)
   expect(await ui.find({ type: 'Text', text: 'Не получилось отдать страницу — попробуй ещё раз, когда Claude освободится.' })).toMatchObject({ props: { color: 'warning' } })
+  await ui.unmount()
+})
+
+test('итоги дня: кнопка в блокноте и под досками — страница «Итоги» с тем, что ушло Claude и сделано; ещё раз — та же страница заново', async ($, on) => {
+  const { clock, saved, submits } = stubs(on, { submit: true })
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const pages = () => saved.get('notes') as any[]
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await ui.find({ key: 'arcade-note-summary' })).toMatchObject({ props: { label: 'Итоги дня' } })
+  expect(await ui.find({ type: 'Text', text: '  страница для стендапа: что сегодня ушло Claude, что сделано и что ещё в работе' })).toBeDefined()
+
+  // Страницу — Claude, он отмечает пункт; доску ведёт он же: одну карточку — в «Готово»
+  await noteInput(ui, 'arcade-note-new-', 'Релиз')
+  await noteInput(ui, 'arcade-note-add-', 'тег')
+  await noteInput(ui, 'arcade-note-add-', 'заметки')
+  await ui.press({ key: 'arcade-note-send' })
+  expect(submits.length).toBe(1)
+  await $.tool.call({ tool: NOTES, action: 'check', page: 'Релиз', item: 'тег' })
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Логин', parent: 'Sprint' })
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Тесты', parent: 'Sprint', column: 'doing' })
+  await $.tool.call({ tool: NOTES, action: 'move', page: 'Логин', column: 'done' })
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-note-summary' })
+  const sum = pages().find((p) => p.title === 'Итоги 02.11')
+  expect(sum).toMatchObject({ parent: null })
+  expect(sum.body).toBe(
+    [
+      '## Отдано Claude',
+      '- Релиз',
+      '',
+      '## Сделано',
+      '- ✓ Логин · доска «Sprint» · Claude',
+      '- Релиз: отмечено пунктов — 1 · Claude',
+      '',
+      '## В работе',
+      '- Тесты · доска «Sprint», колонка «В работе»',
+      '- Релиз: осталось пунктов — 1',
+    ].join('\n'),
+  )
+  // Открыта сама страница: её можно отдать Claude или поправить
+  expect(await ui.find({ type: 'Text', text: 'Итоги собраны: отдай их Claude, отправь в чат или поправь.' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-send' })).toBeDefined()
+  // Без входа отправлять в чат некуда — кнопки нет
+  expect(await ui.find({ key: 'arcade-note-chat' })).toBeUndefined()
+  await ui.press({ key: 'arcade-note-send' })
+  expect(submits.length).toBe(2)
+
+  // Ещё раз — из списка досок: та же страница, текст заново; сами итоги, отданные Claude, — не в итоги
+  await $.tool.call({ tool: NOTES, action: 'check', page: 'Релиз', item: 'заметки' })
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-note-summary' })).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-boards' })
+  expect(await ui.find({ key: 'arcade-board-summary' })).toMatchObject({ props: { label: 'Итоги дня' } })
+  const count = pages().length
+  await ui.press({ key: 'arcade-board-summary' })
+  expect(pages().length).toBe(count)
+  expect(pages().find((p) => p.id === sum.id).body).toBe(
+    [
+      '## Отдано Claude',
+      '- Релиз',
+      '',
+      '## Сделано',
+      '- ✓ Логин · доска «Sprint» · Claude',
+      '- Релиз: отмечено пунктов — 2 · Claude',
+      '',
+      '## В работе',
+      '- Тесты · доска «Sprint», колонка «В работе»',
+    ].join('\n'),
+  )
+  expect(await ui.find({ type: 'Text', text: 'Итоги собраны: отдай их Claude, отправь в чат или поправь.' })).toBeDefined()
+  // Журнал — в $.store мода: его видят и другие сессии
+  expect((saved.get('daylog') as any[]).map((x) => [x.kind, x.title, x.by ?? ''])).toEqual([
+    ['gave', 'Релиз', ''],
+    ['checked', 'Релиз', 'claude'],
+    ['done', 'Логин', 'claude'],
+    ['gave', 'Итоги 02.11', ''],
+    ['checked', 'Релиз', 'claude'],
+  ])
+  await ui.unmount()
+})
+
+test('блокнот: «Отправить в чат» — страница текстом в чат с друзьями или командой', async ($, on) => {
+  const { api, chats, state } = chatsSite()
+  const { clock, requests } = stubs(on, { api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(3_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  await ui.press({ key: 'arcade-menu-notes' })
+  await noteInput(ui, 'arcade-note-new-', 'План')
+  await noteInput(ui, 'arcade-note-add-', 'тег')
+  expect(await ui.find({ key: 'arcade-note-chat' })).toMatchObject({ props: { label: 'Отправить в чат' } })
+  expect(await text('  друзьям или команде — текстом в чат Arcade')).toBeDefined()
+
+  // Нажал — список чатов с сайта, кнопкой на каждый
+  await ui.press({ key: 'arcade-note-chat' })
+  await clock.settle()
+  expect(await ui.find({ key: 'arcade-note-chat' })).toMatchObject({ props: { label: 'Не отправлять в чат' } })
+  expect(await ui.find({ key: `arcade-note-chat-${DM}` })).toMatchObject({ props: { label: '💬 @octo_pal' } })
+  expect(await ui.find({ key: `arcade-note-chat-${CLUB}` })).toMatchObject({ props: { label: '💬 club' } })
+  await ui.press({ key: `arcade-note-chat-${CLUB}` })
+  await clock.settle()
+  expect(sent(requests, 'api/me/chats/send', 'POST').map((r) => r.body)).toEqual([{ chat: CLUB, text: 'План\n\n☐ тег' }])
+  expect(chats.find((c) => c.id === CLUB).messages.at(-1)).toMatchObject({ t: 'План\n\n☐ тег' })
+  expect(await text('Ушло в чат club')).toBeDefined()
+  expect(await ui.find({ key: `arcade-note-chat-${DM}` })).toBeUndefined()
+
+  // Сайт отказал — так и говорим, выбор чата остаётся
+  state.unfriended = true
+  await ui.press({ key: 'arcade-note-chat' })
+  await ui.press({ key: `arcade-note-chat-${DM}` })
+  await clock.settle()
+  expect(await text('Писать можно только друзьям.')).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ key: `arcade-note-chat-${DM}` })).toBeDefined()
+  // Нажал ещё раз — передумал
+  await ui.press({ key: 'arcade-note-chat' })
+  expect(await ui.find({ key: `arcade-note-chat-${DM}` })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -8413,6 +8732,202 @@ test('блокнот: Notion и другие приложения — прось
   await ui.unmount()
 })
 
+test('доска: задачи из GitHub — Claude забирает их карточками через коннектор, итог карточки — комментарием в задачу', async ($, on) => {
+  const { clock, saved, submits } = stubs(on, { env: WINDOWS, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const NO_GITHUB = 'Нет инструментов GitHub — ничего не делай, только объясни, как подключить коннектор GitHub в Claude.'
+  const ISSUE = 'https://github.com/octo/app/issues/7'
+  const OLD = 'https://github.com/octo/app/issues/3'
+  // Задача карточки: из связи, иначе из текста; список задач и чужие адреса — не задача
+  expect(issueUrl({ body: 'см. https://github.com/octo/app/pull/12#discussion и ещё' })).toBe('https://github.com/octo/app/pull/12')
+  expect(issueUrl({ link: { app: 'GitHub', url: `${ISSUE}#issuecomment-1` }, body: OLD })).toBe(ISSUE)
+  expect(issueUrl({ link: { app: 'Notion', url: 'https://notion.so/x' }, body: 'нет' })).toBe('')
+  expect(issueUrl({ body: 'https://github.com/octo/app/issues' })).toBe('')
+
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Старая', parent: 'Sprint', text: `${OLD}\n- [ ] x` })
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Своя', parent: 'Sprint' })
+  const board = pages().find(isBoard)
+  await ui.press({ key: 'arcade-menu-boards' })
+  await ui.press({ key: `arcade-desk-${board.id}` })
+
+  // Поле на доске: Arcade только передаёт просьбу — задачи читает и карточки заводит Claude
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-board-github-') })).toMatchObject({ props: { label: 'Задачи из GitHub', placeholder: 'owner/repo или ссылка на задачи', submitLabel: 'Забрать' } })
+  expect(await text('  Claude заберёт открытые задачи карточками через коннектор GitHub. Итог по карточке он напишет в задачу кнопкой «Итог — в GitHub» на карточке.')).toBeDefined()
+  await noteInput(ui, 'arcade-board-github-', '   ')
+  expect(submits.length).toBe(0)
+  expect(await text('Впиши репозиторий GitHub (owner/repo) или ссылку на задачи.')).toMatchObject({ props: { color: 'warning' } })
+  await noteInput(ui, 'arcade-board-github-', ' octo/app \n label:bug ')
+  expect(submits[0].text).toBe(
+    [
+      'Забери задачи из GitHub на доску из моего блокнота Arcade.',
+      `Доска: «Sprint» (id ${board.id})`,
+      'Откуда: octo/app label:bug',
+      `Уже на доске: ${OLD}`,
+      '',
+      'Прочитай открытые задачи (issues) инструментами коннектора GitHub — не больше 20. Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — адрес задачи и коротко её суть, app — GitHub, url — адрес задачи.',
+      NO_GITHUB,
+    ].join('\n'),
+  )
+  expect(await text('Просьба ушла Claude.')).toBeDefined()
+
+  // Claude заводит карточку задачи, связанную с ней
+  const body = `${ISSUE}\nКнопка входа молчит.\n- [x] найти причину`
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Падает вход', parent: 'Sprint', text: body, app: 'GitHub', url: ISSUE })
+  const card = pages().find((p) => p.title === 'Падает вход')
+  await ui.press({ key: `arcade-card-${card.id}` })
+  await ui.press({ key: `arcade-card-${card.id}` })
+  expect(await ui.find({ key: 'arcade-note-github' })).toMatchObject({ props: { label: 'Итог — в GitHub' } })
+  expect(await text('  Claude напишет в задачу GitHub комментарий: что сделано по карточке. Задачу не закроет.')).toBeDefined()
+  // Задачу текстом карточки не переписываем: «Обновить в приложении» нет
+  expect(await text(`  Связана с GitHub: ${ISSUE}`)).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-push' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-pull' })).toBeDefined()
+
+  // «Отдать Claude» — с адресом задачи; комментарий в задачу — только кнопкой
+  await ui.press({ key: 'arcade-note-send' })
+  expect(submits[1].text.split('\n').slice(-2)).toEqual([
+    'Это карточка доски «Sprint». Когда сделаешь — перенеси её в колонку «Готово» (колонка done) действием move того же инструмента.',
+    `Это задача GitHub: ${ISSUE} — подробности, обсуждение и код читай там инструментами коннектора GitHub, если он подключён.`,
+  ])
+  await ui.press({ key: 'arcade-note-github' })
+  expect(submits[2].text).toBe(
+    [
+      'Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче GitHub.',
+      `Задача: ${ISSUE}`,
+      `Страница блокнота: ${card.id}`,
+      '',
+      '# Падает вход',
+      body,
+      '',
+      'Оставь в задаче короткий комментарий инструментами коннектора GitHub: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай, если об этом не просят.',
+      NO_GITHUB,
+    ].join('\n'),
+  )
+  expect(await text('Просьба ушла Claude.')).toBeDefined()
+
+  // Карточка без задачи — без кнопки; в следующей просьбе «Уже на доске» — обе задачи
+  await ui.press({ key: 'arcade-back' })
+  const own = pages().find((p) => p.title === 'Своя')
+  await ui.press({ key: `arcade-card-${own.id}` })
+  await ui.press({ key: `arcade-card-${own.id}` })
+  expect(await ui.find({ key: 'arcade-note-github' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-push' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-notion' })).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  await noteInput(ui, 'arcade-board-github-', 'https://github.com/octo/app/issues')
+  const have = submits[3].text.split('\n')[3]
+  expect(have.startsWith('Уже на доске: ')).toBe(true)
+  expect(have.slice('Уже на доске: '.length).split(', ').sort()).toEqual([OLD, ISSUE].sort())
+  await ui.unmount()
+})
+
+test('доска: очередь для Claude — карточки по одной; разрешение, прерывание, чужая просьба и недоделанная карточка её останавливают', async ($, on) => {
+  const { clock, saved, submits, toasts } = stubs(on, { env: WINDOWS, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const page = (title: string) => pages().find((p) => p.title === title)
+  const board = () => pages().find(isBoard)
+  const col = (title: string) => columnOf(page(title), board().board.cols)
+  const QUEUE = 'Карточки идут очередью Arcade: перенесёшь эту в последнюю колонку — следующую Arcade даст сам. Нужно решение человека — не переноси, спроси.'
+  const card = (n: number) => submits[n].text.match(/\(id (\w+)\)/)[1]
+  const done = (title: string) => $.tool.call({ tool: NOTES, action: 'move', page: page(title).id, column: 'done' })
+  const turn = async (id: string, n: number, work: () => Promise<unknown>, end: any = { reason: 'answer' }) => {
+    await $.turn.start({ turnId: id, text: submits[n].text })
+    await work()
+    await $.turn.complete({ turnId: id, answer: '', ...end })
+    await clock.advance(10)
+  }
+  const label = async () => (await ui.find({ key: 'arcade-board-queue' }))?.props.label
+
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
+  for (const title of ['A', 'B', 'C']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-menu-boards' })
+  await ui.press({ key: `arcade-desk-${board().id}` })
+  expect(await label()).toBe('Очередь для Claude')
+  expect(await text('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Спросит разрешения или не доделает — очередь встанет.')).toBeDefined()
+
+  // Первая карточка — Claude и в «В работе»; на экране — что он делает
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(0)).toBe(page('A').id)
+  expect(submits[0].text.split('\n').at(-1)).toBe(QUEUE)
+  expect(col('A')).toBe('doing')
+  expect(await label()).toBe('Остановить очередь')
+  expect(await text('  Очередь: Claude делает «A» · отдано карточек — 1')).toBeDefined()
+
+  // Claude перенёс карточку в «Готово» и закончил ход — следующая уходит сама
+  await turn('t1', 0, () => done('A'))
+  expect(submits.length).toBe(2)
+  expect(card(1)).toBe(page('B').id)
+  expect(col('B')).toBe('doing')
+  expect(await text('  Очередь: Claude делает «B» · отдано карточек — 2')).toBeDefined()
+
+  // Ход кончился, а карточка не в «Готово» — очередь стоит, решает человек
+  await turn('t2', 1, async () => {})
+  expect(submits.length).toBe(2)
+  const stuck = 'Очередь стоит: Claude закончил ход, а карточка «B» не в колонке «Готово». Посмотри, что он ответил.'
+  expect(await text(stuck)).toMatchObject({ props: { color: 'warning' } })
+  expect(toasts).toContain(stuck)
+  expect(await label()).toBe('Очередь для Claude')
+
+  // Снова — из первой колонки: B уже в работе, дальше C. Claude спросил разрешения — очередь встаёт
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(2)).toBe(page('C').id)
+  await turn('t3', 2, async () => {
+    await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'npm test' } })
+    await done('C')
+  })
+  expect(submits.length).toBe(3)
+  expect(await text('Очередь остановлена: Claude спросил разрешения. Ответь ему и запусти очередь снова.')).toMatchObject({ props: { color: 'warning' } })
+
+  // Ход прервали — тоже стоп
+  for (const title of ['D', 'E']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(3)).toBe(page('D').id)
+  await turn('t4', 3, () => done('D'), { reason: 'aborted', isAborted: true })
+  expect(submits.length).toBe(4)
+  expect(await text('Очередь остановлена: ход Claude прервали.')).toBeDefined()
+
+  // Claude получил другую просьбу — стоп; пока он занят, очередь не запустить
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(4)).toBe(page('E').id)
+  await $.turn.start({ turnId: 't5', text: 'почини тесты' })
+  expect(await text('Очередь остановлена: Claude получил другую просьбу.')).toBeDefined()
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(submits.length).toBe(5)
+  expect(await text('Claude занят — запусти очередь, когда он закончит ход.')).toBeDefined()
+  await $.turn.complete({ turnId: 't5', reason: 'answer', answer: '' })
+  await clock.advance(10)
+
+  // В первой колонке пусто — нечего отдавать
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(submits.length).toBe(5)
+  expect(await text('В колонке «Сделать» нет карточек для Claude.')).toMatchObject({ props: { color: 'warning' } })
+
+  // «Остановить очередь»: текущую Claude доделает, следующую не получит
+  for (const title of ['F', 'G']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(5)).toBe(page('F').id)
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(await text('Очередь остановлена. Claude доделает текущую карточку, следующую не получит.')).toMatchObject({ props: { dimColor: true } })
+  await turn('t6', 5, () => done('F'))
+  expect(submits.length).toBe(6)
+
+  // Последняя карточка сделана — очередь пройдена
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(6)).toBe(page('G').id)
+  await turn('t7', 6, () => done('G'))
+  expect(submits.length).toBe(7)
+  expect(await text('Очередь пройдена: в колонке «Сделать» карточек больше нет.')).toMatchObject({ props: { dimColor: true } })
+})
+
 test('блокнот: голос — диктовка системы; «Взять из поля ввода Claude» переносит набранное там в конец страницы', async ($, on) => {
   const { clock, saved, fills } = stubs(on, { env: WINDOWS, draft: 'купить молоко\nпозвонить маме\n' })
   await start($)
@@ -8682,7 +9197,7 @@ test('календарь: инструмент Claude — ответы по-ан
   expect(fails.map((f) => f.text.split('\n')[1])).toEqual([
     'time must be HH:MM, 24-hour, e.g. 15:00, or empty for all day.',
     'day must be a real date as YYYY-MM-DD.',
-    'Nothing to change: pass title, day, time, note, remind or color.',
+    'Nothing to change: pass title, day, time, note, remind, color or repeat.',
     'color is one of blue, green, yellow, orange, red, purple, pink, gray, or "" for the default.',
     'No event "Ужин". Use list to see the events and their ids.',
     'days is 1 to 92.',
@@ -8694,6 +9209,83 @@ test('календарь: инструмент Claude — ответы по-ан
   const gone: any = applyCalendarTool(list, { action: 'remove', event: id }, T0)
   expect(gone).toMatchObject({ text: `${head}\nRemoved: Созвон (Tue 2026-11-03 15:00).`, changed: true })
   expect(gone.list.map((e: any) => e.title)).toEqual(['Отпуск'])
+})
+
+test('календарь: повторяющиеся события — правила, быстрая запись, напоминания серии', () => {
+  // Быстрая запись: повтор — словами; одно слово «Daily» — часть названия, а не повтор
+  expect(quickParse('каждый будний день 9:30 стендап', '2026-11-02')).toEqual({ title: 'стендап', day: '2026-11-02', time: '09:30', repeat: 'weekdays' })
+  expect(quickParse('каждую пятницу ревью', '2026-11-02')).toEqual({ title: 'ревью', day: '2026-11-06', time: '', repeat: 'weekly' })
+  expect(quickParse('по пятницам 15:00 ретро', '2026-11-02')).toEqual({ title: 'ретро', day: '2026-11-06', time: '15:00', repeat: 'weekly' })
+  expect(quickParse('every weekday 9:30 standup', '2026-11-02')).toEqual({ title: 'standup', day: '2026-11-02', time: '09:30', repeat: 'weekdays' })
+  expect(quickParse('ежемесячно 10.11 счёт', '2026-11-02')).toEqual({ title: 'счёт', day: '2026-11-10', time: '', repeat: 'monthly' })
+  expect(quickParse('Daily standup', '2026-11-02')).toEqual({ title: 'Daily standup', day: '2026-11-02', time: '' })
+
+  // Серия — одно событие; по дням — каждым своим разом, с днём первого раза (first)
+  let list: any[] = []
+  const series = (title: string, day: string, repeat: string, n: number) => {
+    const out: any = addEvent(list, { title, day, repeat }, T0 + n)
+    list = out.list
+    return out.event
+  }
+  const daily = series('Зарядка', '2026-11-02', 'daily', 1)
+  // По будням с субботы — с понедельника
+  expect(series('Стендап', '2026-11-07', 'weekdays', 2)).toMatchObject({ day: '2026-11-09', repeat: 'weekdays' })
+  series('Ревью', '2026-11-06', 'weekly', 3)
+  series('Счёт', '2026-10-31', 'monthly', 4)
+  series('День рождения', '2026-11-03', 'yearly', 5)
+  const on = (title: string, from: string, days: number) => between(list, from, days).filter((x: any) => x.title === title).map((x: any) => x.day)
+  expect(on('Зарядка', '2026-11-01', 4)).toEqual(['2026-11-02', '2026-11-03', '2026-11-04'])
+  expect(on('Стендап', '2026-11-07', 9)).toEqual(['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13'])
+  expect(on('Ревью', '2026-11-01', 21)).toEqual(['2026-11-06', '2026-11-13', '2026-11-20'])
+  // 31-го — только в месяцах, где оно есть
+  expect(on('Счёт', '2026-10-01', 92)).toEqual(['2026-10-31', '2026-12-31'])
+  expect(on('День рождения', '2026-11-01', 400)).toEqual(['2026-11-03', '2027-11-03'])
+  expect(between(list, '2026-11-04', 1).find((x: any) => x.title === 'Зарядка')).toMatchObject({ id: daily.id, day: '2026-11-04', first: '2026-11-02', repeat: 'daily' })
+  // Повтор меняют и снимают; непонятный — ошибка; из хранилища непонятный повтор не берётся
+  expect(updateEvent(list, daily.id, { repeat: 'hourly' }, T0)).toEqual({ error: 'repeat' })
+  expect(addEvent(list, { title: 'x', day: '2026-11-02', repeat: 'hourly' }, T0)).toEqual({ error: 'repeat' })
+  expect('repeat' in (updateEvent(list, daily.id, { repeat: '' }, T0) as any).event).toBe(false)
+  expect((updateEvent(list, daily.id, { repeat: 'weekdays', day: '2026-11-08' }, T0) as any).event).toMatchObject({ day: '2026-11-09', repeat: 'weekdays' })
+  expect(restoreCalendar([
+    { id: 'e1', title: 'a', day: '2026-11-02', remind: 0, at: 0, repeat: 'weekly' },
+    { id: 'e2', title: 'b', day: '2026-11-02', remind: 0, at: 0, repeat: 'hourly' },
+  ]).map((e: any) => e.repeat)).toEqual(['weekly', undefined])
+
+  // Напоминания серии — каждый раз свои. Записали в 12:00 — сегодняшнее уже прошло, его не показываем
+  const made: any = addEvent([], { title: 'Стендап', day: '2026-11-02', time: '09:30', remind: 10, repeat: 'weekdays' }, T0)
+  const id = made.event.id
+  expect(made.event.alerted).toBe(at('2026-11-02', '09:20'))
+  let s = made.list
+  expect(dueReminders(s, T0)).toEqual({ due: [], stale: [] })
+  expect(nextReminder(s, T0)).toBe(at('2026-11-03', '09:20'))
+  // Во вторник — вторничный раз; показанный помечен его временем и больше не приходит
+  const tue = at('2026-11-03', '09:21')
+  expect(dueReminders(s, tue).due).toMatchObject([{ id, day: '2026-11-03', first: '2026-11-02', time: '09:30' }])
+  s = markAlerted(s, [id], 'sme', tue)
+  expect(s[0]).toMatchObject({ day: '2026-11-02', alerted: at('2026-11-03', '09:20'), alertedBy: 'sme' })
+  expect(dueReminders(s, tue)).toEqual({ due: [], stale: [] })
+  expect(nextReminder(s, tue)).toBe(at('2026-11-04', '09:20'))
+  // Claude Code был закрыт до четверга — пропущенным приходит только последний раз
+  expect(dueReminders(s, at('2026-11-05', '09:40')).due.map((x: any) => x.day)).toEqual(['2026-11-05'])
+  // После пятничного — следующий в понедельник
+  const fri = at('2026-11-06', '09:25')
+  expect(nextReminder(markAlerted(s, [id], 'sme', fri), fri)).toBe(at('2026-11-09', '09:20'))
+
+  // Инструмент Claude: повтор — полем repeat; в списке — каждый раз серии
+  const head = 'Today is Mon 2026-11-02, 12:00 local time.'
+  const added: any = applyCalendarTool([], { action: 'add', title: 'Стендап', day: '2026-11-02', time: '09:30', repeat: 'weekdays' }, T0)
+  const sid = `e${T0.toString(36)}`
+  expect(added.text).toBe(`${head}\nAdded:\n- ${sid}: Mon 2026-11-02 09:30 — Стендап (repeats every weekday from 2026-11-02, reminder 15 min before)`)
+  const listed = applyCalendarTool(added.list, { action: 'list', day: '2026-11-05', days: 4 }, T0).text.split('\n').slice(2)
+  expect(listed).toEqual([
+    `- ${sid}: Thu 2026-11-05 09:30 — Стендап (repeats every weekday from 2026-11-02, reminder 15 min before)`,
+    `- ${sid}: Fri 2026-11-06 09:30 — Стендап (repeats every weekday from 2026-11-02, reminder 15 min before)`,
+  ])
+  const weekly: any = applyCalendarTool(added.list, { action: 'update', event: sid, repeat: 'weekly', day: '2026-11-06' }, T0)
+  expect(weekly.text.split('\n')[2]).toBe(`- ${sid}: Fri 2026-11-06 09:30 — Стендап (repeats every Fri from 2026-11-06, reminder 15 min before)`)
+  expect(applyCalendarTool(weekly.list, { action: 'update', event: sid, repeat: '' }, T0).text.split('\n')[2]).toBe(`- ${sid}: Fri 2026-11-06 09:30 — Стендап (reminder 15 min before)`)
+  const bad: any = applyCalendarTool(added.list, { action: 'add', title: 'x', day: '2026-11-02', repeat: 'hourly' }, T0)
+  expect([bad.isError, bad.text.split('\n')[1]]).toEqual([true, 'repeat is one of daily, weekdays, weekly, monthly, yearly, or "" to stop repeating.'])
 })
 
 test('календарь: Claude ведёт его инструментом mcp__arcade__calendar без вопроса человеку, экран идёт следом', async ($, on) => {
@@ -8990,6 +9582,72 @@ test('календарь: напоминание показывает одна �
   saved.set('calendar', [{ ...mine, alertedBy: 'sother' }])
   await clock.advance(1_000)
   expect(toasts.filter((t) => t.startsWith('Календарь'))).toEqual([])
+})
+
+test('календарь в Desktop: повтор — в быстрой записи и выбором в событии, серия на каждом своём дне', async ($, on) => {
+  const { clock, saved } = stubs(on)
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  const events = () => saved.get('calendar') as any[]
+  const hasDot = async (day: string) => JSON.stringify(await ui.find({ key: `cal-cell-${day}` })).includes('●')
+
+  await noteInput(ui, 'arcade-cal-add-', 'каждый будний день 9:30 стендап')
+  const id = events()[0].id
+  expect(events()[0]).toMatchObject({ title: 'стендап', day: '2026-11-02', time: '09:30', repeat: 'weekdays' })
+  // В сетке — на каждом будне, в выходные — нет
+  expect(await Promise.all(['2026-11-02', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-30'].map(hasDot))).toEqual([true, true, false, false, true])
+  expect(await ui.find({ key: `arcade-cal-dayev-${id}-2026-11-02` })).toMatchObject({ props: { label: 'стендап' } })
+  expect(await text('09:30 · 🔁 По будням · 🔔 за 15 мин')).toBeDefined()
+  // «Ближайшее» — серия один раз, ближайшим разом
+  expect(await ui.find({ key: `arcade-cal-ev-${id}-2026-11-02` })).toBeDefined()
+  expect(await ui.find({ key: `arcade-cal-ev-${id}-2026-11-03` })).toBeUndefined()
+  expect(await text('Сегодня 09:30 · 🔁 По будням · 🔔 за 15 мин')).toBeDefined()
+
+  // Раз серии открывает всю серию: повтор — выбором из списка
+  await ui.press({ key: 'arcade-cal-day-2026-11-05' })
+  await ui.press({ key: `arcade-cal-dayev-${id}-2026-11-05` })
+  expect(await text('🔁 По будням, 09:30 · первый раз сегодня · 🔔 за 15 мин')).toBeDefined()
+  expect(await text('  У повторяющегося события здесь — день первого раза.')).toBeDefined()
+  const repeat = () => ui.find({ key: 'arcade-cal-repeat' })
+  expect(await repeat()).toMatchObject({ props: { label: 'Повтор', value: 'weekdays' } })
+  expect((await repeat()).props.options.map((o: any) => o.label)).toEqual(['Не повторять', 'Каждый день', 'По будням', 'Каждую неделю', 'Каждый месяц', 'Каждый год'])
+  await ui.select({ key: 'arcade-cal-repeat', value: 'weekly' })
+  expect(events()[0].repeat).toBe('weekly')
+  expect(await repeat()).toMatchObject({ props: { value: 'weekly', autoFocus: true } })
+  expect(await text('🔁 Каждую неделю, 09:30 · первый раз сегодня · 🔔 за 15 мин')).toBeDefined()
+  await ui.select({ key: 'arcade-cal-repeat', value: 'none' })
+  expect('repeat' in events()[0]).toBe(false)
+  expect(await text('Сегодня 09:30 · 🔔 за 15 мин')).toBeDefined()
+  expect(await text('  У повторяющегося события здесь — день первого раза.')).toBeUndefined()
+  // «Когда» понимает повтор; серия с воскресенья — с понедельника
+  await noteInput(ui, 'arcade-cal-when-', 'по будням 10:00')
+  expect(events()[0]).toMatchObject({ day: '2026-11-02', time: '10:00', repeat: 'weekdays' })
+  await noteInput(ui, 'arcade-cal-when-', '2026-11-01 11:00')
+  expect(events()[0]).toMatchObject({ day: '2026-11-02', time: '11:00', repeat: 'weekdays' })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-cal-when-') })).toMatchObject({ props: { value: '2026-11-02 11:00' } })
+  // Назад — фокус на том же разе серии
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: `arcade-cal-dayev-${id}-2026-11-05` })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+
+  // В терминале серия помечена 🔁
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ key: `arcade-cal-ev-${id}-2026-11-02` })).toMatchObject({ props: { label: 'Сегодня 11:00 · стендап 🔁' } })
+  await term.unmount()
+})
+
+test('календарь: серия с прошлой недели напоминает сегодняшним разом', HEAVY, async ($, on) => {
+  const { clock, saved, toasts } = stubs(on, { env: WINDOWS, stored: { calendar: [{ id: 'e1', title: 'Стендап', day: '2026-10-26', time: '12:02', remind: 1, at: 0, repeat: 'weekdays' }] } })
+  await clock.advance(T0)
+  await start($)
+  const shown = () => toasts.filter((t) => t.startsWith('Календарь'))
+  await clock.advance(66_000)
+  expect(shown()).toEqual(['Календарь: Стендап — сегодня 12:02'])
+  expect((saved.get('calendar') as any[])[0]).toMatchObject({ day: '2026-10-26', alerted: at('2026-11-02', '12:01') })
 })
 
 test('календарь по-английски: экраны без русского, названия событий — как есть', async ($, on) => {

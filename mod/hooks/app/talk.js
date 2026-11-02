@@ -88,7 +88,7 @@ export const CHAT_PICKED = '#3a78b533' // открытый чат в списк�
 export const CHAT_HOVER = '#8080801a' // строка списка под мышью
 
 // Почему с чатами не вышло; group — создавали группу: у групп свой предел на сутки
-function chatNote(error, group = false) {
+export function chatNote(error, group = false) {
   if (error === 'often' || error === 'limit') return group ? 'Групп сегодня создано слишком много — попробуй завтра.' : 'Слишком часто — подожди минуту.'
   if (error === 'friend') return 'Писать можно только друзьям.'
   if (error === 'gone') return 'Этого чата больше нет.'
