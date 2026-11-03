@@ -259,6 +259,7 @@ const EXACT = {
   'Общие доски на сайте сейчас выключены.': 'Shared boards are turned off on the site right now.',
   'Открытую карточку удалили на общей доске.': 'The open card was deleted on the shared board.',
   'Открытую страницу удалили в другой сессии.': 'The open page was deleted in another session.',
+  'Те же строки тем временем поменяли в другой сессии — осталась правка отсюда.': 'The same lines were changed in another session meanwhile — the edit from here stayed.',
   'Открытую карточку удалили в другой сессии.': 'The open card was deleted in another session.',
   'Открытую доску удалили в другой сессии.': 'The open board was deleted in another session.',
   'Доска на сайте полна — часть карточек осталась только у тебя.': 'The board on the site is full — some cards stayed only with you.',
