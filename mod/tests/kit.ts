@@ -164,9 +164,18 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     if (detect === 'fail') return { deny: 'powershell.exe not found' }
     return { value: { exitCode: 0, stdout: '\ufeff' + DETECTED + '\r\n', stderr: '' } }
   })
-  on('store.get', ($: any, e: any) => ({ value: saved.get(e.key) }))
+  // Другая сессия между чтением и записью этой: meanwhile.store(шаг, ключ) — после чтения ('get'), перед записью
+  // ('before') и после неё ('set')
+  const meanwhile: { store?: (step: string, key: string) => void } = {}
+  on('store.get', ($: any, e: any) => {
+    const value = saved.get(e.key)
+    meanwhile.store?.('get', e.key)
+    return { value }
+  })
   on('store.set', ($: any, e: any) => {
+    meanwhile.store?.('before', e.key)
     saved.set(e.key, e.value)
+    meanwhile.store?.('set', e.key)
     return { value: undefined }
   })
   on('store.delete', ($: any, e: any) => {
@@ -277,7 +286,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard }
+  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard }
 }
 
 export const BASH_MS = 2_000

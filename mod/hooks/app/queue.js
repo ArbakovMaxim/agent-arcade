@@ -8,7 +8,7 @@ import { columnCards, columnOf, isBoard, moveCard } from '../notes.js'
 import { S, nb } from './state.js'
 import { log } from './status.js'
 import { boardMates, dropCard, queueMates, samePath, takeCard } from './agents.js'
-import { cardTaker, colName, editNotes, modError, refreshNotes, sendNote } from './work.js'
+import { cardTaker, checkNotes, colName, editNotes, modError, refreshNotes, sendNote } from './work.js'
 
 export const QUEUE_MAX = 10 // карточек за один запуск очереди, не больше: дальше — снова кнопкой
 // Очередь сейчас: board — id доски, card — карточка у Claude, given — какие уже отданы, sent — карточка ушла, а её ход
@@ -204,7 +204,8 @@ export async function queueTurnDone($, e) {
   if (!queue || queue.sent || e.turnId !== queue.turn) return false
   if (e.isAborted || e.reason === 'aborted') return stopQueue($, t('Очередь остановлена: ход Claude прервали.'))
   if (e.reason !== 'answer') return stopQueue($, t('Очередь остановлена: Claude не закончил ход — ошибка или отказ.'))
-  await refreshNotes($)
+  // Свежий блокнот, а в нём — правки Claude за этот ход: перенос карточки могла затереть запись другой сессии
+  await checkNotes($)
   if (S.queue !== queue) return false
   const card = S.notes.find((p) => p.id === queue.card)
   const board = S.notes.find((p) => p.id === queue.board && isBoard(p))
