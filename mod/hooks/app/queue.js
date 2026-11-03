@@ -192,9 +192,10 @@ export function queueTurnStart($, e) {
   stopQueue($, t('Очередь остановлена: Claude получил другую просьбу.'))
 }
 
-// Claude спросил разрешения — решает человек: дальше очередь не идёт
-export function queuePermission($) {
-  if (S.queue) stopQueue($, t('Очередь остановлена: Claude спросил разрешения. Ответь ему и запусти очередь снова.'))
+// Claude спросил разрешения или задал вопрос (question) — решает человек: дальше очередь не идёт
+export function queuePermission($, question = false) {
+  if (!S.queue) return
+  stopQueue($, question ? t('Очередь остановлена: Claude задал вопрос. Ответь ему и запусти очередь снова.') : t('Очередь остановлена: Claude спросил разрешения. Ответь ему и запусти очередь снова.'))
 }
 
 // Ход Claude кончился — из turn.complete. Карточка очереди в последней колонке — true: следующую даст queueNext;
