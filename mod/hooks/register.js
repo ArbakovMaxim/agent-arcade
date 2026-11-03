@@ -21,8 +21,9 @@ import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/pro
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
-import { queueNext, queuePermission, queueStopCheck, queueTurnDone, queueTurnStart } from './app/queue.js'
+import { queueNext, queueStopCheck, queueTurnDone, queueTurnStart } from './app/queue.js'
 import { AGENT_TICK_MS, agentsTick, leaveAgents, startAgents } from './app/agents.js'
+import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
@@ -229,6 +230,7 @@ export function register(on) {
       S.askVisible = false
       S.agentAlert = null
       S.paused = false
+      asksReset()
       queueTurnStart($, e)
       log('агент начал ход')
       if (DEBUG) await $.ui.toast('arcade: агент начал ход')
@@ -238,34 +240,11 @@ export function register(on) {
     return next(e)
   })
 
+  // Запрос разрешения — классическим хуком (Pro и Max) и по вердикту tool.check (везде: на Team и Enterprise
+  // классические хуки плагинов выключены). Что дальше — в app/asks.js
   on('classic.PermissionRequest', async ($, e, next) => {
     try {
-      S.status = 'permission'
-      S.askVisible = false
-      queuePermission($)
-      if (S.paneOpen && S.view !== 'library') {
-        S.agentAlert = 'permission'
-        if (S.onPermission === 'pause') {
-          S.paused = true
-          releaseAll()
-        }
-        if (S.onPermission === 'close') await $.ui.close({ id: PANE })
-      }
-      log(`запрос разрешения: ${e.tool_name ?? 'инструмент'}`)
-      const now = await $.clock.now()
-      const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS
-        ? notifyCommand(S.platform, 'Claude Code', tr('Агент ждёт разрешения', S.lang))
-        : null
-      if (command) {
-        $.clock.after(0, async () => {
-          try {
-            await $.process.run(command.argv, { env: command.env, timeoutMs: 15_000 })
-          } catch (err) {
-            log(`уведомление не показалось: ${err?.message ?? err}`)
-          }
-        })
-      }
-      $.ui.invalidate('ui.render')
+      await classicAsk($, e)
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
     }
@@ -274,22 +253,35 @@ export function register(on) {
 
   on('classic.PostToolUse', async ($, e, next) => {
     try {
-      if (S.status === 'permission') {
-        S.status = 'working'
-        log('агент снова работает')
-        $.ui.invalidate('ui.render')
-      }
+      classicDone($)
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
     }
     return next(e)
   })
 
+  // Без отбора: вердикт — как есть, мод только смотрит, не спросят ли человека
+  on('tool.check', async ($, e, next) => checkObserved($, e, next))
+
+  // Телеметрия — только смотрим: решение о вызове (tool_decision) закрывает запрос разрешения
+  on('telemetry.log', { to: 'collector' }, async ($, e, next) => {
+    try {
+      toolDecided($, e)
+    } catch (err) {
+      log(`ошибка мода: ${err?.message ?? err}`)
+    }
+    return next(e)
+  })
+
+  // Вопрос Claude (AskUserQuestion): человеку — как обычно, а ответить можно и из «Агентов» другой сессии
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => (next.origin?.plugin === $.plugin.name ? next(e) : questionCall($, e, next)))
+
   on('turn.complete', async ($, e, next) => {
     if (e.agentId) return next(e) // субагент закончил — агент ещё нет: «агент закончил» не про него
     const turnId = S.agentTurn
     S.agentTurn = null
     S.toolsRunning = 0
+    asksReset()
     // Ход оборвал Arcade, чтобы открыть игру: агент сейчас же продолжит по просьбе Arcade
     if (S.interrupting) {
       S.interrupting = false
@@ -416,14 +408,24 @@ export function register(on) {
 
   // Инструменты агента (главного цикла; свои вызовы Arcade — нет): игру, которую надо открыть, пока агент работает,
   // открываем, когда закончится текущий — оборванный посреди инструмент может оставить работу недоделанной. Дольше
-  // CUT_TOOL_MS не ждём: обрываем (cutPending)
+  // CUT_TOOL_MS не ждём: обрываем (cutPending). Вызов кончился — его запрос разрешения (и у субагента) закрыт, а когда
+  // не идёт ни одного — и классический
   on('tool.call', async ($, e, next) => {
-    if (e.agentId !== undefined || next.origin?.plugin === $.plugin.name) return next(e)
+    if (next.origin?.plugin === $.plugin.name) return next(e)
+    if (e.agentId !== undefined) {
+      try {
+        return await next(e)
+      } finally {
+        settle($, e.tool_use_id)
+      }
+    }
     S.toolsRunning++
     try {
       return await next(e)
     } finally {
       S.toolsRunning = Math.max(0, S.toolsRunning - 1)
+      settle($, e.tool_use_id)
+      if (S.toolsRunning === 0) callsOver($)
       // Ход прерываем после того, как результат инструмента дойдёт до агента
       if (S.pendingOpen && S.toolsRunning === 0)
         $.clock.after(0, () => openPending($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))

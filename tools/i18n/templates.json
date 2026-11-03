@@ -200,6 +200,7 @@
   "this is a Doom file (WAD). Add those in the Arcade window: Games → Shooters → “Open your own file”",
   "Paused: the agent finished. Any game key — keep playing, Esc — back to the agent",
   "Paused: the agent is waiting for permission. Any game key — keep playing, Esc — back to the agent",
+  "Paused: the agent asked a question. Any game key — keep playing, Esc — back to the agent",
   "the file is damaged",
   "up",
   "down",

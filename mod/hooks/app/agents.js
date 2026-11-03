@@ -79,6 +79,7 @@ function recordOf(at) {
     card: ag.card,
     queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0, started: q.started ?? 0 } : null,
     claim: ag.claim,
+    ask: S.ask ?? null,
   }
 }
 const bodyOf = (rec) => JSON.stringify({ ...rec, at: 0 })
@@ -151,7 +152,7 @@ function othersFrom(now) {
   for (const [slot, f] of Object.entries(ag.files)) {
     const rec = f.rec
     if (!live(rec, now) || rec.sid === ag.sid || (ag.ready && Number(slot) === ag.slot)) continue
-    if (!by.has(rec.sid) || by.get(rec.sid).at < rec.at) by.set(rec.sid, rec)
+    if (!by.has(rec.sid) || by.get(rec.sid).at < rec.at) by.set(rec.sid, { ...rec, slot: Number(slot) })
   }
   return [...by.values()]
 }
@@ -241,7 +242,7 @@ export async function agentsTick($) {
       await readSlots($, now)
       const others = othersFrom(now)
       notify($, others)
-      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of]).sort())
+      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
         if (shown) $.ui.invalidate('ui.render')
@@ -254,18 +255,20 @@ export async function agentsTick($) {
   }
 }
 
-// Всплывашки о других сессиях: первое чтение только запоминает, что видно; дальше — «ждёт разрешения» (и у новой
-// сессии тоже) и, если включено, «закончил ход» у знакомой
+// Всплывашки о других сессиях: первое чтение только запоминает, что видно; дальше — «ждёт разрешения» или «ждёт
+// ответа на вопрос» (и у новой сессии тоже; каждый новый вопрос — заново) и, если включено, «закончил ход» у знакомой
+const seenOf = (r) => (r.status === 'permission' && r.ask?.kind === 'question' ? `question:${r.ask.id}` : r.status)
 function notify($, others) {
   const ag = S.ag
   const first = !ag.seen
   const was = ag.seen ?? new Map()
-  ag.seen = new Map(others.map((r) => [r.sid, r.status]))
+  ag.seen = new Map(others.map((r) => [r.sid, seenOf(r)]))
   if (first) return
   for (const r of others) {
     const before = was.get(r.sid)
-    if (before === r.status) continue
-    if (r.status === 'permission' && S.agNotify) $.ui.toast(fill(tr('Сессия «{0}» ждёт разрешения', S.lang), [r.name]))
+    if (before === seenOf(r)) continue
+    if (r.status === 'permission' && S.agNotify)
+      $.ui.toast(fill(tr(r.ask?.kind === 'question' ? 'Сессия «{0}» ждёт ответа на вопрос' : 'Сессия «{0}» ждёт разрешения', S.lang), [r.name]))
     else if (r.status === 'done' && before !== undefined && S.agDone) $.ui.toast(fill(tr('В сессии «{0}» Claude закончил ход', S.lang), [r.name]))
   }
 }
@@ -411,7 +414,7 @@ export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }
