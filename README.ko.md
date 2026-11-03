@@ -284,7 +284,8 @@ Arcade는 **베타** 단계입니다. 기능은 갖춰졌고 세부 사항을 �
 - **게임:** 각 게임에는 고유한 자유 라이선스(MIT, GPL, BSD, Apache, Creative Commons 등)가 있습니다. 라이선스 전문과 소스 코드는 게임 옆에 있으며 카드에서 연결됩니다.
 - **책과 오디오북:** 퍼블릭 도메인. Arcade는 이를 보관하지 않으며, 열 때 책은 Project Gutenberg와 Wikisource에서, 녹음은 LibriVox(archive.org)에서 가져옵니다.
 - **에뮬레이터와 엔진:** JSNES(Apache-2.0), 코어를 포함한 EmulatorJS(GPL-3.0), PrBoom(GPL-2.0), Cloudflare의 doom-wasm과 Chocolate Doom/Heretic(GPL-2.0), OpenTTD(GPL-2.0), micropolisJS(추가 조항이 붙은 GPL-3.0), ScummVM(GPL-3.0-or-later), 체스 컴퓨터 상대인 Stockfish(GPL-3.0). Sega와 마스터 시스템에 쓰이는 Genesis Plus GX 코어는 비상업적 용도로만 사용할 수 있습니다.
-- **Arcade 자체 코드**(플러그인과 사이트) — **GNU AGPL-3.0**([LICENSE](LICENSE)), © 2026 Max Arbakov. 자유롭게 사용하고, 연구하고, 수정할 수 있습니다. 수정한 버전을 배포하거나 다른 사람을 위한 온라인 서비스로 운영한다면, 전체 소스 코드를 같은 라이선스로 공개하고 저작권 고지를 유지해야 합니다. 서드파티 구성 요소는 각자의 라이선스를 따릅니다.
+- **플러그인에 들어 있는 것:** JSNES 2.1.0 에뮬레이터(Apache-2.0)와 오프라인으로 즐길 수 있는 NES 홈브루 게임 세 개 — Damian Yerrick의 *Thwaite*와 *Concentration Room*(GPL-3.0-or-later), Leonard Richardson의 게임을 바탕으로 Damian Yerrick이 만든 *robotfindskitten*(zlib). 게임은 `mod/hooks/roms/`에 데이터로 들어 있고, 소스 코드(`.tar.gz`)와 라이선스 전문은 `mod/third_party/`에 있습니다.
+- **Arcade 자체 코드**(플러그인과 사이트) — **GNU AGPL-3.0**([LICENSE](LICENSE)), © 2026 Max Arbakov. 자유롭게 사용하고, 연구하고, 수정할 수 있습니다. 수정한 버전을 배포하거나 다른 사람을 위한 온라인 서비스로 운영한다면, 전체 소스 코드를 같은 라이선스로 공개하고 저작권 고지를 유지해야 합니다. 서드파티 구성 요소는 각자의 라이선스를 따릅니다. Arcade 로고(플러그인 아이콘이기도 합니다)는 이 라이선스에 포함되지 않으며, Arcade 프로젝트를 가리키는 용도로만 사용할 수 있습니다.
 
 ## 프로젝트 후원하기
 
@@ -313,4 +314,4 @@ tools/   빌드 도구: 번역, heretic-wasm
 - 작업은 `main`에서 하고 풀 리퀘스트도 `main`으로 보내 주세요. 기본 브랜치 `plugin`은 `site/`를 뺀 `main`의 복사본으로, 푸시할 때마다 GitHub Action이 갱신합니다. 플러그인 마켓플레이스는 저장소 전체 대신 이 브랜치를 내려받습니다.
 - 번역: `node tools/i18n/collect.mjs`, 그다음 `node tools/i18n/check.mjs` — [tools/i18n/README.md](tools/i18n/README.md) 참고.
 
-자세한 문서(러시아어): [mod/README.md](mod/README.md) — 플러그인, [site/README.md](site/README.md) — 사이트, 게임 추가, 네트워크 플레이.
+자세한 문서(러시아어): [mod/docs/README.ru.md](mod/docs/README.ru.md) — 플러그인, [site/README.md](site/README.md) — 사이트, 게임 추가, 네트워크 플레이.

@@ -284,7 +284,8 @@ O Arcade está em **beta**: os recursos estão no lugar, e o trabalho continua n
 - **Jogos:** cada jogo tem sua própria licença livre (MIT, GPL, BSD, Apache, Creative Commons e outras) — o texto da licença e o código-fonte ficam junto do jogo e têm link no cartão dele.
 - **Livros e audiolivros:** domínio público; o Arcade não os guarda — os livros vêm do Project Gutenberg e do Wikisource, as gravações do LibriVox (archive.org), no momento em que você os abre.
 - **Emuladores e motores:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) com seus núcleos, PrBoom (GPL-2.0), doom-wasm da Cloudflare e Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 com termos adicionais), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — o adversário no xadrez. O núcleo Genesis Plus GX usado para Sega e Master System é apenas para uso não comercial.
-- **O código do próprio Arcade** (o plugin e o site) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Você pode usá-lo, estudá-lo e modificá-lo livremente. Se você distribuir uma versão modificada — ou rodá-la como serviço online para outras pessoas —, precisa publicar todo o seu código-fonte sob a mesma licença e manter os avisos de direitos autorais. Componentes de terceiros mantêm suas próprias licenças.
+- **Dentro do plugin:** o emulador JSNES 2.1.0 (Apache-2.0) e três jogos homebrew de NES para jogar offline — *Thwaite* e *Concentration Room*, de Damian Yerrick (GPL-3.0-or-later), e *robotfindskitten*, de Damian Yerrick a partir do jogo de Leonard Richardson (zlib). Os jogos ficam armazenados como dados em `mod/hooks/roms/`; o código-fonte (`.tar.gz`) e os textos das licenças estão em `mod/third_party/`.
+- **O código do próprio Arcade** (o plugin e o site) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Você pode usá-lo, estudá-lo e modificá-lo livremente. Se você distribuir uma versão modificada — ou rodá-la como serviço online para outras pessoas —, precisa publicar todo o seu código-fonte sob a mesma licença e manter os avisos de direitos autorais. Componentes de terceiros mantêm suas próprias licenças. O logotipo do Arcade, que também é o ícone do plugin, não está coberto por esta licença: só pode ser usado para se referir ao projeto Arcade.
 
 ## Apoie o projeto
 
@@ -313,4 +314,4 @@ tools/   ferramentas de build: traduções, heretic-wasm
 - O trabalho acontece na `main`, e os pull requests também vão para lá. A branch padrão `plugin` é uma cópia da `main` sem `site/`, atualizada por uma GitHub Action a cada push: o marketplace de plugins baixa essa branch em vez do repositório inteiro.
 - Traduções: `node tools/i18n/collect.mjs`, depois `node tools/i18n/check.mjs` — veja [tools/i18n/README.md](tools/i18n/README.md).
 
-Documentação detalhada (em russo): [mod/README.md](mod/README.md) — o plugin, [site/README.md](site/README.md) — o site, como adicionar jogos e o jogo em rede.
+Documentação detalhada (em russo): [mod/docs/README.ru.md](mod/docs/README.ru.md) — o plugin, [site/README.md](site/README.md) — o site, como adicionar jogos e o jogo em rede.

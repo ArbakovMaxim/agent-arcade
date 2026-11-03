@@ -1,7 +1,8 @@
 {
   "name": "arcade",
+  "displayName": "Arcade for Claude Code",
   "version": "0.39.2",
-  "description": "Task boards Claude picks up, a notebook it keeps with you, team chats — and games while the agent works · Доски задач для Claude, блокнот, чаты команды — и игры, пока агент работает",
+  "description": "Task boards Claude picks up, a notebook it keeps with you, team chats — and games while the agent works",
   "author": {
     "name": "Max Arbakov"
   },

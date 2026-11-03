@@ -284,7 +284,8 @@ Arcade 处于 **beta** 阶段：功能已经齐全，工作继续集中在细节
 - **游戏：** 每款游戏都有自己的自由许可证（MIT、GPL、BSD、Apache、Creative Commons 等） — 许可证文本和源代码与游戏放在一起，并从其卡片链接。
 - **书籍和有声书：** 公有领域；Arcade 不存储它们——书籍在你打开时从 Project Gutenberg 和 Wikisource 获取，录音来自 LibriVox（archive.org）。
 - **模拟器和引擎：** JSNES（Apache-2.0）、EmulatorJS（GPL-3.0）及其核心、PrBoom（GPL-2.0）、Cloudflare 的 doom-wasm 和 Chocolate Doom/Heretic（GPL-2.0）、OpenTTD（GPL-2.0）、micropolisJS（带附加条款的 GPL-3.0）、ScummVM（GPL-3.0-or-later）、国际象棋电脑对手 Stockfish（GPL-3.0）。用于 Sega 和 Master System 的 Genesis Plus GX 核心仅限非商业用途。
-- **Arcade 自己的代码**（插件和网站） — **GNU AGPL-3.0**（[LICENSE](LICENSE)），© 2026 Max Arbakov。你可以自由使用、研究和修改它。如果你分发修改后的版本 — 或将其作为在线服务提供给他人 — 必须以相同许可证公开你的全部源代码，并保留版权声明。第三方组件保留各自的许可证。
+- **插件自带：** JSNES 2.1.0 模拟器（Apache-2.0）和三款可离线游玩的 NES 自制游戏——Damian Yerrick 的 *Thwaite* 和 *Concentration Room*（GPL-3.0-or-later），以及他根据 Leonard Richardson 的游戏制作的 *robotfindskitten*（zlib）。游戏以数据形式存放在 `mod/hooks/roms/`，源代码（`.tar.gz`）和许可证全文在 `mod/third_party/`。
+- **Arcade 自己的代码**（插件和网站） — **GNU AGPL-3.0**（[LICENSE](LICENSE)），© 2026 Max Arbakov。你可以自由使用、研究和修改它。如果你分发修改后的版本 — 或将其作为在线服务提供给他人 — 必须以相同许可证公开你的全部源代码，并保留版权声明。第三方组件保留各自的许可证。Arcade 标志（也是插件图标）不在此许可证范围内，仅可用于指代 Arcade 项目。
 
 ## 支持本项目
 
@@ -313,4 +314,4 @@ tools/   构建辅助工具：翻译、heretic-wasm
 - 开发在 `main` 上进行，Pull Request 也请提交到 `main`。默认分支 `plugin` 是去掉 `site/` 的 `main` 副本，每次推送时由 GitHub Action 更新：插件市场下载的是这个分支，而不是整个仓库。
 - 翻译：`node tools/i18n/collect.mjs`，然后 `node tools/i18n/check.mjs` — 见 [tools/i18n/README.md](tools/i18n/README.md)。
 
-详细文档（俄语）：[mod/README.md](mod/README.md) — 插件，[site/README.md](site/README.md) — 网站、添加游戏和联网对战。
+详细文档（俄语）：[mod/docs/README.ru.md](mod/docs/README.ru.md) — 插件，[site/README.md](site/README.md) — 网站、添加游戏和联网对战。

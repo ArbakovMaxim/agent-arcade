@@ -284,7 +284,8 @@ Arcade は **ベータ版** です。機能はそろっており、細かな部�
 - **ゲーム：** 各ゲームにはそれぞれの自由なライセンス（MIT、GPL、BSD、Apache、Creative Commons など）があります。ライセンス本文とソースコードはゲームと一緒に置かれ、カードからリンクしています。
 - **本とオーディオブック：** パブリックドメイン。Arcade 自体は保存せず、開いたときに本は Project Gutenberg と Wikisource から、録音は LibriVox（archive.org）から取得します。
 - **エミュレーターとエンジン：** JSNES（Apache-2.0）、コア付きの EmulatorJS（GPL-3.0）、PrBoom（GPL-2.0）、Cloudflare の doom-wasm と Chocolate Doom/Heretic（GPL-2.0）、OpenTTD（GPL-2.0）、micropolisJS（追加条項付き GPL-3.0）、ScummVM（GPL-3.0-or-later）、チェスの対戦相手 Stockfish（GPL-3.0）。Sega とマスターシステムに使う Genesis Plus GX コアは非商用利用に限られます。
-- **Arcade 自体のコード**（プラグインとサイト） — **GNU AGPL-3.0**（[LICENSE](LICENSE)）、© 2026 Max Arbakov。自由に使い、研究し、改変できます。改変版を配布する場合、またはほかの人向けのオンラインサービスとして運用する場合は、ソースコード全体を同じライセンスで公開し、著作権表示を残す必要があります。サードパーティのコンポーネントはそれぞれのライセンスに従います。
+- **プラグイン本体に含まれるもの：** エミュレーター JSNES 2.1.0（Apache-2.0）と、オフラインで遊べる NES 用の自作ゲーム 3 本 — Damian Yerrick の *Thwaite* と *Concentration Room*（GPL-3.0-or-later）、Leonard Richardson のゲームをもとに Damian Yerrick が作った *robotfindskitten*（zlib）。ゲームはデータとして `mod/hooks/roms/` に入っており、ソースコード（`.tar.gz`）とライセンス本文は `mod/third_party/` にあります。
+- **Arcade 自体のコード**（プラグインとサイト） — **GNU AGPL-3.0**（[LICENSE](LICENSE)）、© 2026 Max Arbakov。自由に使い、研究し、改変できます。改変版を配布する場合、またはほかの人向けのオンラインサービスとして運用する場合は、ソースコード全体を同じライセンスで公開し、著作権表示を残す必要があります。サードパーティのコンポーネントはそれぞれのライセンスに従います。Arcade のロゴ（プラグインのアイコンでもあります）はこのライセンスの対象外で、Arcade プロジェクトを指す目的でのみ使用できます。
 
 ## プロジェクトを支援
 
@@ -313,4 +314,4 @@ tools/   ビルド用ツール：翻訳、heretic-wasm
 - 作業は `main` で行い、プルリクエストも `main` に送ってください。デフォルトブランチ `plugin` は `site/` を除いた `main` のコピーで、プッシュのたびに GitHub Action が更新します。プラグインのマーケットプレイスはリポジトリ全体ではなくこのブランチをダウンロードします。
 - 翻訳：`node tools/i18n/collect.mjs`、続いて `node tools/i18n/check.mjs` — [tools/i18n/README.md](tools/i18n/README.md) を参照。
 
-詳しいドキュメント（ロシア語）：[mod/README.md](mod/README.md) — プラグイン、[site/README.md](site/README.md) — サイト、ゲームの追加、ネットワークプレイ。
+詳しいドキュメント（ロシア語）：[mod/docs/README.ru.md](mod/docs/README.ru.md) — プラグイン、[site/README.md](site/README.md) — サイト、ゲームの追加、ネットワークプレイ。

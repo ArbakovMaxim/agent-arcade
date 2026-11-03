@@ -2,6 +2,7 @@
 # Claude Code обновляет маркетплейс свежим клоном ветки по умолчанию (git clone --depth 1) и ждёт его 2 минуты —
 # клон main с играми и книгами сайта не успевал, и обновление оставалось на старой версии. Поэтому ветка по умолчанию
 # на GitHub — plugin, а сайт Cloudflare, как и раньше, собирает из main.
+# Отличия от main ещё два: нет mod/tests/, а mod/README.md — копия корневого README.md (её показывает каталог Anthropic).
 # Ветку пишет только этот workflow — на каждый пуш в main; правки — в main, через PR. Вручную: Actions → «Ветка plugin».
 name: Ветка plugin
 
@@ -43,11 +44,22 @@ jobs:
           # Отдельный индекс: рабочая папка и индекс checkout остаются как есть
           export GIT_INDEX_FILE="$RUNNER_TEMP/plugin.index"
           git read-tree "$(git ls-tree HEAD | awk -F '\t' '$2 != "site"' | git mktree)"
+          # Тесты плагина остаются в main: пользователю они не нужны, а файлы больше 256 КиБ каталог Anthropic
+          # отправляет на ручную проверку
+          git ls-files mod/tests | git update-index --force-remove --stdin
           # Ссылки README на site/ — в main: в ветке plugin этой папки нет
           for f in $(git ls-files ':(glob)*.md'); do
             blob=$(git cat-file blob "HEAD:$f" | sed "s#](site/#](https://github.com/$GITHUB_REPOSITORY/tree/main/site/#g" | git hash-object -w --stdin)
             git update-index --cacheinfo "100644,$blob,$f"
           done
+          # Каталог плагинов Anthropic показывает README из папки плагина: кладём туда корневой README.md.
+          # Относительные ссылки и картинки из mod/ не открылись бы — переписываем их на main; #якоря и http — как есть
+          repo="https://github.com/$GITHUB_REPOSITORY"
+          blob=$(git cat-file blob HEAD:README.md | sed -E \
+            -e "s|src=\"(\./)?([^\":]+)\"|src=\"$repo/raw/main/\2\"|g" \
+            -e "s|!\[([^]]*)\]\((\./)?([^):#][^):]*)\)|![\1]($repo/raw/main/\3)|g" \
+            -e "s|\]\((\./)?([^):#][^):]*)\)|]($repo/blob/main/\2)|g" | git hash-object -w --stdin)
+          git update-index --cacheinfo "100644,$blob,mod/README.md"
           tree=$(git write-tree)
 
           size=$(git ls-tree -r -l "$tree" | awk '{ s += $4 } END { print s + 0 }')
