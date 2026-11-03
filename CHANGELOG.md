@@ -1,5 +1,11 @@
 # Changelog · Список изменений
 
+## 0.39.2 — в Desktop игры, чаты и статьи снова открываются во встроенном браузере сразу по нажатию · in Desktop, games, chats and articles open in the built-in browser right on a press again
+
+- Since Claude Code 2.1.308, a tool call a plugin makes from a button's handler skips the plugin's own permission check, so a press in Arcade asked for permission or fell back to asking Claude. Arcade now opens the built-in browser in its press hook, once the handler has finished, where its own check applies again; Enter in a field (TikTok search) goes the same way · с Claude Code 2.1.308 вызов инструмента, который плагин делает из обработчика кнопки, идёт мимо собственной проверки разрешений плагина, и нажатие в Arcade спрашивало разрешения или уходило к Claude с просьбой. Теперь Arcade открывает встроенный браузер в хуке нажатия, когда обработчик отработал, — там его проверка снова действует; Enter в поле (поиск TikTok) идёт так же
+- Several openings from one press go one after another, in the order they were asked · несколько открытий от одного нажатия идут по очереди, в том порядке, в каком их попросили
+- The tests run on Claude Code 2.1.302 and on 2.1.316 · тесты проходят на Claude Code 2.1.302 и на 2.1.316
+
 ## 0.39.1 — у сайта Arcade есть страница о проекте, библиотека переехала на /?library · Arcade's site has an about page, the library moved to /?library
 
 - The bare site address now shows a page about Arcade: what it does, a short video of the board, how to install it; no external scripts, fonts, counters or cookies · голый адрес сайта теперь показывает страницу об Arcade: что он умеет, короткий ролик доски, как установить; без чужих скриптов, шрифтов, счётчиков и cookie
