@@ -118,15 +118,16 @@ export function siteUrl(path) {
   return `${SITE}/${path}`
 }
 
-// Страница игры на сайте или библиотека, если игра не указана
+// Страница игры на сайте или библиотека, если игра не указана. Библиотека — /?library: голый корень сайта без
+// строки запроса — страница о проекте, окно — тот же корень с любым запросом
 export function pageUrl(gameId) {
-  return gameId ? `${SITE}/?game=${encodeURIComponent(gameId)}` : `${SITE}/`
+  return gameId ? `${SITE}/?game=${encodeURIComponent(gameId)}` : `${SITE}/?library`
 }
 
 // Окно со своей игрой из «Моих игр»: страница найдёт её в браузере или один раз попросит выбрать файл и сверит хеш.
 // Всё про свою игру — после #: эту часть адреса браузер не отправляет на сервер, хеш и название не попадут в логи.
 export function minePageUrl(m) {
-  return `${SITE}/#mine=${encodeURIComponent(m.id)}&console=${encodeURIComponent(m.console)}&sha=${m.sha256}&title=${encodeURIComponent(m.title)}`
+  return `${SITE}/?library#mine=${encodeURIComponent(m.id)}&console=${encodeURIComponent(m.console)}&sha=${m.sha256}&title=${encodeURIComponent(m.title)}`
 }
 
 // Окно на вкладке приставки (например, PlayStation — свои диски добавляются там)

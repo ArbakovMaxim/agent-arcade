@@ -88,9 +88,10 @@ export function windowUrl(id) {
     url = m ? minePageUrl(m) : pageUrl(id)
   }
   if (S.lang === 'ru') return url
-  // Язык передаём в адресе: после # — если своя игра там, иначе обычным параметром
-  if (url.includes('#')) return `${url}&lang=${S.lang}`
-  return url.includes('?') ? `${url}&lang=${S.lang}` : `${url}?lang=${S.lang}`
+  // Язык передаём обычным параметром, до части после # (там своя игра): окно читает язык только из строки запроса
+  const at = url.includes('#') ? url.indexOf('#') : url.length
+  const base = url.slice(0, at)
+  return `${base}${base.includes('?') ? '&' : '?'}lang=${S.lang}${url.slice(at)}`
 }
 
 // Сетевая настольная игра: подпись @ника — после #, страница покажет ник соперникам и уберёт его из адреса. Вышли —
