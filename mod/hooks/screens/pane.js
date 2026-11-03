@@ -17,6 +17,7 @@ import { loadReads } from '../app/read.js'
 import { toggleFavorite, toggleHidden } from '../app/profile.js'
 import { answerInvite } from '../app/talk.js'
 import { modError, notesShown, refreshNotes } from '../app/work.js'
+import { calendarShown, refreshCalendar } from '../app/calendar.js'
 import { gameScreen } from './game.js'
 import { mainScreen, welcomeScreen } from './main.js'
 import { favoritesScreen, groupScreen, mineScreen, searchScreen, shelfScreen } from './games.js'
@@ -28,9 +29,11 @@ import { tiktokScreen, twitchScreen, youtubeScreen, youtubeTopicScreen } from '.
 import { booksScreen, readsScreen, readsTopicScreen } from './read.js'
 import { notesScreen } from './notes.js'
 import { boardsScreen } from './boards.js'
+import { agentsScreen } from './agents.js'
+import { calendarScreen } from './calendar.js'
 
 export async function drawPane($, e) {
-  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input, Markdown } = $.ui.resolve(e)
+  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input, Markdown, Select } = $.ui.resolve(e)
   // Готовая кнопка заморожена и свой onPress не отдаёт, а плитка Desktop пересобирает её с переносом названия:
   // пропсы каждой кнопки запоминаются здесь
   const buttonProps = new WeakMap()
@@ -161,8 +164,9 @@ export async function drawPane($, e) {
       S.menu = id
       S.libraryNotice = ''
       $.ui.invalidate('ui.render')
-      // Блокнот и доски — свежие: их могли поправить в другой сессии Claude Code
+      // Блокнот, доски и календарь — свежие: их могли поправить в другой сессии Claude Code
       if (notesShown()) refreshNotes($).catch(modError)
+      if (calendarShown()) refreshCalendar($).catch(modError)
     }
     const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') })
     const dim = (text) => Text({ dimColor: true, children: [text] })
@@ -450,6 +454,8 @@ export async function drawPane($, e) {
       now, open, ownTopics, picGrid, pictures, playGame, section, sectionSwitches, tileWidth, tiles, watchLive, windowed,
       // Текст, который можно выделить и скопировать: в Desktop и VS Code — Markdown, как ответ Claude; в терминале — нет
       Markdown: terminal ? null : Markdown,
+      // Выбор из списка (напоминание в календаре); на телефоне его нет
+      Select: Select ?? null,
     }
 
     let items
@@ -466,6 +472,8 @@ export async function drawPane($, e) {
     else if (S.menu.startsWith('youtube:')) items = youtubeTopicScreen($, e, kit)
     else if (S.menu === 'boards' || S.menu.startsWith('board:') || (S.menu.startsWith('note:') && isBoard(S.notes.find((p) => p.id === S.menu.slice(5))))) items = boardsScreen($, e, kit)
     else if (S.menu === 'notes' || S.menu.startsWith('note:')) items = notesScreen($, e, kit)
+    else if (calendarShown()) items = calendarScreen($, e, kit)
+    else if (S.menu === 'agents') items = agentsScreen($, e, kit)
     else if (S.menu === 'tiktok') items = tiktokScreen($, e, kit)
     else if (S.menu === 'twitch' || S.menu.startsWith('twitch:')) items = twitchScreen($, e, kit)
     else if (S.menu === 'articles' || S.menu === 'podcasts') items = readsScreen($, e, kit)

@@ -3,6 +3,7 @@
 // Поля одного раздела заводятся в его модуле.
 import { bundledCatalog } from '../catalog.js'
 import { NOTES_TOOL } from '../notes.js'
+import { CALENDAR_TOOL } from '../calendar.js'
 
 export const S = {}
 export const PANE = 'arcade'
@@ -121,7 +122,7 @@ export const SECTION_NOTES = {
   read: 'книги, аудиокниги, статьи и подкасты',
   watch: 'YouTube, Twitch и TikTok',
   talk: 'друзья, чаты и аккаунт',
-  work: 'блокнот и доска проектов',
+  work: 'блокнот, доска проектов, календарь и агенты',
 }
 export const SECTION_ICONS = { play: 'games', read: 'books', watch: 'youtube', talk: 'friends', work: 'boards' }
 export const FAV_LIMIT = 100
@@ -201,10 +202,18 @@ S.myTopics = []
 // Блокнот (hooks/notes.js): страницы из $.store. note — заметка под полями (bad — о беде), confirm — какую страницу
 // удалить по второму нажатию, draft — набранное в поле «Текст» и ещё не сохранённое ({ id, text }), field — номер полей:
 // поля рисуются заново с новым текстом, когда страница поменялась не из них; focus — какое поле страницы в фокусе;
-// editing — у какой страницы открыто поле «Текст» (кнопка «Редактировать»): без него текст только виден
+// editing — у какой страницы открыто поле «Текст» (кнопка «Редактировать»): без него текст только виден; take — какую
+// карточку общей доски отдать своему Claude по второму нажатию, хотя её уже взял другой; chat — у какой страницы открыт
+// выбор чата («Отправить в чат»), sending — в какой чат она уходит сейчас
 S.notes = []
-export const nb = { note: '', bad: false, confirm: null, draft: null, field: 0, focus: '', editing: '' }
+export const nb = { note: '', bad: false, confirm: null, draft: null, field: 0, focus: '', editing: '', take: '', chat: '', sending: '' }
 export const NOTES_TOOL_NAME = `mcp__arcade__${NOTES_TOOL.name}`
+// Календарь (calendar.js): события и экран — открытый месяц «ГГГГ-ММ» и выбранный день, ответ и подтверждение удаления;
+// field — номер поля ввода: после записи поле пустеет; focus — кнопка, на которой фокус после перерисовки,
+// back — список, из которого открыли событие
+S.calendar = []
+export const cal = { month: '', day: '', note: '', bad: false, confirm: false, field: 0, focus: '', back: '' }
+export const CALENDAR_TOOL_NAME = `mcp__arcade__${CALENDAR_TOOL.name}`
 export const NOTE_LINES = 400 // строк страницы на экране; дальше — в поле «Текст» по «Редактировать»
 // Доска проектов: основы общих досок (desks.js), список общих досок с сайта и состояние экрана. trouble — беда сверки
 // одной доски { share, text }; picked — отмеченные друзья; syncing и again — какие доски сверяются и каким нужна ещё сверка

@@ -8,7 +8,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script>
-  // Мод до 0.36.4 открывал свои игры как /#mine=…: часть после # сервер не видит, и такой адрес приходит сюда.
+  // Мод до 0.39.1 открывал свои игры как /#mine=…: часть после # сервер не видит, и такой адрес приходит сюда.
   // Хеш окна (в нём есть «=») — сразу в окно с тем же хешем; якоря самой страницы (#install) остаются здесь
   if (location.hash.includes('=')) location.replace('/?library' + location.hash)
 </script>

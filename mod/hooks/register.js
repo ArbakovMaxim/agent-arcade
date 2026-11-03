@@ -9,8 +9,9 @@ import { detectLang, tr, translateTree } from './i18n.js'
 import { restoreMine } from './mine.js'
 import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
 import { NOTES_TOOL } from './notes.js'
+import { CALENDAR_TOOL } from './calendar.js'
 import { bookLang } from './books.js'
-import { DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, S, savedKeys } from './app/state.js'
+import { CALENDAR_TOOL_NAME, DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, S, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
 import { LOBBIES_EVERY_MS, log, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
 import { followPane, nesView, openPane, paneClosedBy, pressStart, readInput, releaseAll, runGameLoop, toLibrary, typedFrom } from './app/play.js'
@@ -19,6 +20,9 @@ import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNot
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
+import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
+import { queueNext, queuePermission, queueStopCheck, queueTurnDone, queueTurnStart } from './app/queue.js'
+import { AGENT_TICK_MS, agentsTick, leaveAgents, startAgents } from './app/agents.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
@@ -39,14 +43,19 @@ export function register(on) {
       S.bk = { ...S.bk, lang: bookLang(await $.store.get('booksLang'), S.lang) }
       S.stamps = restoreStamps(await $.store.get('syncAt'))
       S.msgNotify = (await $.store.get('msgNotify')) !== false
+      S.agNotify = (await $.store.get('agentsNotify')) !== false
+      S.agDone = (await $.store.get('agentsDone')) === true
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
       await loadNotes($)
+      await loadCalendar($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {
         S.sep = home.includes('\\') ? '\\' : '/'
         S.dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(S.sep)
       }
+      // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
+      await startAgents($, home)
       S.catalog = restoreCatalog(await $.store.get('catalog')) ?? S.catalog
       const savedGame = await $.store.get('lastGame')
       S.played = games().some((g) => g.id === savedGame)
@@ -114,7 +123,16 @@ export function register(on) {
       // Блокнот на экране — перечитываем: его могли поправить в другой сессии Claude Code
       $.clock.every(NOTES_POLL_MS, () => {
         if (S.paneOpen && S.view === 'library' && notesShown()) refreshNotes($).catch(chatError)
+        if (S.paneOpen && S.view === 'library' && calendarShown()) refreshCalendar($).catch(chatError)
       })
+      // Отметка сессии — маленькая запись раз в несколько секунд; чужие читаем, только когда они нужны. Очередь, которую
+      // остановили во всех сессиях, — тут же
+      $.clock.every(AGENT_TICK_MS, async () => {
+        await agentsTick($)
+        if (S.queue) await queueStopCheck($).catch(chatError)
+      })
+      // Напоминания календаря: пропущенные, пока Claude Code был закрыт, — чуть погодя после старта; дальше таймер сам
+      $.clock.after(5_000, () => remindNow($).catch(chatError))
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -158,6 +176,8 @@ export function register(on) {
       await $.command.register({ name: 'arcade', description: tr('Открыть Arcade', S.lang), immediate: true })
       // Блокнот — и инструмент Claude: читать, создавать страницы, дописывать и отмечать пункты
       await $.tool.register(NOTES_TOOL).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+      // Календарь — тоже: смотреть, записывать, переносить и удалять события
+      await $.tool.register(CALENDAR_TOOL).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
       await $.command.register({
         name: 'arcade-add',
         description: tr('Arcade: добавить свою игру — файл ROM Денди или Sega', S.lang),
@@ -184,6 +204,12 @@ export function register(on) {
     return started
   })
 
+  // Сессия закрывается: место её отметки — свободно (после /clear сессия та же, место остаётся за ней)
+  on('session.end', async ($, e, next) => {
+    await leaveAgents($, e.reason).catch((err) => log(`отметка сессии: ${err?.message ?? err}`))
+    return next(e)
+  })
+
   // Desktop или VS Code подключился к сессии: панель, оставленную открытой в другой сессии, открываем и здесь
   on('session.attach', async ($, e, next) => {
     const attached = await next(e)
@@ -203,6 +229,7 @@ export function register(on) {
       S.askVisible = false
       S.agentAlert = null
       S.paused = false
+      queueTurnStart($, e)
       log('агент начал ход')
       if (DEBUG) await $.ui.toast('arcade: агент начал ход')
     } catch (err) {
@@ -215,6 +242,7 @@ export function register(on) {
     try {
       S.status = 'permission'
       S.askVisible = false
+      queuePermission($)
       if (S.paneOpen && S.view !== 'library') {
         S.agentAlert = 'permission'
         if (S.onPermission === 'pause') {
@@ -278,6 +306,8 @@ export function register(on) {
       }
       S.status = 'done'
       S.askVisible = false
+      // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
+      if (S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
       if (S.paneOpen && S.view !== 'library') {
         S.agentAlert = 'done'
         if (S.onDone === 'pause') {
@@ -365,6 +395,17 @@ export function register(on) {
   // модель получает ошибкой — отказом с текстом
   on('tool.call', { tool: NOTES_TOOL_NAME }, async ($, e) => {
     const out = await notesTool($, e)
+    return out.isError ? { deny: out.text } : { result: out.text }
+  })
+
+  // Инструмент календаря меняет только календарь Arcade: разрешаем сам, если Claude Code спросил бы человека
+  on('tool.check', { tool: CALENDAR_TOOL_NAME }, async ($, e, next) => {
+    const decided = await next(e)
+    if (decided?.decision !== 'ask') return decided
+    return { decision: 'allow', reason: 'Календарь Arcade: инструмент меняет только календарь мода' }
+  })
+  on('tool.call', { tool: CALENDAR_TOOL_NAME }, async ($, e) => {
+    const out = await calendarTool($, e)
     return out.isError ? { deny: out.text } : { result: out.text }
   })
 

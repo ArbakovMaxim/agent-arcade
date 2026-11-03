@@ -1,20 +1,27 @@
 // Arcade: экран блокнота.
 import { openUrlCommand } from '../browsers.js'
 import { keep, tr } from '../i18n.js'
-import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, moveCard, noteLines, notesOrder, removePage, toggleLine, updatePage } from '../notes.js'
+import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, issueUrl, moveCard, noteLines, notesOrder, removePage, toggleLine, updateCard, updatePage } from '../notes.js'
+import { dayKey, quickParse } from '../calendar.js'
 import { NOTE_LINES, S, nb } from '../app/state.js'
 import { clip } from '../app/status.js'
-import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, colName, connectorPrompt, copyPage, createPage, editNotes, giveClaude, openLink, sendNote } from '../app/work.js'
+import { dayText } from '../app/calendar.js'
+import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, cardTaker, colName, connectorPrompt, copyPage, createPage, deskPerson, editNotes, giveClaude, issueComment, makeSummary, openLink, pageToChat, releaseCard, sendNote } from '../app/work.js'
+import { chatTitle, loadChats } from '../app/talk.js'
 
-// Блокнот: список страниц с подстраницами и экран страницы — строки текста, отметки чек-листа, «Редактировать» (поле
-// «Текст»), «Копировать», поля «Новый пункт» и «Название», «Отдать Claude», «Удалить». Названия и текст страниц — человека,
-// без перевода (keep)
+const CHAT_PICK = 8 // чатов в выборе «Отправить в чат» — последние по переписке
+
+// Блокнот: список страниц с подстраницами и «Итоги дня», экран страницы — строки текста, отметки чек-листа,
+// «Редактировать» (поле «Текст»), «Копировать», поля «Новый пункт» и «Название», «Отдать Claude», «Отправить в чат»,
+// «Удалить». Названия и текст страниц — человека, без перевода (keep)
 export function notesScreen($, e, kit) {
-  const { Box, Button, Input, Markdown, Text, desktop, dim, gap, hint, noticeLines, open, section, tiles } = kit
+  const { Box, Button, Input, Markdown, Text, desktop, dim, gap, hint, noticeLines, now, open, section, tiles } = kit
   let items
   const page = S.menu.startsWith('note:') ? S.notes.find((p) => p.id === S.menu.slice(5)) : null
   if (!page && S.menu !== 'notes') S.menu = 'notes'
   if (nb.confirm && nb.confirm !== page?.id) nb.confirm = null
+  if (nb.take && nb.take !== page?.id) nb.take = ''
+  if (nb.chat && nb.chat !== page?.id) nb.chat = ''
   // Уйти с экрана: набранное в поле «Текст» — сначала в страницу; не поместилось — остаёмся, заметка скажет почему
   const leave = (target) => async () => {
     if (!(await editNotes($, (list) => list))) return
@@ -67,6 +74,8 @@ export function notesScreen($, e, kit) {
         },
       }),
       dim('  доски с колонками и карточками; общие — с друзьями'),
+      Button({ key: 'arcade-note-summary', label: 'Итоги дня', onPress: () => makeSummary($) }),
+      dim('  страница для стендапа: что сегодня ушло Claude, что сделано и что ещё в работе'),
       gap,
       Input({
         key: `arcade-note-import-${nb.field}`,
@@ -181,9 +190,47 @@ export function notesScreen($, e, kit) {
       await $.prompt.fill({ text: '', mode: 'replace' }).catch(() => {})
     }
     const hasText = lines.some((l) => l.kind !== 'blank')
-    // Карточка доски проектов: в какой она колонке и кнопки переноса — как на экране доски
+    // Карточка доски проектов: в какой она колонке и кнопки переноса — как на экране доски, кто её взял (общая доска)
+    // и срок — он виден на доске и в календаре
+    const today = dayKey(now)
+    const { base, me, taken } = cardTaker(page)
+    const takenItems = taken
+      ? [
+          keep(dim(`${tr('Взял', S.lang)} ${deskPerson(taken, base)}`)),
+          ...(taken === me ? [Button({ key: 'arcade-note-release', label: 'Отпустить карточку', onPress: () => releaseCard($, id) })] : []),
+        ]
+      : []
+    const done = isBoard(parent) && columnOf(page, parent.board.cols) === parent.board.cols.at(-1).id
+    const dueItems = [
+      Input({
+        key: `arcade-note-due-${nb.field}`,
+        label: 'Срок',
+        value: page.due ?? '',
+        placeholder: 'пт, завтра, 20.11, 2026-11-20',
+        submitLabel: tr('Сохранить', S.lang),
+        onSubmit: (value) => {
+          const when = value.trim() ? quickParse(value, page.due || today, today) : null
+          if (when && (when.title || when.time || when.repeat)) {
+            nb.note = 'Не понял срок: пиши как «пт», «завтра», «20.11» или «2026-11-20».'
+            nb.bad = true
+            $.ui.invalidate('ui.render')
+            return
+          }
+          if ((when?.day ?? '') === (page.due ?? '')) return
+          return editNotes($, (list, at) => updateCard(list, id, { due: when?.day ?? '' }, at), when ? 'Срок поставлен — он виден и в календаре.' : 'Срок убран.')
+        },
+      }),
+      page.due
+        ? keep(
+            page.due < today && !done
+              ? Text({ color: 'warning', children: [`  ${tr('Срок прошёл', S.lang)}: ${dayText(page.due, today)}`] })
+              : dim(`  ${tr('Срок', S.lang)}: ${dayText(page.due, today)}`),
+          )
+        : dim('  Пусто — без срока. Стереть и сохранить — убрать срок.'),
+    ]
     const cardPlace = isBoard(parent)
       ? [
+          ...takenItems,
           keep(dim(`${tr('Колонка', S.lang)}: ${colName(parent.board.cols.find((c) => c.id === columnOf(page, parent.board.cols)) ?? parent.board.cols[0])}`)),
           Box({
             flexDirection: 'row',
@@ -206,6 +253,7 @@ export function notesScreen($, e, kit) {
               }),
             ),
           }),
+          ...dueItems,
         ]
       : []
     // Панель Desktop не даёт выделить текст вне полей ввода: без правки текст виден и копируется кнопкой, поле «Текст» —
@@ -304,6 +352,35 @@ export function notesScreen($, e, kit) {
       }),
       gap,
     ]
+    // «Отправить в чат»: чаты — по нажатию; их список — с сайта, если его ещё не спрашивали
+    const picking = nb.chat === id && S.ch.list
+    const chatItems = [
+      Button({
+        key: 'arcade-note-chat',
+        label: picking ? 'Не отправлять в чат' : 'Отправить в чат',
+        onPress: () => {
+          nb.chat = picking ? '' : id
+          if (nb.chat && !S.ch.list) loadChats($).then(() => $.ui.invalidate('ui.render'))
+          $.ui.invalidate('ui.render')
+        },
+      }),
+      ...(nb.chat !== id
+        ? [dim('  друзьям или команде — текстом в чат Arcade')]
+        : !S.ch.list
+          ? [dim(S.ch.loading ? '  Спрашиваю сайт о чатах…' : '  Не получилось узнать чаты — нажми ещё раз.')]
+          : !S.ch.list.length
+            ? [dim('  Чатов пока нет — начни переписку в «Чатах».')]
+            : [
+                Box({
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  columnGap: 2,
+                  children: S.ch.list
+                    .slice(0, CHAT_PICK)
+                    .map((c) => keep(Button({ key: `arcade-note-chat-${c.id}`, label: nb.sending === c.id ? `${tr('Отправляю', S.lang)}…` : `💬 ${chatTitle(c)}`, onPress: () => pageToChat($, id, c.id) }))),
+                }),
+              ]),
+    ]
     items = [
       parent ? keep(Button({ key: 'arcade-back', label: `← ${parent.title}`, onPress: leave(isBoard(parent) ? `board:${parent.id}` : `note:${parent.id}`) })) : Button({ key: 'arcade-back', label: '← Назад', onPress: leave('notes') }),
       keep(section(page.title)),
@@ -346,11 +423,19 @@ export function notesScreen($, e, kit) {
       gap,
       Button({ key: 'arcade-note-send', label: 'Отдать Claude', onPress: () => sendNote($, id) }),
       dim('  Claude получит страницу и сможет отмечать пункты и дописывать её.'),
+      ...(issueUrl(page)
+        ? [
+            Button({ key: 'arcade-note-github', label: 'Итог — в GitHub', onPress: () => issueComment($, id) }),
+            dim('  Claude напишет в задачу GitHub комментарий: что сделано по карточке. Задачу не закроет.'),
+          ]
+        : []),
+      ...(S.acct.session ? chatItems : []),
       section('Notion и другие приложения'),
       ...(page.link
         ? [
             keep(dim(`  ${tr('Связана с', S.lang)} ${page.link.app}: ${page.link.url}`)),
-            Button({ key: 'arcade-note-push', label: 'Обновить в приложении', onPress: () => askApp('update') }),
+            // Задачу GitHub текстом карточки не переписываем: итог в неё — комментарием, кнопкой выше
+            ...(issueUrl({ link: page.link }) ? [] : [Button({ key: 'arcade-note-push', label: 'Обновить в приложении', onPress: () => askApp('update') })]),
             Button({ key: 'arcade-note-pull', label: 'Забрать из приложения', onPress: () => askApp('pull') }),
             ...(openUrlCommand(S.platform, page.link.url) ? [Button({ key: 'arcade-note-open', label: 'Открыть в браузере', onPress: () => openLink($, page.link.url) })] : []),
             Button({

@@ -22,6 +22,9 @@ export const MAX_COLS = 8
 export const MAX_COL = 30 // знаков в названии колонки
 const COL_ID = /^[a-z0-9]{1,12}$/
 export const SHARE_ID = /^b[A-Za-z0-9_-]{16}$/
+const DAY = /^(\d{4})-(\d{2})-(\d{2})$/
+// Номер аккаунта Arcade (GitHub) — у того, кто отдал карточку своему Claude
+const ACCOUNT = /^\d{1,20}$/
 // Колонки новой доски. Названия по умолчанию: на экране — по-русски (переводы — в i18n.js), для Claude — по-английски
 export const DEFAULT_COLS = [{ id: 'todo' }, { id: 'doing' }, { id: 'done' }]
 export const COL_NAMES = { todo: 'Сделать', doing: 'В работе', done: 'Готово' }
@@ -48,6 +51,32 @@ export function cleanLink(app, url) {
   const href = String(url ?? '').trim()
   if (!name || href.length > MAX_URL || !/^[a-z][a-z0-9+.-]*:\/\/\S+$/i.test(href)) return null
   return { app: name, url: href }
+}
+
+// Задача GitHub страницы: адрес задачи или запроса на слияние из связи, иначе первый такой адрес в тексте; нет — ''.
+// В тексте — потому что на общую доску связь не уходит, а адрес Claude пишет и в текст карточки
+const ISSUE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull)\/\d+/
+export function issueUrl(page) {
+  const m = ISSUE.exec(page?.link?.url ?? '') ?? ISSUE.exec(page?.body ?? '')
+  return m ? m[0] : ''
+}
+
+// «ГГГГ-ММ-ДД», и такой день есть в календаре; иначе ''. Срок карточки и день события календаря
+export function cleanDay(text) {
+  const m = DAY.exec(String(text ?? '').trim())
+  if (!m) return ''
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])]
+  if (y < 1970 || y > 2999) return ''
+  const date = new Date(y, mo - 1, d)
+  return date.getMonth() === mo - 1 && date.getDate() === d ? m[0] : ''
+}
+// Срок карточки (due) и кто отдал её своему Claude (taken — номер аккаунта): только то, что сходится
+export function cardExtra(raw) {
+  const out = {}
+  const due = cleanDay(raw?.due)
+  if (due) out.due = due
+  if (typeof raw?.taken === 'string' && ACCOUNT.test(raw.taken)) out.taken = raw.taken
+  return out
 }
 
 // Колонки доски: от одной до MAX_COLS, id латиницей без повторов, name — если своё (как на сайте). Не так — null
@@ -98,20 +127,25 @@ export function restoreNotes(saved) {
     if (link) page.link = link
     if (typeof p.prev === 'string') page.prev = cleanBody(p.prev)
     if (!parent && p.board && typeof p.board === 'object') page.board = boardFrom(p.board)
-    if (parent) Object.assign(page, { col: p.col, pos: p.pos })
+    if (parent) Object.assign(page, { col: p.col, pos: p.pos, due: p.due, taken: p.taken })
     out.push(page)
   }
   const top = new Set(out.filter((p) => !p.parent).map((p) => p.id))
   const boards = new Map(out.filter((p) => p.board).map((p) => [p.id, p.board.cols]))
-  // Карточке доски — колонка и место; у подстраницы обычной страницы их нет
+  // Карточке доски — колонка и место, срок и кто взял; у подстраницы обычной страницы их нет
   return out
     .filter((p) => !p.parent || top.has(p.parent))
     .map((p) => {
       if (!p.parent) return p
-      const { col, pos, ...page } = p
+      const { col, pos, due, taken, ...page } = p
       const cols = boards.get(p.parent)
       if (!cols) return page
-      return { ...page, col: typeof col === 'string' && cols.some((c) => c.id === col) ? col : cols[0].id, pos: Number.isFinite(pos) ? pos : 0 }
+      return {
+        ...page,
+        col: typeof col === 'string' && cols.some((c) => c.id === col) ? col : cols[0].id,
+        pos: Number.isFinite(pos) ? pos : 0,
+        ...cardExtra({ due, taken }),
+      }
     })
 }
 
@@ -125,9 +159,9 @@ export function notesOrder(notes) {
 }
 
 // Новая страница — первой (подстраница — первой среди подстраниц своей). Карточка доски — в колонку col (нет такой —
-// в первую), на место pos или под последнюю. Новая доска — board: { cols?, share? }. id — свой, если свободен (карточки
-// общей доски приходят со своими). Не вышло — { error }
-export function addPage(notes, { title, body = '', parent = null, id: wanted, col, pos, board }, now) {
+// в первую), на место pos или под последнюю, со сроком due и тем, кто взял (taken). Новая доска — board: { cols?, share? }.
+// id — свой, если свободен (карточки общей доски приходят со своими). Не вышло — { error }
+export function addPage(notes, { title, body = '', parent = null, id: wanted, col, pos, board, due, taken }, now) {
   const name = cleanTitle(title)
   if (!name) return { error: 'empty' }
   if (notes.length >= MAX_PAGES) return { error: 'full' }
@@ -143,6 +177,7 @@ export function addPage(notes, { title, body = '', parent = null, id: wanted, co
   if (top?.board) {
     page.col = columnOf({ col }, top.board.cols)
     page.pos = Number.isFinite(pos) ? pos : nextPos(columnCards(notes, top, page.col))
+    Object.assign(page, cardExtra({ due, taken }))
   } else if (!parent && board) page.board = boardFrom(board)
   return { notes: [page, ...notes], page }
 }
@@ -206,6 +241,24 @@ export const removePage = (notes, id) => notes.filter((p) => p.id !== id && p.pa
 
 export const updatePage = (notes, id, change, now) => notes.map((p) => (p.id === id ? { ...p, ...change, at: now } : p))
 
+// Срок и «кто взял» у карточки доски: { due?, taken? }, пустое значение ('' или null) — убрать. Что не сходится —
+// не трогаем; не карточка доски — блокнот как был
+export function updateCard(notes, id, change, now) {
+  const card = notes.find((p) => p.id === id)
+  if (!card || !notes.some((p) => p.id === card.parent && p.board)) return notes
+  const next = { ...card }
+  for (const key of ['due', 'taken']) {
+    if (!(key in change)) continue
+    if (change[key] === '' || change[key] === null || change[key] === undefined) delete next[key]
+    else {
+      const value = cardExtra({ [key]: change[key] })[key]
+      if (value) next[key] = value
+    }
+  }
+  if (next.due === card.due && next.taken === card.taken) return notes
+  return notes.map((p) => (p.id === id ? { ...next, at: now } : p))
+}
+
 // Строки текста для экрана: заголовок, пункт чек-листа, пункт списка, текст или пустая; index — номер строки в тексте
 export function noteLines(body) {
   return String(body ?? '')
@@ -256,6 +309,7 @@ const statsLabel = (body) => {
   return total ? ` (${done}/${total} done)` : ''
 }
 const linkLabel = (page) => (page.link ? ` [${page.link.app}]` : '')
+const dueLabel = (page) => (page.due ? ` (due ${page.due})` : '')
 // Название колонки для Claude: своё или английское по умолчанию
 const colLabel = (col) => col.name ?? COL_EN[col.id] ?? col.id
 const boardLabel = (page) => (page.board ? ` [board${page.board.share ? ', shared with friends' : ''}: ${page.board.cols.map(colLabel).join(', ')}]` : '')
@@ -280,13 +334,14 @@ export const NOTES_TOOL = {
     'Other apps are reached with their own connector tools, never from here. ' +
     'A project board is a page with columns (create with board: true makes one with To do, Doing, Done); its cards are its subpages: ' +
     'create a card with parent set to the board and column, move it with move (page and column); read a board to see its columns and cards. ' +
+    'A card can have a due date: due on create, or action due (page and due; "" removes it); the user sees it on the board and in the Arcade calendar. ' +
     'A board shared with friends syncs with them, so cards may change between calls. ' +
     'Pages are found by id or exact title. Nothing is deleted here: the user deletes pages in Arcade.',
   inputSchema: {
     type: 'object',
     properties: {
-      action: { type: 'string', enum: ['list', 'read', 'create', 'append', 'check', 'replace', 'link', 'move'] },
-      page: { type: 'string', description: 'Page id or exact title (read, append, check, replace, link, move)' },
+      action: { type: 'string', enum: ['list', 'read', 'create', 'append', 'check', 'replace', 'link', 'move', 'due'] },
+      page: { type: 'string', description: 'Page id or exact title (read, append, check, replace, link, move, due)' },
       title: { type: 'string', description: `New page title, up to ${MAX_TITLE} characters (create)` },
       parent: { type: 'string', description: 'Id or title of a top-level page or board to put the new page or card under (create)' },
       board: { type: 'boolean', description: 'create: true makes a project board with columns To do, Doing, Done' },
@@ -296,6 +351,7 @@ export const NOTES_TOOL = {
       done: { type: 'boolean', description: 'check: true ticks (default), false unticks' },
       app: { type: 'string', description: `Name of the other app, e.g. Notion, up to ${MAX_APP} characters (link, create)` },
       url: { type: 'string', description: 'Address of the page in that app, e.g. https://www.notion.so/… (link, create)' },
+      due: { type: 'string', description: 'Due date of a board card as YYYY-MM-DD, local time (create, due); "" removes it (due)' },
     },
     required: ['action'],
   },
@@ -313,7 +369,7 @@ export function applyNotesTool(notes, input, now, makeId) {
       const board = p.parent && notes.find((b) => b.id === p.parent && b.board)
       return board ? ` (${colLabel(board.board.cols.find((c) => c.id === columnOf(p, board.board.cols)))})` : ''
     }
-    const lines = notesOrder(notes).map((p) => `${p.parent ? '  - ' : '- '}${p.id}: ${p.title}${boardLabel(p)}${column(p)}${statsLabel(p.body)}${linkLabel(p)}`)
+    const lines = notesOrder(notes).map((p) => `${p.parent ? '  - ' : '- '}${p.id}: ${p.title}${boardLabel(p)}${column(p)}${dueLabel(p)}${statsLabel(p.body)}${linkLabel(p)}`)
     return { notes, text: `Notebook pages:\n${lines.join('\n')}` }
   }
   if (action === 'create') {
@@ -324,13 +380,16 @@ export function applyNotesTool(notes, input, now, makeId) {
     const link = input.app || input.url ? cleanLink(input.app, input.url) : null
     if ((input.app || input.url) && !link) return fail(BAD_LINK)
     if (input.board && parent) return fail('A board is a top-level page: create it without parent.')
+    const due = input.due ? cleanDay(input.due) : ''
+    if (input.due && !parent?.board) return fail('Only a card on a board has a due date: create it with parent set to the board.')
+    if (input.due && !due) return fail(BAD_DUE)
     let col
     if (parent?.board) {
       col = input.column ? findColumn(parent.board.cols, input.column)?.id : parent.board.cols[0].id
       if (!col) return fail(`No column "${clip(input.column)}" on ${parent.title}. Columns: ${columnList(parent.board.cols)}.`)
     }
     const fresh = { title: input.title, body: input.text ?? '', parent: parent?.id ?? null }
-    if (parent?.board) Object.assign(fresh, { col, id: makeId?.() })
+    if (parent?.board) Object.assign(fresh, { col, id: makeId?.(), ...(due ? { due } : {}) })
     if (input.board) fresh.board = {}
     const made = addPage(notes, fresh, now)
     if (made.error === 'empty') return fail('The page needs a title.')
@@ -339,7 +398,7 @@ export function applyNotesTool(notes, input, now, makeId) {
     if (!fits(list)) return fail(NOTEBOOK_FULL)
     const linked = link ? `, linked to ${link.app}` : ''
     const where = parent?.board
-      ? ` (card on ${parent.title}, column ${colLabel(parent.board.cols.find((c) => c.id === col))})`
+      ? ` (card on ${parent.title}, column ${colLabel(parent.board.cols.find((c) => c.id === col))}${due ? `, due ${due}` : ''})`
       : parent
         ? ` (under ${parent.title})`
         : made.page.board
@@ -348,7 +407,7 @@ export function applyNotesTool(notes, input, now, makeId) {
     return { notes: list, text: `Created ${made.page.board ? 'board' : parent?.board ? 'card' : 'page'} ${made.page.id}: ${made.page.title}${where}${linked}.`, changed: true }
   }
   const page = findPage(notes, input?.page)
-  if (['read', 'append', 'check', 'replace', 'link', 'move'].includes(action)) {
+  if (['read', 'append', 'check', 'replace', 'link', 'move', 'due'].includes(action)) {
     if (!page) return fail(`No page "${clip(input?.page)}". Use action list to see the pages.`)
   }
   if (action === 'read') {
@@ -356,7 +415,7 @@ export function applyNotesTool(notes, input, now, makeId) {
     const children = notes.filter((p) => p.parent === page.id)
     const linked = page.link ? `\nLinked to ${page.link.app}: ${page.link.url}` : ''
     const under = parent?.board
-      ? ` (card on board ${parent.title}, column ${colLabel(parent.board.cols.find((c) => c.id === columnOf(page, parent.board.cols)))})`
+      ? ` (card on board ${parent.title}, column ${colLabel(parent.board.cols.find((c) => c.id === columnOf(page, parent.board.cols)))}${page.due ? `, due ${page.due}` : ''})`
       : parent
         ? ` (under ${parent.title})`
         : ''
@@ -364,7 +423,7 @@ export function applyNotesTool(notes, input, now, makeId) {
       const shared = page.board.share ? ' (shared with friends)' : ''
       const cols = page.board.cols.map((c) => {
         const cards = columnCards(notes, page, c.id)
-        return `## ${colLabel(c)}\n${cards.length ? cards.map((p) => `- ${p.id}: ${p.title}${statsLabel(p.body)}`).join('\n') : '(no cards)'}`
+        return `## ${colLabel(c)}\n${cards.length ? cards.map((p) => `- ${p.id}: ${p.title}${dueLabel(p)}${statsLabel(p.body)}`).join('\n') : '(no cards)'}`
       })
       return { notes, text: `Board ${page.id}: ${page.title}${shared}${linked}${page.body ? `\n\n${page.body}` : ''}\n\n${cols.join('\n\n')}` }
     }
@@ -420,9 +479,18 @@ export function applyNotesTool(notes, input, now, makeId) {
     if (col.id === columnOf(page, board.board.cols)) return { notes, text: `${page.title} is already in ${colLabel(col)}.` }
     return { notes: moveCard(notes, page.id, { col: col.id }, now), text: `Moved ${page.title} to ${colLabel(col)}.`, changed: true }
   }
-  return fail('Unknown action: use list, read, create, append, check, replace, link or move.')
+  if (action === 'due') {
+    if (!page.parent || !notes.some((p) => p.id === page.parent && p.board)) return fail(`${page.title} is not a card on a board; only cards have a due date.`)
+    if (typeof input.due !== 'string') return fail(BAD_DUE)
+    const due = input.due.trim() ? cleanDay(input.due) : ''
+    if (input.due.trim() && !due) return fail(BAD_DUE)
+    if ((page.due ?? '') === due) return { notes, text: due ? `${page.title} is already due ${due}.` : `${page.title} has no due date.` }
+    return { notes: updateCard(notes, page.id, { due }, now), text: due ? `${page.title} is due ${due}.` : `Removed the due date of ${page.title}.`, changed: true }
+  }
+  return fail('Unknown action: use list, read, create, append, check, replace, link, move or due.')
 }
 
 const clip = (text) => String(text ?? '').slice(0, 80)
 const NOTEBOOK_FULL = 'The notebook is full. Ask the user to delete pages they do not need.'
+const BAD_DUE = 'due must be a real date as YYYY-MM-DD, or "" to remove it.'
 const BAD_LINK = `A link needs app (e.g. Notion, up to ${MAX_APP} characters) and url: the full address of the page in that app, like https://…, up to ${MAX_URL} characters.`
