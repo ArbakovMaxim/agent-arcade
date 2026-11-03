@@ -22,7 +22,7 @@ import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, p
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
 import { queueNext, queueStopCheck, queueTurnDone, queueTurnStart } from './app/queue.js'
-import { AGENT_TICK_MS, agentsTick, leaveAgents, startAgents } from './app/agents.js'
+import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
 import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
@@ -46,6 +46,7 @@ export function register(on) {
       S.msgNotify = (await $.store.get('msgNotify')) !== false
       S.agNotify = (await $.store.get('agentsNotify')) !== false
       S.agDone = (await $.store.get('agentsDone')) === true
+      S.agHidden = hiddenOf(await $.store.get('agentsHidden'))
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
       await loadNotes($)

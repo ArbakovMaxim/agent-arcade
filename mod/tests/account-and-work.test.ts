@@ -5379,6 +5379,62 @@ test('агенты: другая сессия ждёт разрешения — 
   await ui.unmount()
 })
 
+test('агенты: крестик скрывает другую сессию — её нет в списке и всплывашек о ней нет; «Скрытые» возвращают; помнится в хранилище, скрытое в другой сессии видно сразу', async ($, on) => {
+  const { clock, saved, toasts, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { agentsHidden: ['sess-c'] } })
+  const rival = agentFile(putFile, clock, disk)
+  const api = { sid: 'sess-a', name: 'api', path: 'D:\\work\\api', status: 'working', since: -60_000 }
+  const docs = { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'idle', since: -60_000 }
+  const site = { sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'idle', since: -60_000 }
+  const marks = (over: any = {}) => {
+    rival(3, { ...api, ...over.api })
+    rival(9, { ...docs, ...over.docs })
+    rival(12, { ...site, ...over.site })
+  }
+  marks()
+  await start($)
+  await clock.advance(10_000)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-agents' })
+  await clock.advance(AGENT_TICK_MS)
+  // «site» скрыли раньше — её нет в списке, она в «Скрытых»; у этой сессии крестика нет
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-a', 'agents-card-sess-b', 'agents-card-sess-me'])
+  expect(await ui.find({ key: 'agents-hide-sess-a' })).toMatchObject({ props: { label: '×', plain: true } })
+  expect(await ui.find({ key: 'agents-hide-sess-me' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Скрытые сессии — нажми, чтобы вернуть:' })).toBeDefined()
+  expect(await ui.find({ key: 'agents-show-sess-c' })).toMatchObject({ props: { label: 'site' } })
+
+  // Крестик у «api»: её нет в списке, она в «Скрытых»; запомнено вместе с тем, что скрыли раньше
+  await ui.press({ key: 'agents-hide-sess-a' })
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-b', 'agents-card-sess-me'])
+  expect(saved.get('agentsHidden')).toEqual(['sess-c', 'sess-a'])
+  // Скрытая ждёт разрешения — всплывашки нет, а в «Скрытых» она так и подписана
+  marks({ api: { status: 'permission', ask: { kind: 'permission', tool: 'Bash', what: 'npm test' } }, docs: { status: 'permission' } })
+  await clock.advance(AGENT_READ_MS + AGENT_TICK_MS)
+  expect(toasts.filter((t) => t.startsWith('Сессия «'))).toEqual(['Сессия «docs» ждёт разрешения'])
+  expect(await ui.find({ key: 'agents-show-sess-a' })).toMatchObject({ props: { label: 'api · ждёт разрешения' } })
+  // Терминал: крестик — рядом с именем другой сессии, у своей его нет
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await boxKeys(term, 'agents-line-')).toEqual(['agents-line-sess-b', 'agents-line-sess-me'])
+  expect(await term.find({ key: 'agents-hide-sess-b' })).toBeDefined()
+  await term.unmount()
+
+  // Вернуть «site» — она снова в списке; «api» остаётся скрытой
+  await ui.press({ key: 'agents-show-sess-c' })
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-b', 'agents-card-sess-c', 'agents-card-sess-me'])
+  expect(saved.get('agentsHidden')).toEqual(['sess-a'])
+  await ui.press({ key: 'agents-show-sess-a' })
+  expect(saved.get('agentsHidden')).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Скрытые сессии — нажми, чтобы вернуть:' })).toBeUndefined()
+
+  // «docs» скрыли в другой сессии — здесь она уходит в «Скрытые» со следующим чтением отметок, без перезапуска
+  saved.set('agentsHidden', ['sess-b'])
+  await clock.advance(AGENT_TICK_MS)
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-a', 'agents-card-sess-c', 'agents-card-sess-me'])
+  expect(await ui.find({ key: 'agents-show-sess-b' })).toMatchObject({ props: { label: 'docs · ждёт разрешения' } })
+  await ui.unmount()
+})
+
 test('агенты: вопрос Claude этой сессии — в её отметке; ответ из «Агентов» другой сессии модель получает как ответ человека, чужой или неверный — нет; ответить можно и из своей вкладки', HEAVY, async ($, on) => {
   const { clock, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, questionMs: 60_000 })
   await start($)

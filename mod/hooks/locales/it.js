@@ -281,6 +281,7 @@ export default {
   "Group: tick friends, name it and press “Create group”.": "Gruppo: spunta gli amici, dagli un nome e premi «Crea gruppo».",
   "Hardware and electronics": "Hardware ed elettronica",
   "Here": "Qui",
+  "Hidden sessions — press one to bring it back:": "Sessioni nascoste — premine una per riportarla:",
   "History": "Storia",
   "History of technology": "Storia della tecnologia",
   "Horror": "Horror",

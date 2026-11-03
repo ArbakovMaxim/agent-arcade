@@ -281,6 +281,7 @@ export default {
   "Group: tick friends, name it and press “Create group”.": "グループ：フレンドにチェックを入れ、名前を付けて「グループを作成」を押してください。",
   "Hardware and electronics": "ハードウェアと電子工作",
   "Here": "ここでプレイ",
+  "Hidden sessions — press one to bring it back:": "非表示のセッション — 押すと元に戻ります：",
   "History": "歴史",
   "History of technology": "テクノロジーの歴史",
   "Horror": "ホラー",

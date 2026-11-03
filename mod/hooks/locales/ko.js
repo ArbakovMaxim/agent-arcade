@@ -281,6 +281,7 @@ export default {
   "Group: tick friends, name it and press “Create group”.": "그룹: 친구를 체크하고 이름을 붙인 뒤 “그룹 만들기”를 누르세요.",
   "Hardware and electronics": "하드웨어와 전자공학",
   "Here": "여기",
+  "Hidden sessions — press one to bring it back:": "숨긴 세션 — 누르면 다시 표시됩니다:",
   "History": "역사",
   "History of technology": "기술의 역사",
   "Horror": "공포",

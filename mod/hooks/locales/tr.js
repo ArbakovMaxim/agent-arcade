@@ -281,6 +281,7 @@ export default {
   "Group: tick friends, name it and press “Create group”.": "Grup: arkadaşlarını işaretle, bir ad ver ve “Grup oluştur”a bas.",
   "Hardware and electronics": "Donanım ve elektronik",
   "Here": "Burada",
+  "Hidden sessions — press one to bring it back:": "Gizli oturumlar — geri getirmek için birine bas:",
   "History": "Tarih",
   "History of technology": "Teknoloji tarihi",
   "Horror": "Korku",

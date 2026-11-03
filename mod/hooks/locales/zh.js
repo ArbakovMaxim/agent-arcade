@@ -281,6 +281,7 @@ export default {
   "Group: tick friends, name it and press “Create group”.": "群组：勾选好友，起个名字，然后点击“创建群组”。",
   "Hardware and electronics": "硬件与电子",
   "Here": "在这里",
+  "Hidden sessions — press one to bring it back:": "已隐藏的会话 — 点击即可恢复：",
   "History": "历史",
   "History of technology": "科技史",
   "Horror": "恐怖",

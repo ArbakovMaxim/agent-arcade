@@ -17,12 +17,14 @@ export const CLAIM_MS = 1_000 // заявив место или карточку
 export const CLAIM_TRIES = 8 // столько раз подряд проиграть заявку — и сдаться
 export const DONE_HOLD_MS = 5_000 // сделанную карточку отметка держит ещё столько: другие сессии успеют увидеть её сделанной
 export const AGENT_SLOTS = 32 // мест для отметок: столько сессий разом
+export const HIDDEN_MAX = 64 // скрытых сессий помним не больше стольких — последних
 
 // on — отметки работают (есть домашняя папка и id сессии); ready — место slot моё; files — что лежит в местах:
 // { sig, rec, bad }; seen — какое состояние каждой чужой сессии уже видели (для всплывашек), null — ещё ни разу не читали
 S.ag = null
 S.agNotify = true // всплывашка «Сессия «…» ждёт разрешения» — настройка agentsNotify
 S.agDone = false // всплывашка «В сессии «…» Claude закончил ход» — настройка agentsDone
+S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
 
 const STATUS_ORDER = { permission: 0, done: 1, working: 2, idle: 3 }
 export const STATUS_LABEL = { permission: 'ждёт разрешения', done: 'закончил ход', working: 'работает', idle: 'свободна' }
@@ -240,6 +242,7 @@ export async function agentsTick($) {
     const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || /^(boards|board:|note:)/.test(S.menu))
     if (shown || ((S.agNotify || S.agDone) && now - ag.read >= AGENT_READ_MS)) {
       await readSlots($, now)
+      if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
       notify($, others)
       const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what]).sort())
@@ -266,7 +269,7 @@ function notify($, others) {
   if (first) return
   for (const r of others) {
     const before = was.get(r.sid)
-    if (before === seenOf(r)) continue
+    if (before === seenOf(r) || S.agHidden.includes(r.sid)) continue
     if (r.status === 'permission' && S.agNotify)
       $.ui.toast(fill(tr(r.ask?.kind === 'question' ? 'Сессия «{0}» ждёт ответа на вопрос' : 'Сессия «{0}» ждёт разрешения', S.lang), [r.name]))
     else if (r.status === 'done' && before !== undefined && S.agDone) $.ui.toast(fill(tr('В сессии «{0}» Claude закончил ход', S.lang), [r.name]))
@@ -417,6 +420,38 @@ export function agentsList(now) {
   const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
+}
+
+// Скрытые сессии из $.store: только строки
+export const hiddenOf = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x) : [])
+
+// Скрыть другую сессию во вкладке «Агенты» (hide) или вернуть. Хранилище общее для всех сессий: перед записью —
+// перечитать, чтобы не затереть, что скрыли в другой
+let hiding = 0 // нажатий, которые ещё пишут в хранилище
+let hiddenTurn = 0 // растёт с каждым нажатием: чтение, начатое до нажатия, его не откатит
+export async function hideAgent($, sid, hide) {
+  hiding++
+  hiddenTurn++
+  try {
+    const saved = await $.store.get('agentsHidden').catch(() => undefined)
+    const list = (saved === undefined ? S.agHidden : hiddenOf(saved)).filter((x) => x !== sid)
+    S.agHidden = (hide ? [...list, sid] : list).slice(-HIDDEN_MAX)
+    $.ui.invalidate('ui.render')
+    await $.store.set('agentsHidden', S.agHidden).catch((err) => log(`скрытые сессии: ${err?.message ?? err}`))
+  } finally {
+    hiding--
+  }
+}
+
+// Что скрыли в других сессиях — вместе с чужими отметками. true — список изменился
+async function readHidden($) {
+  const turn = hiddenTurn
+  const saved = await $.store.get('agentsHidden').catch(() => undefined)
+  if (saved === undefined || hiding || turn !== hiddenTurn) return false
+  const list = hiddenOf(saved)
+  if (list.join('\n') === S.agHidden.join('\n')) return false
+  S.agHidden = list
+  return true
 }
 
 // Сколько в состоянии: «меньше минуты», «5 мин», «2 ч 10 мин»

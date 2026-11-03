@@ -281,6 +281,7 @@ export default {
   "Group: tick friends, name it and press “Create group”.": "Група: познач друзів, назви її й натисни «Створити групу».",
   "Hardware and electronics": "Залізо й електроніка",
   "Here": "Тут",
+  "Hidden sessions — press one to bring it back:": "Приховані сесії — натисни, щоб повернути:",
   "History": "Історія",
   "History of technology": "Історія технологій",
   "Horror": "Жахи",

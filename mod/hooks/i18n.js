@@ -1029,6 +1029,7 @@ const EXACT = {
   'Разрешение даётся только в самой сессии.': 'Permission can only be given in that session itself.',
   'Ответить': 'Answer',
   'Ответ отправлен — сессия получит его через секунду.': 'Answer sent — the session will get it within a second.',
+  'Скрытые сессии — нажми, чтобы вернуть:': 'Hidden sessions — press one to bring it back:',
   'В сессии «{0}» Claude закончил ход': 'In session “{0}”, Claude finished the turn',
   'блокнот, доска проектов, календарь и агенты': 'notebook, project board, calendar and agents',
 }
