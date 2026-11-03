@@ -8,11 +8,11 @@ import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatar
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
-import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, issueUrl, moveCard, noteLines, notesOrder, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
+import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, issueUrl, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
 import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
 import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
-import { BOARD_POLL_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
+import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/app/agents.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test } from './kit.ts'
@@ -4250,7 +4250,7 @@ test('блокнот в двух сессиях: экран перечитыва
       { id: 'pb', title: 'Бета', body: '', parent: null, at: 1 },
     ],
   }
-  const { clock, saved } = stubs(on, { stored })
+  const { clock, saved, toasts } = stubs(on, { stored })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -4285,17 +4285,40 @@ test('блокнот в двух сессиях: экран перечитыва
   await press('arcade-back')
   expect([page('pa').body, page('pb').body, page('pc')?.title]).toEqual(['- [ ] один\n- [ ] два', 'от A', 'Гамма'])
 
-  // Открытую страницу без набранного A поправил — поле рисуется с новым текстом; с набранным — остаётся последняя правка
+  // Открытую страницу без набранного A поправил — поле рисуется с новым текстом
   await press('arcade-note-page-pb')
   await press('arcade-note-edit')
-  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A ещё', at: 4 } : p)))
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: '- [ ] от A\n- [ ] ещё', at: 4 } : p)))
   await tick()
-  expect(await field()).toBe('от A ещё')
+  expect(await field()).toBe('- [ ] от A\n- [ ] ещё')
+  // В B набран текст, а Claude в A тем временем отметил пункт той же страницы: после Enter на месте и то и другое
+  const typedKey = await noteKey(ui, 'arcade-note-text-')
+  await noteInput(ui, 'arcade-note-text-', '- [ ] от A\n- [ ] ещё\n- [ ] от B', 'change')
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: '- [x] от A\n- [ ] ещё', at: 5 } : p)))
+  await tick()
+  expect(await noteKey(ui, 'arcade-note-text-')).toBe(typedKey)
+  await noteInput(ui, 'arcade-note-text-', '- [ ] от A\n- [ ] ещё\n- [ ] от B')
+  await clock.settle()
+  expect(page('pb').body).toBe('- [x] от A\n- [ ] ещё\n- [ ] от B')
+  expect(await text('Сохранено.')).toBeDefined()
+  // Набранное и правка A задели одну строку — остаётся набранное, а не молча: заметка под страницей.
+  // A правит уже после записи B — время страницы позже
+  await press('arcade-note-edit')
+  await noteInput(ui, 'arcade-note-text-', '- [x] от A\n- [ ] ещё, от B\n- [ ] от B', 'change')
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: '- [x] от A\n- [x] ещё\n- [ ] от B\nот A снова', at: clock.now() + 1 } : p)))
+  await tick()
+  await noteInput(ui, 'arcade-note-text-', '- [x] от A\n- [ ] ещё, от B\n- [ ] от B')
+  await clock.settle()
+  expect(page('pb').body).toBe('- [x] от A\n- [ ] ещё, от B\n- [ ] от B\nот A снова')
+  expect(await text('Те же строки тем временем поменяли в другой сессии — осталась правка отсюда.')).toMatchObject({ props: { color: 'warning' } })
+  // То же, а набранное уходит со страницы кнопкой «Назад» — заметка тостом
+  await press('arcade-note-edit')
   await noteInput(ui, 'arcade-note-text-', 'от B', 'change')
-  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A снова', at: 5 } : p)))
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'pb' ? { ...p, body: 'от A', at: clock.now() + 1 } : p)))
   await tick()
   await press('arcade-back')
   expect([page('pa').body, page('pb').body]).toEqual(['- [ ] один\n- [ ] два', 'от B'])
+  expect(toasts).toEqual(['Те же строки тем временем поменяли в другой сессии — осталась правка отсюда.'])
 
   // Открытую страницу удалили в A — со следующим тиком B уходит к списку с заметкой, страница не возвращается
   await press('arcade-note-page-pc')
@@ -4314,6 +4337,122 @@ test('блокнот в двух сессиях: экран перечитыва
   expect(await ui.find({ key: 'arcade-note-page-pa' })).toBeDefined()
   expect(pages().map((p) => p.id)).toEqual(['pa'])
   await ui.unmount()
+})
+
+test('rebaseNotes: правка одной сессии поверх записи другой — свои поля, чужие страницы и строки на месте', () => {
+  const board = { id: 'pb', title: 'Лендинг', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } }
+  const card = (id: string, body: string, col = 'doing', at = 1) => ({ id, title: id, body, parent: 'pb', at, col, pos: 0 })
+  const base = [board, card('ca', '- [ ] design\n- [ ] copy'), card('cb', '- [ ] design\n- [ ] copy'), card('cc', '')]
+  // Эта сессия отметила пункт в ca и перенесла её в done, удалила cc и завела новую; другая — отметила пункт в cb
+  const mine = [card('cn', '', 'todo', 5), board, card('ca', '- [x] design\n- [ ] copy', 'done', 5), base[2]]
+  const cur = [board, base[1], card('cb', '- [x] design\n- [ ] copy', 'doing', 4), base[3]]
+  const out = rebaseNotes(cur, base, mine)
+  expect(out.map((p: any) => p.id)).toEqual(['cn', 'pb', 'ca', 'cb'])
+  expect(out[2]).toMatchObject({ body: '- [x] design\n- [ ] copy', col: 'done', at: 5 })
+  expect(out[3]).toBe(cur[2])
+  // Уже на месте — тот же блокнот
+  expect(rebaseNotes(out, base, mine)).toBe(out)
+  // Проверка позже (since): страницу, которую правили после неё, не трогаем; удалённую — тоже
+  const later = [board, card('ca', '- [ ] design\n- [ ] copy', 'doing', 9), base[2], card('cc', 'новое', 'doing', 9)]
+  expect(rebaseNotes(later, base, mine, 6).map((p: any) => p.id)).toEqual(['cn', 'pb', 'ca', 'cb', 'cc'])
+  expect(rebaseNotes(later, base, mine, 6)[2]).toBe(later[1])
+  // Карточку завели на доске, которую другая сессия удалила, — не остаётся
+  expect(rebaseNotes([], base, mine)).toEqual([])
+  // Эта сессия отметила пункт, потом сняла: проверка обеих правок отметку не возвращает
+  const w1 = { base, mine: [board, card('ca', '- [x] design\n- [ ] copy', 'doing', 5), base[2], base[3]], at: 5 }
+  const w2 = { base: w1.mine, mine: [board, card('ca', '- [ ] design\n- [ ] copy', 'doing', 6), base[2], base[3]], at: 6 }
+  let list: any[] = base
+  for (const w of latestEdits([w1, w2])) list = rebaseNotes(list, w.base, w.mine, w.at)
+  expect(list).toBe(base)
+
+  // Один текст правили обе: разные пункты — по строкам; дописали в конец, а выше отметили — и то и другое;
+  // дописали обе — сначала чужое; одну строку — побеждает эта, а clash говорит, что чужая правка там пропала
+  expect(mergeText('- [x] a\n- [ ] b', '- [ ] a\n- [ ] b', '- [ ] a\n- [x] b')).toEqual({ text: '- [x] a\n- [x] b', clash: false })
+  expect(mergeText('- [ ] a\n- [x] b', '- [ ] a\n- [ ] b', '- [ ] a\n- [ ] b\nResult: done')).toEqual({ text: '- [ ] a\n- [x] b\nResult: done', clash: false })
+  expect(mergeText('a\nот A', 'a', 'a\nот B')).toEqual({ text: 'a\nот A\nот B', clash: false })
+  expect(mergeText('a\nb2\nc', 'a\nb\nc', 'a\nb3\nc\nd')).toEqual({ text: 'a\nb3\nc\nd', clash: true })
+  // Поправили сверху и дописали снизу, а между ними другая отметила пункт — все три правки
+  expect(mergeText('top\n- [x] mid\nend', 'top\n- [ ] mid\nend', 'TOP\n- [ ] mid\nend\nmore')).toEqual({ text: 'TOP\n- [x] mid\nend\nmore', clash: false })
+  // Текст кончался переводом строки, и обе дописали по строке — обе на месте; одну и ту же правку сделали обе — не беда
+  expect(mergeText('a\nResult: done', 'a\n', 'a\nот B')).toEqual({ text: 'a\nResult: done\nот B', clash: false })
+  expect(mergeText('a\n- [x] b', 'a\n- [ ] b', 'a\n- [x] b')).toEqual({ text: 'a\n- [x] b', clash: false })
+  // Страницы, где задели одни строки, — в lost
+  const lost: string[] = []
+  rebaseNotes([board, card('ca', '- [ ] design\n- [x] copy')], [board, base[1]], [board, card('ca', '- [ ] design\n- [ ] copy, B')], undefined, lost)
+  expect(lost).toEqual(['ca'])
+  // Сверка: другая сессия записала свой блокнот поверх правки этой и отметила пункт прямо над дописанной строкой —
+  // правка на месте, второй раз строка не встаёт; затёрла — строка возвращается
+  const added = [board, card('ca', '- [ ] design\n- [ ] copy\nот B', 'doing', 2)]
+  const over = [board, card('ca', '- [ ] design\n- [x] copy\nот B\nот A', 'doing', 2)]
+  expect(rebaseNotes(over, base.slice(0, 2), added, 3)).toBe(over)
+  const lostLine = [board, card('ca', '- [ ] design\n- [x] copy', 'doing', 2)]
+  expect(rebaseNotes(lostLine, base.slice(0, 2), added, 3)[1].body).toBe('- [ ] design\n- [x] copy\nот B')
+})
+
+// Другая сессия записывает свой блокнот сразу после того, как эта прочла хранилище: эта правит уже не свежий
+function writeAfterRead({ saved, meanwhile }: any, change: (value: any) => any) {
+  meanwhile.store = (step: string, key: string) => {
+    if (step !== 'get' || key !== 'notes') return
+    meanwhile.store = undefined
+    elsewhere(saved, 'notes', change)
+  }
+}
+// Другая сессия прочла блокнот до записи этой, а свой записала после: запись этой затёрта
+function staleWrite({ saved, meanwhile }: any, change: (value: any) => any) {
+  let before: any = null
+  meanwhile.store = (step: string, key: string) => {
+    if (key !== 'notes') return
+    if (step === 'before') before = JSON.parse(JSON.stringify(saved.get('notes') ?? null))
+    if (step !== 'set') return
+    meanwhile.store = undefined
+    saved.set('notes', change(before))
+  }
+}
+
+test('блокнот в двух сессиях: правят почти одновременно — ни отметка, ни строка, ни перенос карточки не пропадают', async ($, on) => {
+  const stored = {
+    notes: [
+      { id: 'pb', title: 'Landing page', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } },
+      { id: 'ca', title: 'pricing', body: '- [ ] design\n- [ ] copy', parent: 'pb', at: 1, col: 'doing', pos: 0 },
+      { id: 'cb', title: 'timeline', body: '- [ ] design\n- [ ] copy', parent: 'pb', at: 1, col: 'doing', pos: 1 },
+    ],
+  }
+  const stub = stubs(on, { stored })
+  const { clock, saved } = stub
+  await start($)
+  await clock.advance(200)
+  const page = (id: string) => (saved.get('notes') as any[]).find((p) => p.id === id)
+  const tick = (id: string, item: string) => (list: any) => list.map((p: any) => (p.id === id ? { ...p, body: p.body.replace(`- [ ] ${item}`, `- [x] ${item}`), at: clock.now() } : p))
+  const check = async () => {
+    await clock.advance(NOTES_CHECK_MS)
+    await clock.settle()
+  }
+
+  // Другая сессия отметила пункт в timeline, пока эта отмечала в pricing: обе отметки на месте
+  writeAfterRead(stub, tick('cb', 'design'))
+  expect(await $.tool.call({ tool: NOTES, action: 'check', page: 'ca', item: 'design' })).toMatchObject({ result: 'Ticked: design.' })
+  expect([page('ca').body, page('cb').body]).toEqual(['- [x] design\n- [ ] copy', '- [x] design\n- [ ] copy'])
+
+  // Одна карточка: там отметили пункт, здесь дописали итог — и отметка, и строка
+  writeAfterRead(stub, tick('ca', 'copy'))
+  await $.tool.call({ tool: NOTES, action: 'append', page: 'ca', text: 'Result: done' })
+  expect(page('ca').body).toBe('- [x] design\n- [x] copy\nResult: done')
+
+  // Запись другой сессии легла поверх: та прочла блокнот до переноса pricing в Done. Перенос пропал — через
+  // NOTES_CHECK_MS эта сессия возвращает его, чужая отметка остаётся
+  staleWrite(stub, tick('cb', 'copy'))
+  await $.tool.call({ tool: NOTES, action: 'move', page: 'ca', column: 'done' })
+  expect([page('ca').col, page('cb').body]).toEqual(['doing', '- [x] design\n- [x] copy'])
+  await check()
+  expect([page('ca').col, page('ca').body, page('cb').body]).toEqual(['done', '- [x] design\n- [x] copy\nResult: done', '- [x] design\n- [x] copy'])
+
+  // Правку, сделанную уже после записи, проверка не трогает: pricing вернули в «В работе» — там она и остаётся
+  await $.tool.call({ tool: NOTES, action: 'append', page: 'cb', text: 'Result: done' })
+  await clock.advance(100)
+  elsewhere(saved, 'notes', (list) => list.map((p: any) => (p.id === 'ca' ? { ...p, col: 'doing', at: clock.now() } : p)))
+  await check()
+  await check()
+  expect([page('ca').col, page('cb').body]).toEqual(['doing', '- [x] design\n- [x] copy\nResult: done'])
 })
 
 test('доска проектов в двух сессиях: правки поверх свежего блокнота, удалённые карточка и доска — назад с заметкой', async ($, on) => {
@@ -4873,6 +5012,41 @@ test('доска: очередь для Claude — карточки по одн�
   await turn('t7', 6, () => done('G'))
   expect(submits.length).toBe(7)
   expect(await text('Очередь пройдена: в колонке «Сделать» карточек больше нет.')).toMatchObject({ props: { dimColor: true } })
+})
+
+test('доска: очередь в двух сессиях — перенос карточки в «Готово» затёрла другая сессия, очередь не встаёт', async ($, on) => {
+  const stub = stubs(on, { env: WINDOWS, submit: true })
+  const { clock, saved, submits, toasts } = stub
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const pages = () => saved.get('notes') as any[]
+  const page = (title: string) => pages().find((p) => p.title === title)
+  const board = () => pages().find(isBoard)
+  const col = (title: string) => columnOf(page(title), board().board.cols)
+  const card = (n: number) => submits[n].text.match(/\(id (\w+)\)/)[1]
+
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
+  for (const title of ['A', 'B', 'C']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-menu-boards' })
+  await ui.press({ key: `arcade-desk-${board().id}` })
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(0)).toBe(page('A').id)
+
+  // Claude перенёс A в «Готово», а другая сессия, прочитав блокнот раньше, записала поверх свою правку C
+  await $.turn.start({ turnId: 't1', text: submits[0].text })
+  staleWrite(stub, (list) => list.map((p: any) => (p.title === 'C' ? { ...p, body: 'от другой сессии', at: clock.now() } : p)))
+  await $.tool.call({ tool: NOTES, action: 'move', page: page('A').id, column: 'done' })
+  expect(col('A')).toBe('doing')
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  await clock.advance(10)
+
+  // Конец хода сверяет правки: A — в «Готово», правка C на месте, следующая — B
+  expect([col('A'), page('C').body]).toEqual(['done', 'от другой сессии'])
+  expect(submits.length).toBe(2)
+  expect(card(1)).toBe(page('B').id)
+  expect(toasts.filter((t: string) => t.startsWith('Очередь стоит'))).toEqual([])
+  await ui.unmount()
 })
 
 // Вкладка «Агенты» и очередь доски на несколько сессий. Отметки сессий лежат в домашней папке — USERPROFILE задан

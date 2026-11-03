@@ -259,6 +259,161 @@ export function updateCard(notes, id, change, now) {
   return notes.map((p) => (p.id === id ? { ...next, at: now } : p))
 }
 
+// Правка одной сессии (base → mine) — поверх блокнота cur, который тем временем записала другая сессия: новые
+// страницы — в начало, удалённые — прочь, у изменённых — только поля, которые правила эта сессия. Поле поменяли обе —
+// побеждает эта, только текст сливается по строкам (mergeText). since — правку проверяют позже (hooks/app/work.js,
+// checkNotes): страницу, которую в cur правили после since, не трогаем — её поменяли уже после этой правки, а текст,
+// где правка уже есть, — тоже. Ничего не поменялось — тот же cur. lost — сюда id страниц, где обе правки задели одни
+// строки: там пропала правка из cur
+export function rebaseNotes(cur, base, mine, since, lost) {
+  const was = new Map(base.map((p) => [p.id, p]))
+  const next = new Map(mine.map((p) => [p.id, p]))
+  const have = new Set(cur.map((p) => p.id))
+  let changed = false
+  const kept = []
+  for (const p of cur) {
+    const old = was.get(p.id)
+    if (!old || (since !== undefined && p.at > since)) kept.push(p)
+    else if (!next.has(p.id)) changed = true
+    else {
+      const page = mergePage(p, old, next.get(p.id), lost, since !== undefined)
+      if (page !== p) changed = true
+      kept.push(page)
+    }
+  }
+  const added = mine.filter((p) => !was.has(p.id) && !have.has(p.id))
+  if (!changed && !added.length) return cur
+  const out = [...added, ...kept]
+  const ids = new Set(out.map((p) => p.id))
+  return out.filter((p) => !p.parent || ids.has(p.parent))
+}
+
+const same = (a, b) => a === b || JSON.stringify(a) === JSON.stringify(b)
+
+// Правки одной сессии по порядку ({ base, mine, at }) — для rebaseNotes каждой: страница, которую правили не раз, в
+// каждой такая, какой её оставила последняя правка (удалила — без неё). Иначе ранняя правка, наложенная снова, откатила
+// бы позднюю: отметку, которую потом сняли
+export function latestEdits(writes) {
+  const last = new Map()
+  for (const w of writes) {
+    const was = new Map(w.base.map((p) => [p.id, p]))
+    for (const p of w.mine) if (!same(was.get(p.id), p)) last.set(p.id, p)
+    const now = new Set(w.mine.map((p) => p.id))
+    for (const p of w.base) if (!now.has(p.id)) last.set(p.id, null)
+  }
+  return writes.map((w) => ({ ...w, mine: w.mine.flatMap((p) => (!last.has(p.id) ? [p] : last.get(p.id) ? [last.get(p.id)] : [])) }))
+}
+
+// Страница cur, а в ней — поля, которые эта сессия поменяла (old → next). check — сверка после записи: текст, где
+// правка уже есть (hasEdit), не трогаем
+function mergePage(cur, old, next, lost, check = false) {
+  if (old === next) return cur
+  let page = cur
+  for (const key of new Set([...Object.keys(old), ...Object.keys(next)])) {
+    if (key === 'id' || key === 'at' || same(old[key], next[key]) || same(cur[key], next[key])) continue
+    let value = next[key]
+    if (key === 'body' && !same(cur.body, old.body)) {
+      if (check && hasEdit(cur.body, old.body, next.body)) continue
+      const merged = mergeText(cur.body, old.body, next.body)
+      if (merged.clash) lost?.push(cur.id)
+      value = merged.text
+    }
+    if (same(cur[key], value)) continue
+    if (page === cur) page = { ...cur }
+    if (value === undefined) delete page[key]
+    else page[key] = value
+  }
+  if (page !== cur) page.at = Math.max(cur.at, next.at)
+  return page
+}
+
+// В тексте cur уже есть правка old → mine: каждую строку, которую mine дописал или убрал, cur тоже дописал или убрал,
+// и не меньше раз. Другая сессия записала свой блокнот поверх правки этой (и, может, поправила рядом) — правка на месте.
+// Иначе сверка наложила бы её снова, и строку, дописанную под чужой правкой, — второй раз
+function hasEdit(cur, old, mine) {
+  const count = (text, sign, lines = new Map()) => {
+    for (const line of text.split('\n')) lines.set(line, (lines.get(line) ?? 0) + sign)
+    return lines
+  }
+  const ours = count(mine, 1, count(old, -1))
+  const theirs = count(cur, 1, count(old, -1))
+  for (const [line, n] of ours) {
+    const got = theirs.get(line) ?? 0
+    if (n > 0 ? got < n : n < 0 && got > n) return false
+  }
+  return true
+}
+
+// Текст, который поменяли двое: из old один сделал cur, другой — mine (другая сессия и эта; Claude и набранное в поле
+// «Текст»). Правки в разных местах — в тексте обе: отметили разные пункты чек-листа, дописали в конец, а выше отметили
+// пункт; новые строки в одном месте у обоих — сначала из cur. Задели одни строки — там остаётся mine, а clash: правка
+// из cur в этом месте пропала. Перевод строки в конце — отдельно: дописанная строка его не задевает
+export function mergeText(cur, old, mine) {
+  const ends = (text) => text.endsWith('\n')
+  const split = (text) => (ends(text) ? text.slice(0, -1) : text).split('\n').filter((line, i, all) => all.length > 1 || line)
+  const o = split(old)
+  const theirs = hunks(o, split(cur)).map((h) => ({ ...h, mine: 0 }))
+  const ours = hunks(o, split(mine)).map((h) => ({ ...h, mine: 1 }))
+  // Одну и ту же правку сделали оба — она одна
+  const all = [...theirs.filter((a) => !ours.some((b) => same(a.lines, b.lines) && a.from === b.from && a.to === b.to)), ...ours]
+  all.sort((x, y) => x.from - y.from || x.to - y.to || x.mine - y.mine)
+  const out = []
+  let at = 0
+  let clash = false
+  for (let i = 0; i < all.length; ) {
+    // Правка и всё, что задевает её строки
+    const group = [all[i]]
+    let to = all[i].to
+    for (i++; i < all.length && all[i].from < to; i++) {
+      group.push(all[i])
+      to = Math.max(to, all[i].to)
+    }
+    const both = group.some((h) => h.mine) && group.some((h) => !h.mine)
+    if (both) clash = true
+    for (const h of both ? group.filter((h) => h.mine) : group) {
+      out.push(...o.slice(at, h.from), ...h.lines)
+      at = h.to
+    }
+  }
+  out.push(...o.slice(at))
+  const end = ends(mine) !== ends(old) ? ends(mine) : ends(cur)
+  return { text: out.join('\n') + (end ? '\n' : ''), clash }
+}
+
+// Где строки lines разошлись со старыми o: места from..to старых строк, ставшие lines. Общие строки — самая длинная
+// общая подпоследовательность; разница слишком велика для неё — одно место от первой разницы до последней
+const DIFF_CELLS = 1_000_000
+function hunks(o, lines) {
+  let head = 0
+  while (head < o.length && head < lines.length && o[head] === lines[head]) head++
+  let tail = 0
+  while (tail < o.length - head && tail < lines.length - head && o[o.length - 1 - tail] === lines[lines.length - 1 - tail]) tail++
+  const a = o.slice(head, o.length - tail)
+  const b = lines.slice(head, lines.length - tail)
+  if (!a.length && !b.length) return []
+  if (a.length * b.length > DIFF_CELLS) return [{ from: head, to: head + a.length, lines: b }]
+  // len[i][j] — длина общей подпоследовательности a[i..] и b[j..]
+  const len = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1))
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) len[i][j] = a[i] === b[j] ? len[i + 1][j + 1] + 1 : Math.max(len[i + 1][j], len[i][j + 1])
+  const out = []
+  let i = 0
+  let j = 0
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      i++
+      j++
+      continue
+    }
+    const [from, start] = [i, j]
+    while ((i < a.length || j < b.length) && !(i < a.length && j < b.length && a[i] === b[j])) {
+      if (j < b.length && (i === a.length || len[i][j + 1] >= len[i + 1][j])) j++
+      else i++
+    }
+    out.push({ from: head + from, to: head + i, lines: b.slice(start, j) })
+  }
+  return out
+}
+
 // Строки текста для экрана: заголовок, пункт чек-листа, пункт списка, текст или пустая; index — номер строки в тексте
 export function noteLines(body) {
   return String(body ?? '')

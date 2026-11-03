@@ -25,6 +25,8 @@ export function notesScreen($, e, kit) {
   // Уйти с экрана: набранное в поле «Текст» — сначала в страницу; не поместилось — остаёмся, заметка скажет почему
   const leave = (target) => async () => {
     if (!(await editNotes($, (list) => list))) return
+    // Набранное слилось с правкой другой сессии, но одни строки задели обе: заметка ушла бы вместе с экраном — тостом
+    if (nb.bad) $.ui.toast(tr(nb.note, S.lang))
     nb.note = ''
     nb.bad = false
     nb.confirm = null
@@ -98,6 +100,8 @@ export function notesScreen($, e, kit) {
     const parent = page.parent ? S.notes.find((p) => p.id === page.parent) : null
     const children = S.notes.filter((p) => p.parent === id)
     const lines = noteLines(page.body)
+    // Набранное в поле «Текст» — черновик страницы (nb.draft); from — текст, с которого начали набирать
+    const typed = (value) => ({ id, text: String(value ?? ''), from: nb.draft?.id === id ? nb.draft.from : page.body })
     // Правка текста страницы: change(body) → новый текст, null — не помещается
     const editBody = (change, saved = '') =>
       editNotes(
@@ -325,12 +329,13 @@ export function notesScreen($, e, kit) {
         placeholder: '# Заголовок, - пункт, - [ ] дело',
         submitLabel: tr('Сохранить', S.lang),
         ...(nb.focus === 'text' ? { autoFocus: true } : {}),
-        // Набранное — в черновик, без перерисовки: значение поля не трогаем, пока человек пишет
+        // Набранное — в черновик, без перерисовки: значение поля не трогаем, пока человек пишет. from — текст страницы,
+        // с которого начали: его тем временем поменяли (Claude, другая сессия) — при записи обе правки сольются
         onInput: (value) => {
-          nb.draft = { id, text: String(value ?? '') }
+          nb.draft = typed(value)
         },
         onSubmit: async (value) => {
-          nb.draft = { id, text: String(value ?? '') }
+          nb.draft = typed(value)
           nb.focus = 'text'
           if (!(await editNotes($, (list) => list, 'Сохранено.'))) return
           nb.editing = ''
