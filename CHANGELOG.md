@@ -1,5 +1,14 @@
 # Changelog · Список изменений
 
+## 0.39.1 — у сайта Arcade есть страница о проекте, библиотека переехала на /?library · Arcade's site has an about page, the library moved to /?library
+
+- The bare site address now shows a page about Arcade: what it does, a short video of the board, how to install it; no external scripts, fonts, counters or cookies · голый адрес сайта теперь показывает страницу об Arcade: что он умеет, короткий ролик доски, как установить; без чужих скриптов, шрифтов, счётчиков и cookie
+- The window is the same address with any query: the plugin opens the library as /?library, games, books and tabs as before (?game=, ?book=, ?tab=) · окно — тот же адрес с любым запросом: плагин открывает библиотеку как /?library, игры, книги и вкладки — как раньше (?game=, ?book=, ?tab=)
+- Older plugin versions still get there: the page links to the library, and an own game (#mine=…) goes straight to the window · старые версии плагина тоже доходят: на странице есть ссылка на библиотеку, а своя игра (#mine=…) сразу уходит в окно
+- An own game opened in the window in another language now opens in that language: the language goes in the query, before the part after # · своя игра, открытая в окне на другом языке, теперь открывается на нём: язык идёт в строке запроса, до части после #
+- The plugin's homepage is now the site · домашняя страница плагина — теперь сайт
+- Friends in Desktop: the add field has its hint inside it and no longer gets squeezed by a label on its left; friends, requests and buttons no longer stick to each other edge to edge · друзья в Desktop: подсказка поля «Добавить друга» — в самом поле, подпись слева его больше не сжимает; друзья, заявки и кнопки больше не слипаются рамками
+
 ## 0.39.0 — вкладка «Агенты»: все сессии Claude Code на этом компьютере, одна очередь доски на несколько сессий · the Agents tab: every Claude Code session on this computer, one board queue across several sessions
 
 - *Agents*, the fourth tile in *Work*, lists the Claude Code sessions with Arcade on this computer, each named by its folder (in a git worktree, with the repository's name first), this one marked *this session*: waiting for permission, finished the turn, working or idle, and for how long, with its card and its place in the queue, like *Queue: card 3 of 10*. Sessions waiting for permission come first. In Desktop each session is a card, in the terminal and VS Code a line · «Агенты», четвёртая плитка «Работы», — сессии Claude Code с Arcade на этом компьютере, каждая по имени своей папки (в git worktree — с именем репозитория впереди), эта отмечена «эта сессия»: ждёт разрешения, закончил ход, работает или свободна и сколько времени, с её карточкой и местом в очереди, например «Очередь: карточка 3 из 10». Сессии, которые ждут разрешения, — первыми. В Desktop каждая сессия — карточка, в терминале и VS Code — строка

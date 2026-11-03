@@ -81,6 +81,20 @@ assert.equal(catalog.games.thwaite.license.commit, '00e36745188bc165990f60eed6b0
 for (const f of ['index.html', 'boot.js', 'library.js', 'game.js', 'stats.js', 'jsnes.js', 'licenses/jsnes/LICENSE.txt']) {
   assert.ok(fs.existsSync(path.join(out, f)), f)
 }
+// Страница о проекте (голый корень сайта): ролик, кадр-заставка, картинка превью ссылки и значок — с того же адреса
+{
+  for (const f of ['about.html', 'about-board.mp4', 'about-poster.jpg', 'about-card.png', 'arcade-logo.svg']) assert.ok(fs.existsSync(path.join(out, f)), f)
+  const about = fs.readFileSync(path.join(out, 'about.html'), 'utf8')
+  // Без внешних скриптов, шрифтов, рамок и счётчиков: в privacy.html — «no analytics»
+  for (const [, attr, value] of about.matchAll(/\b(src|poster|href)="([^"]*)"/g)) {
+    if (attr === 'href' && /^https:\/\/(github\.com|www\.youtube\.com|agent-arcade\.fefaodessa\.workers\.dev)\//.test(value)) continue // ссылки, не загрузки
+    assert.ok(!value.includes('//'), `${attr}="${value}" — с того же адреса`)
+  }
+  assert.ok(!/rel="stylesheet"|<iframe|@import|@font-face/i.test(about), 'без внешних стилей, шрифтов и рамок')
+  // Старые версии мода открывают голый корень — ссылка в окно и переход по хешу окна (#mine=…)
+  assert.match(about, /href="\/\?library"/)
+  assert.match(about, /location\.replace\('\/\?library' \+ location\.hash\)/)
+}
 const headers = fs.readFileSync(path.join(out, '_headers'), 'utf8')
 assert.match(headers, /\/files\/\*\n  Cache-Control: public, max-age=31536000, immutable/)
 assert.match(headers, /\/catalog\.json\n  Cache-Control: public, max-age=60/)

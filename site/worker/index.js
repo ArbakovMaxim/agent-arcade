@@ -125,6 +125,10 @@ export default {
       forward.headers.set('X-Room', room[2])
       return space.get(space.idFromName(room[2])).fetch(forward)
     }
+    // Голый адрес сайта без строки запроса — страница о проекте (about.html); окно — тот же корень с любым запросом,
+    // мод открывает библиотеку как /?library. «/?» с пустым запросом — тоже окно: url.search для него пустой, а в
+    // самом адресе «?» есть — так раньше вела в библиотеку кнопка окна
+    if (url.pathname === '/' && !request.url.includes('?')) return env.ASSETS.fetch(new Request(new URL('/about', url), request))
     // Плеер с игрой, которой нужна изоляция (isolated в каталоге): заголовки страницы — здесь, _headers к ответам
     // кода не применяется. Остальные страницы — статика как есть
     if (url.pathname === '/' && ISOLATED_GAMES.has(url.searchParams.get('game'))) {

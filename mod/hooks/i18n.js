@@ -416,6 +416,7 @@ const EXACT = {
   'Друзья добавляют тебя по нему, а ты их — по их @нику.': 'Friends add you by it, and you add them by their @handle.',
   'Добавить друга': 'Add a friend',
   '@ник друга, точно как есть': "your friend's @handle, exactly",
+  'Добавить друга: @ник, точно как есть': "Add a friend: their @handle, exactly",
   'Отправляю заявку…': 'Sending the request…',
   'Подсказок по буквам нет: заявка дойдёт, только если ник написан точно.': 'There are no suggestions as you type: a request only arrives if the handle is spelled exactly.',
   'Заявки тебе': 'Requests for you',
