@@ -70,7 +70,7 @@ export async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', agents }: any = {}) {
+export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', agents, ask, deny, questionMs = 0 }: any = {}) {
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
@@ -164,9 +164,18 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     if (detect === 'fail') return { deny: 'powershell.exe not found' }
     return { value: { exitCode: 0, stdout: '\ufeff' + DETECTED + '\r\n', stderr: '' } }
   })
-  on('store.get', ($: any, e: any) => ({ value: saved.get(e.key) }))
+  // Другая сессия между чтением и записью этой: meanwhile.store(шаг, ключ) — после чтения ('get'), перед записью
+  // ('before') и после неё ('set')
+  const meanwhile: { store?: (step: string, key: string) => void } = {}
+  on('store.get', ($: any, e: any) => {
+    const value = saved.get(e.key)
+    meanwhile.store?.('get', e.key)
+    return { value }
+  })
   on('store.set', ($: any, e: any) => {
+    meanwhile.store?.('before', e.key)
     saved.set(e.key, e.value)
+    meanwhile.store?.('set', e.key)
     return { value: undefined }
   })
   on('store.delete', ($: any, e: any) => {
@@ -240,6 +249,8 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   // Инструмент агента, который идёт не сразу: Bash заканчивается через пару секунд по часам теста (часы теста идут
   // медленно — игровой цикл Arcade тикает каждые 33 мс, — так что минуту тест не дождался бы)
   on('tool.call', ($: any, e: any) => {
+    // Вопрос Claude (AskUserQuestion) человек не отвечает questionMs по часам теста — потом диалог закрыт без ответа
+    if (e.tool === 'AskUserQuestion' && questionMs) return clock.sleep(questionMs).then(() => ({ result: { questions: e.questions, answers: {} } }))
     if (e.tool === 'Bash') return clock.sleep(bashMs).then(() => ({ result: 'ok', text: 'ok' }))
     const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(e.tool) ?? []
     const { tool: _name, tool_use_id: _id, consent, ...args } = e
@@ -261,8 +272,12 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     return { value: undefined }
   })
   // Решение по разрешениям без плагинов: спросить человека. Вызов самого Claude (из теста он идёт от движка) человек
-  // разрешил: тест говорит «Claude открыл игру». Вопрос без вызова ($.tool.check) и вызовы мода — «спросить»
-  on('tool.check', ($: any, e: any, next: any) => ({ decision: e.tool_use_id && next?.origin?.plugin === 'engine' ? 'allow' : 'ask' }))
+  // разрешил: тест говорит «Claude открыл игру». Вопрос без вызова ($.tool.check) и вызовы мода — «спросить»; вызовы
+  // Claude, которые выбрал тест (ask), — тоже. В вызовах, которые тест выбрал в deny, человек отказал
+  on('tool.check', ($: any, e: any, next: any) => {
+    if (deny?.(e)) return { decision: 'deny' }
+    return { decision: ask?.(e) || !(e.tool_use_id && next?.origin?.plugin === 'engine') ? 'ask' : 'allow' }
+  })
   // Просьба от мода Claude: принята (submit: true) или нет — тогда, как и без отказа в разрешении, поле ввода
   on('prompt.submit', ($: any, e: any) => {
     submits.push(e)
@@ -277,7 +292,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard }
+  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard }
 }
 
 export const BASH_MS = 2_000

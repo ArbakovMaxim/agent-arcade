@@ -3,6 +3,10 @@ import { frameToSvg, screenSize } from '../nes-screen.js'
 import { ACTIONS, COLS, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, INPUT, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, PANE, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, ROWS, S } from '../app/state.js'
 import { cellsOf, fieldRows, first, flappyLine, freeRows, pixelMode, screenContent, toLibrary } from '../app/play.js'
 
+// Что с агентом, пока идёт игра: на паузе и на плашке над экраном
+const ALERT_PAUSE = { permission: 'агент ждёт разрешения', question: 'агент задал вопрос' }
+const ALERT_BAR = { permission: ' Агент ждёт разрешения ', question: ' Агент задал вопрос ' }
+
 export function gameScreen($, e, kit) {
   const { Box, Button, Client, Image, Raster, Svg, Text, eventLines, game, header, terminal } = kit
   const libraryButton = Button({
@@ -24,7 +28,7 @@ export function gameScreen($, e, kit) {
   const message = S.paused
     ? Text({
         color: 'warning',
-        children: [`Пауза: ${S.agentAlert === 'permission' ? 'агент ждёт разрешения' : 'агент закончил'}. Любая клавиша игры — играть дальше, Esc — к агенту`],
+        children: [`Пауза: ${ALERT_PAUSE[S.agentAlert] ?? 'агент закончил'}. Любая клавиша игры — играть дальше, Esc — к агенту`],
       })
     : S.mode === 'assign'
       ? Text({ color: 'warning', children: [`${S.notice} Нажми клавишу для «${ACTIONS[S.assignStep].label}» (${S.assignStep + 1} из ${ACTIONS.length})`] })
@@ -58,8 +62,8 @@ export function gameScreen($, e, kit) {
             Text({
               bold: true,
               color: 'black',
-              backgroundColor: S.agentAlert === 'permission' ? 'yellow' : 'green',
-              children: [`${S.agentAlert === 'permission' ? ' Агент ждёт разрешения ' : ' Агент закончил '}${S.paused ? '· пауза ' : ''}`],
+              backgroundColor: S.agentAlert === 'done' ? 'green' : 'yellow',
+              children: [`${ALERT_BAR[S.agentAlert] ?? ' Агент закончил '}${S.paused ? '· пауза ' : ''}`],
             }),
             Button({ key: 'arcade-to-agent', label: 'К агенту', onPress: async () => { await $.ui.close({ id: PANE }) } }),
             Button({

@@ -31,6 +31,10 @@ const EXACT = {
   ' Агент закончил · пауза ': ' Agent finished · paused ',
   ' Агент ждёт разрешения ': ' Agent is waiting for permission ',
   ' Агент ждёт разрешения · пауза ': ' Agent is waiting for permission · paused ',
+  'Агент задал вопрос — Esc, чтобы ответить': 'Agent asked a question — Esc to answer',
+  'Агент задал вопрос': 'Agent asked a question',
+  ' Агент задал вопрос ': ' Agent asked a question ',
+  ' Агент задал вопрос · пауза ': ' Agent asked a question · paused ',
   'К агенту': 'Back to agent',
   'Играть дальше': 'Keep playing',
   // Меню
@@ -259,6 +263,7 @@ const EXACT = {
   'Общие доски на сайте сейчас выключены.': 'Shared boards are turned off on the site right now.',
   'Открытую карточку удалили на общей доске.': 'The open card was deleted on the shared board.',
   'Открытую страницу удалили в другой сессии.': 'The open page was deleted in another session.',
+  'Те же строки тем временем поменяли в другой сессии — осталась правка отсюда.': 'The same lines were changed in another session meanwhile — the edit from here stayed.',
   'Открытую карточку удалили в другой сессии.': 'The open card was deleted in another session.',
   'Открытую доску удалили в другой сессии.': 'The open board was deleted in another session.',
   'Доска на сайте полна — часть карточек осталась только у тебя.': 'The board on the site is full — some cards stayed only with you.',
@@ -980,6 +985,7 @@ const EXACT = {
   'Очередь остановлена. Claude доделает текущую карточку, следующую не получит.': "Queue stopped. Claude will finish the current card but won't get the next one.",
   'Очередь остановлена: Claude получил другую просьбу.': 'Queue stopped: Claude got a different request.',
   'Очередь остановлена: Claude спросил разрешения. Ответь ему и запусти очередь снова.': 'Queue stopped: Claude asked for permission. Answer Claude and start the queue again.',
+  'Очередь остановлена: Claude задал вопрос. Ответь ему и запусти очередь снова.': 'Queue stopped: Claude asked a question. Answer Claude and start the queue again.',
   'Очередь остановлена: ход Claude прервали.': "Queue stopped: Claude's turn was interrupted.",
   'Очередь остановлена: Claude не закончил ход — ошибка или отказ.': "Queue stopped: Claude didn't finish the turn — an error or a refusal.",
   'Очередь стоит: Claude закончил ход, а карточка': 'Queue paused: Claude finished the turn, but the card',
@@ -1019,6 +1025,11 @@ const EXACT = {
   'Другая сессия закончила ход: нет': 'Another session finished its turn: off',
   '  всплывашка в панели Arcade, без звука': '  a toast in the Arcade pane, no sound',
   'Сессия «{0}» ждёт разрешения': 'Session “{0}” is waiting for permission',
+  'Сессия «{0}» ждёт ответа на вопрос': 'Session “{0}” is waiting for an answer to a question',
+  'Разрешение даётся только в самой сессии.': 'Permission can only be given in that session itself.',
+  'Ответить': 'Answer',
+  'Ответ отправлен — сессия получит его через секунду.': 'Answer sent — the session will get it within a second.',
+  'Скрытые сессии — нажми, чтобы вернуть:': 'Hidden sessions — press one to bring it back:',
   'В сессии «{0}» Claude закончил ход': 'In session “{0}”, Claude finished the turn',
   'блокнот, доска проектов, календарь и агенты': 'notebook, project board, calendar and agents',
 }
@@ -1164,8 +1175,8 @@ const RULES = [
   [/^Открой во встроенном браузере: (.+)$/, (m) => `Open in the built-in browser: ${m[1]}`],
   [/^Попроси Claude открыть во встроенном браузере: (.+)$/, (m) => `Ask Claude to open this in the built-in browser: ${m[1]}`],
   [/^Не получилось открыть окно: (.+)$/, (m) => `Could not open the window: ${m[1].replace(/^код (\d+)$/, 'code $1')}`],
-  [/^Пауза: (агент ждёт разрешения|агент закончил)\. Любая клавиша игры — играть дальше, Esc — к агенту$/,
-    (m) => `Paused: ${m[1] === 'агент закончил' ? 'the agent finished' : 'the agent is waiting for permission'}. Any game key — keep playing, Esc — back to the agent`],
+  [/^Пауза: (агент ждёт разрешения|агент задал вопрос|агент закончил)\. Любая клавиша игры — играть дальше, Esc — к агенту$/,
+    (m) => `Paused: ${paused(m[1])}. Any game key — keep playing, Esc — back to the agent`],
   [/^Не узнаю клавишу «(.+)»\. Назначим управление под твою раскладку\.$/, (m) => `I don't recognize the key “${m[1]}”. Let's set up the controls for your layout.`],
   [/^(.*)Нажми клавишу для «(.+)» \((\d+) из (\d+)\)$/, (m) => `${tr(m[1].trim(), 'en')} Press the key for “${words(m[2])}” (${m[3]} of ${m[4]})`.trim()],
   [/^Нажатия: (.*)$/, (m) => `Pressed: ${m[1]}`],
@@ -1179,15 +1190,20 @@ const RULES = [
   [/^(\d\d:\d\d(?::\d\d)?) (.+)$/, (m) => `${m[1]} ${EVENTS[m[2]] ?? event(m[2])}`],
 ]
 
+// Не словарём: фразы целиком — в шаблонах «Paused: …» (tools/i18n/templates.json), отдельно их не переводят
+const paused = (why) => (why === 'агент закончил' ? 'the agent finished' : why === 'агент задал вопрос' ? 'the agent asked a question' : 'the agent is waiting for permission')
 const EVENTS = {
   'агент начал ход': 'the agent started a turn',
   'агент закончил ход': 'the agent finished the turn',
   'агент снова работает': 'the agent is working again',
+  'Claude задал вопрос': 'Claude asked a question',
+  'ответ на вопрос пришёл из «Агентов»': 'the answer to the question came from “Agents”',
   'Arcade открыта сама: в другой сессии её оставили открытой': 'Arcade opened on its own: it was left open in another session',
 }
 const event = (t) =>
   t
     .replace(/^запрос разрешения: (.+)$/, (_, tool) => `permission request: ${tool === 'инструмент' ? 'a tool' : tool}`)
+    .replace(/^ответ на вопрос ушёл сессии «(.+)»$/, 'the answer was sent to the session “$1”')
     .replace(/^каталог с сайта не получен: (.+)$/, 'could not get the catalog from the site: $1')
     .replace(/^не удалось найти браузеры: (.+)$/, 'could not find browsers: $1')
     .replace(/^уведомление не показалось: (.+)$/, 'the notification did not show: $1')

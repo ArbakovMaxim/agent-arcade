@@ -1,7 +1,7 @@
 // Arcade: блокнот и доски проектов.
 import { clipboardCommand, openUrlCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
-import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, issueUrl, restoreNotes, updateCard, updatePage } from '../notes.js'
+import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, issueUrl, latestEdits, mergeText, rebaseNotes, restoreNotes, updateCard, updatePage } from '../notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../desks.js'
 import { LAUNCH_TIMEOUT_MS, S, nb } from './state.js'
 import { log } from './status.js'
@@ -15,6 +15,7 @@ import { MAX_TEXT, parseSent } from '../chats.js'
 // --- Блокнот ------------------------------------------------------------------------------------------------------
 const NOTES_FULL = 'Блокнот полон — удали ненужные страницы.'
 export const NOTE_TOO_LONG = 'Текст страницы длиннее 20 000 знаков — сократи его.'
+const LINES_CLASH = 'Те же строки тем временем поменяли в другой сессии — осталась правка отсюда.'
 export const CONNECTOR_HINT = '  Через коннекторы Claude: ключи и пароли Arcade не нужны. Нет коннектора — Claude подскажет, как подключить.'
 // Голосовой ввод — диктовкой системы: она пишет в любое поле, где курсор, и в поля Arcade тоже
 export const VOICE_HINT = {
@@ -24,13 +25,20 @@ export const VOICE_HINT = {
 
 // Блокнот и общие доски в $.store — одни на все открытые сессии Claude Code, а у каждой сессии — своя копия в памяти
 // (S.notes, S.desks). Поэтому всякая правка — по очереди (queue) и поверх свежего блокнота: перечитать хранилище
-// (readNotes), поправить, записать. Тогда сессия не стирает чужое: удалённая в другой сессии страница не вернётся, а
-// добавленная не пропадёт. Блокнот и доски такими, какими их последний раз прочли или записали, — JSON-строкой:
-// поменялись ли они в хранилище, видно сравнением строк
+// (readNotes), поправить, записать (saveNotes). Тогда сессия не стирает чужое: удалённая в другой сессии страница не
+// вернётся, а добавленная не пропадёт. Но две сессии пишут и почти одновременно — запись одной ложится на запись
+// другой. Поэтому saveNotes кладёт правку поверх того, что другая сессия успела записать, а через NOTES_CHECK_MS
+// проверяет, что правка на месте (checkNotes). Блокнот и доски такими, какими их последний раз прочли или записали, —
+// JSON-строкой: поменялись ли они в хранилище, видно сравнением строк
 let notesJson = ''
 let desksJson = ''
 let deskJsons = {} // по общим доскам: share → JSON
 let queue = Promise.resolve()
+// Записи блокнота этой сессией за последние NOTES_CHECK_MS — что проверить: { base — блокнот до правки, mine — после,
+// at — когда записан }; checkTimer — когда проверить
+let writes = []
+let checkTimer = null
+export const NOTES_CHECK_MS = 2_000
 
 // Работа с блокнотом: в очередь, сначала — свежий блокнот (work получает ответ readNotes). Изнутри work снова в очередь
 // не вставать — очередь ждала бы сама себя
@@ -93,12 +101,58 @@ export function refreshNotes($) {
 }
 export const notesShown = () => /^(notes|boards)$|^(note|board):/.test(S.menu)
 
-async function saveNotes($) {
-  notesJson = JSON.stringify(S.notes)
-  await $.store.set('notes', S.notes).catch((err) => {
+// Записать правку блокнота: base — блокнот до неё, S.notes — после. Другая сессия, пока эта правила, записала свой —
+// правка ложится поверх него (rebaseNotes). check — через NOTES_CHECK_MS проверить, что правка на месте. Только в
+// очереди (fresh)
+async function saveNotes($, base, check = true) {
+  const mine = S.notes
+  try {
+    const raw = await $.store.get('notes')
+    const json = JSON.stringify(raw ?? null)
+    if (json !== notesJson) {
+      notesJson = json
+      const lost = []
+      follow($, rebaseNotes(restoreNotes(raw), base, mine, undefined, lost))
+      clashNote(lost.length > 0)
+    }
+    notesJson = JSON.stringify(S.notes)
+    await $.store.set('notes', S.notes)
+  } catch (err) {
     nb.note = 'Не получилось сохранить блокнот.'
     nb.bad = true
     log(`ошибка мода: ${err?.message ?? err}`)
+    return
+  }
+  if (!check) return
+  writes.push({ base, mine, at: await $.clock.now() })
+  checkLater($)
+}
+
+// Другая сессия прочла блокнот до записи этой, а записала свой после — правка этой пропала. Правки за последние
+// NOTES_CHECK_MS — снова поверх свежего блокнота; страницу, которую правили уже после правки, не трогаем. Что вернула
+// проверка, снова не проверяем: две сессии, поменявшие одно поле, иначе возвращали бы каждая своё без конца
+function checkLater($) {
+  if (checkTimer) return
+  checkTimer = $.clock.after(NOTES_CHECK_MS, () => {
+    checkTimer = null
+    checkNotes($).catch(modError)
+  })
+}
+export function checkNotes($) {
+  return fresh($, async () => {
+    const now = await $.clock.now()
+    let list = S.notes
+    const lost = []
+    for (const w of latestEdits(writes)) list = rebaseNotes(list, w.base, w.mine, w.at, lost)
+    writes = writes.filter((w) => now - w.at < NOTES_CHECK_MS)
+    if (list !== S.notes) {
+      log('блокнот: другая сессия затёрла правку этой — вернул')
+      const base = S.notes
+      follow($, list)
+      clashNote(lost.length > 0)
+      await saveNotes($, base, false)
+      pushBoards($)
+    } else if (writes.length) checkLater($)
   })
 }
 
@@ -147,11 +201,12 @@ function follow($, list, site = false) {
 
 // Блокнот поменялся: поля страницы рисуются заново с новым текстом. entries — что из этого записать в итоги дня
 async function notesChanged($, list, entries = []) {
+  const base = S.notes
   S.notes = list
   nb.draft = null
   nb.field++
   $.ui.invalidate('ui.render')
-  await saveNotes($)
+  await saveNotes($, base)
   pushBoards($)
   await logDay($, entries)
 }
@@ -163,13 +218,25 @@ async function logDay($, entries) {
   await $.store.set('daylog', addLog(restoreLog(raw), entries, entries[0].at)).catch(modError)
 }
 
-// Набранное в поле «Текст» — в страницу (в списке list). Не помещается — null
+// Обе правки задели одни строки: осталась правка этой сессии, а человеку — заметка
+function clashNote(clash) {
+  if (!clash) return
+  nb.note = LINES_CLASH
+  nb.bad = true
+}
+
+// Набранное в поле «Текст» — в страницу (в списке list). Пока набирали, страницу поменяли не из поля (Claude, другая
+// сессия): набранное — поверх её свежего текста по строкам (mergeText), и обе правки на месте; задели одни строки —
+// clash. Не помещается — list: null
 function withDraft(list, at) {
   const draft = nb.draft
   const page = draft && list.find((p) => p.id === draft.id)
-  if (!page || draft.text === page.body) return list
-  if (draft.text.length > MAX_BODY) return null
-  return updatePage(list, page.id, { body: cleanBody(draft.text) }, at)
+  if (!page || draft.text === page.body) return { list }
+  if (draft.text.length > MAX_BODY) return { list: null }
+  const typed = cleanBody(draft.text)
+  const { text, clash } = draft.from === page.body ? { text: typed, clash: false } : mergeText(page.body, draft.from, typed)
+  if (text.length > MAX_BODY) return { list: null }
+  return { list: updatePage(list, page.id, { body: text }, at), clash }
 }
 
 // Правка с экрана, вместе с набранным в поле «Текст»: change(list, at) → новый список или текст беды. Ложится поверх
@@ -179,11 +246,11 @@ export function editNotes($, change, saved = '') {
   return fresh($, async (moved) => {
     if (moved === 'gone') return null
     const at = await $.clock.now()
-    const base = withDraft(S.notes, at)
+    const { list: base, clash } = withDraft(S.notes, at)
     const next = base && change(base, at)
     const problem = !base ? NOTE_TOO_LONG : typeof next === 'string' ? next : fits(next) ? '' : NOTES_FULL
-    nb.note = problem || saved
-    nb.bad = Boolean(problem)
+    nb.note = problem || (clash ? LINES_CLASH : saved)
+    nb.bad = Boolean(problem || clash)
     if (problem) {
       $.ui.invalidate('ui.render')
       return false
@@ -199,7 +266,9 @@ export function editNotes($, change, saved = '') {
 export function notesTool($, input) {
   return fresh($, async () => {
     const at = await $.clock.now()
-    const base = withDraft(S.notes, at) ?? S.notes
+    const draft = withDraft(S.notes, at)
+    clashNote(draft.clash)
+    const base = draft.list ?? S.notes
     const out = applyNotesTool(base, input, at, cardId)
     if (out.changed || base !== S.notes) await notesChanged($, out.notes, [...noteChanges(S.notes, base, at, 'me'), ...noteChanges(base, out.notes, at, 'claude')])
     return out
@@ -529,8 +598,9 @@ export function shownBoard() {
 
 // Блокнот поменялся сверкой с сайтом: экран идёт за ним (follow), блокнот — в хранилище. Только в очереди (fresh)
 async function boardChanged($, list) {
+  const base = S.notes
   follow($, list, true)
-  await saveNotes($)
+  await saveNotes($, base)
 }
 
 // Сверка общей доски share с сайтом: свои правки — туда, чужие — сюда. Пока одна сверка идёт, вторая ждёт (again);
