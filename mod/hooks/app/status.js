@@ -98,7 +98,7 @@ export function workedText(seconds) {
 
 export function statusText(now) {
   if (S.status === 'working') return `Агент работает ${workedText(workedSeconds(now))}`
-  if (S.status === 'permission') return 'Агент ждёт разрешения — Esc, чтобы ответить'
+  if (S.status === 'permission') return S.ask?.kind === 'question' ? 'Агент задал вопрос — Esc, чтобы ответить' : 'Агент ждёт разрешения — Esc, чтобы ответить'
   if (S.status === 'done') return 'Агент закончил — Esc, чтобы вернуться'
   return 'Агент свободен'
 }

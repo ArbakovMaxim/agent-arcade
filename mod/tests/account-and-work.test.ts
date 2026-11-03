@@ -14,8 +14,10 @@ import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/app/agents.js'
+import { ANSWER_POLL_MS, asksReset, checkObserved, toolDecided } from '../hooks/app/asks.js'
+import { S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
-import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test } from './kit.ts'
+import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test, BASH_MS } from './kit.ts'
 
 // --- Аккаунт: вход через GitHub и настройки на всех компьютерах ---
 
@@ -5374,6 +5376,274 @@ test('агенты: другая сессия ждёт разрешения — 
   await state('permission')
   await state('done')
   expect(about()).toEqual(['Сессия «docs» ждёт разрешения', 'В сессии «docs» Claude закончил ход'])
+  await ui.unmount()
+})
+
+test('агенты: крестик скрывает другую сессию — её нет в списке и всплывашек о ней нет; «Скрытые» возвращают; помнится в хранилище, скрытое в другой сессии видно сразу', async ($, on) => {
+  const { clock, saved, toasts, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { agentsHidden: ['sess-c'] } })
+  const rival = agentFile(putFile, clock, disk)
+  const api = { sid: 'sess-a', name: 'api', path: 'D:\\work\\api', status: 'working', since: -60_000 }
+  const docs = { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'idle', since: -60_000 }
+  const site = { sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'idle', since: -60_000 }
+  const marks = (over: any = {}) => {
+    rival(3, { ...api, ...over.api })
+    rival(9, { ...docs, ...over.docs })
+    rival(12, { ...site, ...over.site })
+  }
+  marks()
+  await start($)
+  await clock.advance(10_000)
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-agents' })
+  await clock.advance(AGENT_TICK_MS)
+  // «site» скрыли раньше — её нет в списке, она в «Скрытых»; у этой сессии крестика нет
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-a', 'agents-card-sess-b', 'agents-card-sess-me'])
+  expect(await ui.find({ key: 'agents-hide-sess-a' })).toMatchObject({ props: { label: '×', plain: true } })
+  expect(await ui.find({ key: 'agents-hide-sess-me' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Скрытые сессии — нажми, чтобы вернуть:' })).toBeDefined()
+  expect(await ui.find({ key: 'agents-show-sess-c' })).toMatchObject({ props: { label: 'site' } })
+
+  // Крестик у «api»: её нет в списке, она в «Скрытых»; запомнено вместе с тем, что скрыли раньше
+  await ui.press({ key: 'agents-hide-sess-a' })
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-b', 'agents-card-sess-me'])
+  expect(saved.get('agentsHidden')).toEqual(['sess-c', 'sess-a'])
+  // Скрытая ждёт разрешения — всплывашки нет, а в «Скрытых» она так и подписана
+  marks({ api: { status: 'permission', ask: { kind: 'permission', tool: 'Bash', what: 'npm test' } }, docs: { status: 'permission' } })
+  await clock.advance(AGENT_READ_MS + AGENT_TICK_MS)
+  expect(toasts.filter((t) => t.startsWith('Сессия «'))).toEqual(['Сессия «docs» ждёт разрешения'])
+  expect(await ui.find({ key: 'agents-show-sess-a' })).toMatchObject({ props: { label: 'api · ждёт разрешения' } })
+  // Терминал: крестик — рядом с именем другой сессии, у своей его нет
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await boxKeys(term, 'agents-line-')).toEqual(['agents-line-sess-b', 'agents-line-sess-me'])
+  expect(await term.find({ key: 'agents-hide-sess-b' })).toBeDefined()
+  await term.unmount()
+
+  // Вернуть «site» — она снова в списке; «api» остаётся скрытой
+  await ui.press({ key: 'agents-show-sess-c' })
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-b', 'agents-card-sess-c', 'agents-card-sess-me'])
+  expect(saved.get('agentsHidden')).toEqual(['sess-a'])
+  await ui.press({ key: 'agents-show-sess-a' })
+  expect(saved.get('agentsHidden')).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'Скрытые сессии — нажми, чтобы вернуть:' })).toBeUndefined()
+
+  // «docs» скрыли в другой сессии — здесь она уходит в «Скрытые» со следующим чтением отметок, без перезапуска
+  saved.set('agentsHidden', ['sess-b'])
+  await clock.advance(AGENT_TICK_MS)
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-a', 'agents-card-sess-c', 'agents-card-sess-me'])
+  expect(await ui.find({ key: 'agents-show-sess-b' })).toMatchObject({ props: { label: 'docs · ждёт разрешения' } })
+  await ui.unmount()
+})
+
+test('агенты: вопрос Claude этой сессии — в её отметке; ответ из «Агентов» другой сессии модель получает как ответ человека, чужой или неверный — нет; ответить можно и из своей вкладки', HEAVY, async ($, on) => {
+  const { clock, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, questionMs: 60_000 })
+  await start($)
+  await clock.advance(4_000)
+  const questions = [{ question: 'Какую базу взять?', header: 'База', options: [{ label: 'Postgres', description: '' }, { label: 'SQLite', description: 'проще' }], multiSelect: false }]
+  const ask = () => {
+    const got = { out: 'pending' as any }
+    $.tool.call({ tool: 'AskUserQuestion', questions }).then((r: any) => (got.out = r))
+    return got
+  }
+  const first = ask()
+  await clock.advance(AGENT_TICK_MS)
+  const rec = ownRecord(disk)
+  expect(rec).toMatchObject({ status: 'permission', ask: { kind: 'question', questions: [{ question: 'Какую базу взять?', header: 'База', options: ['Postgres', 'SQLite'], multi: false }] } })
+  const slot = agentSlots(disk).find((x) => x.rec.sid === AG_ME.sid)!.slot
+  const answer = (body: any) => putFile(`${AG_DIR}\\a${slot}.json`, JSON.stringify({ v: 1, to: AG_ME.sid, id: rec.ask.id, picks: [['SQLite']], at: clock.now(), ...body }))
+  // Ответ другой сессии, на другой вопрос, вариант не из списка, два варианта там, где можно один, — не ответ
+  for (const wrong of [{ to: 'sess-x' }, { id: 'other' }, { picks: [['MySQL']] }, { picks: [['Postgres', 'SQLite']] }, { picks: [] }, { v: 2 }]) {
+    answer(wrong)
+    await clock.advance(ANSWER_POLL_MS * 2)
+  }
+  expect(first.out).toBe('pending')
+  answer({})
+  await clock.advance(ANSWER_POLL_MS)
+  expect(first.out).toEqual({ result: { questions, answers: { 'Какую базу взять?': 'SQLite' } } })
+  await clock.advance(AGENT_TICK_MS)
+  expect(ownRecord(disk)).toMatchObject({ status: 'working', ask: null })
+
+  // Свой вопрос — кнопками в своей строке вкладки
+  const second = ask()
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-agents' })
+  expect(await ui.find({ key: 'agents-ask-sess-me' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^web · эта сессия — ждёт ответа · / })).toBeDefined()
+  expect(await ui.find({ key: 'agents-q-sess-me-0-0' })).toMatchObject({ props: { label: 'Postgres' } })
+  await ui.press({ key: 'agents-q-sess-me-0-0' })
+  await clock.advance(ANSWER_POLL_MS)
+  expect(second.out).toEqual({ result: { questions, answers: { 'Какую базу взять?': 'Postgres' } } })
+  expect(await ui.find({ key: 'agents-ask-sess-me' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('агенты: вопрос другой сессии — ответить кнопками в её карточке, ответ уходит файлом в её место; запрос разрешения — только текст, разрешают в самой сессии', async ($, on) => {
+  const { clock, disk, putFile, toasts } = stubs(on, { env: AG_ENV, agents: AG_ME })
+  const rival = agentFile(putFile, clock, disk)
+  const one = { kind: 'question', id: 'q1', questions: [{ question: 'Какую базу взять?', header: 'База', options: ['Postgres', 'SQLite'], multi: false }] }
+  const two = {
+    kind: 'question',
+    id: 'q2',
+    questions: [
+      { question: 'Что проверить?', header: '', options: ['Тесты', 'Линтер', 'Типы'], multi: true },
+      { question: 'Куда выложить?', header: 'Ветка', options: ['main', 'dev'], multi: false },
+    ],
+  }
+  const docs = { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working', since: -60_000 }
+  const site = { sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'permission', since: -2 * 60_000, ask: { kind: 'permission', tool: 'Bash', what: 'npm test' } }
+  const api = { sid: 'sess-a', name: 'api', status: 'permission', since: -3 * 60_000, ask: two }
+  // Отметки соперников — до старта: места ровно эти
+  rival(9, docs)
+  rival(12, site)
+  rival(3, api)
+  await start($)
+  // Первое чтение только запоминает, что видно
+  await clock.advance(10_000)
+  rival(9, { ...docs, status: 'permission', ask: one })
+  rival(12, site)
+  rival(3, api)
+  await clock.advance(AGENT_READ_MS + AGENT_TICK_MS)
+  expect(toasts.filter((t) => t.includes('«docs»'))).toEqual(['Сессия «docs» ждёт ответа на вопрос'])
+
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await term.press({ key: 'arcade-menu-agents' })
+  await term.unmount()
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const label = async (key: string) => (await ui.find({ key }))?.props?.label
+  expect(await boxKeys(ui, 'agents-card-')).toEqual(['agents-card-sess-a', 'agents-card-sess-c', 'agents-card-sess-b', 'agents-card-sess-me'])
+  expect(await text(/^ждёт ответа · 1 мин$/)).toBeDefined()
+  // Запрос разрешения: что просят — и где отвечать; кнопок нет
+  expect(await text('Bash: npm test')).toBeDefined()
+  expect(await text('Разрешение даётся только в самой сессии.')).toBeDefined()
+  expect(JSON.stringify((await ui.find({ key: 'agents-card-sess-c' }))?.props)).not.toContain('agents-q-')
+  // Один вопрос с одним ответом: нажал вариант — ответ ушёл
+  expect(await text('База')).toBeDefined()
+  expect(await text('Какую базу взять?')).toBeDefined()
+  expect([await label('agents-q-sess-b-0-0'), await label('agents-q-sess-b-0-1')]).toEqual(['Postgres', 'SQLite'])
+  expect(await ui.find({ key: 'agents-send-sess-b' })).toBeUndefined()
+  await ui.press({ key: 'agents-q-sess-b-0-1' })
+  expect(JSON.parse(disk.get(`${AG_DIR}\\a9.json`))).toMatchObject({ v: 1, to: 'sess-b', id: 'q1', picks: [['SQLite']] })
+  expect(await text('Ответ отправлен — сессия получит его через секунду.')).toBeDefined()
+  expect(await ui.find({ key: 'agents-q-sess-b-0-0' })).toBeUndefined()
+
+  // Несколько вопросов: отметить варианты (где можно несколько — снять повторным нажатием), потом «Ответить»
+  await ui.press({ key: 'agents-q-sess-a-0-0' })
+  await ui.press({ key: 'agents-q-sess-a-0-2' })
+  await ui.press({ key: 'agents-q-sess-a-0-0' })
+  await ui.press({ key: 'agents-q-sess-a-0-0' })
+  expect([await label('agents-q-sess-a-0-0'), await label('agents-q-sess-a-0-1'), await label('agents-q-sess-a-0-2')]).toEqual(['✓ Тесты', 'Линтер', '✓ Типы'])
+  expect(await ui.find({ key: 'agents-send-sess-a' })).toBeUndefined()
+  await ui.press({ key: 'agents-q-sess-a-1-0' })
+  await ui.press({ key: 'agents-q-sess-a-1-1' })
+  expect([await label('agents-q-sess-a-1-0'), await label('agents-q-sess-a-1-1')]).toEqual(['main', '✓ dev'])
+  expect(disk.has(`${AG_DIR}\\a3.json`)).toBe(false)
+  expect(await label('agents-send-sess-a')).toBe('Ответить')
+  await ui.press({ key: 'agents-send-sess-a' })
+  expect(JSON.parse(disk.get(`${AG_DIR}\\a3.json`))).toMatchObject({ v: 1, to: 'sess-a', id: 'q2', picks: [['Типы', 'Тесты'], ['dev']] })
+  expect(await ui.find({ key: 'agents-send-sess-a' })).toBeUndefined()
+  await ui.unmount()
+})
+
+// Свой $ и свои часы: проверка tool.check в тесте не знает, кого спросить (approver), — через движок её не вызвать.
+// Модули теста — отдельная от мода копия: состояние S здесь своё
+test('запрос разрешения без классического хука (Team): «спросить» у вызова Claude — через паузу «ждёт разрешения», решение из телеметрии — снова работает; вердикт не меняется', async () => {
+  let now = 0
+  const timers: { at: number; fn: () => any }[] = []
+  const $: any = {
+    clock: { now: async () => now, after: (ms: number, fn: () => any) => void timers.push({ at: now + ms, fn }) },
+    ui: { invalidate: () => {}, close: async () => {} },
+    process: { run: async () => ({}) },
+  }
+  const advance = async (ms: number) => {
+    now += ms
+    for (const t of timers.filter((x) => x.at <= now).sort((a, b) => a.at - b.at)) {
+      timers.splice(timers.indexOf(t), 1)
+      await t.fn()
+    }
+  }
+  const engine = (verdict: any, plugin = 'engine') => Object.assign(async () => verdict, { origin: { plugin, tier: 'core' } })
+  const call = (id: string, more: any = {}) => ({ tool: 'Bash', input: { command: 'npm test\nnpm run lint' }, tool_use_id: id, approver: 'person', ...more })
+  const check = (id: string, more: any = {}) => checkObserved($, call(id, more), engine({ decision: 'ask' }))
+  // Решение по вызову — в телеметрии; из неё берём только id вызова и режим
+  const decided = (id: string, mode = 'default') =>
+    toolDecided($, { to: 'collector', event: 'claude_code.tool_decision', attributes: { tool_use_id: id, permission_mode: mode, decision: 'accept', source: 'user_temporary' } })
+  const waits = () => S.status === 'permission'
+  asksReset()
+  S.status = 'working'
+  S.permMode = ''
+
+  // Вердикт уходит тем же объектом. Режим ещё неизвестен — ждём 3 с: вдруг решит классификатор
+  const verdict = { decision: 'ask' }
+  expect(await checkObserved($, call('toolu_1'), engine(verdict))).toBe(verdict)
+  await advance(2_900)
+  expect(waits()).toBe(false)
+  await advance(200)
+  expect(waits()).toBe(true)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test' })
+  expect(S.events[0]).toMatch(/запрос разрешения: Bash$/)
+  decided('toolu_1')
+  expect([S.status, S.ask, S.permMode]).toEqual(['working', null, 'default'])
+  expect(S.events[0]).toMatch(/агент снова работает$/)
+
+  // Режим известен и не авто — диалог сразу, ждём меньше секунды
+  await check('toolu_2')
+  await advance(600)
+  expect(waits()).toBe(false)
+  await advance(200)
+  expect(waits()).toBe(true)
+  decided('toolu_2', 'auto')
+  expect(waits()).toBe(false)
+  // Авто: классификатор решил раньше 20 с — человека не ждали
+  await check('toolu_3')
+  await advance(19_000)
+  decided('toolu_3', 'auto')
+  await advance(2_000)
+  expect(waits()).toBe(false)
+  // Два запроса сразу (субагенты): виден последний; ответили на него — виден первый, на оба — снова работает
+  await check('toolu_10')
+  await check('toolu_11', { tool: 'Write', input: { file_path: 'D:\work\web\notes.txt' } })
+  await advance(20_000)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Write', what: 'D:\work\web\notes.txt' })
+  decided('toolu_11', 'auto')
+  expect([S.status, S.ask?.tool]).toEqual(['permission', 'Bash'])
+  decided('toolu_10', 'auto')
+  expect([S.status, S.ask]).toEqual(['working', null])
+  // Телеметрия обогнала вердикт — запроса нет
+  decided('toolu_4', 'auto')
+  await check('toolu_4')
+  // Спросить некого, вызов без id, вопрос, вызов мода, «можно» — тоже нет
+  await check('toolu_5', { approver: undefined })
+  await check('')
+  await check('toolu_6', { tool: 'AskUserQuestion' })
+  await checkObserved($, call('toolu_7'), engine({ decision: 'ask' }, 'arcade'))
+  await checkObserved($, call('toolu_8'), engine({ decision: 'allow' }))
+  await advance(21_000)
+  expect(waits()).toBe(false)
+  expect(timers).toEqual([])
+  // Другие события телеметрии не трогают ничего
+  toolDecided($, { to: 'collector', event: 'claude_code.api_request', attributes: { permission_mode: 'plan' } })
+  expect(S.permMode).toBe('auto')
+  asksReset()
+  S.status = 'idle'
+  S.permMode = ''
+})
+
+test('в разрешении отказали — статус «ждёт разрешения» не висит до конца хода', async ($, on) => {
+  const { clock, disk } = stubs(on, { env: AG_ENV, agents: AG_ME, deny: (e: any) => e.tool === 'Bash' && e.tool_use_id })
+  await start($)
+  await clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  // Запрос разрешения показан (классический хук), человек отказал: PostToolUse не будет. Тестовая среда 2.1.302 отказ
+  // не соблюдает и пускает вызов к заглушке Bash — тогда он идёт BASH_MS по часам теста, но PostToolUse нет и там
+  await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'npm test' } })
+  const call = $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await clock.advance(BASH_MS)
+  await call
+  expect(await ui.find({ type: 'Text', text: /запрос разрешения: Bash/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ждёт разрешения/ })).toBeUndefined()
+  await clock.advance(AGENT_TICK_MS)
+  expect(ownRecord(disk)).toMatchObject({ status: 'working', ask: null })
   await ui.unmount()
 })
 
