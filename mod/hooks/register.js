@@ -16,7 +16,7 @@ import { addMine, gameById, games } from './app/library.js'
 import { LOBBIES_EVERY_MS, log, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
 import { followPane, nesView, openPane, paneClosedBy, pressStart, readInput, releaseAll, runGameLoop, toLibrary, typedFrom } from './app/play.js'
 import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from './app/window.js'
-import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall } from './app/desktop.js'
+import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall, pressed } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
@@ -383,6 +383,11 @@ export function register(on) {
     return { decision: 'allow', reason: 'Arcade открывает игру во встроенном браузере по нажатию в своей панели' }
   })
 
+  // Нажатие в Arcade — кнопка или Enter в поле: встроенный браузер открываем в теле хука, когда обработчик отработал, —
+  // вызов из самого обработчика с движка 2.1.308 идёт мимо tool.check выше (pressed, desktop.js)
+  on('ui.press', async ($, e, next) => (e.plugin === $.plugin.name ? pressed($, e, next) : next(e)))
+  on('ui.input', async ($, e, next) => (e.plugin === $.plugin.name && e.kind === 'submit' ? pressed($, e, next) : next(e)))
+
   // Инструмент блокнота меняет только блокнот Arcade и ничего не удаляет: разрешаем сам, если Claude Code спросил бы
   // человека. Правило в настройках (разрешить или запретить) отдаём как есть
   on('tool.check', { tool: NOTES_TOOL_NAME }, async ($, e, next) => {
@@ -555,11 +560,8 @@ export function register(on) {
                 onPress: async () => {
                   S.asked = true
                   S.askVisible = false
-                  if (builtinBrowser(e.surface, mouseGame(S.lastGame))) {
-                    await desktopWindow($, S.lastGame, `${gameById(S.lastGame)?.title ?? S.lastGame} открыт во встроенном браузере Claude.`)
-                    await $.ui.toast(tr(S.libraryNotice, S.lang))
-                    return
-                  }
+                  if (builtinBrowser(e.surface, mouseGame(S.lastGame)))
+                    return desktopWindow($, S.lastGame, `${gameById(S.lastGame)?.title ?? S.lastGame} открыт во встроенном браузере Claude.`, true)
                   const command = windowCommand(S.lastGame)
                   try {
                     const result = await $.process.run(command.argv, { env: command.env, timeoutMs: LAUNCH_TIMEOUT_MS })
