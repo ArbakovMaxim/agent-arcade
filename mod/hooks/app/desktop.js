@@ -272,24 +272,51 @@ export function desktopNotice($, outcome, opened, url) {
   $.ui.invalidate('ui.render')
 }
 
-// Открыть во встроенном браузере и сказать, что вышло; opened — что сказать, если он открылся сразу
-export async function desktopWindow($, id, opened) {
+// Открыть во встроенном браузере и сказать, что вышло; opened — что сказать, если он открылся сразу, toast — сказать
+// ещё и всплывашкой (панель Arcade может быть закрыта). Из обработчика нажатия с движка 2.1.308 вызов инструмента
+// идёт мимо tool.check самого Arcade, и свой вызов он уже не разрешит: пока идёт нажатие, открытие только встаёт в
+// очередь, а открывает хук нажатия (pressed) — в своём теле, когда обработчик отработал
+export async function desktopWindow($, id, opened, toast = false) {
+  if (S.pressing) {
+    S.pressOpens.push({ id, opened, toast })
+    return
+  }
+  await openWindow($, id, opened, toast)
+}
+
+// Хук нажатия (ui.press, ui.input по Enter): next ждёт обработчик до конца, потом открываем то, что он поставил в
+// очередь, — по одному, как нажимали
+export async function pressed($, e, next) {
+  S.pressing++
+  try {
+    return await next(e)
+  } finally {
+    S.pressing = Math.max(0, S.pressing - 1)
+    while (S.pressOpens.length) {
+      const { id, opened, toast } = S.pressOpens.shift()
+      await openWindow($, id, opened, toast).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+    }
+  }
+}
+
+async function openWindow($, id, opened, toast) {
   // Эту же игру Claude уже открывает по просьбе Arcade или она ждёт конца инструмента или сжатия — повторное
   // нажатие только напоминает, что происходит: второй раз ход не прерываем
   const url = windowUrl(id)
   if (S.asking === url || S.pendingOpen === url) {
     desktopNotice($, S.asking === url ? 'asking' : S.compacting ? 'compacting' : 'waiting', '', url)
-    return
+  } else {
+    S.opening = false
+    S.pendingOpen = null
+    S.libraryNotice = 'Открываю встроенный браузер…'
+    $.ui.invalidate('ui.render')
+    const outcome = await openDesktopBrowser($, id)
+    desktopNotice($, outcome, opened, url)
+    // Браузер встаёт под панелью Arcade, и игре тесно — панель закрываем, если в настройках не выбрано оставлять меню.
+    // Назад — /arcade или «Библиотека» на сайте
+    if (outcome === 'opened' && !S.keepMenu) await $.ui.close({ id: PANE })
   }
-  S.opening = false
-  S.pendingOpen = null
-  S.libraryNotice = 'Открываю встроенный браузер…'
-  $.ui.invalidate('ui.render')
-  const outcome = await openDesktopBrowser($, id)
-  desktopNotice($, outcome, opened, url)
-  // Браузер встаёт под панелью Arcade, и игре тесно — панель закрываем, если в настройках не выбрано оставлять меню.
-  // Назад — /arcade или «Библиотека» на сайте
-  if (outcome === 'opened' && !S.keepMenu) await $.ui.close({ id: PANE })
+  if (toast) await $.ui.toast(tr(S.libraryNotice, S.lang))
 }
 
 // Игру открыл Claude по просьбе Arcade: панель Arcade закрываем (или оставляем — keepMenu). Вызов Claude панель

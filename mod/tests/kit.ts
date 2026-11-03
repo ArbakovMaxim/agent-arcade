@@ -260,8 +260,9 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     if (!abort) throw new Error('stub: ход не прерван')
     return { value: undefined }
   })
-  // Решение по разрешениям без плагинов: спросить человека
-  on('tool.check', () => ({ decision: 'ask' }))
+  // Решение по разрешениям без плагинов: спросить человека. Вызов самого Claude (из теста он идёт от движка) человек
+  // разрешил: тест говорит «Claude открыл игру». Вопрос без вызова ($.tool.check) и вызовы мода — «спросить»
+  on('tool.check', ($: any, e: any, next: any) => ({ decision: e.tool_use_id && next?.origin?.plugin === 'engine' ? 'allow' : 'ask' }))
   // Просьба от мода Claude: принята (submit: true) или нет — тогда, как и без отказа в разрешении, поле ввода
   on('prompt.submit', ($: any, e: any) => {
     submits.push(e)
