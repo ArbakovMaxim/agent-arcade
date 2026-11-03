@@ -286,7 +286,8 @@ Arcade jest w wersji **beta**: funkcje są na miejscu, a praca trwa nad szczegó
 - **Gry:** każda gra ma własną wolną licencję (MIT, GPL, BSD, Apache, Creative Commons i inne) — tekst licencji i kod źródłowy leżą obok gry, a link do nich jest na jej karcie.
 - **Książki i audiobooki:** domena publiczna; Arcade ich nie przechowuje — książki przychodzą z Project Gutenberg i Wikiźródeł, nagrania z LibriVox (archive.org), w chwili, gdy je otwierasz.
 - **Emulatory i silniki:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) z rdzeniami, PrBoom (GPL-2.0), doom-wasm od Cloudflare i Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 z dodatkowymi warunkami), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — przeciwnik w szachach. Rdzeń Genesis Plus GX używany dla Sega i Master System jest przeznaczony tylko do użytku niekomercyjnego.
-- **Własny kod Arcade** (wtyczka i strona) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Możesz go swobodnie używać, badać i zmieniać. Jeśli rozpowszechniasz zmienioną wersję — albo uruchamiasz ją jako usługę online dla innych osób — musisz opublikować cały swój kod źródłowy na tej samej licencji i zachować informacje o prawach autorskich. Komponenty zewnętrzne zachowują własne licencje.
+- **W samej wtyczce:** emulator JSNES 2.1.0 (Apache-2.0) i trzy amatorskie gry na NES do grania offline — *Thwaite* i *Concentration Room* autorstwa Damiana Yerricka (GPL-3.0-or-later) oraz *robotfindskitten* autorstwa Damiana Yerricka na podstawie gry Leonarda Richardsona (zlib). Gry są zapisane jako dane w `mod/hooks/roms/`, a ich kod źródłowy (`.tar.gz`) i teksty licencji — w `mod/third_party/`.
+- **Własny kod Arcade** (wtyczka i strona) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Możesz go swobodnie używać, badać i zmieniać. Jeśli rozpowszechniasz zmienioną wersję — albo uruchamiasz ją jako usługę online dla innych osób — musisz opublikować cały swój kod źródłowy na tej samej licencji i zachować informacje o prawach autorskich. Komponenty zewnętrzne zachowują własne licencje. Logo Arcade, będące też ikoną wtyczki, nie jest objęte tą licencją: można go używać wyłącznie do odwoływania się do projektu Arcade.
 
 ## Wesprzyj projekt
 
@@ -315,4 +316,4 @@ tools/   narzędzia do budowania: tłumaczenia, heretic-wasm
 - Prace toczą się w `main` i tam też kieruj pull requesty. Domyślna gałąź `plugin` to kopia `main` bez `site/`, którą GitHub Action aktualizuje przy każdym pushu: marketplace wtyczek pobiera ją zamiast całego repozytorium.
 - Tłumaczenia: `node tools/i18n/collect.mjs`, potem `node tools/i18n/check.mjs` — zobacz [tools/i18n/README.md](tools/i18n/README.md).
 
-Szczegółowa dokumentacja (po rosyjsku): [mod/README.md](mod/README.md) — wtyczka, [site/README.md](site/README.md) — strona, dodawanie gier i gra sieciowa.
+Szczegółowa dokumentacja (po rosyjsku): [mod/docs/README.ru.md](mod/docs/README.ru.md) — wtyczka, [site/README.md](site/README.md) — strona, dodawanie gier i gra sieciowa.
