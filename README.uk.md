@@ -286,7 +286,8 @@ Arcade — у **беті**: усе на місці, робота триває н
 - **Ігри:** кожна гра має свою вільну ліцензію (MIT, GPL, BSD, Apache, Creative Commons та інші) — текст ліцензії й вихідний код лежать поруч із грою, посилання — в її картці.
 - **Книги й аудіокниги:** суспільне надбання; Arcade їх у себе не зберігає — книги надходять із Project Gutenberg і Wikisource, записи — з LibriVox (archive.org), саме тоді, коли ти їх відкриваєш.
 - **Емулятори й рушії:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) з ядрами, PrBoom (GPL-2.0), doom-wasm від Cloudflare і Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 з додатковими умовами), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — шаховий комп’ютер. Ядро Genesis Plus GX для Sega і Master System — лише для некомерційного використання.
-- **Власний код Arcade** (плагін і сайт) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Його можна вільно використовувати, вивчати й змінювати. Хто поширює змінену версію — або запускає її як онлайн-сервіс для інших людей, — мусить опублікувати весь вихідний код під тією самою ліцензією й зберегти повідомлення про авторські права. Сторонні компоненти зберігають свої ліцензії.
+- **У самому плагіні:** емулятор JSNES 2.1.0 (Apache-2.0) і три аматорські ігри для NES, щоб грати без інтернету, — *Thwaite* і *Concentration Room* від Damian Yerrick (GPL-3.0-or-later) та *robotfindskitten* від Damian Yerrick за грою Leonard Richardson (zlib). Ігри зберігаються як дані в `mod/hooks/roms/`, їхній вихідний код (`.tar.gz`) і тексти ліцензій — у `mod/third_party/`.
+- **Власний код Arcade** (плагін і сайт) — **GNU AGPL-3.0** ([LICENSE](LICENSE)), © 2026 Max Arbakov. Його можна вільно використовувати, вивчати й змінювати. Хто поширює змінену версію — або запускає її як онлайн-сервіс для інших людей, — мусить опублікувати весь вихідний код під тією самою ліцензією й зберегти повідомлення про авторські права. Сторонні компоненти зберігають свої ліцензії. Логотип Arcade — він же значок плагіна — до цієї ліцензії не входить: ним можна користуватися лише для посилання на проєкт Arcade.
 
 ## Підтримати проєкт
 
@@ -315,4 +316,4 @@ tools/   допоміжні збирачі: переклади, heretic-wasm
 - Робота йде в `main`, pull request'и — туди ж. Гілка за замовчуванням `plugin` — копія `main` без `site/`, яку GitHub Action оновлює на кожен пуш: маркетплейс плагінів завантажує її, а не весь репозиторій.
 - Переклади: `node tools/i18n/collect.mjs`, потім `node tools/i18n/check.mjs` — див. [tools/i18n/README.md](tools/i18n/README.md).
 
-Докладна документація (російською): [mod/README.md](mod/README.md) — плагін, [site/README.md](https://github.com/ArbakovMaxim/agent-arcade/tree/main/site/README.md) — сайт, додавання ігор і гра по мережі.
+Докладна документація (російською): [mod/docs/README.ru.md](mod/docs/README.ru.md) — плагін, [site/README.md](https://github.com/ArbakovMaxim/agent-arcade/tree/main/site/README.md) — сайт, додавання ігор і гра по мережі.

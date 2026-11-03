@@ -1,186 +1,319 @@
-# Arcade — мод для Claude Code
+<img src="https://github.com/ArbakovMaxim/agent-arcade/raw/main/docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade logo" align="right">
 
-Пока агент работает, мод предлагает поиграть. Игры и каталог живут на сайте Arcade (папка `site/` этого репозитория, адрес — в `hooks/catalog.js`), поэтому новые игры появляются без обновления мода.
+# Arcade — task boards, notes, team chats and games inside Claude Code
 
-## Где и как идёт игра
+**English** · [Русский](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.ru.md) · [Українська](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.uk.md) · [Español](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.es.md) · [Français](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.fr.md) · [Deutsch](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.de.md) · [Português](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.pt.md) · [Italiano](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.it.md) · [Polski](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.pl.md) · [Türkçe](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.tr.md) · [日本語](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.ja.md) · [中文](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.zh.md) · [한국어](https://github.com/ArbakovMaxim/agent-arcade/blob/main/README.ko.md)
 
-| Где запущен Claude Code | Как показывается игра | Клавиши |
-| --- | --- | --- |
-| Терминал на Windows | отдельным окном браузера справа от терминала (по умолчанию) или в панели | в окне — как в браузере |
-| Терминал на macOS и Linux | в браузере по умолчанию или в панели | в окне — как в браузере |
-| Терминал с картинками (kitty, Ghostty, Rio) | в панели — настоящими пикселями | клик по экрану, потом клавиши |
-| Остальные терминалы | в панели — символами | клик по экрану, потом клавиши |
-| Claude Code Desktop | в панели — картинкой | клик по экрану, потом клавиши |
-| Расширение Claude Code для VS Code | в панели — картинкой | строка 🎮 над вводом Claude: клик — и игра слушает клавиатуру; или кнопки мышью |
+> **Beta (0.39).** Everything described here works and is used every day; what changes from now on is mostly the details. Bug reports are very welcome — see [Feedback](#feedback).
 
-Где открывать игры, выбирается в «Настройках» меню: окно браузера (на Windows — любой найденный браузер) или «здесь, в панели». В терминале по умолчанию открывается окно. В VS Code по умолчанию игра идёт в панели, а окно — только если его выбрали явно. В Desktop Денди идёт в панели, а остальное открывается во встроенном браузере Claude (по умолчанию) или, если так выбрано в «Настройках», окном браузера, как в терминале. Шутеры в Desktop всегда идут окном браузера: встроенный браузер Claude не даёт игре захватить мышь (если ОС не определилась и окно открыть нечем, шутер откроется во встроенном браузере, а сайт подскажет играть стрелками). В авто-режиме встроенный браузер открывает сам Claude по просьбе Arcade: Arcade прерывает его текущий шаг, и Claude возвращается к работе.
+Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns it into a small workspace: project boards where Claude works through the cards one by one, even in several sessions at once; a notebook Claude keeps with you, shared by all your open sessions; a calendar; and shared boards and chats for your team. And for the wait: when the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
 
-## Что внутри
+Everything in the catalog is free: the games are openly licensed, the books and audiobooks are in the public domain. You can also play online with other people who are waiting for their agents too, and chat with your friends.
 
-- `.claude-plugin/plugin.json` — манифест.
-- `hooks/hooks.json` — указывает Claude Code на код мода.
-- `hooks/register.js` — подписки на события Claude Code: события агента, вопрос «сыграть?», инструменты, панель.
-- `hooks/app/` — состояние мода и помощники по разделам: библиотека игр, запуск игры, окно браузера, Desktop, видео, книги, профиль, общение, работа.
-- `hooks/screens/` — экраны панели: шапка и разделы библиотеки (`pane.js`), главное меню, игры, настройки, профиль, друзья, чаты, видео, книги, заметки, доски и сама игра.
-- `hooks/catalog.js` — адрес сайта, разбор каталога, запас игр в моде, проверка скачанных игр по хешу.
-- `hooks/browsers.js` — окно игры на Windows: поиск браузеров, размер и место окна, команда запуска.
-- `hooks/input.js` — экран игры ловит клавиши: что зажато и сколько раз нажато.
-- `hooks/nes-screen.js` — Денди в панели: эмулятор, кадр в PNG и SVG для картинки и в символы для остальных терминалов.
-- `hooks/roms/` — три игры Денди, которые лежат в самом моде на случай без интернета.
-- `hooks/vendor/jsnes.mjs` — эмулятор JSNES 2.1.0.
-- `third_party/` — лицензии JSNES и игр, исходники игр.
-- `tests/arcade.test.ts` — тесты, которые запускает сам Claude Code.
+![Demo: a project board in Claude Desktop; a card opens as a page with a checklist, Give to Claude hands it over, and Claude ticks off each item, writes the result on the card and moves it to Done](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
-## Установка
+*Your board: a card goes to Claude with one button. [Watch the 31-second video](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
 
-В сессии Claude Code в терминале — подключить маркетплейс из этого репозитория и поставить мод из него:
+![Demo: Claude Code gets a task, “play?” appears above the prompt, an NES game runs next to the chat, and Arcade calls you back when the agent finishes; books, audiobooks and articles are there too](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
-```
-/plugin marketplace add ArbakovMaxim/agent-arcade
-/plugin install arcade@agent-arcade
-```
+*While the agent works: 31 seconds in Claude Desktop. [Watch the 720p video](https://github.com/user-attachments/assets/bbb14c28-2813-40c0-82e6-d7375ddc2253).*
 
-Или просто в терминале, без запуска сессии:
+## Features
+
+- **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. A page or card shows its text formatted, with *Edit* and *Copy* buttons. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
+- **Claude works through your board.** *Queue for Claude* hands Claude the cards of the first column one by one: the next goes once the last one is in *Done*, and a permission question stops the queue. Cards have due dates that show in the calendar, and on a shared board everyone sees who took which card. Bring GitHub issues onto a board as cards and post the result back as a comment, through Claude's GitHub connector. *Daily summary* makes a standup page — what went to Claude, what's done, what's in progress — to send to your team's chat.
+- **Agents.** *Agents* in *Work* shows every Claude Code session with Arcade on this computer, by folder: working, waiting for permission, finished its turn or idle, and for how long, with its card and place in the queue. When Claude in another session asks a question with options, you answer it with a button right in its card. When another session asks for permission or a question, a toast in your own pane says so. A board's queue can run in several sessions at once, and two sessions don't get the same card.
+- **Calendar.** In Desktop, a month of same-size day tiles with a dot in each event's color; in the terminal and VS Code, the list of what's coming up. An event goes in with one line, like “fri 9:30 standup”, and can repeat every day, on weekdays, every week, month or year. Pick its color and when to be reminded, from a list or in your own words (like “45 min before” or “the day before at 20:00”); the reminder comes as a system notification. Due dates of board cards are there too. Claude adds and changes events too: “add a call on Friday at 15:00”.
+- **Friends and chats.** An optional GitHub sign-in keeps your settings the same on all your computers and gives you an @handle; add friends by their exact handle, see who is online, share boards, invite them to a game, and chat one-on-one or in groups.
+- **Knows what the agent is doing.** When the agent finishes or asks for permission, you get a banner over the game — keep playing, pause, or jump straight back to the agent (you choose the behaviour in settings). In Claude Desktop it can also close the tab you're watching, so the conversation is back in front of you.
+- **Appears on its own.** After 10 seconds of agent work, Arcade offers a game above the prompt — or later, or never, as you choose in the settings; it never steals focus unless you ask it to.
+- **Follows you between sessions.** Leave the Arcade pane open, and every new Claude Code session opens it on its own; close it by hand, and it stays closed.
+- **One menu, six sections.** *Play*, *Read & listen*, *Watch*, *Social*, *Work* and *More* — fold the ones you don't need. On top: *Continue* the last game, *Search* and *Favorites*. The first time you open Arcade, you choose which sections to show.
+- **61 free games** across NES (Dendy), Sega Mega Drive, Master System, PlayStation and a *Games* tab with arcade games, shooters, racing, strategy, adventures and board games.
+- **Read and listen.** Classic books and LibriVox audiobooks in 30 languages, straight from Project Gutenberg, Wikisource and LibriVox, plus fresh articles and podcast episodes on the topic of the agent's work.
+- **Watch.** Fresh YouTube videos on the topic of the agent's work, Twitch: your own channels and live streams about coding, tech, science and retro games, and TikTok: the *For You* feed and search on TikTok's own site, where you sign in yourself.
+- **NES and Flappy Arcade right inside Claude Code** — in the terminal, VS Code and Claude Desktop. Everything else opens in a browser window — in Claude Desktop, in Claude's built-in browser by default (shooters still open in a browser window: the built-in browser can't capture the mouse).
+- **Online play.** Two-player console games over the network, Doom deathmatch and co-op, chess, Go, draughts and reversi against people or the computer.
+- **“Who's waiting online”.** Arcade shows in Claude Code when someone is waiting for a partner, with a *Join* button.
+- **Search and favorites.** One search across games and Twitch channels, grouped by section and genre; mark a game with ☆ to keep it in *★ Favorites*.
+- **Your own games.** Add ROMs you own; they stay on your machine.
+- **13 interface languages:** English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어 — picked from your system or browser, English by default.
+
+## Install
+
+Requires **Claude Code 2.1.275 or newer**.
+
+In a terminal — two commands: add Arcade's marketplace (this repository), then install the plugin from it:
 
 ```
 claude plugin marketplace add ArbakovMaxim/agent-arcade
 claude plugin install arcade@agent-arcade
 ```
 
-В расширении для VS Code команды `/plugin` нет — поставь мод из терминала, и расширение подхватит его в новом разговоре.
-
-Мод ставится сразу для всех сессий и приложений. Нужен Claude Code 2.1.275 или новее. Меню открывается командой `/arcade`. Когда агент работает дольше 10 секунд, над строкой ввода появляется вопрос «сыграть?»: `1` — здесь, в панели, `2` — в окне браузера (где оно доступно), `3` — не сейчас.
-
-Обновить мод: `/plugin marketplace update agent-arcade`. Удалить: `/plugin uninstall arcade@agent-arcade`.
-
-## Разработка
-
-Чтобы запустить мод прямо из папки, без установки:
-
-```bash
-claude plugin validate ./mod
-claude --plugin-dir ./mod
-```
-
-В VS Code и Desktop флаг не передать — для разработки там путь задаётся через `env` в `~/.claude/settings.json` (пути через `;` на Windows):
-
-```json
-{
-  "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "D:\\projects\\agent-arcade\\mod"
-  }
-}
-```
-
-Не ставь мод одновременно и из маркетплейса, и через `--plugin-dir` или `CLAUDE_CODE_PLUGIN_DIRS` — он загрузится дважды.
-
-## Каталог и игры
-
-- При старте сессии мод в фоне скачивает `catalog.json` с сайта и сохраняет копию. Без интернета меню строится из сохранённой копии, а если её нет — из трёх игр, которые лежат в моде.
-- Окно браузера открывает страницу игры на сайте: там же статистика, рекорды и сохранения.
-- В режиме «в панели» мод берёт игру из своего запаса, если хеш совпадает с каталогом, иначе скачивает её с сайта, сверяет SHA-256 и кеширует (до 8 игр в хранилище мода). Битый или подменённый файл не запустится.
-
-## Sega Mega Drive
-
-Игры Sega из каталога идут в окне браузера: на сайте Arcade работает эмулятор EmulatorJS (GPL-3.0) с ядром Genesis Plus GX. Лицензия ядра некоммерческая: его нельзя продавать и использовать в коммерческом продукте. В панели Claude Code показать Sega нечем, поэтому мод открывает для неё окно — и в терминале, и в VS Code. Управление в окне: стрелки, A — S, B — X, C — Z, Start — Enter.
-
-## Master System
-
-Тоже в окне браузера, на том же ядре Genesis Plus GX, что и Mega Drive. В каталоге — Balloon Master, SkyHaul, Food Fighter и Escape from Monster Dimension (код MIT, авторы графики — в CREDITS). Свои игры `.sms` добавляются и через `/arcade-add`. Управление в окне: стрелки, кнопка 1 — X, кнопка 2 — Z, Start или пауза — Enter. Game Gear Arcade не поддерживает: свободных игр для него нет.
-
-У каждой приставки в окне свой адрес: `/nes`, `/sega`, `/sms`, `/psx`, `/doom` сразу открывают её вкладку, а при переключении вкладок адрес в строке меняется сам.
-
-## Языки
-
-13 языков интерфейса: English, Русский, Українська, Español, Français, Deutsch, Português, Italiano, Polski, Türkçe, 日本語, 中文, 한국어. Язык берётся из окружения (`LC_ALL`, `LC_MESSAGES`, `LANG`), по умолчанию — английский; выбрать другой — кнопка 🌐 в главном меню или «Язык» в настройках. Окно Arcade открывается на том же языке. Переводы — в `hooks/locales/<язык>.js`, как переводить — `tools/i18n/README.md`.
-
-## Вкладки
-
-Приставки — Денди, Sega, Master System, PlayStation — каждая своей вкладкой. Всё остальное, что не эмулятор, — одна вкладка **«Игры»**, а в ней полки: **шутеры** (Freedoom, FreeDM, Blasphemer, BlasphDM), **гонки** (HexGL), **стратегии** (OpenTTD), **настольные** (шахматы, шашки, реверси). В меню мода — так же: «Игры» → полка → игра. В окне — вкладка «Игры» с рядом полок, адрес вида `?tab=games&shelf=racing`; короткий адрес — `/games`, старые `/doom`, `/board` и `/web` открывают нужную полку.
-
-## Сетевая игра
-
-- **Sega, Master System, PlayStation** — в окне браузера на панели эмулятора есть кнопка сетевой игры: создай комнату или войди в чужую. Синхронизация — по нажатиям, сервер — наш, на Cloudflare. Подходят все игры на двоих: Tank Battle, Pong, Battle 4Tris, Snake Arena, Space Shooter, KleleAtoms, Hello Pong и другие.
-- **Денди** — в окне игры кнопка «По сети»: та же игра открывается на EmulatorJS (ядро FCEUmm, GPL-2.0) с той же сетевой игрой. Одиночная Денди по-прежнему идёт на нашем JSNES — с рекордами и статистикой.
-- **Doom** — FreeDM, сетевой deathmatch с лобби и раундами, и **кооператив Freedoom**: на странице Phase 1 или Phase 2 кнопка «По сети» — проходите уровни вдвоём или вчетвером, без таймера.
-- **Настольные игры** — шахматы, русские шашки и реверси (вкладка «Настольные»): «С компьютером», «Найти соперника» или «Пригласить друга» по ссылке. Партия хранится на сервере: сделал ход, вернулся к агенту, открыл ссылку позже — доска на месте.
-
-## Браузерные игры
-
-Игры, написанные сразу для браузера, — вкладка «Браузерные», в окне. HexGL (MIT, Thibaut Despoulain) — футуристические гонки в духе Wipeout; OpenTTD 15.3 (GPL-2.0, графика OpenGFX) — транспортная стратегия по мотивам Transport Tycoon Deluxe, сохраняется в браузере. Газ — ↑, тормоз — ↓, руль — ← →, воздушные тормоза — A и D (или Q и E).
-- **Кто ждёт в сети** — во всех сетевых играх: Денди, Sega, Master System, PlayStation и Doom. Мод раз в минуту спрашивает сайт, ждёт ли кто-нибудь партнёра, и пишет об этом в вопросе над вводом — «Агент работает 12 с — сыграть? В сети ждут: FreeDM (1)», — а в главном меню появляется кнопка «Присоединиться».
-
-## Шутеры
-
-**Blasphemer** — свободная замена Heretic (BSD-3-Clause): тёмное фэнтези на движке Doom. Одному — сразу игра, «По сети» — кооператив; **BlasphDM** — сетевой deathmatch с лобби и раундами, как FreeDM. Движок — Chocolate Heretic с сетевым слоем doom-wasm, собран в Arcade (GPL-2.0). Управление: стрелки, огонь — Ctrl, открыть — пробел, бег — Shift, шаг вбок — Alt и стрелки, оружие — 1–7, предметы — [ ] и Enter.
-
-**Сетевой deathmatch — FreeDM.** Играешь с теми, кто тоже ждёт своего агента: открой FreeDM во вкладке Doom, и ты в лобби. Как только там двое и больше, начинается раунд на 5 минут, до четырёх игроков; потом все снова в лобби. Опоздавшие ждут конца раунда — в идущий матч Chocolate Doom не пускает. Движок — doom-wasm от Cloudflare (Chocolate Doom, GPL-2.0), карты — FreeDM из Freedoom. Управление в сетевом Doom: стрелки, огонь — Ctrl, открыть — пробел, бег — Shift, шаг вбок — Alt и стрелки, оружие — 1–7.
-
-Doom идёт в окне браузера на движке PrBoom (GPL-2.0). В каталоге — Freedoom: Phase 1 и Phase 2: свободная замена первого Doom и Doom II, где всё своё — карты, монстры, звуки и музыка (лицензия BSD-3-Clause). Данные игр id Software Arcade не раздаёт: купленный `doom.wad` или `doom2.wad` можно открыть сам — «Игры» → «Шутеры» → «Открыть свой файл». Управление: стрелки, огонь — A, открыть или нажать — Z, бег — S, шаг вбок — Q/E, оружие — Tab/R, карта — V, меню — Enter.
-
-## PlayStation
-
-Первая PlayStation идёт в окне браузера: эмулятор EmulatorJS с ядром PCSX ReARMed (GPL-2.0). У ядра своя открытая замена BIOS, поэтому BIOS Sony не нужен. В каталоге — Hello Pong (MIT), Понг против компьютера или вдвоём; диск собран в Arcade из исходников на PSn00bSDK. Свой диск можно открыть так: в меню мода PlayStation → «Открыть PlayStation в окне», там «Открыть свой файл». Подходят `.chd`, `.pbp`, `.iso` или `.zip`, внутри которого лежат `.cue` и `.bin`. Диски большие, поэтому через `/arcade-add` они не добавляются — только в окне. Файл остаётся в твоём браузере.
-
-## Свои игры
-
-Arcade раздаёт только игры со свободными лицензиями. Свою игру можно подключить самому — это файл ROM у тебя на компьютере:
+Or inside a Claude Code session:
 
 ```
-/arcade-add C:\Games\my-game.nes
+/plugin marketplace add ArbakovMaxim/agent-arcade
+/plugin install arcade@agent-arcade
 ```
 
-В терминале файл можно просто перетащить в окно после `/arcade-add ` — путь вставится сам. Путь нужен к самому файлу игры (`.nes`, `.md`, `.bin`), а не к архиву: `.zip`, `.7z` или `.rar` сначала распакуй. То же самое есть в меню: «Мои игры» → «Добавить файл».
+The plugin is installed for all sessions and apps. The VS Code extension has no `/plugin` command — install from a terminal, and the extension picks the plugin up in a new conversation.
 
-- Мод узнаёт Денди (`.nes`, заголовок iNES) и Sega Mega Drive (`.md`, `.bin`, `.gen`, метка SEGA в заголовке картриджа) и сразу проверяет, пойдёт ли игра на нашем эмуляторе Денди.
-- Наш эмулятор Денди понимает и маппер 28 (Action 53): сборники Action 53 и другие самодельные мультикарты открываются как своя игра — в панели и в окне.
-- Копия файла хранится у тебя в `~/.claude/arcade/roms` (на Windows — `%USERPROFILE%\.claude\arcade\roms`), переживает обновления мода и никуда не отправляется. «Удалить» в «Моих играх» стирает копию.
-- Свои игры Денди идут в панели Claude Code, а Sega — в окне браузера. В окне страница один раз попросит выбрать тот же файл, сверит его хеш и запомнит у тебя в браузере — на сервер он не уходит.
-- В самом окне Arcade у каждой приставки есть кнопка «Открыть свой файл» и раздел «Мои игры — только в этом браузере».
-- Подключай только файлы, на которые у тебя есть права: например, свои сборки, бесплатные игры или копии своих картриджей там, где это разрешено законом. Где брать ROM, мы не подсказываем и ссылок не даём.
+**Update:**
 
-## Язык
-
-Интерфейс мода и окна Arcade — на русском или английском: «Настройки» → «Язык». По умолчанию язык берётся из системы (переменные `LANG`, `LC_ALL`), а если их нет — русский. Окно браузера открывается на том же языке, а в самом окне язык переключает кнопка RU/EN рядом с «Открыть свой файл». Описания игр в каталоге пока только по-русски.
-
-## Когда агент закончил
-
-- В панели Claude Code сверху всегда видно, что делает агент: работает (со временем), ждёт разрешения или закончил. Когда агент закончил, а панель открыта, Claude Code показывает уведомление.
-- Если играешь в окне браузера, Claude Code не видно. Тогда мод показывает системное уведомление со звуком — на Windows в углу экрана, на macOS через Центр уведомлений, на Linux через notify-send:
-  - «Агент закончил» — если ход шёл дольше 20 секунд, а окно игры открывали за последние полчаса;
-  - «Агент ждёт разрешения» — сразу.
-- Выключается в «Настройках»: «Уведомления, пока играешь в окне».
-- В VS Code и Desktop, пока в панели идёт игра, поверх неё появляется яркая плашка «Агент закончил» или «Агент ждёт разрешения» с кнопками «К агенту» (панель закрывается, игра встаёт на паузу) и «Играть дальше».
-- Что делать с игрой в панели, выбирается в «Настройках» отдельно для двух сигналов — «Когда агент закончил» и «Когда агент ждёт разрешения»:
-  - «плашка, игра идёт» — мягко: плашка, и играешь дальше (по умолчанию, когда агент закончил);
-  - «пауза и плашка» — игра замирает, пока не нажмёшь «Играть дальше», а в терминале — любую клавишу игры (по умолчанию, когда агент ждёт разрешения);
-  - «сразу к агенту» — панель закрывается, игра встаёт на паузу, клавиатура возвращается в Claude Code.
-- В окне браузера мод игру не останавливает — там приходит системное уведомление.
-- «Настройки» → «Размер панели: во всю ширину» — панель игры занимает почти всё место, разговор с агентом сжимается в узкую полосу, а картинка Денди растёт, но целиком помещается по высоте. Ширину всегда можно поправить мышью.
-
-## Управление в панели
-
-- В терминале и Desktop: кликни по экрану игры, дальше клавиши идут в игру в любой раскладке. Esc возвращает клавиатуру Claude Code, Backspace — в список игр.
-- В VS Code: панель игры клавиатуру не получает, поэтому над строкой ввода Claude появляется строка 🎮. Кликни в неё — и игра слушает клавиатуру: W A S D (движение), K (A), J (B), Enter или N (Start), M (Select), подходит и русская раскладка. Строка всегда пустая: каждая буква сразу уходит в игру. Или нажимай кнопки под игрой мышью. Стрелки там не работают.
-- Клавиши по умолчанию: W A S D или стрелки, огонь J и K, Start N. Незнакомая клавиша запускает назначение управления; назначить заново — «Настройки» → «Назначить клавиши заново» (в терминале).
-
-## Тесты
-
-```bash
-cd mod
-claude plugin test
+```
+/plugin marketplace update agent-arcade
+/plugin update arcade@agent-arcade
 ```
 
-Тесты загружают мод в движок Claude Code без сессии и сети: рисуют панель для терминала, Desktop и VS Code, гоняют Денди на виртуальных часах, подменяют сайт (каталог, скачивание, недоступность, битый файл) и запуск окна на Windows, Linux и macOS.
+Then restart Claude Code. The marketplace downloads only the plugin — a few MiB, without the site — so updating takes seconds. If Arcade is already installed, there's nothing to do: the marketplace switches over by itself on the next update.
 
-## Известные ограничения
+If `/plugin update` says *already at the latest version* but a newer Arcade is out, the marketplace didn't refresh. Run `claude plugin marketplace update agent-arcade` in a terminal to see why. If it says *timed out*, give the clone 10 minutes:
 
-- Окно на Windows встаёт справа на главном экране, но пока не привязано к месту панели в терминале.
-- В VS Code и Desktop кадр — несжатый PNG около 80 КБ, 30 раз в секунду; это проверено тестами, но не на живом VS Code.
-- Окно браузера не открывается, если Claude Code запущен по SSH, — и в Desktop, подключённом к удалённой машине: там выбирай встроенный браузер Claude.
-- Звука в панели нет; в окне браузера есть.
+```
+CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000 claude plugin marketplace update agent-arcade
+```
 
-## Лицензии
+In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin marketplace update agent-arcade`. Then run `/plugin update arcade@agent-arcade` again.
 
-- **Thwaite** © Damian Yerrick, GPL-3.0-or-later; **Concentration Room** © Damian Yerrick, GPL-3.0-or-later; **robotfindskitten** © Damian Yerrick и Leonard Richardson, zlib. Исходники и лицензии — в `third_party/`.
-- **JSNES** 2.1.0, Apache-2.0 — `third_party/jsnes/LICENSE.txt`.
+**Uninstall:** `/plugin uninstall arcade@agent-arcade`
+
+## How to use
+
+- **`/arcade`** opens the menu at any time.
+- Leave the pane open, and new sessions open it on their own: in the terminal at start, in Desktop and VS Code when they connect to the session; the keyboard stays with the prompt. Close it by hand (the close mark or Esc), and it stops opening by itself until you open it again.
+- When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now. In Settings → Notifications you can choose when it appears — from 10 seconds to 5 minutes — or turn it off.
+- Arrow keys or Tab to choose, Enter to open; the mouse works too. Game controls are shown under each game.
+- When the agent finishes or waits for permission, a banner appears over the game: **Back to agent** or **Keep playing**.
+
+### The menu
+
+| Section | What's inside |
+|---|---|
+| *(on top)* | **▶ Continue** the last game, **🔍 Search**, **★ Favorites** |
+| **Play** | NES, Sega, Master System, PlayStation, Games; *Join* when someone is waiting online; **My games** |
+| **Read & listen** | Books, Audiobooks, Articles, Podcasts |
+| **Watch** | YouTube, Twitch, TikTok |
+| **Social** | Friends, Chats, **Sign in with GitHub** (or **Account** once you're signed in) |
+| **Work** | Notebook, Project board, Calendar, Agents |
+| **More** | Arcade window, Settings, 🌐 language, 🐞 Report a bug, ☕ Support the project |
+
+Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. A section you don't need can be hidden in **Settings**: it is gone from the menu entirely, title and tiles; *More*, which holds the settings, always stays. Signed in, the menu header shows your @handle with the same counters.
+
+**Search** starts from two letters and matches a title or a genre, ignoring case and accents. Results are grouped by section and genre, like *Games · Shooter*. The ☆ star next to a game adds it to **★ Favorites** (up to 100), laid out by section and genre with the latest first. Books and audiobooks have their own search by title or author.
+
+### Where things open
+
+| | NES (Dendy), Flappy Arcade | Sega, Master System, PlayStation, other Games; books, audiobooks, articles, podcasts, videos |
+|---|---|---|
+| **Terminal** | in the panel (pixel graphics where the terminal supports them, otherwise text blocks) | browser window |
+| **VS Code** | in the panel | browser window |
+| **Claude Desktop** | in the panel | Claude's built-in browser, or a browser window (pick in settings); shooters — always a browser window |
+
+The browser window is a separate Arcade window (your default browser or the one you pick in settings), not a tab in your everyday browsing. Chats work right in the panel in the terminal and in Desktop; *Open as a page* opens them on the site the same way. The notebook, project boards, calendar and agents live in the panel. TikTok opens in Claude's built-in browser in Desktop and in your default browser elsewhere, where you are likely signed in already.
+
+## Notebook and project boards
+
+Both are in the *Work* section of the menu.
+
+- **Notebook.** Pages and subpages; a line starting with `# ` is a heading, `- ` an item, `- [ ] ` a checklist item that ticks with a press. It is kept on this computer — up to 200 pages, 20,000 characters on a page.
+- **Edit and Copy.** A page or card shows its text formatted — headings, lists, checklist — in Desktop and VS Code, and as lines in the terminal. *Edit* opens the text box in its place: Enter saves, *Cancel* drops the change, and what Claude or another session changes meanwhile shows up in the box. *Copy* puts the whole page into the clipboard — in Desktop's pane you can select text only inside input boxes, so this is the way to copy a page.
+- **Claude keeps it too.** *Give to Claude* passes a page to Claude, or just ask Claude to write something down in Arcade. Claude uses the `mcp__arcade__notes` tool, which changes only the notebook and deletes nothing. If you don't like Claude's edit, *Restore the text from before Claude's edit*.
+- **Notion and other apps** — through Claude's connectors, so Arcade needs no keys or passwords: *Send to Notion*, *To another app*, *Import from Notion or another app*. A linked page can be updated in the app or imported again from it.
+- **Voice.** Dictate into Claude's prompt box with the system's own dictation (Win+H on Windows, Fn twice on macOS), then press *Take from Claude's prompt box* — the text moves to the end of the page.
+- **Project board.** Columns — *To do*, *Doing*, *Done* or your own, up to 8 — and cards; a card is a notebook page with text and a checklist. Press a card to pick it and move it with the arrows, press again to open it. Claude can run a board too: *Give to Claude*, or ask it to lay out tasks on a board in Arcade.
+- **Shared boards.** Signed in with a @handle, tick friends and press *Share*: everyone has the same cards, columns and name, and changes show up within seconds. The owner invites more friends, removes people and deletes the board from the site; anyone can leave; whatever happens, everyone keeps their own copy. Up to 3 shared boards of your own, 20 people and 200 cards on a board.
+- **Several sessions at once.** All open Claude Code sessions on this computer share one notebook and its boards: what one session adds, edits or ticks off, the others see within a few seconds, so each session can work on its own card of the same board.
+- **Queue for Claude.** On a board, *Queue for Claude* gives Claude the first card of the first column, and moves it to the second column if the board has more than two. When Claude finishes its turn with that card in the last column, the next card goes by itself, up to 10 cards a run. The queue stops when Claude asks for permission, the turn is interrupted or ends with an error, the card isn't in the last column, or you send Claude something else — from then on, you decide. *Stop the queue* lets Claude finish the current card without giving it the next. On a shared board, cards someone else took are skipped. A queue can run in several sessions at once — see [Agents](#agents).
+- **Due dates.** A card's *Due* field takes “fri”, “tomorrow”, “20.11” or “2026-11-20”. The date shows under the card on the board — in a warning color once it's past and the card isn't done — and in the calendar, which reminds you at 9:00 that day unless the card is already in the last column. Claude sets due dates too.
+- **Who took a card.** On a shared board, *Give to Claude* marks the card as yours, and everyone sees “taken by @handle” under it. If someone else took it, Arcade says so first; press again to give it to your Claude anyway. *Release the card* frees it.
+- **GitHub issues.** *Issues from GitHub* on a board takes `owner/repo` or a link to issues: Claude reads up to 20 open issues through its GitHub connector and adds those not on the board yet as cards. On such a card, *Result to GitHub* has Claude post a short comment on the issue about what was done; it doesn't close the issue. Arcade itself never talks to GitHub and needs no keys.
+- **Daily summary.** The button under the boards and in the notebook makes a page “Summary DD.MM”: what went to Claude today, what's done — cards moved to the last column, ticked items — and what's still in progress. Give it to Claude, edit it, or send it to a chat.
+- **Send to a chat.** Signed in, *Send to a chat* posts any page to one of your recent chats as text, with headings and checklist marks kept.
+
+## Calendar
+
+It's in the *Work* section of the menu. Like the notebook, the calendar is kept on this computer, in Claude Code's plugin storage, and all your open sessions share it.
+
+- **Month and day.** In Desktop, a month grid of same-size day tiles with arrows and *Today*: the date on top, below it a dot in each event's color (up to three, then “+N”). The chosen day has a highlighted frame, today a tinted background. Under the grid are the chosen day's events, then *Coming up* for the next 30 days, as cards in each event's color. In the terminal and VS Code it's the *Coming up* list.
+- **One line adds an event:** “fri 9:30 standup”, “tomorrow 15:00 call”, “12.11 review”, “2026-11-20 10:00 demo”. No day — the day chosen in the grid (in the terminal, today); no time — all day. Day words are understood in English and Russian.
+- **Repeat.** Does not repeat, every day, weekdays, every week, every month or every year; the event's day is when the series starts. One line can say it too: “every friday 10:00 retro”, “on weekdays 9:30 standup”.
+- **Color.** Blue, green, yellow, orange, red, purple, pink or gray; blue by default.
+- **Reminder.** Pick it from a list: at the start, 5, 10, 15 or 30 minutes, 1 or 2 hours, a day, two days or a week before; for an all-day event, at 9:00, 8:00 or 7:00 that day, the day before at 21:00, 18:00 or 9:00, two days or a week before at 9:00. Or type your own, in English or Russian: “45 min before”, “at 14:30”, “the day before at 20:00” — no later than the start and no earlier than a week before. In the Claude mobile app, which has no list, a button steps through the choices.
+- **Notifications.** A reminder comes as a system notification and a toast while any Claude Code session is open; one session shows it, not all of them. One missed while Claude Code was closed shows on the next start as *Missed*, if the event was less than a day ago.
+- **Claude keeps it too**, with the `mcp__arcade__calendar` tool, which changes only the calendar: “add a call on Friday at 15:00”, “what do I have tomorrow?”, “make the demo red”.
+- **Card due dates.** Board cards with a due date show on their day as all-day entries, *done* once the card is in the last column; you change them on the card.
+- It doesn't sync with Google or Apple calendars yet.
+
+## Agents
+
+It's in the *Work* section of the menu: the Claude Code sessions with Arcade on this computer, each named by its folder, yours marked *this session*.
+
+- **What each one is doing.** *Waiting for permission*, *awaiting a reply*, *finished the turn*, *working* or *idle*, and for how long, with the card it's on and its place in the queue, like *Queue: card 3 of 10*. Sessions waiting for permission come first. In Desktop each session is a card; in the terminal and VS Code, a line. A closed session disappears in under a minute.
+- **Find it by its folder.** Arcade can't open another session for you; the folder name tells you which window or tab it is.
+- **Answer from here.** When Claude in another session asks a question with options, its card shows the question and the options as buttons. A single question goes off at the first press; with several, pick the options and press *Answer*. Within a second, Claude in that session gets the answer as if you had given it there. A permission request shows too, with the tool and the command, like *Bash: npm test*, but you give permission only in that session itself.
+- **One queue, several sessions.** Press *Queue for Claude* on the same board in each session, and whichever is free takes the next card; two sessions don't get the same card. A session that joins says so: *A queue is already running on this board in the session “api”*. Each session stops its own queue by the same rules — a permission question, an interrupted turn, another request — and gives up to 10 cards a run. *Stop the queue* stops only this session; *Stop everywhere* stops all of them, and each one finishes its current card. Under a card, the board shows who has it: *in the session “api”*.
+- **Same folder.** If a session already in the queue works in the same folder, Arcade warns that the two may edit the same files and joins only when you press *Queue for Claude* again. A separate folder or a git worktree is safer.
+- **Toasts.** When another session asks for permission or a question, a toast in your own Arcade pane says *Session “api” is waiting for permission* or *…for an answer to a question* — no sound, no system notification. Turn it off, or turn on a toast for a finished turn (off by default), in *Settings → Notifications*.
+- **Hide one.** The × next to another session hides it, and its toasts, until you bring it back from *Hidden sessions* at the bottom; a hidden session waiting for permission or a reply says so there. Hidden sessions are remembered in every session.
+- **Stays on this computer.** Each session keeps a small file in `~/.claude/arcade/agents` with its folder, state and card, and the question or permission request it's waiting on; an answer from *Agents* goes to the session as a small file next to them. Nothing goes to Arcade's site.
+
+## For teams
+
+A small team can keep its tasks in Arcade: one shared board, and whoever takes a card hands it to their own Claude.
+
+1. Everyone installs Arcade (Claude Code 2.1.275 or newer) — see [Install](#install).
+2. `/arcade` → **Social** → **Sign in with GitHub**: GitHub's page opens in your browser; confirm there, then press *Sign in* on Arcade's page (its code should match the one in the panel). If that doesn't work, *Sign in with a code*.
+3. Take an @handle — your GitHub name in one click, or your own.
+4. Add each other as friends by exact @handle; the other person accepts.
+5. **Work** → make a board → tick teammates → **Share**.
+6. Only here for boards and chats? The first time you open Arcade, keep just **Work** and **Social**. Then in **Settings → Notifications**, press **“Play?” line** until it says *off*: nothing will appear above the prompt while the agent works.
+
+From then on: open the board, pick a card, **Give to Claude**. If Claude is free, the card goes to it at once; if it's busy, the card waits in the prompt box until you send it. Claude ticks off what's done and writes the result on the card, and everyone on the board sees it within seconds — and who took which card. Give each card a due date, and it shows in your calendar. At the end of the day, *Daily summary* → *Send to a chat* puts your standup in the team chat. Chats are in **Social**.
+
+Running several Claude Code sessions yourself? Press *Queue for Claude* on the same board in each one: a free session takes the next card, and **Work** → **Agents** shows what each session is doing.
+
+Good to know: shared boards and chats are stored on Arcade's site and are not encrypted, so keep passwords and keys out of them. Arcade learns only your GitHub profile name and picture. Up to 3 shared boards of your own, 20 people and 200 cards on a board. *Delete account* (press twice) makes the site forget you and your settings.
+
+## Account, friends and chats
+
+Signing in is optional — without it everything else works as before.
+
+- **Sign in with GitHub** (in *Social*): GitHub’s sign-in page opens in your regular browser; confirm there, then press *Sign in* on Arcade’s page — its code should match the one in the panel. If signing in through the browser doesn’t work, use *Sign in with a code*: Arcade shows a code, you enter it on GitHub’s page. Arcade learns only your GitHub profile name and picture — no email, no access to repositories.
+- **Sync.** Your language, keys, notifications, panel size, what to do with the game when the agent signals, the Desktop browser options, your topics, Twitch channels, favorites, folded and hidden sections and Flappy Arcade best become the same on all your computers. Your own games, the browser and the graphics mode stay per computer.
+- **@handle.** Take your GitHub name in one click or make up your own: 4 to 32 characters — Latin letters, digits and `_`. You can change it up to 5 times a day.
+- **Friends.** Add a friend by their exact @handle: they accept the request on their side, and you appear in each other's lists. There are no suggestions as you type, so nobody can browse who is on Arcade. Declining and removing are silent.
+- **Online and game invitations.** While the Arcade menu is open, your friends see you as *online*, and you see them; to stay unseen, turn off *Show friends that I am online* on the *Friends* screen. *Invite* next to a friend offers the online games: a board game opens a private room for two, a Doom game its lobby. The game opens for you at once; your friend gets a notification and *Accept* at the top of the menu, and the invitation is valid for 10 minutes. You can invite where online games open in a browser — the built-in one in Desktop or a browser window.
+- **Chats.** One-on-one with a friend, groups of friends, or a group with all your friends in one press. Write right in the Arcade panel or open the chats page on the site. Your own message can be edited or deleted from the ⋮ menu next to it; on the site, a right click opens the same menu. Messages are stored on Arcade's site and are not encrypted — don't write passwords or keys there.
+- **Avatars and message notifications.** Pick one of 24 ready-made avatars in *Account* — chats only show it; without one, the first letter of your @handle. A group’s owner picks its picture from the same 24. Your GitHub picture is never shown to others. When a friend writes, a card pops up in the bottom left on top of all windows (Windows) or a system notification appears (macOS, Linux); a click on the card opens that chat.
+- **Sign out** stops syncing on this computer; **Delete account** (press twice) makes the site forget you and your settings.
+
+## The catalog
+
+| Tab | What's inside |
+|---|---|
+| **NES (Dendy)** | 28 homebrew games — platformers, puzzles, shooters, racing: Thwaite, Nova the Squirrel, Super Uwol, Lala the Magical and more |
+| **Sega** | 11 Mega Drive games: Miniplanets, Tank Battle, Battle 4Tris, Pong and more |
+| **Master System** | 4 games: Balloon Master, SkyHaul, Food Fighter, Escape from Monster Dimension |
+| **PlayStation** | Hello Pong |
+| **Games → Arcade games** | Flappy Arcade — Arcade's own one-button game: plays right in the panel and in the Arcade window; the course of the day is the same for everyone, your best score is kept |
+| **Games → Shooters** | Freedoom Phase 1 and 2 (free Doom replacements), FreeDM deathmatch, Blasphemer (free Heretic replacement), BlasphDM deathmatch, OpenArena — arena shooter on the Quake III engine against bots (GPL-2.0) |
+| **Games → Racing** | HexGL — futuristic anti-gravity racing |
+| **Games → Strategy** | OpenTTD — transport tycoon (GPL-2.0); Micropolis — the open-source code of the classic 1989 city builder, your city is saved in the browser (micropolisJS, GPL-3.0 with additional terms and the Micropolis Public Name License); Warzone 2100 — real-time strategy with a campaign and skirmish against the computer, you design your own units, saves stay in the browser (GPL-2.0-or-later) |
+| **Games → Adventures** | Four free classic 90s adventures in ScummVM (GPL-3.0-or-later): Beneath a Steel Sky, Flight of the Amazon Queen, Lure of the Temptress and Nippon Safes, Inc. — freeware game data with permission to redistribute; save at any moment with F5 |
+| **Games → Board games** | Chess — against people or the computer (Stockfish, levels 1–10), online with clocks; Go on 9×9, 13×13 and 19×19 boards; Russian draughts, Reversi; *Resign* in all of them |
+| **Books** | Public-domain classics in 30 languages — you pick the language (it starts with the interface language). Sections are the same for every language: Popular, Fiction, Poetry, Drama, Adventure, Detective stories and more; search by title or author. The list comes from Project Gutenberg and Wikisource on demand — Arcade keeps no books of its own; a book you open stays in *My books* in your browser. The bookmark is set automatically: open a book again and you're back where you stopped. Your own EPUB, FB2 and TXT open in the Arcade window too |
+| **Audiobooks** | LibriVox recordings in the same languages and sections, with search: listen online straight from archive.org, or download a book to your browser to listen offline. The player in the Arcade window remembers the chapter, the place and the speed; your own MP3, M4A, M4B, OGG and Opus files open there too and stay in your browser |
+| **Articles** | Fresh articles from 106 curated English-language blogs and publications — Simon Willison, InfoQ, The Cloudflare Blog, Ars Technica, Krebs on Security and more |
+| **Podcasts** | Fresh episodes of 65 English-language podcasts — Software Engineering Daily, Security Now, Talk Python To Me, Darknet Diaries and more; an episode remembers where you stopped |
+| **YouTube** | Fresh videos from 153 curated channels across 24 directions, from AI, web and DevOps to science, space and retro computing |
+| **Twitch** | *My channels* — any Twitch channel by name or link, live ones first; *Live now* and *Full catalog* — 26 curated English-language channels, no 18+ channels; no sign-up needed |
+
+Each game's card links to its license and source code.
+
+**Topics.** Articles, Podcasts and YouTube start with topics: Haiku suggests three about what the agent is working on, plus *Launches and keynotes*. Under *Your own topic* you can type what you want to watch, read or listen to, in any language; your last five topics stay as *My topics* tiles.
+
+## Online play
+
+- **Consoles.** Two-player games on NES, Sega, Master System and PlayStation have an **Online** button: create a room or join someone's. Inputs are synchronised frame by frame through Arcade's server.
+- **Doom.** **FreeDM** and **BlasphDM** are deathmatch lobbies with 5-minute rounds for up to four players; **Freedoom** and **Blasphemer** have co-op via **Online**. Newcomers wait for the next round — the engine doesn't allow joining a match in progress.
+- **Board games.** *Find an opponent*, *Invite a friend* by link, or *Against the computer*. The game is stored on the server: make a move, go back to your agent, open the link later — the board is where you left it. Signed in with an @handle, your opponent sees it next to your colour.
+- **Who's waiting.** Once a minute Arcade checks whether anyone is waiting for a partner and shows it in Claude Code — for example *“play? Waiting online: FreeDM (1)”* — with a **Join** button in the menu.
+
+## Your own games
+
+- **`/arcade-add <file>`** adds a NES, Mega Drive or Master System ROM (up to 4 MB). The plugin keeps a copy in `~/.claude/arcade` and never uploads it.
+- **PlayStation discs and Doom WADs** (for example a `doom.wad` you own) — in the Arcade window: **Open your own file**. They stay in that browser only.
+
+Only add files you have the rights to.
+
+## Settings
+
+Open **Settings** in the *More* section of the `/arcade` menu:
+
+- **Main menu sections** — show or hide any section except *More*; a hidden section is gone from the menu entirely until you bring it back here. The same choice is offered the first time you open Arcade.
+- **Language** — one of 13 (also right in the menu: 🌐).
+- **Open games** — here in the panel, in a browser window, or in a specific browser; in Claude Desktop — in Claude's built-in browser or in a browser window.
+- **Graphics** (terminal) — pixels in terminals that show images (kitty, Ghostty, Rio), text blocks everywhere.
+- **Panel size** — normal or full width.
+- **When the agent finishes** — banner and keep playing, pause with a banner, or straight back to the agent.
+- **When the agent asks for permission** — the same three options.
+- **When the browser opens** (Claude Desktop) — close the Arcade menu so the browser gets the full height, or keep the menu above it.
+- **Agent finished while you watch** (Claude Desktop) — close the tab Arcade opened for a video, a stream, TikTok, an article or an episode, so the chat with Claude is in front of you again, or just let you know.
+- **Notifications while playing in the window.**
+- **Message notifications** — a card in the bottom left when a friend writes in a chat (a system notification on macOS and Linux).
+- **Another session is waiting for permission** and **Another session finished its turn** — a toast in the Arcade pane about the other sessions on this computer, no sound (see [Agents](#agents)); the first also covers a question, and is on by default, the second off.
+- **Key test and key remapping** (terminal).
+- **Terms and privacy** — the site's Terms of Use and Privacy Policy, opened in your usual browser.
+
+## What the plugin does on your computer
+
+Arcade runs inside Claude Code with the access Claude Code gives plugins. All of its code is in this repository, and `claude plugin validate ./mod` lists every event it hooks and every call it makes. In short:
+
+- **The agent's tools.** Arcade sees when a tool starts and finishes and when the agent asks for permission — that's how it knows when to show its banner. It never changes or blocks the agent's tool calls. It approves only three kinds of calls itself, and only where Claude Code would otherwise ask you: `mcp__arcade__notes`, which changes only the notebook and deletes nothing; `mcp__arcade__calendar`, which changes only the calendar; and opening a game in Desktop's built-in browser after you press it in the panel. Your allow and deny rules apply as they are.
+- **Interrupting the agent.** Only in Claude Desktop, when you open something in the built-in browser while the agent is working: Desktop doesn't let a plugin open the browser by itself. Arcade waits for the current tool to finish (after 10 seconds it cuts it off, but it waits as long as a permission prompt is on screen), interrupts the agent and asks Claude to open the page and get back to work. To avoid this, choose a browser window in *Settings → Open games*.
+- **Your conversation.** For topics, Haiku in your own session gets the end of the conversation, a few thousand characters; this counts toward your Claude usage. Arcade's site never sees the conversation. Arcade types into the prompt box or submits it only when you ask — for example *Give to Claude* in the notebook, or the next card of a *Queue for Claude* you started — or to open a page as described above.
+- **Programs it runs.** Your browser for the Arcade window (on Windows with its own profile in `%LOCALAPPDATA%\claude-arcade`); notifications, calendar reminders among them — PowerShell on Windows, `osascript` on macOS, `notify-send` on Linux; a check of which browsers are installed (Windows) or which OS this is (`uname`).
+- **Files.** It writes only the ROMs you add with `/arcade-add`, into `~/.claude/arcade/roms`, and each session's small mark for *Agents*, with the answers sent from there, into `~/.claude/arcade/agents`; it reads only the file you name, those copies, those marks and its own files. Settings, the notebook, the calendar and favorites live in Claude Code's plugin storage.
+- **Environment variables.** It reads `HOME` or `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` and `OS`, and changes none.
+- **Network.** The plugin itself talks only to Arcade's site (`agent-arcade.fefaodessa.workers.dev`), the RSS feeds of YouTube channels and the feeds of the blogs and podcasts it shows. Pictures in the Desktop panel, such as Twitch avatars, load straight from those services. Games, books and videos are loaded by the page you open in the browser.
+
+## Privacy
+
+The site's [Privacy Policy](https://agent-arcade.fefaodessa.workers.dev/privacy) and [Terms of Use](https://agent-arcade.fefaodessa.workers.dev/terms) have the details; in the plugin they are under *Settings → Terms and privacy*. In short:
+
+- No ads, no analytics, no tracking. Games that came with analytics had it removed (see each game's `NOTICE`).
+- Your own ROMs, WADs, books and audiobook files never leave your machine or browser.
+- Book and audiobook lists and Project Gutenberg books come through Arcade's site, which fetches them from Project Gutenberg, Wikisource and archive.org and keeps them only in Cloudflare's cache — lists for six hours, a book for a week. Wikisource pages and LibriVox recordings the window loads straight from those sites.
+- Online play goes through Arcade's server on Cloudflare: messages are relayed between players in a room and not stored — except moves of board games, which are kept so you can come back; a game untouched for a month is deleted.
+- Topics are suggested by Haiku in your own Claude Code session; Arcade's site never sees your conversation — only a short English search query when you use *Your own topic*. An article's address goes after `#`, so it never reaches Arcade's server.
+- A search for *Your own topic* goes through YouTube API Services, and videos play in YouTube's own player, so the [YouTube Terms of Service](https://www.youtube.com/t/terms) and the [Google Privacy Policy](https://policies.google.com/privacy) apply too. Haiku in your own session picks up to six videos from their titles and short descriptions; Arcade's site keeps search results in a shared cache for a day.
+- Signed in, the site keeps your synced settings, favorites, @handle, friends, chats and shared boards, and game invitations for 10 minutes. Who is online it holds only in memory, for a minute and a half. The session key goes only to Arcade's site.
+- The notebook and the calendar stay on your computer. Shared boards are stored on Arcade's site and are not encrypted, like chats. Pages go to Notion or another app only when you ask, through your own Claude connectors; GitHub issues and comments too — Arcade never talks to GitHub itself.
+- *Agents* sees your other sessions through small files in `~/.claude/arcade/agents` — each session's folder, state and card, and the text of the question or permission request it's waiting on, with the command. Answers sent from *Agents* go next to them. They stay on this computer and never go to Arcade's site; on a shared board your friends see only “taken by @handle”, as before.
+- A bug report carries your text, the Arcade version, where it is open, the interface language and the OS — nothing else; without signing in it goes unsigned, and the site keeps no address.
+- Some games can reach the internet only when you ask them to — for example OpenTTD's optional survey and its *Online Content* button.
+
+## Platforms and status
+
+Arcade is in **beta**: the features are in place, and work goes on in the details — see the [changelog](https://github.com/ArbakovMaxim/agent-arcade/blob/main/CHANGELOG.md).
+
+- Checked live on Windows, macOS and Linux.
+- Works in the terminal, in VS Code and in Claude Desktop.
+
+## Licenses
+
+- **Games:** every game has its own free license (MIT, GPL, BSD, Apache, Creative Commons and others) — the license text and source live next to the game and are linked from its card.
+- **Books and audiobooks:** public domain; Arcade does not store them — books come from Project Gutenberg and Wikisource, recordings from LibriVox (archive.org), at the moment you open them.
+- **Emulators and engines:** JSNES (Apache-2.0), EmulatorJS (GPL-3.0) with its cores, PrBoom (GPL-2.0), doom-wasm by Cloudflare and Chocolate Doom/Heretic (GPL-2.0), OpenTTD (GPL-2.0), micropolisJS (GPL-3.0 with additional terms), ScummVM (GPL-3.0-or-later), Stockfish (GPL-3.0) — the chess computer. The Genesis Plus GX core used for Sega and Master System is for non-commercial use only.
+- **Inside the plugin:** the JSNES 2.1.0 emulator (Apache-2.0) and three NES homebrew games for playing offline — *Thwaite* and *Concentration Room* by Damian Yerrick (GPL-3.0-or-later) and *robotfindskitten* by Damian Yerrick after Leonard Richardson's game (zlib). The games are stored as data in `mod/hooks/roms/`; their source code (`.tar.gz`) and license texts are in `mod/third_party/`.
+- **Arcade's own code** (the plugin and the site) — **GNU AGPL-3.0** ([LICENSE](https://github.com/ArbakovMaxim/agent-arcade/blob/main/LICENSE)), © 2026 Max Arbakov. You are free to use, study and change it. If you distribute a modified version — or run it as an online service for other people — you must publish your full source code under the same license and keep the copyright notices. Third-party components keep their own licenses. The Arcade logo, which is also the plugin icon, is not covered by this license: it may be used only to refer to the Arcade project.
+
+## Support the project
+
+Arcade is free. If it makes your waits more fun, you can buy the project a coffee — entirely voluntary: **[ko-fi.com/agentarcade](https://ko-fi.com/agentarcade)**. The same link is at the bottom of the `/arcade` menu (*☕ Support the project*) and in the Arcade window. Nothing in Arcade depends on it, and it never interrupts a game.
+
+## Feedback
+
+Found a bug? The quickest way is right in Arcade: **More → 🐞 Report a bug**. Describe what broke, and the report goes straight to the author of Arcade with the version, the surface, the language and the OS.
+
+You can also open an [issue](https://github.com/ArbakovMaxim/agent-arcade/issues) — for bugs and for ideas. Please mention your OS, your Claude Code surface (terminal, VS Code or Desktop) and the game.
+
+Pull requests are welcome. By sending one you agree that your contribution is licensed under AGPL-3.0 and that the author may also offer Arcade under other terms (for example, a commercial license).
+
+## For developers
+
+```
+mod/     the Claude Code plugin (hooks, panel UI, tests)
+site/    the website on Cloudflare Workers: catalog, Arcade window, network rooms, accounts, friends, chats, bug reports
+tools/   build helpers: translations, heretic-wasm
+.github/ GitHub Actions that build doom-wasm, heretic-wasm, OpenTTD and ScummVM for the browser
+```
+
+- Run the plugin from the repository: `claude --plugin-dir ./mod`
+- Plugin tests: `claude plugin validate ./mod`, then `claude plugin test` in `mod/`
+- Site tests: `npm test` in `site/`; build: `node build.mjs`; deploy happens automatically from `main` via Cloudflare Workers Builds.
+- Work happens in `main`, and pull requests go there too. The default branch `plugin` is a copy of `main` without `site/` that a GitHub Action updates on every push: the plugin marketplace downloads it instead of the whole repository.
+- Translations: `node tools/i18n/collect.mjs`, then `node tools/i18n/check.mjs` — see [tools/i18n/README.md](https://github.com/ArbakovMaxim/agent-arcade/blob/main/tools/i18n/README.md).
+
+Detailed documentation (in Russian): [mod/docs/README.ru.md](https://github.com/ArbakovMaxim/agent-arcade/blob/main/mod/docs/README.ru.md) — the plugin, [site/README.md](https://github.com/ArbakovMaxim/agent-arcade/blob/main/site/README.md) — the site, adding games and network play.
