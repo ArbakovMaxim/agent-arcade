@@ -1,5 +1,5 @@
 // Arcade: Claude ждёт человека — разрешения на инструмент или ответа на вопрос (AskUserQuestion). Отсюда — статус
-// «ждёт разрешения», уведомление, остановка очереди и что показать в карточке вкладки «Агенты».
+// «ждёт разрешения», уведомление, остановка очереди на вопрос и что показать в карточке вкладки «Агенты».
 // Классический хук PermissionRequest на Team и Enterprise до мода не доходит: встроенная защита cc-plugin-sec-default
 // идёт первой и выключает классические хуки плагинов. Поэтому запрос замечаем и по решению tool.check — «спросить» у
 // вызова Claude, — а что человек ответил, узнаём из телеметрии (tool_decision) или по концу вызова. Решений мод не
@@ -11,7 +11,7 @@ import { tr } from '../i18n.js'
 import { CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, NOTIFY_WINDOW_MS, PANE, S } from './state.js'
 import { log } from './status.js'
 import { releaseAll } from './play.js'
-import { queuePermission } from './queue.js'
+import { queueQuestion } from './queue.js'
 import { AGENT_SLOTS } from './agents.js'
 
 export const ANSWER_POLL_MS = 1_000 // пока вопрос открыт, файл ответа читаем раз в столько
@@ -27,7 +27,7 @@ const QUESTION_MAX = 300 // текст вопроса в отметке — не
 // Чего ждёт Claude: { kind: 'permission', tool, what } или { kind: 'question', id, questions: [{ question, header,
 // options: [подписи], multi }] }; null — ничего
 S.ask = null
-S.permMode = '' // режим разрешений сессии — из телеметрии
+S.permMode = '' // режим разрешений сессии — из телеметрии и классических хуков
 // id вызова → запрос: «спросить» ещё может решить классификатор
 const waiting = new Map()
 // Открытые запросы: id вызова, 'classic' (классический хук) или 'q:<id вопроса>'
@@ -42,14 +42,16 @@ const sent = new Set()
 
 const answerPath = (slot) => `${S.ag.dir}${S.sep}a${slot}.json`
 
-// Claude ждёт человека: статус, плашка над игрой, остановка очереди, уведомление. Уже ждёт — только новый запрос
+// Claude ждёт человека: статус, плашка над игрой, уведомление; вопрос ещё и останавливает очередь. Уже ждёт — только
+// новый запрос
 export async function waitForPerson($, ask) {
   S.ask = ask
-  if (S.status === 'permission') return $.ui.invalidate('ui.render')
   const question = ask.kind === 'question'
+  // Вопрос останавливает очередь, даже если статус «ждёт» уже стоит (например, от запроса разрешения рядом)
+  if (question) queueQuestion($)
+  if (S.status === 'permission') return $.ui.invalidate('ui.render')
   S.status = 'permission'
   S.askVisible = false
-  queuePermission($, question)
   if (S.paneOpen && S.view !== 'library') {
     S.agentAlert = question ? 'question' : 'permission'
     if (S.onPermission === 'pause') {
@@ -150,15 +152,22 @@ export function toolDecided($, e) {
   if (typeof a.tool_use_id === 'string') settle($, a.tool_use_id)
 }
 
+// Режим разрешений из входа классического хука (Pro и Max): он есть у каждого
+function modeOf(e) {
+  if (typeof e?.permission_mode === 'string' && e.permission_mode) S.permMode = e.permission_mode
+}
+
 // Классический хук (Pro и Max): запрос показан человеку сейчас. Вопрос ловит questionCall
 export async function classicAsk($, e) {
+  modeOf(e)
   if (e.tool_name === 'AskUserQuestion') return
   const ask = { kind: 'permission', tool: e.tool_name ?? '', what: whatOf(e.tool_input) }
   asks.set('classic', ask)
   await waitForPerson($, ask)
 }
 // Инструмент отработал: классический запрос закрыт (вопрос, если он открыт, — нет)
-export function classicDone($) {
+export function classicDone($, e) {
+  modeOf(e)
   asks.delete('classic')
   resume($)
 }

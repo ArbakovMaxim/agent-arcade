@@ -398,7 +398,7 @@ export function boardsScreen($, e, kit) {
           Button({ key: 'arcade-board-send', label: 'Отдать Claude', onPress: () => sendBoard($, id) }),
           dim('  Claude получит доску с карточками и сможет добавлять, править и переносить их.'),
           Button({ key: 'arcade-board-queue', label: queued ? 'Остановить очередь' : 'Очередь для Claude', onPress: () => (queued ? endQueue($) : startQueue($, id)) }),
-          dim('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Спросит разрешения или не доделает — очередь встанет.'),
+          dim('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Задаст вопрос или не доделает — очередь встанет.'),
           ...stopAll,
           ...deleteItems,
         ],
