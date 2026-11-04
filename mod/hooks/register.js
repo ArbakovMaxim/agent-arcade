@@ -254,7 +254,7 @@ export function register(on) {
 
   on('classic.PostToolUse', async ($, e, next) => {
     try {
-      classicDone($)
+      classicDone($, e)
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
     }
