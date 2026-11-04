@@ -4914,7 +4914,7 @@ test('доска: задачи из GitHub — Claude забирает их ка
   await ui.unmount()
 })
 
-test('доска: очередь для Claude — карточки по одной; разрешение, прерывание, чужая просьба и недоделанная карточка её останавливают', async ($, on) => {
+test('доска: очередь для Claude — карточки по одной; вопрос, прерывание, чужая просьба и недоделанная карточка её останавливают, запрос разрешения — нет', async ($, on) => {
   const { clock, saved, submits, toasts } = stubs(on, { env: WINDOWS, submit: true })
   await start($)
   await clock.advance(200)
@@ -4940,7 +4940,7 @@ test('доска: очередь для Claude — карточки по одн�
   await ui.press({ key: 'arcade-menu-boards' })
   await ui.press({ key: `arcade-desk-${board().id}` })
   expect(await label()).toBe('Очередь для Claude')
-  expect(await text('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Спросит разрешения или не доделает — очередь встанет.')).toBeDefined()
+  expect(await text('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Задаст вопрос или не доделает — очередь встанет.')).toBeDefined()
 
   // Первая карточка — Claude и в «В работе»; на экране — что он делает
   await ui.press({ key: 'arcade-board-queue' })
@@ -4965,20 +4965,20 @@ test('доска: очередь для Claude — карточки по одн�
   expect(toasts).toContain(stuck)
   expect(await label()).toBe('Очередь для Claude')
 
-  // Снова — из первой колонки: B уже в работе, дальше C. Claude спросил разрешения — очередь встаёт
+  // Снова — из первой колонки: B уже в работе, дальше C. Claude спросил разрешения — очередь не встаёт: одобрили
+  // (человек или авто-режим), карточка в «Готово» — следующая уходит сама
+  for (const title of ['D', 'E']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
   await ui.press({ key: 'arcade-board-queue' })
   expect(card(2)).toBe(page('C').id)
   await turn('t3', 2, async () => {
     await $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'npm test' } })
+    expect(await label()).toBe('Остановить очередь')
     await done('C')
   })
-  expect(submits.length).toBe(3)
-  expect(await text('Очередь остановлена: Claude спросил разрешения. Ответь ему и запусти очередь снова.')).toMatchObject({ props: { color: 'warning' } })
-
-  // Ход прервали — тоже стоп
-  for (const title of ['D', 'E']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
-  await ui.press({ key: 'arcade-board-queue' })
+  expect(submits.length).toBe(4)
   expect(card(3)).toBe(page('D').id)
+
+  // Ход прервали — стоп
   await turn('t4', 3, () => done('D'), { reason: 'aborted', isAborted: true })
   expect(submits.length).toBe(4)
   expect(await text('Очередь остановлена: ход Claude прервали.')).toBeDefined()
@@ -5014,6 +5014,25 @@ test('доска: очередь для Claude — карточки по одн�
   await turn('t7', 6, () => done('G'))
   expect(submits.length).toBe(7)
   expect(await text('Очередь пройдена: в колонке «Сделать» карточек больше нет.')).toMatchObject({ props: { dimColor: true } })
+
+  // В разрешении отказали — Claude не доделал карточку: очередь встаёт в конце хода
+  for (const title of ['H', 'I']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(7)).toBe(page('H').id)
+  await turn('t8', 7, () => $.classic.PermissionRequest({ tool_name: 'Bash', tool_input: { command: 'rm -rf build' } }))
+  expect(submits.length).toBe(8)
+  expect(await text('Очередь стоит: Claude закончил ход, а карточка «H» не в колонке «Готово». Посмотри, что он ответил.')).toMatchObject({ props: { color: 'warning' } })
+
+  // Claude задал вопрос — очередь встаёт сразу: он ждёт человека
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(8)).toBe(page('I').id)
+  const questions = [{ question: 'Какой цвет кнопки?', header: 'Цвет', options: [{ label: 'Синий', description: '' }, { label: 'Зелёный', description: '' }], multiSelect: false }]
+  await turn('t9', 8, async () => {
+    await $.tool.call({ tool: 'AskUserQuestion', questions })
+    expect(await text('Очередь остановлена: Claude задал вопрос. Ответь ему и запусти очередь снова.')).toMatchObject({ props: { color: 'warning' } })
+    await done('I')
+  })
+  expect(submits.length).toBe(9)
 })
 
 test('доска: очередь в двух сессиях — перенос карточки в «Готово» затёрла другая сессия, очередь не встаёт', async ($, on) => {

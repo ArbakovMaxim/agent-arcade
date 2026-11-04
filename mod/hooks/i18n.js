@@ -963,8 +963,8 @@ const EXACT = {
     "Leave a short comment on the issue with the GitHub connector tools: what was done, judging by the card text and ticked items, in the issue's language. Don't close the issue unless asked to.",
   'Очередь для Claude': 'Queue for Claude',
   'Остановить очередь': 'Stop the queue',
-  '  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Спросит разрешения или не доделает — очередь встанет.':
-    '  Claude takes cards from the first column one at a time: the next one once the previous one is in the last column. If Claude asks for permission or leaves a card unfinished, the queue stops.',
+  '  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Задаст вопрос или не доделает — очередь встанет.':
+    '  Claude takes cards from the first column one at a time: the next one once the previous one is in the last column. If Claude asks a question or leaves a card unfinished, the queue stops.',
   'Очередь: Claude делает': 'Queue: Claude is doing',
   'отдано карточек': 'cards given',
   'Карточки идут очередью Arcade: перенесёшь эту в последнюю колонку — следующую Arcade даст сам. Нужно решение человека — не переноси, спроси.':
@@ -984,7 +984,6 @@ const EXACT = {
   'Очередь остановлена: ошибка Arcade.': 'Queue stopped: an Arcade error.',
   'Очередь остановлена. Claude доделает текущую карточку, следующую не получит.': "Queue stopped. Claude will finish the current card but won't get the next one.",
   'Очередь остановлена: Claude получил другую просьбу.': 'Queue stopped: Claude got a different request.',
-  'Очередь остановлена: Claude спросил разрешения. Ответь ему и запусти очередь снова.': 'Queue stopped: Claude asked for permission. Answer Claude and start the queue again.',
   'Очередь остановлена: Claude задал вопрос. Ответь ему и запусти очередь снова.': 'Queue stopped: Claude asked a question. Answer Claude and start the queue again.',
   'Очередь остановлена: ход Claude прервали.': "Queue stopped: Claude's turn was interrupted.",
   'Очередь остановлена: Claude не закончил ход — ошибка или отказ.': "Queue stopped: Claude didn't finish the turn — an error or a refusal.",
