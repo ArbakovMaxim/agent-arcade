@@ -1223,6 +1223,26 @@ const EXACT = {
   'Непрочитанных сообщений: {0}': 'Unread messages: {0}',
   'сброс в {0}': 'resets at {0}',
   'На сегодня всё.': 'All clear for today.',
+  // Что поменялось: ветка git и незакоммиченные файлы сессии в «Агентах»
+  'ветка {0}': 'branch {0}',
+  'без ветки': 'no branch',
+  'изменено файлов: {0}': 'files changed: {0}',
+  'не закоммичено': 'not committed',
+  'изменений нет': 'no changes',
+  'не отправлено коммитов: {0}': 'unpushed commits: {0}',
+  'новый файл': 'new file',
+  'двоичный файл': 'binary file',
+  'и ещё файлов: {0}': 'more files: {0}',
+  'и ещё общих файлов: {0}': 'more shared files: {0}',
+  'Та же папка, что у сессии «{0}»: изменения общие — чьи они, не различить.':
+    "Same folder as session “{0}”: the changes are shared — there's no telling whose they are.",
+  'Та же папка, что у этой сессии: изменения общие — чьи они, не различить.':
+    "Same folder as this session: the changes are shared — there's no telling whose they are.",
+  '{0} правит и сессия «{1}»': '{0} is also being edited by session “{1}”',
+  '{0} правит и эта сессия': '{0} is also being edited by this session',
+  'Дать Claude: проверить изменения': 'Give to Claude: review changes',
+  'Проверь незакоммиченные изменения в этой папке: посмотри git status и git diff, и новые файлы тоже. Найди ошибки, забытое и что стоит поправить — и расскажи коротко. Ничего не коммить, не откатывай и не прячь в stash. Если что-то стоит поправить — сначала скажи, что именно.':
+    "Review the uncommitted changes in this folder: look at git status and git diff, and the new files too. Find bugs, anything forgotten and what is worth fixing — and tell me briefly. Don't commit, revert or stash anything. If something is worth fixing, say what first.",
 }
 
 const SIGNAL = { 'плашка, игра идёт': 'banner, game keeps running', 'пауза и плашка': 'pause and banner', 'сразу к агенту': 'straight back to the agent' }

@@ -25,6 +25,7 @@ import { scheduleTick } from './app/schedule.js'
 import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
 import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
+import { changesPoll } from './app/changes.js'
 import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
@@ -61,6 +62,8 @@ export function register(on) {
       }
       // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
       await startAgents($, home)
+      // «Что поменялось» в «Агентах»: ветка и незакоммиченные файлы — git читает сейчас и в конце каждого хода, не по таймеру
+      $.clock.after(0, () => changesPoll($).catch((err) => log(`что поменялось: ${err?.message ?? err}`)))
       // Очередь, которая ждала сброса лимита Claude до перезапуска, — ждёт дальше; доски «продолжать после сброса»
       await resumeStart($).catch((err) => log(`очередь после сброса: ${err?.message ?? err}`))
       S.catalog = restoreCatalog(await $.store.get('catalog')) ?? S.catalog
@@ -316,6 +319,7 @@ export function register(on) {
       // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
       if (S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
       $.clock.after(0, () => usagePoll($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
+      $.clock.after(0, () => changesPoll($).catch((err) => log(`что поменялось: ${err?.message ?? err}`)))
       if (S.paneOpen && S.view !== 'library') {
         S.agentAlert = 'done'
         if (S.onDone === 'pause') {

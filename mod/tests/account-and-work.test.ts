@@ -5507,6 +5507,123 @@ test('агенты: крестик скрывает другую сессию �
   await ui.unmount()
 })
 
+test('агенты: что поменялось — ветка и файлы по git, раскрыть, кто правит те же файлы, «Дать Claude: проверить изменения» у своей; git только читает, при старте и в конце хода; не git — строки нет', async ($, on) => {
+  // git этой сессии: ветка landing на 2 коммита впереди, правка app.js, новый new.txt, a.js переименован в b.js
+  const git = {
+    repo: true,
+    status: '## landing...origin/landing [ahead 2]\0 M app.js\0?? new.txt\0R  b.js\0a.js\0',
+    numstat: '12\t3\tapp.js\0' + '0\t0\t\0a.js\0b.js\0',
+  }
+  const answer = (argv: string[]) => {
+    if (!git.repo) return { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+    const cmd = argv[4]
+    if (cmd === 'rev-parse') return { exitCode: 0, stdout: 'D:/work/web\n.git\n', stderr: '' }
+    if (cmd === 'status') return { exitCode: 0, stdout: git.status, stderr: '' }
+    if (cmd === 'diff') return { exitCode: 0, stdout: git.numstat, stderr: '' }
+    return { exitCode: 1, stdout: '', stderr: 'unexpected' }
+  }
+  const { clock, disk, putFile, submits, gits } = stubs(on, { env: AG_ENV, agents: { ...AG_ME, git: answer }, submit: true })
+  const rival = agentFile(putFile, clock, disk)
+  const same = { top: 'd:/work/web', repo: 'd:/work/web/.git' }
+  // «api» — git worktree того же репозитория, правит app.js и lib.js; «docs» — в той же папке, что эта сессия;
+  // «site» — другой репозиторий, без правок; «old» — отметка не того вида
+  const marks = () => {
+    rival(3, { sid: 'sess-a', name: 'api', path: 'D:\\work\\api', status: 'working', since: -60_000, changes: { branch: 'fix', ahead: 0, top: 'd:/work/api', repo: same.repo, files: [{ path: 'app.js', add: 1, del: 0, state: '' }, { path: 'lib.js', add: 2, del: 2, state: '' }], n: 2, at: 1 } })
+    rival(9, { sid: 'sess-b', name: 'docs', path: 'D:\\work\\web', status: 'idle', since: -60_000, changes: { branch: 'landing', ahead: 0, ...same, files: [{ path: 'app.js', add: 12, del: 3, state: '' }], n: 1, at: 1 } })
+    rival(12, { sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'idle', since: -60_000, changes: { branch: 'main', ahead: 0, top: 'd:/work/site', repo: 'd:/work/site/.git', files: [], n: 0, at: 1 } })
+    rival(14, { sid: 'sess-d', name: 'old', path: 'D:\\work\\old', status: 'idle', since: -60_000, changes: { files: 'app.js', n: 'x' } })
+  }
+  marks()
+  await start($)
+  await clock.advance(4_000)
+  // git прочитан при старте; итог — в отметке этой сессии, файлы с числом строк
+  expect(ownRecord(disk).changes).toMatchObject({
+    branch: 'landing',
+    ahead: 2,
+    top: 'd:/work/web',
+    repo: 'd:/work/web/.git',
+    n: 3,
+    files: [
+      { path: 'app.js', add: 12, del: 3, state: '' },
+      { path: 'new.txt', add: null, del: null, state: 'new' },
+      { path: 'b.js', add: 0, del: 0, state: '' },
+    ],
+  })
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-agents' })
+  await clock.advance(AGENT_TICK_MS)
+  // Своя карточка: строка нажимается и раскрывает файлы
+  const head = 'ветка landing · изменено файлов: 3 · не закоммичено · не отправлено коммитов: 2'
+  expect(await ui.find({ key: 'agents-changes-sess-me' })).toMatchObject({ props: { label: `▸ ${head}`, plain: true } })
+  expect(await ui.find({ type: 'Text', text: '  app.js  +12 −3' })).toBeUndefined()
+  await ui.press({ key: 'agents-changes-sess-me' })
+  expect(await ui.find({ key: 'agents-changes-sess-me' })).toMatchObject({ props: { label: `▾ ${head}` } })
+  for (const text of ['  app.js  +12 −3', '  new.txt · новый файл', '  b.js  +0 −0']) expect(await ui.find({ type: 'Text', text })).toBeDefined()
+  await ui.press({ key: 'agents-changes-sess-me' })
+  expect(await ui.find({ type: 'Text', text: '  app.js  +12 −3' })).toBeUndefined()
+  // Кто правит те же файлы: та же папка — изменения общие; worktree того же репозитория — общие файлы; другой репозиторий — ничего
+  const warns = async (card: string) => {
+    const out: string[] = []
+    const walk = (n: any) => {
+      if (n == null || typeof n === 'string') return
+      if (n.props?.color === 'warning') out.push((n.children ?? []).filter((c: any) => typeof c === 'string').join(''))
+      for (const c of n.children ?? []) walk(c)
+    }
+    walk(await ui.find({ key: card }))
+    return out
+  }
+  expect(await warns('agents-card-sess-me')).toEqual(['Та же папка, что у сессии «docs»: изменения общие — чьи они, не различить.', 'app.js правит и сессия «api»'])
+  expect(await warns('agents-card-sess-a')).toEqual(['app.js правит и сессия «docs»', 'app.js правит и эта сессия'])
+  expect(await warns('agents-card-sess-b')).toEqual(['Та же папка, что у этой сессии: изменения общие — чьи они, не различить.', 'app.js правит и сессия «api»'])
+  expect(await warns('agents-card-sess-c')).toEqual([])
+  expect(await ui.find({ type: 'Text', text: 'ветка main · изменений нет' })).toBeDefined()
+  expect(await ui.find({ key: 'agents-changes-sess-d' })).toBeUndefined()
+  // Чужие — только показать: кнопка проверки одна, у своей
+  expect((await ui.findAll({ type: 'Button' })).filter((b: any) => b.props.label === 'Дать Claude: проверить изменения').map((b: any) => b.key)).toEqual(['agents-review'])
+
+  // Терминал — те же строки под строкой сессии
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ key: 'agents-chg-sess-me' })).toBeDefined()
+  expect(await term.find({ key: 'agents-changes-sess-a' })).toMatchObject({ props: { label: '▸ ветка fix · изменено файлов: 2 · не закоммичено' } })
+  await term.unmount()
+
+  // «Дать Claude: проверить изменения» — просьба посмотреть и рассказать, ничего не меняя
+  await ui.press({ key: 'agents-review' })
+  expect(submits.length).toBe(1)
+  expect(submits[0].text).toMatch(/^Проверь незакоммиченные изменения в этой папке: посмотри git status и git diff/)
+  expect(submits[0].text).toContain('Ничего не коммить, не откатывай и не прячь в stash.')
+  expect(await ui.find({ type: 'Text', text: 'Просьба ушла Claude.' })).toBeDefined()
+
+  // Пока ход идёт, git не читается — ни по таймеру, ни при чтении отметок
+  const reads = () => gits.filter((a) => a[4] === 'rev-parse').length
+  expect(reads()).toBe(1)
+  await $.turn.start({ turnId: 't1', text: submits[0].text })
+  marks()
+  await clock.advance(AGENT_READ_MS + AGENT_TICK_MS * 3)
+  expect(reads()).toBe(1)
+  // Ход кончился, всё закоммичено и отправлено — «изменений нет», кнопки проверки нет
+  git.status = '## landing...origin/landing\0'
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(reads()).toBe(2)
+  expect(await ui.find({ type: 'Text', text: 'ветка landing · изменений нет' })).toBeDefined()
+  expect(await ui.find({ key: 'agents-review' })).toBeUndefined()
+  expect(ownRecord(disk).changes).toMatchObject({ branch: 'landing', ahead: 0, n: 0, files: [] })
+
+  // Папка больше не git — строки нет, в отметке пусто
+  git.repo = false
+  await $.turn.start({ turnId: 't2', text: 'дальше' })
+  await $.turn.complete({ turnId: 't2', answer: '', reason: 'answer' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(await ui.find({ type: 'Text', text: /^ветка landing/ })).toBeUndefined()
+  expect(ownRecord(disk).changes).toBeNull()
+  // git только читал: rev-parse, status и diff --numstat, без замков
+  expect([...new Set(gits.map((a) => a.slice(4).join(' ')))].sort()).toEqual(['diff --numstat -z HEAD', 'rev-parse --show-toplevel --git-common-dir', 'status --porcelain=v1 -b -z'])
+  expect(gits.every((a) => a[1] === '--no-optional-locks' && a[2] === '-C' && a[3] === 'D:\\work\\web')).toBe(true)
+  await ui.unmount()
+})
+
 test('агенты: вопрос Claude этой сессии — в её отметке; ответ из «Агентов» другой сессии модель получает как ответ человека, чужой или неверный — нет; ответить можно и из своей вкладки', HEAVY, async ($, on) => {
   const { clock, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, questionMs: 60_000 })
   await start($)
