@@ -6430,3 +6430,170 @@ test('календарь по-английски: экраны без русск
   expect(await term.find({ type: 'Text', text: 'The calendar is empty — add the first event.' })).toBeDefined()
   await term.unmount()
 })
+
+// «Сегодня»: что ждёт человека — на одном экране. Четверг, 5 ноября 2026, 13:10 по местному времени
+const TD = new Date(2026, 10, 5, 13, 10).getTime()
+const TD_MIN = 60_000
+const TD_HOUR = 60 * TD_MIN
+const todayKeys = async (ui: any, prefix: string) => (await ui.findAll({ type: 'Button' })).map((b: any) => b.key).filter((k: any) => typeof k === 'string' && k.startsWith(prefix))
+// Замер лимитов Claude Code ($.session.usage): окна — [вид, проценты, сброс]
+const todayUsage = (on: any, limits: [string, number, number][]) =>
+  on('session.usage', () => ({ value: { rateLimits: limits.map(([kind, percentUsed, reset]) => ({ kind, percentUsed, resetsAt: new Date(reset).toISOString() })) } }))
+
+test('сегодня: плитка первая в «Работе»; ничего не ждёт — «На сегодня всё.»', async ($, on) => {
+  const { clock } = stubs(on, { env: WINDOWS })
+  todayUsage(on, [])
+  await clock.advance(TD)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const keys = await todayKeys(ui, 'arcade-menu-')
+  expect(keys[keys.indexOf('arcade-menu-today') + 1]).toBe('arcade-menu-notes')
+  expect(await ui.find({ key: 'arcade-menu-today' })).toMatchObject({ props: { label: 'Сегодня' } })
+  expect(await ui.find({ type: 'Text', text: '  вопросы сессий, события, сроки и чаты — на одном экране' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-today' })
+  await clock.advance(50)
+  expect(await ui.find({ type: 'Text', text: 'На сегодня всё.' })).toBeDefined()
+  expect(await todayKeys(ui, 'today-')).toEqual([])
+  // Назад — к плитке
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-today' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.unmount()
+})
+
+test('сегодня: ждут ответа и разрешения, события, сроки, мои карточки, чаты и лимиты; на вопрос — ответ прямо здесь', HEAVY, async ($, on) => {
+  const site = boardsSite()
+  const card = (id: string, title: string, col: string, pos: number, more: any = {}) => ({ id, title, body: '', col, pos, ...more })
+  // Общая доска: Логин — взял я, Тесты — друг, Дизайн — я, но готово, API — я, и срок сегодня (он — в «Сроках»)
+  const b = site.board('Релиз', OCTO.id, [OCTO.id, '7'], [
+    card('c1', 'Логин', 'doing', 0, { taken: OCTO.id }),
+    card('c2', 'Тесты', 'doing', 1, { taken: '7' }),
+    card('c3', 'Дизайн', 'done', 0, { taken: OCTO.id }),
+    card('c4', 'API', 'todo', 0, { taken: OCTO.id, due: '2026-11-05' }),
+  ])
+  const share = b.id
+  const shared = Object.values(b.cards).map(({ r, ...c }: any) => ({ ...c, parent: 'pd', at: 1 }))
+  // Своя доска: срок сегодня, просрочено, просрочено, но готово, срок впереди
+  const own = [
+    card('k1', 'Отчёт', 'todo', 0, { due: '2026-11-05' }),
+    card('k2', 'Счёт', 'doing', 0, { due: '2026-11-03' }),
+    card('k3', 'Старое', 'done', 0, { due: '2026-11-01' }),
+    card('k4', 'Позже', 'todo', 1, { due: '2026-11-09' }),
+  ].map((c) => ({ ...c, parent: 'pa', at: 1 }))
+  const stored = {
+    account: { token: TOKEN, user: OCTO },
+    notes: [
+      { id: 'pd', title: 'Релиз', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS, share } },
+      ...shared,
+      { id: 'pa', title: 'Спринт', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } },
+      ...own,
+    ],
+    desks: { [share]: { page: 'pd', rev: b.rev, name: 'Релиз', cols: DEFAULT_COLS, owner: OCTO.id, members: [OCTO.id, '7'], names: {}, cards: { c1: 1, c2: 1, c3: 1, c4: 1 }, held: {} } },
+    calendar: [
+      { id: 'e1', title: 'Стендап', day: '2026-11-05', time: '09:30', remind: 15, at: 0, alerted: TD },
+      { id: 'e2', title: 'Ревью', day: '2026-11-05', time: '15:00', remind: 15, at: 0 },
+      { id: 'e3', title: 'Отпуск Пети', day: '2026-11-05', time: '', remind: 0, at: 0, alerted: TD },
+      { id: 'e4', title: 'Демо', day: '2026-11-06', time: '10:00', remind: 15, at: 0 },
+    ],
+  }
+  const { clock, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, api: site.api, stored })
+  todayUsage(on, [
+    ['five_hour', 85, TD + 80 * TD_MIN + 30_000],
+    ['seven_day', 30, TD + 30 * TD_HOUR + 30_000],
+  ])
+  await clock.advance(TD)
+  // Сессии: docs ждёт ответа на вопрос, site — разрешения, api работает
+  const rival = agentFile(putFile, clock, disk)
+  const one = { kind: 'question', id: 'q1', questions: [{ question: 'Какую базу взять?', header: 'База', options: ['Postgres', 'SQLite'], multi: false }] }
+  rival(9, { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'permission', since: TD - 2 * TD_MIN, ask: one })
+  rival(12, { sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'permission', since: TD - 5 * TD_MIN, ask: { kind: 'permission', tool: 'Bash', what: 'npm test' } })
+  rival(3, { sid: 'sess-a', name: 'api', status: 'working', since: TD - 60 * TD_MIN })
+  await start($)
+  await clock.advance(4_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-today' })
+  await clock.advance(AGENT_TICK_MS)
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const label = async (key: string) => (await ui.find({ key }))?.props?.label
+
+  // Ждут тебя: дольше ждёт — выше; работающей и этой сессии нет
+  expect(await boxKeys(ui, 'today-ask-')).toEqual(['today-ask-sess-c', 'today-ask-sess-b'])
+  expect(await text(/^ждёт разрешения · 5 мин$/)).toMatchObject({ props: { color: 'error' } })
+  expect(await text(/^ждёт ответа · 2 мин$/)).toMatchObject({ props: { color: 'error' } })
+  expect(await text('Bash: npm test')).toBeDefined()
+  expect(await text('Разрешение даётся только в самой сессии.')).toBeDefined()
+  expect(await todayKeys(ui, 'today-q-sess-c')).toEqual([])
+  expect([await label('today-q-sess-b-0-0'), await label('today-q-sess-b-0-1')]).toEqual(['Postgres', 'SQLite'])
+
+  // В календаре: только сегодня; на весь день — первым, прошедшее — бледнее
+  expect(await todayKeys(ui, 'today-ev-')).toEqual(['today-ev-e3', 'today-ev-e1', 'today-ev-e2'])
+  expect(await ui.find({ key: 'today-ev-e3' })).toMatchObject({ props: { label: 'весь день · Отпуск Пети' } })
+  expect(await ui.find({ key: 'today-ev-e1' })).toMatchObject({ props: { label: '09:30 · Стендап', dimColor: true } })
+  expect(await ui.find({ key: 'today-ev-e2' })).toMatchObject({ props: { label: '15:00 · Ревью' } })
+  expect((await ui.find({ key: 'today-ev-e2' }))?.props?.dimColor).toBeUndefined()
+
+  // Сроки: сегодня и просроченные, кроме готовых, с названием доски
+  expect((await todayKeys(ui, 'today-due-')).sort()).toEqual(['today-due-c4', 'today-due-k1', 'today-due-k2'])
+  expect(await text(/^просрочено, срок 03.11$/)).toMatchObject({ props: { color: 'error' } })
+  expect(await text(/^сегодня$/)).toMatchObject({ props: { color: 'warning' } })
+  expect(await text(/^Счёт — Спринт · /)).toBeDefined()
+
+  // Мои карточки: взятые мной на общих досках, не готовые и не в «Сроках»
+  expect(await todayKeys(ui, 'today-mine-')).toEqual(['today-mine-c1'])
+  expect(await label('today-mine-c1')).toBe('Логин — Релиз')
+
+  // Чаты: непрочитанные
+  expect(await label(`today-chat-${DM}`)).toBe('@octo_pal · 2')
+
+  // Лимиты: одна строка; от 80% — предупреждение
+  const usage = '5 часов: 85%, сброс в 14:30 · Неделя: 30%, сброс в Пт 19:10'
+  expect(await label('today-usage')).toBe(usage)
+  expect(await text(usage)).toMatchObject({ props: { color: 'warning' } })
+
+  // Desktop — карточками с рамкой, как в «Агентах»
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await desk.find({ key: 'today-ask-sess-b' })).toMatchObject({ props: { borderStyle: 'round', borderColor: '#e5484d80' } })
+  await desk.unmount()
+
+  // Ответ на вопрос — прямо отсюда
+  await ui.press({ key: 'today-q-sess-b-0-1' })
+  expect(JSON.parse(disk.get(`${AG_DIR}\\a9.json`))).toMatchObject({ v: 1, to: 'sess-b', id: 'q1', picks: [['SQLite']] })
+  expect(await text('Ответ отправлен — сессия получит его через секунду.')).toBeDefined()
+
+  // Срок — открывает карточку
+  await ui.press({ key: 'today-due-k1' })
+  expect(await ui.find({ key: 'today-due-k1' })).toBeUndefined()
+  expect(await noteKey(ui, 'arcade-note-')).toBeDefined()
+  await ui.unmount()
+})
+
+test('сегодня по-английски: экран без русского; событие открывается', async ($, on) => {
+  const stored = {
+    notes: [
+      { id: 'pa', title: 'Sprint', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } },
+      { id: 'k2', title: 'Invoice', body: '', parent: 'pa', at: 1, col: 'doing', pos: 0, due: '2026-11-03' },
+    ],
+    calendar: [{ id: 'e2', title: 'Review', day: '2026-11-05', time: '15:00', remind: 15, at: 0 }],
+  }
+  const { clock } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, stored })
+  todayUsage(on, [['five_hour', 85, TD + 80 * TD_MIN + 30_000]])
+  await clock.advance(TD)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  expect(await ui.find({ key: 'arcade-menu-today' })).toMatchObject({ props: { label: 'Today' } })
+  expect(await ui.find({ type: 'Text', text: 'session questions, events, due dates and chats on one screen' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-today' })
+  await clock.advance(50)
+  expect(await cyrillic()).toEqual([])
+  for (const heading of ['On the calendar', 'Due', 'Usage']) expect(await ui.find({ type: 'Text', text: heading })).toBeDefined()
+  expect(await ui.find({ key: 'today-ev-e2' })).toMatchObject({ props: { label: '15:00 · Review' } })
+  expect(await ui.find({ type: 'Text', text: /^overdue, due 03.11$/ })).toMatchObject({ props: { color: 'error' } })
+  expect(await ui.find({ key: 'today-usage' })).toMatchObject({ props: { label: '5 hours: 85%, resets at 14:30' } })
+  // Событие — открывается в календаре
+  await ui.press({ key: 'today-ev-e2' })
+  expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Remind', value: '15' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})

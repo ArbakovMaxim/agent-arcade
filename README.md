@@ -22,6 +22,7 @@ Everything in the catalog is free: the games are openly licensed, the books and 
 
 - **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. A page or card shows its text formatted, with *Edit* and *Copy* buttons. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
 - **Claude works through your board.** *Queue for Claude* hands Claude the cards of the first column one by one: the next goes once the last one is in *Done*, and the queue stops when Claude asks a question or leaves a card unfinished. Cards have due dates that show in the calendar, and on a shared board everyone sees who took which card. Bring GitHub issues onto a board as cards and post the result back as a comment, through Claude's GitHub connector. *Daily summary* makes a standup page — what went to Claude, what's done, what's in progress — to send to your team's chat.
+- **Today.** The first tile in *Work* gathers what is waiting for you on one screen: sessions waiting for permission or an answer (a question with options is answered right there), today's events, cards due today or overdue, cards you took on shared boards, unread chats and one line of Claude's limits.
 - **Agents.** *Agents* in *Work* shows every Claude Code session with Arcade on this computer, by folder: working, waiting for permission, finished its turn or idle, and for how long, with its card and place in the queue. When Claude in another session asks a question with options, you answer it with a button right in its card. When another session asks for permission or a question, a toast in your own pane says so. A board's queue can run in several sessions at once, and two sessions don't get the same card.
 - **Usage.** The *Usage* tile in *Work* shows Claude's limit windows — 5 hours, the week and the spend limit — with a percentage, a bar and when each resets, plus the context and cost of this and your other sessions. The numbers come from Claude Code itself. If a limit runs out in the middle of a board's queue, one button continues it after the reset.
 - **Calendar.** In Desktop, a month of same-size day tiles with a dot in each event's color; in the terminal and VS Code, the list of what's coming up. An event goes in with one line, like “fri 9:30 standup”, and can repeat every day, on weekdays, every week, month or year. Pick its color and when to be reminded, from a list or in your own words (like “45 min before” or “the day before at 20:00”); the reminder comes as a system notification. Due dates of board cards are there too. Claude adds and changes events too: “add a call on Friday at 15:00”.
@@ -96,7 +97,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Read & listen** | Books, Audiobooks, Articles, Podcasts |
 | **Watch** | YouTube, Twitch, TikTok |
 | **Social** | Friends, Chats, **Sign in with GitHub** (or **Account** once you're signed in) |
-| **Work** | Notebook, Project board, Calendar, Agents, Usage |
+| **Work** | Today, Notebook, Project board, Calendar, Agents, Usage |
 | **More** | Arcade window, Settings, 🌐 language, 🐞 Report a bug, ☕ Support the project |
 
 Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. A section you don't need can be hidden in **Settings**: it is gone from the menu entirely, title and tiles; *More*, which holds the settings, always stays. Signed in, the menu header shows your @handle with the same counters.
@@ -170,6 +171,19 @@ It's in the *Work* section of the menu. The numbers come from Claude Code itself
 - **Only while Claude Code is open.** Only an open session, on a computer that isn't asleep, can continue the queue. If Claude Code was closed or the computer was asleep, *Usage* says so: “The queue “Release” didn't continue after the limit reset: Claude Code was closed or the computer was asleep.”; if the session that was waiting was closed — “…didn't start after the limit reset: the session was closed.” × clears the note.
 - **A toast at 80 and 90%.** When a window reaches 80%, and then 90%, a toast shows in the Arcade pane — once per threshold across all sessions. Turn it off in *Settings → Notifications*.
 - **Which Claude Code.** Not every Claude Code version reports limits to plugins — checked on 2.1.302 and 2.1.316. If yours doesn't, the screen says so, and the rest of Arcade works as usual.
+
+## Today
+
+The first tile in the *Work* section of the menu: what is waiting for you, from all of Arcade, on one screen. It keeps nothing of its own — everything comes from what Arcade already knows.
+
+- **Waiting for you.** Sessions on this computer that wait for permission or for an answer, longest first, as in [Agents](#agents). A question with options is answered right here with a button; permission is given only in that session itself.
+- **On the calendar.** Today's events; those already past are dimmer. Pressing one opens it in the [calendar](#calendar).
+- **Due.** Board cards due today or overdue that aren't in the last column yet, with the board's name; pressing one opens the card.
+- **My cards.** Cards you took on shared boards that aren't done yet.
+- **Chats.** Unread chats, if you're signed in; pressing one opens the chat.
+- **Usage.** One line from [Usage](#usage), like “5 hours: 62%, resets at 14:30”; yellow from 80%.
+
+Empty blocks are hidden; when nothing is waiting, the screen says “All clear for today.” In Desktop the sessions are cards; in the terminal and VS Code everything is lines.
 
 ## For teams
 
