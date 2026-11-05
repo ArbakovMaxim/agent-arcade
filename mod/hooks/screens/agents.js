@@ -6,6 +6,7 @@ import { keep, tr } from '../i18n.js'
 import { S } from '../app/state.js'
 import { STATUS_LABEL, agentsList, agoText, hideAgent } from '../app/agents.js'
 import { allPicked, askOf, isSent, pickOption, picksOf, sendAnswer } from '../app/asks.js'
+import { pctText, usdText } from '../app/usage.js'
 
 // Цвет состояния: ждёт разрешения — бедой, закончил ход — успехом, работает — подсказкой, свободна — серым
 const STATUS_COLOR = { permission: 'error', done: 'success', working: 'suggestion', idle: '' }
@@ -26,6 +27,8 @@ export function agentsScreen($, e, kit) {
   const stateOf = (r) => `${tr(labelOf(r), S.lang)} · ${tr(agoText(now - r.since), S.lang)}`
   const cardOf = (r) => (r.card ? (r.card.boardTitle ? fill(tr('«{0}» на доске «{1}»', S.lang), [r.card.title, r.card.boardTitle]) : `«${r.card.title}»`) : '')
   const queueOf = (r) => (r.queue?.of ? fill(tr('Очередь: карточка {0} из {1}', S.lang), [r.queue.n, r.queue.of]) : '')
+  // Контекст и расходы — по последнему ответу Claude в той сессии (цифры Claude Code)
+  const usageOf = (r) => [r.usage?.ctx != null ? fill(tr('Контекст: {0}', S.lang), [pctText(r.usage.ctx)]) : '', r.usage?.usd != null ? usdText(r.usage.usd) : ''].filter(Boolean).join(' · ')
   const status = (r) => {
     const color = STATUS_COLOR[r.status]
     return keep(Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] }))
@@ -62,7 +65,7 @@ export function agentsScreen($, e, kit) {
   }
   const card = (r) => {
     const hex = STATUS_HEX[r.status] ?? STATUS_HEX.idle
-    const lines = [cardOf(r), queueOf(r)].filter(Boolean)
+    const lines = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean)
     return Box({
       key: `agents-card-${r.sid || 'me'}`,
       flexDirection: 'row',
@@ -81,7 +84,7 @@ export function agentsScreen($, e, kit) {
   }
   const line = (r) => {
     const color = STATUS_COLOR[r.status]
-    const rest = [cardOf(r), queueOf(r)].filter(Boolean).join(' · ')
+    const rest = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean).join(' · ')
     const head = keep(Text({ children: [Text({ bold: true, children: [nameOf(r)] }), ' — ', Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] })] }))
     return Box({
       key: `agents-line-${r.sid || 'me'}`,
