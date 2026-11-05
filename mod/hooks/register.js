@@ -21,6 +21,7 @@ import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/pro
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownShares, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
+import { scheduleTick } from './app/schedule.js'
 import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
 import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
@@ -139,6 +140,8 @@ export function register(on) {
         await agentsTick($)
         if (S.queue) await queueStopCheck($).catch(chatError)
         await resumeTick($)
+        // Задания по расписанию — тем же шагом: «на ногах ли сессия» считает resumeTick
+        await scheduleTick($).catch(chatError)
       })
       // Лимиты и контекст — что Claude Code знает уже сейчас (контекст, расходы; окна лимитов — после первого ответа);
       // дальше — раз в полминуты и после каждого хода

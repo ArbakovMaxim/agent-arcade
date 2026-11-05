@@ -9,7 +9,7 @@ import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, 
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, issueUrl, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
-import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
+import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanGive, cleanTime, dayKey, dueReminders, dueTasks, fireAt, giveTargets, markAlerted, markTask, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
 import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
@@ -5935,7 +5935,7 @@ test('календарь: инструмент Claude — ответы по-ан
   expect(fails.map((f) => f.text.split('\n')[1])).toEqual([
     'time must be HH:MM, 24-hour, e.g. 15:00, or empty for all day.',
     'day must be a real date as YYYY-MM-DD.',
-    'Nothing to change: pass title, day, time, note, remind, color or repeat.',
+    'Nothing to change: pass title, day, time, note, remind, color, repeat or give.',
     'color is one of blue, green, yellow, orange, red, purple, pink, gray, or "" for the default.',
     'No event "Ужин". Use list to see the events and their ids.',
     'days is 1 to 92.',
@@ -6429,6 +6429,305 @@ test('календарь по-английски: экраны без русск
   expect((await drawnTexts(term)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')).toEqual([])
   expect(await term.find({ type: 'Text', text: 'The calendar is empty — add the first event.' })).toBeDefined()
   await term.unmount()
+})
+
+// --- По расписанию: «Дать Claude» у события календаря ---
+
+const SCH_NOTES = [
+  { id: 'brd', title: 'Проект', body: '', parent: null, at: 1, board: { cols: DEFAULT_COLS } },
+  { id: 'c1', title: 'Ревью PR', body: 'проверь PR', parent: 'brd', col: 'todo', pos: 0, at: 1 },
+  { id: 'set', title: 'Мои промпты', body: '', parent: null, at: 1, board: { cols: [{ id: PROMPTS_COL }] } },
+  { id: 'pr1', title: 'Утро', body: 'что горит?', parent: 'set', col: PROMPTS_COL, pos: 0, at: 1 },
+]
+// Событие с заданием: свой текст в папке этой сессии
+const schTask = (id: string, title: string, day: string, time: string, text: string, cwd = AG_ME.root) => ({ id, title, day, time, remind: null, at: 0, give: { kind: 'text', text }, cwd })
+
+test('по расписанию: задание у события — что дать, когда пора, отметки', () => {
+  // Задание — свой текст или цель по id с названием, каким оно было; что не сходится — null
+  expect([
+    cleanGive({ kind: 'text', text: '  проверь PR \n' }),
+    cleanGive({ kind: 'queue', board: 'brd', name: ' Проект ', extra: 1 }),
+    cleanGive({ kind: 'card', card: 'BAD ID' }),
+    cleanGive({ kind: 'text', text: '   ' }),
+    cleanGive({ kind: 'loop' }),
+    cleanGive(null),
+  ]).toEqual([{ kind: 'text', text: 'проверь PR' }, { kind: 'queue', board: 'brd', name: 'Проект' }, null, null, null, null])
+  // Цели: доски проектов, их карточки, шаблоны наборов «Промптов»
+  expect(['queue', 'card', 'prompt'].map((k) => giveTargets(SCH_NOTES, k).map((p: any) => p.id))).toEqual([['brd'], ['c1'], ['pr1']])
+
+  // Задание без слова о напоминании — без него; папка — где задание дали; время впереди — отметок нет
+  const ahead = addEvent([], { title: 'Ночная проверка', day: '2026-11-02', time: '18:00', give: { kind: 'text', text: 'проверь PR' }, cwd: ' D:\\work\\web ' }, T0).event
+  expect(ahead).toEqual({ id: ahead.id, title: 'Ночная проверка', day: '2026-11-02', time: '18:00', remind: null, at: T0, give: { kind: 'text', text: 'проверь PR' }, cwd: 'D:\\work\\web' })
+  // Время уже прошло, когда задание дали, — не пропущенное: его не запускаем
+  expect(addEvent([], { title: 'Утро', day: '2026-11-02', time: '09:00', give: { kind: 'text', text: 'x' } }, T0).event).toMatchObject({ fired: at('2026-11-02', '09:00') })
+  expect(addEvent([], { title: 'X', day: '2026-11-02', give: { kind: 'text', text: '' } }, T0)).toEqual({ error: 'give' })
+  // Событие на весь день даёт задание в 9:00
+  const allDay = addEvent([], { title: 'Весь день', day: '2026-11-03', give: { kind: 'text', text: 'y' } }, T0).list
+  expect(fireAt(allDay[0])).toBe(at('2026-11-03', '09:00'))
+  expect([dueTasks(allDay, at('2026-11-03', '08:59')).length, dueTasks(allDay, at('2026-11-03', '09:00')).length]).toEqual([0, 1])
+
+  // Серия: сегодняшний раз уже прошёл — отмечен; назавтра пора завтрашнему
+  const daily = addEvent([], { title: 'Каждый день', day: '2026-11-01', time: '09:00', repeat: 'daily', give: { kind: 'queue', board: 'brd', name: 'Проект' }, cwd: 'D:\\work\\web' }, T0)
+  const id = daily.event.id
+  expect(daily.event.fired).toBe(at('2026-11-02', '09:00'))
+  expect(dueTasks(daily.list, T0)).toEqual([])
+  expect(dueTasks(daily.list, at('2026-11-03', '09:30')).map((x: any) => [x.id, x.day, x.at])).toEqual([[id, '2026-11-03', at('2026-11-03', '09:00')]])
+  // Отметки: undefined убирает; у события без задания — ничего
+  const marked = markTask(daily.list, id, { fired: at('2026-11-03', '09:00'), firedBy: 'sme', held: undefined, missed: at('2026-11-03', '09:00') })
+  expect(marked[0]).toMatchObject({ fired: at('2026-11-03', '09:00'), firedBy: 'sme', missed: at('2026-11-03', '09:00') })
+  expect(dueTasks(marked, at('2026-11-03', '09:30'))).toEqual([])
+  expect(markTask([{ id: 'x' }], 'x', { fired: 1 })).toEqual([{ id: 'x' }])
+  // Другое время — отметки заново; give: null — задание прочь вместе с папкой и отметками; папка без задания — мимо
+  const moved = updateEvent(marked, id, { time: '10:00' }, at('2026-11-03', '09:30')).list[0]
+  expect([moved.fired, 'firedBy' in moved, 'missed' in moved]).toEqual([at('2026-11-02', '10:00'), false, false])
+  const off = updateEvent(marked, id, { give: null }, T0).list[0]
+  expect(['give', 'cwd', 'fired', 'firedBy', 'missed'].filter((k) => k in off)).toEqual([])
+  expect('cwd' in updateEvent([{ id: 'e1', title: 'a', day: '2026-11-02', remind: null, at: 0 }], 'e1', { cwd: 'D:\\x' }, T0).list[0]).toBe(false)
+  // Хранилище: задание с папкой и отметками — как было; кривое задание — без папки и отметок
+  const { firedBy: _by, ...kept } = marked[0]
+  expect(restoreCalendar([{ ...marked[0], firedBy: 'x'.repeat(21) }, { id: 'e2', title: 'b', day: '2026-11-02', remind: null, give: { kind: 'zzz' }, cwd: 'D:\\x', fired: 5 }])).toEqual([kept, { id: 'e2', title: 'b', day: '2026-11-02', remind: null, at: 0 }])
+})
+
+test('по расписанию: Claude даёт задание инструментом календаря — цель по названию или id, в ответе задание и папка', () => {
+  const opts = { notes: SCH_NOTES, cwd: 'D:\\work\\web' }
+  const head = 'Today is Mon 2026-11-02, 12:00 local time.'
+  const call = (list: any[], input: any, o: any = opts) => applyCalendarTool(list, input, T0, [], o)
+  const added = call([], { action: 'add', title: 'Ночная проверка', day: '2026-11-02', time: '18:00', give: 'text', task: 'проверь открытые PR' })
+  const id = added.list[0].id
+  const task = '  at 18:00 gives Claude the text "проверь открытые PR" in a Claude Code session in D:\\work\\web'
+  expect(added.text).toBe(`${head}\nAdded:\n- ${id}: Mon 2026-11-02 18:00 — Ночная проверка (no reminder)\n${task}`)
+  expect(added.list[0]).toMatchObject({ remind: null, give: { kind: 'text', text: 'проверь открытые PR' }, cwd: 'D:\\work\\web' })
+  // Пропущенное — с тем, что оно ждёт «Запустить сейчас»
+  const missed = call(markTask(added.list, id, { missed: at('2026-11-02', '18:00') }), { action: 'list', days: 3 }).text.split('\n').slice(2)
+  expect(missed).toEqual([`- ${id}: Mon 2026-11-02 18:00 — Ночная проверка (no reminder)`, `${task}; missed on 2026-11-02 18:00, waits for the user to press Run now in Arcade`])
+
+  // Очередь доски — по названию без учёта регистра; событие на весь день — в 9:00
+  const queue = call([], { action: 'add', title: 'Очередь', day: '2026-11-03', give: 'queue', target: 'проект' })
+  const qid = queue.list[0].id
+  const line = (what: string) => `${head}\nUpdated:\n- ${qid}: Tue 2026-11-03 all day — Очередь (no reminder)${what}`
+  expect(queue.text).toBe(`${head}\nAdded:\n- ${qid}: Tue 2026-11-03 all day — Очередь (no reminder)\n  at 9:00 gives Claude the queue of board "Проект" (brd) in a Claude Code session in D:\\work\\web`)
+  // Другая цель — папка прежняя, даже если правят из другой сессии
+  const card = call(queue.list, { action: 'update', event: 'Очередь', give: 'card', target: 'c1' }, { notes: SCH_NOTES, cwd: 'D:\\other' })
+  expect(card.text).toBe(line('\n  at 9:00 gives Claude board card "Ревью PR" (c1) in a Claude Code session in D:\\work\\web'))
+  const prompt = call(card.list, { action: 'update', event: 'Очередь', give: 'prompt', target: 'Утро' })
+  expect(prompt.text).toBe(line('\n  at 9:00 gives Claude prompt template "Утро" (pr1) in a Claude Code session in D:\\work\\web'))
+  const stop = call(prompt.list, { action: 'update', event: 'Очередь', give: '' })
+  expect(stop.text).toBe(line(''))
+  expect(['give', 'cwd'].filter((k) => k in stop.list[0])).toEqual([])
+
+  const fails = [
+    { give: 'queue' },
+    { give: 'text', target: 'Проект' },
+    { give: 'card', task: 'y' },
+    { give: 'card', target: 'Нет такой' },
+    { give: 'text' },
+    { give: 'loop' },
+    { target: 'Проект' },
+    { give: 'prompt', target: 'Проект' },
+  ].map((x) => call([], { action: 'add', title: 'x', day: '2026-11-03', ...x }))
+  expect(fails.every((f) => f.isError && f.list.length === 0 && f.text.startsWith(`${head}\n`))).toBe(true)
+  expect(fails.map((f) => f.text.split('\n')[1])).toEqual([
+    'Pass target: the board id or exact title.',
+    'target is for give queue, card or prompt; give text takes task.',
+    'task is for give text; give queue, card or prompt takes target.',
+    'No board card "Нет такой". Read the notebook with the notes tool to find it.',
+    'Pass task: the text Claude gets.',
+    'give is one of queue, card, prompt, text, or "" to stop the task.',
+    'Pass give too: queue, card, prompt or text.',
+    'No prompt template "Проект". Read the notebook with the notes tool to find it.',
+  ])
+})
+
+test('по расписанию: свой текст уходит Claude в своё время и только в сессии своей папки; Claude занят — ждёт конца хода', HEAVY, async ($, on) => {
+  const { clock, saved, submits, toasts } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    submit: true,
+    stored: {
+      calendar: [
+        schTask('e1', 'Проверка', '2026-11-02', '12:01', 'проверь открытые PR'),
+        schTask('e2', 'Чужая', '2026-11-02', '12:01', 'не моё', 'D:\\work\\api'),
+        schTask('e3', 'Итоги', '2026-11-02', '12:03', 'подведи итоги дня'),
+      ],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  const ev = (id: string) => (saved.get('calendar') as any[]).find((e) => e.id === id)
+  const said = () => toasts.filter((t) => /расписанию/.test(t))
+  await clock.advance(50_000)
+  expect(submits).toEqual([])
+  // В своё время — обычным сообщением Claude; задание другой папки здесь не идёт и не отмечается
+  await clock.advance(15_000)
+  expect(submits.map((s) => s.text)).toEqual(['проверь открытые PR'])
+  expect(said()).toEqual(['По расписанию: «Проверка» — ушло Claude.'])
+  expect(ev('e1').fired).toBe(at('2026-11-02', '12:01'))
+  expect(ev('e1').firedBy).toMatch(/^s[a-z0-9]+$/)
+  expect(['fired', 'held', 'missed'].filter((k) => k in ev('e2'))).toEqual([])
+
+  // Claude занят — задание ждёт конца хода и уходит после него
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  await clock.advance(120_000)
+  expect(submits.length).toBe(1)
+  expect(ev('e3').held).toBe(at('2026-11-02', '12:03'))
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  await clock.advance(3_500)
+  expect(submits.map((s) => s.text)).toEqual(['проверь открытые PR', 'подведи итоги дня'])
+  expect(said()).toEqual(['По расписанию: «Проверка» — ушло Claude.', 'По расписанию: «Итоги» — ушло Claude.'])
+  expect(ev('e3')).toMatchObject({ fired: at('2026-11-02', '12:03') })
+  expect('held' in ev('e3')).toBe(false)
+  // Дважды одно и то же не уходит
+  await clock.advance(60_000)
+  expect(submits.length).toBe(2)
+})
+
+test('по расписанию: очередь доски запускается сама; цели нет — всплывашка с причиной', HEAVY, async ($, on) => {
+  const give = (id: string, title: string, time: string, g: any) => ({ id, title, day: '2026-11-02', time, remind: null, at: 0, give: g, cwd: AG_ME.root })
+  const { clock, submits, toasts } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    submit: true,
+    stored: {
+      notes: SCH_NOTES,
+      calendar: [give('e1', 'Ночная очередь', '12:01', { kind: 'queue', board: 'brd', name: 'Проект' }), give('e2', 'Старая доска', '12:02', { kind: 'queue', board: 'gone', name: 'Удалённая' })],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  const said = () => toasts.filter((t) => /расписанию/.test(t))
+  await clock.advance(65_000)
+  expect(submits.length).toBe(1)
+  expect(submits[0].text).toContain('(id c1)')
+  expect(said()).toEqual(['По расписанию: «Ночная очередь» — ушло Claude.'])
+  // Очередь идёт — второе задание ждёт; очередь кончилась — доски уже нет
+  await $.turn.start({ turnId: 't1', text: submits[0].text })
+  await $.tool.call({ tool: 'mcp__arcade__notes', action: 'move', page: 'c1', column: 'done' })
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  await clock.advance(70_000)
+  expect(said()).toEqual(['По расписанию: «Ночная очередь» — ушло Claude.', 'По расписанию: «Старая доска» — задание не ушло: доски больше нет.'])
+})
+
+test('по расписанию: пропущенное — всплывашкой и в календаре с «Запустить сейчас»; давнее — молча', HEAVY, async ($, on) => {
+  const { clock, saved, submits, toasts } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    submit: true,
+    stored: {
+      calendar: [
+        schTask('e1', 'Обзор', '2026-11-02', '10:00', 'что горит?'),
+        schTask('e2', 'Ревью', '2026-11-02', '11:00', 'сделай ревью'),
+        schTask('e3', 'Старое', '2026-10-30', '10:00', 'давно'),
+        schTask('e4', 'Чужое', '2026-11-02', '10:00', 'не моё', 'D:\\work\\api'),
+      ],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  const ev = (id: string) => (saved.get('calendar') as any[]).find((e) => e.id === id)
+  const said = () => toasts.filter((t) => /расписанию/.test(t))
+  await clock.advance(6_000)
+  // Сессии этой папки в своё время не было — само задним числом не идёт
+  expect(submits).toEqual([])
+  expect(said()).toEqual([
+    'Пропущено по расписанию: «Обзор» — Claude Code был закрыт или компьютер спал. Запустить можно в календаре Arcade.',
+    'Пропущено по расписанию: «Ревью» — Claude Code был закрыт или компьютер спал. Запустить можно в календаре Arcade.',
+  ])
+  expect(ev('e1')).toMatchObject({ fired: at('2026-11-02', '10:00'), missed: at('2026-11-02', '10:00') })
+  expect(ev('e3').fired).toBe(at('2026-10-30', '10:00'))
+  expect(['firedBy', 'missed'].filter((k) => k in ev('e3'))).toEqual([])
+  expect(['fired', 'missed'].filter((k) => k in ev('e4'))).toEqual([])
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  expect(await text('Пропущено')).toBeDefined()
+  expect(await text('  Задание не пошло в своё время: Claude Code был закрыт или компьютер спал. Само задним числом не запускается.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-cal-run-e1' })).toMatchObject({ props: { label: 'Запустить сейчас' } })
+  expect(await ui.find({ key: 'arcade-cal-drop-e2' })).toMatchObject({ props: { label: 'Не запускать' } })
+  expect(await ui.find({ key: 'arcade-cal-run-e4' })).toBeUndefined()
+  // «Запустить сейчас» — задание уходит Claude
+  await ui.press({ key: 'arcade-cal-run-e1' })
+  expect(submits.map((s) => s.text)).toEqual(['что горит?'])
+  expect(said()[2]).toBe('По расписанию: «Обзор» — ушло Claude.')
+  expect(await text('Задание ушло Claude.')).toBeDefined()
+  expect('missed' in ev('e1')).toBe(false)
+  expect(await ui.find({ key: 'arcade-cal-run-e1' })).toBeUndefined()
+  // В самом событии — то же; «Не запускать» убирает пропущенное, задание остаётся
+  await ui.press({ key: 'arcade-cal-dayev-e2' })
+  expect(await text('Пропущено сегодня 11:00: Claude Code был закрыт или компьютер спал.')).toMatchObject({ props: { color: 'warning' } })
+  await ui.press({ key: 'arcade-cal-drop-missed' })
+  expect('missed' in ev('e2')).toBe(false)
+  expect(ev('e2').give).toEqual({ kind: 'text', text: 'сделай ревью' })
+  expect(await text('Пропущенное не запускаем.')).toBeDefined()
+  expect(submits.length).toBe(1)
+  await ui.press({ key: 'arcade-back' })
+  expect(await text('Пропущено')).toBeUndefined()
+  await ui.unmount()
+})
+
+test('по расписанию в Desktop: «Дать Claude» в событии — вид, цель, свой текст и папка', async ($, on) => {
+  const { clock, saved } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    stored: {
+      notes: SCH_NOTES,
+      calendar: [
+        { id: 'e1', title: 'Ночная проверка', day: '2026-11-02', time: '18:00', remind: null, at: 0 },
+        schTask('e2', 'Из другой папки', '2026-11-02', '19:00', 'итоги дня', 'D:\\work\\api'),
+      ],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  const text = (t: string) => ui.find({ type: 'Text', text: t })
+  const ev = (id: string) => (saved.get('calendar') as any[]).find((e) => e.id === id)
+  const options = async (key: string) => (await ui.find({ key })).props.options.map((o: any) => [o.value, o.label])
+  // В «Ближайшем» задание видно сразу
+  expect(await text('Сегодня 19:00 · 🤖 свой текст')).toBeDefined()
+  await ui.press({ key: 'arcade-cal-ev-e1' })
+  expect(await ui.find({ key: 'arcade-cal-give-kind' })).toMatchObject({ props: { label: 'Что дать', value: 'none' } })
+  expect(await options('arcade-cal-give-kind')).toEqual([['none', 'Ничего'], ['queue', 'Очередь доски'], ['card', 'Одну карточку'], ['prompt', 'Шаблон из «Промптов»'], ['text', 'Свой текст']])
+  expect(await text('  В своё время событие даст Claude очередь доски, одну карточку, шаблон из «Промптов» или свой текст.')).toBeDefined()
+  // Вид без цели — ещё не задание: ждёт выбора
+  await ui.select({ key: 'arcade-cal-give-kind', value: 'queue' })
+  expect(ev('e1').give).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-cal-give-target' })).toMatchObject({ props: { label: 'Очередь доски', value: 'pick' } })
+  expect(await options('arcade-cal-give-target')).toEqual([['pick', 'Выбери доску'], ['brd', 'Проект']])
+  await ui.select({ key: 'arcade-cal-give-target', value: 'brd' })
+  expect(ev('e1')).toMatchObject({ give: { kind: 'queue', board: 'brd', name: 'Проект' }, cwd: 'D:\\work\\web' })
+  expect(await text('  Папка: D:\\work\\web')).toBeDefined()
+  expect(await text('  В своё время — в открытой сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.')).toBeDefined()
+  expect(await text('  Работает, пока открыт Claude Code и компьютер не спит. Задание идёт в режиме разрешений сессии: вне Auto Claude может ждать разрешения.')).toBeDefined()
+  // Карточка — с доски проекта, кроме сделанных; шаблон — из набора «Промптов»
+  await ui.select({ key: 'arcade-cal-give-kind', value: 'card' })
+  expect(await options('arcade-cal-give-target')).toEqual([['pick', 'Выбери карточку'], ['c1', 'Проект · Ревью PR']])
+  await ui.select({ key: 'arcade-cal-give-target', value: 'c1' })
+  expect(ev('e1').give).toEqual({ kind: 'card', card: 'c1', name: 'Ревью PR' })
+  await ui.select({ key: 'arcade-cal-give-kind', value: 'prompt' })
+  expect(await options('arcade-cal-give-target')).toEqual([['pick', 'Выбери шаблон'], ['pr1', 'Мои промпты · Утро']])
+  // Свой текст — полем; пустой не сохраняем
+  await ui.select({ key: 'arcade-cal-give-kind', value: 'text' })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-cal-task-') })).toMatchObject({ props: { label: 'Текст для Claude', placeholder: 'проверь открытые PR и напиши, что горит' } })
+  await noteInput(ui, 'arcade-cal-task-', '   ')
+  expect(await text('Напиши, что дать Claude.')).toBeDefined()
+  expect(ev('e1').give).toEqual({ kind: 'card', card: 'c1', name: 'Ревью PR' })
+  await noteInput(ui, 'arcade-cal-task-', 'проверь открытые PR')
+  expect(ev('e1').give).toEqual({ kind: 'text', text: 'проверь открытые PR' })
+  expect(await text('Сохранено.')).toBeDefined()
+  // «Ничего» — задание прочь вместе с папкой
+  await ui.select({ key: 'arcade-cal-give-kind', value: 'none' })
+  expect(['give', 'cwd'].filter((k) => k in ev('e1'))).toEqual([])
+  // Задание другой папки здесь не идёт — его можно перевести в эту
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-cal-ev-e2' })
+  expect(await text('  Папка: D:\\work\\api')).toBeDefined()
+  await ui.press({ key: 'arcade-cal-give-here' })
+  expect(ev('e2').cwd).toBe('D:\\work\\web')
+  expect(await ui.find({ key: 'arcade-cal-give-here' })).toBeUndefined()
+  await ui.unmount()
 })
 
 // «Сегодня»: что ждёт человека — на одном экране. Четверг, 5 ноября 2026, 13:10 по местному времени
