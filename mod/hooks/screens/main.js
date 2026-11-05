@@ -1,7 +1,7 @@
 // Arcade: главное меню библиотеки и приветствие первого запуска.
 import { openUrlCommand } from '../browsers.js'
 import { LANG_NAMES, keep, tr } from '../i18n.js'
-import { LAUNCH_TIMEOUT_MS, S, cal, nb } from '../app/state.js'
+import { LAUNCH_TIMEOUT_MS, S, cal, nb, pr } from '../app/state.js'
 import { consoleNote, consoles, favoriteGames, gameById, menuTabs, supportUrl } from '../app/library.js'
 import { plural, waitingText, windowNotice } from '../app/status.js'
 import { builtinBrowser, launchNotice, netWhere, openNet, settingsNote, windowCommand } from '../app/window.js'
@@ -318,6 +318,22 @@ export function mainScreen($, e, kit) {
         },
       }),
       dim('  колонки и карточки; общие — с друзьями'),
+      Button({
+        key: 'arcade-menu-prompts',
+        label: 'Промпты',
+        ...(S.menuFrom === 'prompts' ? { autoFocus: true } : {}),
+        onPress: () => {
+          pr.note = ''
+          pr.bad = false
+          pr.edit = ''
+          pr.set = ''
+          pr.confirm = ''
+          pr.focus = ''
+          open('prompts')()
+          boardsOpened($)
+        },
+      }),
+      dim('  шаблоны в один клик; общие — с друзьями'),
       Button({
         key: 'arcade-menu-calendar',
         label: 'Календарь',

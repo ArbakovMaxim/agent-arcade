@@ -8,7 +8,7 @@ import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatar
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
-import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, issueUrl, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
+import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, issueUrl, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
 import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanTime, dayKey, dueReminders, markAlerted, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
 import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
@@ -6594,6 +6594,306 @@ test('сегодня по-английски: экран без русского
   // Событие — открывается в календаре
   await ui.press({ key: 'today-ev-e2' })
   expect(await ui.find({ key: 'arcade-cal-remind' })).toMatchObject({ props: { label: 'Remind', value: '15' } })
+  expect(await cyrillic()).toEqual([])
+  await ui.unmount()
+})
+
+// --- Промпты: шаблоны в один клик ---
+
+test('промпты: Claude сохраняет шаблон инструментом блокнота — в свой набор, а нет его — в новый; колонок и сроков у шаблонов нет', () => {
+  const ids = ['c111111111111111', 'c222222222222222', 'c333333333333333']
+  let n = 0
+  const makeId = () => ids[n++]
+  const first = applyNotesTool([], { action: 'create', prompt: true, title: ' Коммит ', text: 'Сделай коммит' }, 1000, makeId, 'Мои промпты')
+  expect(first.isError).toBeUndefined()
+  const set = first.notes.find(isPrompts)
+  expect(set).toMatchObject({ title: 'Мои промпты', parent: null, board: { cols: [{ id: PROMPTS_COL }] } })
+  expect(isProjectBoard(set)).toBe(false)
+  expect(first.notes.find((p: any) => p.parent === set.id)).toMatchObject({ id: ids[0], title: 'Коммит', body: 'Сделай коммит', col: PROMPTS_COL, pos: 0 })
+  expect(first.text).toBe(`Saved prompt template ${ids[0]}: Коммит in Мои промпты. The user sends it to Claude with one click in the Prompts tile of Arcade.`)
+  // Следующий — в тот же набор, ниже; create с parent = набор — тоже шаблон
+  const second = applyNotesTool(first.notes, { action: 'create', prompt: true, title: 'Ревью', text: 'Сделай ревью' }, 2000, makeId)
+  const third = applyNotesTool(second.notes, { action: 'create', parent: set.id, title: 'Тесты', text: 'Прогони тесты' }, 3000, makeId)
+  expect(third.text).toMatch(/^Saved prompt template c3{15}: Тесты in Мои промпты\./)
+  expect(columnCards(third.notes, set, PROMPTS_COL).map((p: any) => p.title)).toEqual(['Коммит', 'Ревью', 'Тесты'])
+  expect(third.notes.filter(isPrompts).length).toBe(1)
+  // Набор и шаблон — в списке и при чтении
+  expect(applyNotesTool(second.notes, { action: 'read', page: set.id }, 1).text).toBe(`Prompt set ${set.id}: Мои промпты\n\n## Templates (read one for its text)\n- ${ids[0]}: Коммит\n- ${ids[1]}: Ревью`)
+  expect(applyNotesTool(second.notes, { action: 'read', page: ids[1] }, 1).text).toBe(`Page ${ids[1]}: Ревью (prompt template in Мои промпты)\n\nСделай ревью`)
+  expect(applyNotesTool(second.notes, { action: 'list' }, 1).text).toContain(`  - ${ids[0]}: Коммит (prompt template)`)
+  // Ошибки: без текста, без названия, со сроком или колонкой, перенос между колонками
+  const fail = (input: any) => applyNotesTool(second.notes, input, 1, makeId)
+  expect(fail({ action: 'create', prompt: true, title: 'Пусто', text: '  ' })).toMatchObject({ isError: true, text: 'Give the prompt itself in text.' })
+  expect(fail({ action: 'create', prompt: true, title: ' ', text: 'x' })).toMatchObject({ isError: true, text: 'The template needs a title: its name on the button.' })
+  expect(fail({ action: 'create', prompt: true, title: 'x', text: 'y', due: '2026-11-05' }).isError).toBe(true)
+  expect(fail({ action: 'create', prompt: true, title: 'x', text: 'y', board: true }).isError).toBe(true)
+  expect(fail({ action: 'move', page: ids[1], column: 'done' })).toMatchObject({ isError: true, text: expect.stringMatching(/^This is a prompt template/) })
+  expect(fail({ action: 'due', page: ids[1], due: '2026-11-05' })).toMatchObject({ isError: true, text: expect.stringMatching(/^This is a prompt template/) })
+  // Своя доска — не набор: шаблон от Claude уходит в набор, не на доску
+  const withBoard = addPage(second.notes, { title: 'Релиз', board: {} }, 4000).notes
+  expect(fail({ action: 'create', prompt: true, title: 'x', text: 'y', parent: withBoard.find(isProjectBoard).id })).toMatchObject({ isError: true })
+  expect(applyNotesTool(withBoard, { action: 'create', prompt: true, title: 'Релиз', text: 'Собери релиз' }, 5000, makeId).text).toMatch(/ in Мои промпты\./)
+})
+
+test('промпты: «Работа» → первый шаблон, правка, «Отправить Claude», «В поле ввода», порядок, удаление, настройки набора', async ($, on) => {
+  const { clock, saved, submits, fills } = stubs(on, { submit: true, draft: 'и ещё' })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const set = () => pages().find(isPrompts)
+  const titles = () => columnCards(pages(), set(), PROMPTS_COL).map((p: any) => p.title)
+  const card = (title: string) => pages().find((p) => p.title === title)
+  expect(await text('  шаблоны в один клик; общие — с друзьями')).toBeDefined()
+  await ui.press({ key: 'arcade-menu-prompts' })
+  expect(await text('Arcade · промпты')).toBeDefined()
+  expect(await text('Шаблонов пока нет — впиши название первого.')).toBeDefined()
+  expect(await text('Шаблоны — кнопки этой панели, не команды Claude Code: слэш-команды и скиллы работают как раньше.')).toBeDefined()
+  expect(await text('Войди через GitHub — и сможешь вести набор вместе с друзьями.')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-prompt-new-first-') })).toMatchObject({ props: { label: 'Новый шаблон', submitLabel: 'Добавить', autoFocus: true } })
+
+  // Первый шаблон — в новый набор «Мои промпты» и сразу на правку: курсор — в «Тексте»
+  await noteInput(ui, 'arcade-prompt-new-first-', ' Ревью ')
+  const setId = set().id
+  expect(set()).toMatchObject({ title: 'Мои промпты', parent: null, board: { cols: [{ id: PROMPTS_COL }] } })
+  const review = card('Ревью').id
+  expect(card('Ревью')).toMatchObject({ parent: setId, col: PROMPTS_COL, pos: 0, body: '' })
+  expect(review).toMatch(/^c[0-9a-f]{15}$/)
+  expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Промпты' } })
+  expect(await text('Набор: Мои промпты')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-prompt-text-') })).toMatchObject({ props: { label: 'Текст', autoFocus: true } })
+
+  // Пустой шаблон не уходит — просим вписать текст
+  await ui.press({ key: 'arcade-prompt-send' })
+  expect(submits.length).toBe(0)
+  expect(await text('В шаблоне пока нет текста — впиши его.')).toMatchObject({ props: { color: 'warning' } })
+
+  // Набранное в «Тексте» уходит Claude вместе с шаблоном — как есть, без обёртки
+  await noteInput(ui, 'arcade-prompt-text-', 'Сделай ревью изменений\nошибки и тесты', 'change')
+  await ui.press({ key: 'arcade-prompt-send' })
+  expect(submits.map((s) => s.text)).toEqual(['Сделай ревью изменений\nошибки и тесты'])
+  expect(card('Ревью').body).toBe('Сделай ревью изменений\nошибки и тесты')
+  expect(await text('Шаблон ушёл Claude.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-prompt-send' })).toMatchObject({ props: { autoFocus: true } })
+
+  // «В поле ввода» — к набранному, с новой строки, без отправки
+  await ui.press({ key: 'arcade-prompt-field' })
+  expect(submits.length).toBe(1)
+  expect(fills.map((f: any) => [f.text, f.mode])).toEqual([['\nСделай ревью изменений\nошибки и тесты', 'append']])
+  expect(await text('Шаблон — в поле ввода: допиши и отправь.')).toBeDefined()
+
+  // Назад — список: кнопка шаблона под фокусом, ниже — первая строка текста
+  await ui.press({ key: 'arcade-back' })
+  expect(await text('Arcade · промпты')).toBeDefined()
+  expect(await ui.find({ key: `arcade-prompt-${review}` })).toMatchObject({ props: { label: 'Ревью', autoFocus: true } })
+  expect(await ui.find({ key: `arcade-prompt-field-${review}` })).toMatchObject({ props: { label: 'В поле ввода' } })
+  expect(await ui.find({ key: `arcade-prompt-edit-${review}` })).toMatchObject({ props: { label: '✎' } })
+  expect(await text('  Сделай ревью изменений')).toBeDefined()
+  expect(await text('Мои промпты')).toBeDefined()
+  expect(await text('шаблонов: 1')).toBeDefined()
+
+  // Второй шаблон — вниз набора; Enter в «Тексте» сохраняет; «↑ Выше» ставит его первым
+  await noteInput(ui, `arcade-prompt-new-${setId}-`, 'Коммит')
+  expect(titles()).toEqual(['Ревью', 'Коммит'])
+  await noteInput(ui, 'arcade-prompt-text-', 'Сделай коммит')
+  expect(await text('Сохранено.')).toBeDefined()
+  expect(card('Коммит').body).toBe('Сделай коммит')
+  await ui.press({ key: 'arcade-prompt-up' })
+  expect(titles()).toEqual(['Коммит', 'Ревью'])
+  expect(await ui.find({ key: 'arcade-prompt-up' })).toMatchObject({ props: { label: '↑ Выше', autoFocus: true } })
+  await ui.press({ key: 'arcade-prompt-down' })
+  await ui.press({ key: 'arcade-prompt-up' })
+  expect(titles()).toEqual(['Коммит', 'Ревью'])
+  await noteInput(ui, 'arcade-prompt-title-', '  ')
+  expect(await text('Впиши название шаблона.')).toMatchObject({ props: { color: 'warning' } })
+  await noteInput(ui, 'arcade-prompt-title-', 'Коммит и пуш')
+  expect(await text('Коммит и пуш')).toBeDefined()
+  const commit = card('Коммит и пуш').id
+  await ui.press({ key: 'arcade-back' })
+
+  // Claude занят — шаблон из списка ждёт в поле ввода
+  await $.turn.start({ turnId: 't1', text: 'почини тесты' })
+  await ui.press({ key: `arcade-prompt-${review}` })
+  expect(submits.length).toBe(1)
+  expect(fills.at(-1)).toMatchObject({ text: '\nСделай ревью изменений\nошибки и тесты', mode: 'append' })
+  expect(await text('Claude занят — шаблон ждёт в поле ввода: отправь его, когда он освободится.')).toBeDefined()
+  expect(await ui.find({ key: `arcade-prompt-${review}` })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: `arcade-prompt-field-${commit}` })
+  expect(fills.at(-1)).toMatchObject({ text: '\nСделай коммит', mode: 'append' })
+  expect(fills.length).toBe(3)
+  expect(await text('Шаблон — в поле ввода: допиши и отправь.')).toBeDefined()
+
+  // Пустой шаблон из списка — открывается на правку с заметкой
+  await noteInput(ui, `arcade-prompt-new-${setId}-`, 'Тесты')
+  const tests = card('Тесты').id
+  await ui.press({ key: 'arcade-back' })
+  expect(await text('  текста пока нет')).toBeDefined()
+  await ui.press({ key: `arcade-prompt-${tests}` })
+  expect(fills.length).toBe(3)
+  expect(await text('В шаблоне пока нет текста — впиши его.')).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-prompt-text-') })).toMatchObject({ props: { autoFocus: true } })
+
+  // Удалить шаблон — вторым нажатием; к списку, курсор — в «Новом шаблоне» этого набора
+  expect(await text('  Шаблон удалится насовсем.')).toBeDefined()
+  await ui.press({ key: 'arcade-prompt-delete' })
+  expect(await ui.find({ key: 'arcade-prompt-delete' })).toMatchObject({ props: { label: 'Нажми ещё раз — удалить шаблон' } })
+  expect(card('Тесты')).toBeDefined()
+  await ui.press({ key: 'arcade-prompt-delete' })
+  expect(card('Тесты')).toBeUndefined()
+  expect(await text('Шаблон удалён.')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, `arcade-prompt-new-${setId}-`) })).toMatchObject({ props: { autoFocus: true } })
+  expect(await text('шаблонов: 2')).toBeDefined()
+
+  // ✎ — правка без отправки
+  await ui.press({ key: `arcade-prompt-edit-${review}` })
+  expect(await ui.find({ key: await noteKey(ui, 'arcade-prompt-text-') })).toMatchObject({ props: { value: 'Сделай ревью изменений\nошибки и тесты', autoFocus: true } })
+  expect(fills.length).toBe(3)
+  await ui.press({ key: 'arcade-back' })
+
+  // Наборы — не доски проектов и не страницы блокнота
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: 'arcade-menu-prompts' })).toMatchObject({ props: { autoFocus: true } })
+  await ui.press({ key: 'arcade-menu-boards' })
+  expect(await text('Досок пока нет — впиши название новой выше.')).toBeDefined()
+  expect(await ui.find({ key: `arcade-desk-${setId}` })).toBeUndefined()
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-notes' })
+  expect(await ui.find({ key: `arcade-note-page-${setId}` })).toBeUndefined()
+  await ui.press({ key: 'arcade-back' })
+
+  // Настройки набора: название, общий доступ — войти через GitHub; удалить — вторым нажатием
+  await ui.press({ key: 'arcade-menu-prompts' })
+  await ui.press({ key: `arcade-prompt-set-${setId}` })
+  expect(await ui.find({ key: 'arcade-back' })).toMatchObject({ props: { label: '← Промпты' } })
+  expect(await text('Общий доступ')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-prompt-login' })).toMatchObject({ props: { label: 'Войти через GitHub' } })
+  await noteInput(ui, 'arcade-prompt-set-title-', ' ')
+  expect(await text('Впиши название набора.')).toMatchObject({ props: { color: 'warning' } })
+  await noteInput(ui, 'arcade-prompt-set-title-', 'Ревью и релиз')
+  expect(set().title).toBe('Ревью и релиз')
+  expect(await text('Сохранено.')).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(await ui.find({ key: `arcade-prompt-set-${setId}` })).toMatchObject({ props: { autoFocus: true } })
+  expect(await text('Ревью и релиз')).toBeDefined()
+  await ui.press({ key: `arcade-prompt-set-${setId}` })
+  expect(await text('  Набор удалится вместе с шаблонами.')).toBeDefined()
+  await ui.press({ key: 'arcade-prompt-set-delete' })
+  expect(await ui.find({ key: 'arcade-prompt-set-delete' })).toMatchObject({ props: { label: 'Нажми ещё раз — удалить навсегда' } })
+  await ui.press({ key: 'arcade-prompt-set-delete' })
+  expect(pages()).toEqual([])
+  expect(await text('Набор удалён.')).toBeDefined()
+  expect(await text('Шаблонов пока нет — впиши название первого.')).toBeDefined()
+
+  // «Новый набор» — пустой набор под своим названием
+  await noteInput(ui, 'arcade-prompt-set-new-', 'Для команды')
+  expect(set()).toMatchObject({ title: 'Для команды', board: { cols: [{ id: PROMPTS_COL }] } })
+  expect(await text('шаблонов: 0')).toBeDefined()
+  expect(await ui.find({ key: await noteKey(ui, `arcade-prompt-new-${set().id}-`) })).toBeDefined()
+  await ui.unmount()
+})
+
+test('промпты с друзьями: поделиться набором, набор друга появляется сам, не среди досок', HEAVY, async ($, on) => {
+  const { api, boards, board } = boardsSite()
+  const { clock, requests, saved } = stubs(on, { env: WINDOWS, api, stored: { account: { token: TOKEN, user: OCTO } } })
+  await start($)
+  await clock.advance(4_200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const press = async (key: string) => {
+    await ui.press({ key })
+    await clock.settle()
+  }
+  await press('arcade-menu-prompts')
+  expect(sent(requests, 'api/me/boards', 'GET').length).toBe(1)
+  expect(await text('Общие наборы друзей появляются здесь сами.')).toBeDefined()
+  await noteInput(ui, 'arcade-prompt-new-first-', 'Ревью')
+  await clock.settle()
+  const set = pages().find(isPrompts)
+  await noteInput(ui, 'arcade-prompt-text-', 'Сделай ревью')
+  await clock.settle()
+  await press('arcade-back')
+
+  // Поделиться: друзья галочками, как у общей доски
+  await press(`arcade-prompt-set-${set.id}`)
+  expect(await text('Отметь друзей и нажми «Поделиться» — набор станет общим: шаблоны и название у всех одни.')).toBeDefined()
+  await press('arcade-prompt-pick-7')
+  expect(await ui.find({ key: 'arcade-prompt-pick-7' })).toMatchObject({ props: { label: '☑ @octo_pal' } })
+  await press('arcade-prompt-share')
+  expect(sent(requests, 'api/me/boards/new', 'POST').map((r) => r.body)).toEqual([{ name: 'Мои промпты', cols: [{ id: PROMPTS_COL }], members: ['7'] }])
+  const share = pages().find(isPrompts).board.share
+  expect(share).toMatch(BOARD_ID)
+  expect(Object.values(boards[share].cards).map((c: any) => [c.title, c.body, c.col])).toEqual([['Ревью', 'Сделай ревью', PROMPTS_COL]])
+  expect(await text('Набор общий — друзья увидят его в своих «Промптах».')).toBeDefined()
+  expect(await text('Общий набор — ты хозяин.')).toBeDefined()
+  expect(await text('@octocat · хозяин набора')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-prompt-off' })).toMatchObject({ props: { label: 'Удалить с сайта' } })
+  expect(await ui.find({ key: 'arcade-prompt-set-delete' })).toBeUndefined()
+  await press('arcade-back')
+  expect(await text('шаблонов: 1 · общий')).toBeDefined()
+
+  // Набор друга сам появляется в «Промптах» — со своими шаблонами; среди досок его нет
+  const friends = board('Релизы друга', '7', ['7', OCTO.id], [{ id: 'cpal1', title: 'Релиз', body: 'Собери релиз', col: PROMPTS_COL, pos: 0 }], [{ id: PROMPTS_COL }])
+  await clock.advance(30_000)
+  await clock.settle()
+  const theirs = pages().find((p) => p.board?.share === friends.id)
+  expect(isPrompts(theirs)).toBe(true)
+  expect(await text('Релизы друга')).toBeDefined()
+  expect(await text('шаблонов: 1 · общий, хозяин @octo_pal')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-prompt-cpal1' })).toMatchObject({ props: { label: 'Релиз' } })
+  await press('arcade-back')
+  await press('arcade-menu-boards')
+  expect(await ui.find({ key: `arcade-desk-${theirs.id}` })).toBeUndefined()
+  expect(await ui.find({ key: `arcade-desk-${set.id}` })).toBeUndefined()
+  await press('arcade-back')
+
+  // Чужой набор: хозяин — друг; выйти — вторым нажатием, копия остаётся
+  await press('arcade-menu-prompts')
+  await press(`arcade-prompt-set-${theirs.id}`)
+  expect(await text('Общий набор, хозяин @octo_pal.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-prompt-off' })).toMatchObject({ props: { label: 'Выйти из набора' } })
+  await press('arcade-prompt-off')
+  expect(await ui.find({ key: 'arcade-prompt-off' })).toMatchObject({ props: { label: 'Нажми ещё раз — выйти из набора' } })
+  await press('arcade-prompt-off')
+  expect(friends.members).toEqual(['7'])
+  expect(await text('Ты больше не в этом наборе — у тебя осталась своя копия.')).toBeDefined()
+  expect(pages().find((p) => p.id === theirs.id).board).toEqual({ cols: [{ id: PROMPTS_COL }] })
+  await ui.unmount()
+})
+
+test('промпты по-английски: экран без русского; шаблон уходит Claude', async ($, on) => {
+  const stored = {
+    notes: [
+      { id: 'pa', title: 'Team', body: '', parent: null, at: 1, board: { cols: [{ id: PROMPTS_COL }] } },
+      { id: 'k1', title: 'Review', body: 'Review the diff: bugs, tests, names', parent: 'pa', at: 1, col: PROMPTS_COL, pos: 0 },
+    ],
+  }
+  const { clock, submits } = stubs(on, { env: { LANG: 'en_US.UTF-8' }, stored, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const cyrillic = async () => (await drawnTexts(ui)).filter((x) => /[А-Яа-яЁё]/.test(x) && x !== '🌐 Русский')
+  expect(await ui.find({ key: 'arcade-menu-prompts' })).toMatchObject({ props: { label: 'Prompts' } })
+  expect(await ui.find({ type: 'Text', text: 'one-click templates; shared ones — with friends' })).toBeDefined()
+  await ui.press({ key: 'arcade-menu-prompts' })
+  await clock.advance(50)
+  expect(await cyrillic()).toEqual([])
+  expect(await ui.find({ key: 'arcade-prompt-k1' })).toMatchObject({ props: { label: 'Review' } })
+  expect(await ui.find({ key: 'arcade-prompt-field-k1' })).toMatchObject({ props: { label: 'To the prompt box' } })
+  expect(await ui.find({ type: 'Text', text: 'templates: 1' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Review the diff: bugs, tests, names' })).toBeDefined()
+  await ui.press({ key: 'arcade-prompt-k1' })
+  expect(submits.map((s) => s.text)).toEqual(['Review the diff: bugs, tests, names'])
+  expect(await ui.find({ type: 'Text', text: 'The template went to Claude.' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-prompt-edit-k1' })
+  expect(await ui.find({ key: 'arcade-prompt-send' })).toMatchObject({ props: { label: 'Send to Claude' } })
+  expect(await ui.find({ type: 'Text', text: 'Set: Team' })).toBeDefined()
+  expect(await cyrillic()).toEqual([])
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-prompt-set-pa' })
+  expect(await ui.find({ key: 'arcade-prompt-set-delete' })).toMatchObject({ props: { label: 'Delete the set' } })
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
 })

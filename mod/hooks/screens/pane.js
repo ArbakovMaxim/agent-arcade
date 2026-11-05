@@ -16,7 +16,7 @@ import { addTopic, forgetTopics, loadVideos } from '../app/watch.js'
 import { loadReads } from '../app/read.js'
 import { toggleFavorite, toggleHidden } from '../app/profile.js'
 import { answerInvite } from '../app/talk.js'
-import { modError, notesShown, refreshNotes } from '../app/work.js'
+import { modError, notesShown, promptsShown, refreshNotes } from '../app/work.js'
 import { calendarShown, refreshCalendar } from '../app/calendar.js'
 import { gameScreen } from './game.js'
 import { mainScreen, welcomeScreen } from './main.js'
@@ -29,6 +29,7 @@ import { tiktokScreen, twitchScreen, youtubeScreen, youtubeTopicScreen } from '.
 import { booksScreen, readsScreen, readsTopicScreen } from './read.js'
 import { notesScreen } from './notes.js'
 import { boardsScreen } from './boards.js'
+import { promptsScreen } from './prompts.js'
 import { agentsScreen } from './agents.js'
 import { usageScreen } from './usage.js'
 import { todayScreen } from './today.js'
@@ -472,6 +473,7 @@ export async function drawPane($, e) {
     else if (S.menu === 'settings') items = settingsScreen($, e, kit)
     else if (S.menu === 'youtube') items = youtubeScreen($, e, kit)
     else if (S.menu.startsWith('youtube:')) items = youtubeTopicScreen($, e, kit)
+    else if (promptsShown()) items = promptsScreen($, e, kit)
     else if (S.menu === 'boards' || S.menu.startsWith('board:') || (S.menu.startsWith('note:') && isBoard(S.notes.find((p) => p.id === S.menu.slice(5))))) items = boardsScreen($, e, kit)
     else if (S.menu === 'notes' || S.menu.startsWith('note:')) items = notesScreen($, e, kit)
     else if (calendarShown()) items = calendarScreen($, e, kit)

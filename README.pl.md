@@ -22,6 +22,7 @@ Cały katalog jest darmowy: gry mają otwarte licencje, książki i audiobooki n
 
 - **Notatnik i tablice projektów.** Strony, podstrony i listy kontrolne, które prowadzi też Claude, oraz tablice z kolumnami i kartami. *Wyślij do Claude* przekazuje Claude stronę lub kartę: odhacza to, co zrobione, i dopisuje tam wynik. Strona lub karta pokazuje sformatowany tekst z przyciskami *Edytuj* i *Kopiuj*. Wszystkie otwarte sesje Claude Code dzielą notatnik, więc każda może wziąć własną kartę z tej samej tablicy. Udostępnij tablicę znajomym, a wszyscy pracują na tej samej. Wyślij stronę do Notion lub innej aplikacji albo sprowadź ją stamtąd przez konektory Claude; podyktuj tekst w polu wpisywania Claude i przenieś go na stronę.
 - **Claude przechodzi przez twoją tablicę.** *Kolejka dla Claude* przekazuje Claude karty z pierwszej kolumny po jednej: następna idzie, gdy poprzednia jest już w *Gotowe*, a pytanie od Claude albo niedokończona karta zatrzymuje kolejkę. Karty mają terminy widoczne w kalendarzu, a na wspólnej tablicy wszyscy widzą, kto wziął którą kartę. Zgłoszenia z GitHuba trafiają na tablicę jako karty, a wynik wraca do nich jako komentarz — przez konektor GitHub w Claude. *Podsumowanie dnia* tworzy stronę na standup — co trafiło do Claude, co zrobione, co w toku — do wysłania do czatu zespołu.
+- **Prompty.** Prośby, które wpisujesz raz po raz, stają się szablonami na jedno naciśnięcie: naciśnięcie wysyła szablon do Claude, jak *Wyślij do Claude*, a *Do pola wpisywania* pozwala go najpierw dokończyć. Udostępnij zestaw znajomym, a cały zespół ma te same prompty. Claude też zapisuje szablony: „zapisz to jako prompt w Arcade”.
 - **Dzisiaj.** Pierwszy kafelek w *Pracy* zbiera na jednym ekranie wszystko, co na ciebie czeka: sesje czekające na pozwolenie albo odpowiedź (na pytanie z opcjami odpowiada się od razu tam), dzisiejsze wydarzenia, karty z terminem na dziś i po terminie, karty wzięte przez ciebie na wspólnych tablicach, nieprzeczytane czaty i jedną linijkę z limitami Claude.
 - **Agenci.** *Agenci* w sekcji *Praca* pokazują każdą sesję Claude Code z Arcade na tym komputerze, według folderu: czy Claude w niej pracuje, czeka na zgodę, skończył odpowiadać, czy sesja jest wolna, i od jak dawna, a także jej kartę i miejsce w kolejce. Gdy Claude w innej sesji zadaje pytanie z opcjami, odpowiesz przyciskiem prosto w jej karcie. Gdy inna sesja prosi o zgodę lub zadaje pytanie, mówi o tym komunikat w twoim własnym panelu. Kolejka tablicy może działać w kilku sesjach naraz, a dwie sesje nie dostaną tej samej karty.
 - **Limity.** Kafelek *Limity* w sekcji *Praca* pokazuje okna limitów Claude — 5 godzin, tydzień i limit wydatków — z procentem, paskiem i godziną odnowienia każdego z nich, a także kontekst i koszt tej i innych twoich sesji. Liczby pochodzą od samego Claude Code. Jeśli limit skończy się w trakcie kolejki tablicy, jeden przycisk wznowi ją po odnowieniu.
@@ -97,7 +98,7 @@ W PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mark
 | **Czytaj i słuchaj** | Książki, Audiobooki, Artykuły, Podcasty |
 | **Oglądaj** | YouTube, Twitch, TikTok |
 | **Społeczność** | Znajomi, Czaty, **Zaloguj się przez GitHub** (albo **Konto** po zalogowaniu) |
-| **Praca** | Dzisiaj, Notatnik, Tablica projektów, Kalendarz, Agenci, Limity |
+| **Praca** | Dzisiaj, Notatnik, Tablica projektów, Prompty, Kalendarz, Agenci, Limity |
 | **Więcej** | Okno Arcade, Ustawienia, 🌐 język, 🐞 Zgłoś błąd, ☕ Wesprzyj projekt |
 
 Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuje `▸` i liczbę kafelków w środku, a *Społeczność* także nowe wiadomości 💬 i zaproszenia do znajomych 👥. Arcade pamięta, które sekcje są zwinięte. Niepotrzebną sekcję można ukryć w **Ustawieniach**: znika wtedy z menu całkowicie, razem z tytułem i kafelkami; *Więcej* z ustawieniami zostaje zawsze. Po zalogowaniu nagłówek menu pokazuje twój @nick z tymi samymi licznikami.
@@ -132,6 +133,16 @@ Oba są w sekcji *Praca* menu.
 - **Zgłoszenia GitHub.** Pole *Zgłoszenia z GitHuba* na tablicy przyjmuje `owner/repo` albo link do zgłoszeń: Claude czyta do 20 otwartych zgłoszeń (issues) przez swój konektor GitHub i dodaje jako karty te, których jeszcze nie ma na tablicy. Na takiej karcie *Wynik do GitHuba* sprawia, że Claude pisze w zgłoszeniu krótki komentarz o tym, co zrobiono; zgłoszenia nie zamyka. Arcade nigdy nie łączy się bezpośrednio z GitHubem i nie potrzebuje kluczy.
 - **Podsumowanie dnia.** Przycisk pod tablicami i w notatniku tworzy stronę „Podsumowanie DD.MM”: co dziś trafiło do Claude, co zrobione — karty przeniesione do ostatniej kolumny, odhaczone punkty — i co jest jeszcze w toku. Możesz ją przekazać Claude, poprawić albo wysłać do czatu.
 - **Wyślij do czatu.** Po zalogowaniu *Wyślij do czatu* wysyła dowolną stronę do jednego z twoich ostatnich czatów jako tekst, z zachowaniem nagłówków i znaczników listy kontrolnej.
+
+## Prompty
+
+Kafelek w sekcji *Praca* menu: twoje własne szablony promptów, każdy trafia do Claude jednym naciśnięciem.
+
+- **Szablony.** Szablon to nazwa na przycisku i tekst, który trafi do Claude. Wpisz nazwę w *Nowy szablon*, potem tekst; Enter zapisuje. Szablony leżą w zestawach: pierwszy trafia do *Moje prompty*, a *Nowy zestaw* tworzy kolejny. Szablon można przemianować, edytować, przesunąć przyciskami *↑ Wyżej* i *↓ Niżej* i usunąć drugim naciśnięciem.
+- **Jedno naciśnięcie.** Naciśnięcie szablonu wysyła jego tekst do Claude bez zmian, jak *Wyślij do Claude*: od razu, jeśli Claude jest wolny; gdy jest zajęty, szablon czeka w polu wpisywania, aż go wyślesz. *Do pola wpisywania* dodaje go do tekstu, który już tam jest, bez wysyłania, żeby można go było dokończyć. Pod każdym szablonem widać pierwszy wiersz jego tekstu; ✎ otwiera go do edycji.
+- **Claude też je zapisuje.** Powiedz „zapisz to jako prompt w Arcade”, a Claude doda szablon narzędziem `mcp__arcade__notes`.
+- **Wspólne zestawy.** Po zalogowaniu z @nickiem otwórz *Ustawienia zestawu*, zaznacz znajomych i naciśnij *Udostępnij*: wszyscy mają te same szablony i nazwę, a zmiany docierają w ciągu kilku sekund. Wspólne zestawy znajomych same pojawiają się w twoich *Promptach*. Tak jak przy [wspólnych tablicach](#notatnik-i-tablice-projektów), właściciel zaprasza i usuwa uczestników, opuścić zestaw może każdy, a każdy zachowuje własną kopię. Wspólne zestawy wliczają się do twoich 3 własnych wspólnych tablic.
+- **To nie polecenia.** Szablony to przyciski panelu Arcade, a nie polecenia Claude Code: polecenia z ukośnikiem i skille działają jak dotąd. Szablony są przechowywane na tym komputerze razem z notatnikiem i wliczają się do jego 200 stron.
 
 ## Kalendarz
 

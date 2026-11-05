@@ -3,7 +3,7 @@ import { tr } from '../i18n.js'
 import { CONSOLE_NAMES, MINE_MAX_BYTES, cleanPath, identifyRom, mineId, sha256Hex, titleFromPath } from '../mine.js'
 import { FIELD, S } from './state.js'
 import { plural } from './status.js'
-import { shownBoard } from './work.js'
+import { promptsShown, shownBoard } from './work.js'
 
 export function consoles() {
   return S.catalog.consoles
@@ -124,6 +124,7 @@ export function libraryTitle() {
   if (S.menu === 'podcasts' || S.menu.startsWith('podcasts:')) return 'Arcade · Подкасты'
   if (S.menu === 'twitch' || S.menu.startsWith('twitch:')) return 'Arcade · Twitch'
   if (S.menu === 'tiktok') return 'Arcade · TikTok'
+  if (promptsShown()) return 'Arcade · промпты'
   if (S.menu === 'boards' || S.menu.startsWith('board:') || shownBoard()) return 'Arcade · доска проектов'
   if (S.menu === 'notes' || S.menu.startsWith('note:')) return 'Arcade · блокнот'
   if (S.menu === 'books' || S.menu.startsWith('books:')) return 'Arcade · Книги'
