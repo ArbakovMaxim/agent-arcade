@@ -8,7 +8,7 @@ import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatar
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
-import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, issueUrl, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, toggleLine, updateCard, updatePage } from '../hooks/notes.js'
+import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../hooks/notes.js'
 import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanGive, cleanTime, dayKey, dueReminders, dueTasks, fireAt, giveTargets, markAlerted, markTask, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
 import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
@@ -4820,21 +4820,35 @@ test('блокнот: Notion и другие приложения — прось
   await ui.unmount()
 })
 
-test('доска: задачи из GitHub — Claude забирает их карточками через коннектор, итог карточки — комментарием в задачу', async ($, on) => {
+test('доска: задачи из трекера — GitHub, Linear, Jira или другой; Claude забирает их карточками через коннектор, итог карточки — комментарием в задачу', async ($, on) => {
   const { clock, saved, submits } = stubs(on, { env: WINDOWS, submit: true })
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const text = (t: any) => ui.find({ type: 'Text', text: t })
   const pages = () => saved.get('notes') as any[]
-  const NO_GITHUB = 'Нет инструментов GitHub — ничего не делай, только объясни, как подключить коннектор GitHub в Claude.'
+  const field = async () => ui.find({ key: await noteKey(ui, 'arcade-board-tasks-') })
+  const NONE = 'Нет инструментов этого трекера — ничего не делай, только объясни, как подключить его коннектор в Claude.'
   const ISSUE = 'https://github.com/octo/app/issues/7'
   const OLD = 'https://github.com/octo/app/issues/3'
-  // Задача карточки: из связи, иначе из текста; список задач и чужие адреса — не задача
-  expect(issueUrl({ body: 'см. https://github.com/octo/app/pull/12#discussion и ещё' })).toBe('https://github.com/octo/app/pull/12')
-  expect(issueUrl({ link: { app: 'GitHub', url: `${ISSUE}#issuecomment-1` }, body: OLD })).toBe(ISSUE)
-  expect(issueUrl({ link: { app: 'Notion', url: 'https://notion.so/x' }, body: 'нет' })).toBe('')
-  expect(issueUrl({ body: 'https://github.com/octo/app/issues' })).toBe('')
+  const LINEAR = 'https://linear.app/acme/issue/ENG-12'
+  const JIRA = 'https://acme.atlassian.net/browse/PROJ-7'
+  const CLICKUP = 'https://app.clickup.com/t/86abc'
+  // Задача карточки: из связи, иначе из текста — GitHub, Linear и Jira узнаются по адресу; список задач и чужие адреса — не задача
+  expect(trackerTask({ body: 'см. https://github.com/octo/app/pull/12#discussion и ещё' })).toEqual({ app: 'GitHub', url: 'https://github.com/octo/app/pull/12' })
+  expect(trackerTask({ link: { app: 'GitHub', url: `${ISSUE}#issuecomment-1` }, body: OLD })).toEqual({ app: 'GitHub', url: ISSUE })
+  expect(trackerTask({ link: { app: 'Notion', url: 'https://notion.so/x' }, body: 'нет' })).toBeNull()
+  expect(trackerTask({ body: 'https://github.com/octo/app/issues' })).toBeNull()
+  expect(trackerTask({ body: `${LINEAR}/padaet-vhod` })).toEqual({ app: 'Linear', url: LINEAR })
+  expect(trackerTask({ link: { app: 'Jira', url: `${JIRA}?focusedCommentId=1` }, body: '' })).toEqual({ app: 'Jira', url: JIRA })
+  expect(taskLink({ app: 'Jira', url: JIRA })).toEqual({ app: 'Jira', url: JIRA })
+  expect(taskLink({ app: 'ClickUp', url: CLICKUP })).toBeNull()
+  expect(taskLink(null)).toBeNull()
+  // Другой трекер — только у карточки доски и только первой строкой «Название: адрес»
+  expect(trackerTask({ body: `ClickUp: ${CLICKUP}\nсуть` }, true)).toEqual({ app: 'ClickUp', url: CLICKUP })
+  expect(trackerTask({ body: `ClickUp: ${CLICKUP}\nсуть` })).toBeNull()
+  expect(trackerTask({ body: '- [ ] x: https://a.b' }, true)).toBeNull()
+  expect(trackerTask({ body: `Jira: ${JIRA}` }, true)).toEqual({ app: 'Jira', url: JIRA })
 
   await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
   await $.tool.call({ tool: NOTES, action: 'create', title: 'Старая', parent: 'Sprint', text: `${OLD}\n- [ ] x` })
@@ -4843,74 +4857,113 @@ test('доска: задачи из GitHub — Claude забирает их ка
   await ui.press({ key: 'arcade-menu-boards' })
   await ui.press({ key: `arcade-desk-${board.id}` })
 
-  // Поле на доске: Arcade только передаёт просьбу — задачи читает и карточки заводит Claude
-  expect(await ui.find({ key: await noteKey(ui, 'arcade-board-github-') })).toMatchObject({ props: { label: 'Задачи из GitHub', placeholder: 'owner/repo или ссылка на задачи', submitLabel: 'Забрать' } })
-  expect(await text('  Claude заберёт открытые задачи карточками через коннектор GitHub. Итог по карточке он напишет в задачу кнопкой «Итог — в GitHub» на карточке.')).toBeDefined()
-  await noteInput(ui, 'arcade-board-github-', '   ')
+  // Трекер по умолчанию — тот, из которого задачи на доске; поле подсказывает, что вписать. Arcade только передаёт
+  // просьбу — задачи читает и карточки заводит Claude
+  expect(await ui.find({ key: 'arcade-board-tracker' })).toMatchObject({ props: { label: 'Трекер', value: 'github' } })
+  expect((await ui.find({ key: 'arcade-board-tracker' })).props.options.map((o: any) => o.label)).toEqual(['GitHub', 'Linear', 'Jira', 'Другой трекер'])
+  expect(await field()).toMatchObject({ props: { label: 'Задачи из трекера', placeholder: 'owner/repo или ссылка на задачи', submitLabel: 'Забрать' } })
+  expect(await text('  Claude заберёт открытые задачи карточками через коннектор трекера. Итог по карточке он напишет в задачу кнопкой «Итог — в …» на карточке.')).toBeDefined()
+  await noteInput(ui, 'arcade-board-tasks-', '   ')
   expect(submits.length).toBe(0)
   expect(await text('Впиши репозиторий GitHub (owner/repo) или ссылку на задачи.')).toMatchObject({ props: { color: 'warning' } })
-  await noteInput(ui, 'arcade-board-github-', ' octo/app \n label:bug ')
-  expect(submits[0].text).toBe(
+  await noteInput(ui, 'arcade-board-tasks-', ' octo/app \n label:bug ')
+  const ask = (tracker: string, what: string, have: string[]) =>
     [
-      'Забери задачи из GitHub на доску из моего блокнота Arcade.',
+      'Забери задачи из трекера на доску из моего блокнота Arcade.',
+      `Трекер: ${tracker}`,
       `Доска: «Sprint» (id ${board.id})`,
-      'Откуда: octo/app label:bug',
-      `Уже на доске: ${OLD}`,
+      `Откуда: ${what}`,
+      `Уже на доске: ${have.join(', ')}`,
       '',
-      'Прочитай открытые задачи (issues) инструментами коннектора GitHub — не больше 20. Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — адрес задачи и коротко её суть, app — GitHub, url — адрес задачи.',
-      NO_GITHUB,
-    ].join('\n'),
-  )
+      'Прочитай открытые задачи инструментами коннектора этого трекера — не больше 20. Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — первой строкой «трекер: адрес задачи», дальше коротко её суть, app — название трекера, url — адрес задачи.',
+      NONE,
+    ].join('\n')
+  expect(submits[0].text).toBe(ask('GitHub', 'octo/app label:bug', [OLD]))
   expect(await text('Просьба ушла Claude.')).toBeDefined()
 
-  // Claude заводит карточку задачи, связанную с ней
-  const body = `${ISSUE}\nКнопка входа молчит.\n- [x] найти причину`
+  // Linear и Jira — своё поле и своя подсказка; другой трекер — название или ссылка, какой он — Claude видит из «Откуда»
+  await ui.select({ key: 'arcade-board-tracker', value: 'linear' })
+  expect(await ui.find({ key: 'arcade-board-tracker' })).toMatchObject({ props: { value: 'linear' } })
+  expect(await field()).toMatchObject({ props: { placeholder: 'ключ команды (ENG) или ссылка' } })
+  await noteInput(ui, 'arcade-board-tasks-', '   ')
+  expect(await text('Впиши ключ команды Linear или ссылку на задачи.')).toMatchObject({ props: { color: 'warning' } })
+  await noteInput(ui, 'arcade-board-tasks-', 'ENG')
+  expect(submits[1].text).toBe(ask('Linear', 'ENG', [OLD]))
+  await ui.select({ key: 'arcade-board-tracker', value: 'jira' })
+  expect(await field()).toMatchObject({ props: { placeholder: 'ключ проекта (PROJ) или ссылка' } })
+  await noteInput(ui, 'arcade-board-tasks-', '   ')
+  expect(await text('Впиши ключ проекта Jira или ссылку на задачи.')).toMatchObject({ props: { color: 'warning' } })
+  await ui.select({ key: 'arcade-board-tracker', value: 'other' })
+  expect(await field()).toMatchObject({ props: { placeholder: 'ссылка или название: ClickUp, Asana…' } })
+  await noteInput(ui, 'arcade-board-tasks-', '   ')
+  expect(await text('Впиши ссылку на задачи или название трекера.')).toMatchObject({ props: { color: 'warning' } })
+  await noteInput(ui, 'arcade-board-tasks-', 'ClickUp, список Sprint 4')
+  expect(submits[2].text).toBe(ask('какой — видно из «Откуда»', 'ClickUp, список Sprint 4', [OLD]))
+
+  // Claude заводит карточки задач: из GitHub — со связью, из ClickUp — со связью и первой строкой «ClickUp: адрес»
+  const body = `GitHub: ${ISSUE}\nКнопка входа молчит.\n- [x] найти причину`
   await $.tool.call({ tool: NOTES, action: 'create', title: 'Падает вход', parent: 'Sprint', text: body, app: 'GitHub', url: ISSUE })
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Экспорт', parent: 'Sprint', text: `ClickUp: ${CLICKUP}\nВыгрузка в CSV.`, app: 'ClickUp', url: CLICKUP })
   const card = pages().find((p) => p.title === 'Падает вход')
   await ui.press({ key: `arcade-card-${card.id}` })
   await ui.press({ key: `arcade-card-${card.id}` })
-  expect(await ui.find({ key: 'arcade-note-github' })).toMatchObject({ props: { label: 'Итог — в GitHub' } })
-  expect(await text('  Claude напишет в задачу GitHub комментарий: что сделано по карточке. Задачу не закроет.')).toBeDefined()
+  expect(await ui.find({ key: 'arcade-note-tracker' })).toMatchObject({ props: { label: 'Итог — в GitHub' } })
+  expect(await text('  Claude напишет в задачу комментарий: что сделано по карточке. Задачу не закроет и статус не поменяет.')).toBeDefined()
   // Задачу текстом карточки не переписываем: «Обновить в приложении» нет
   expect(await text(`  Связана с GitHub: ${ISSUE}`)).toBeDefined()
   expect(await ui.find({ key: 'arcade-note-push' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-note-pull' })).toBeDefined()
 
-  // «Отдать Claude» — с адресом задачи; комментарий в задачу — только кнопкой
+  // «Отдать Claude» — с трекером и адресом задачи; комментарий в задачу — только кнопкой
   await ui.press({ key: 'arcade-note-send' })
-  expect(submits[1].text.split('\n').slice(-2)).toEqual([
+  expect(submits[3].text.split('\n').slice(-2)).toEqual([
     'Это карточка доски «Sprint». Когда сделаешь — перенеси её в колонку «Готово» (колонка done) действием move того же инструмента.',
-    `Это задача GitHub: ${ISSUE} — подробности, обсуждение и код читай там инструментами коннектора GitHub, если он подключён.`,
+    `Это задача в трекере GitHub: ${ISSUE} — подробности и обсуждение читай там инструментами коннектора этого трекера, если он подключён.`,
   ])
-  await ui.press({ key: 'arcade-note-github' })
-  expect(submits[2].text).toBe(
+  await ui.press({ key: 'arcade-note-tracker' })
+  const comment = (app: string, url: string, page: any) =>
     [
-      'Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче GitHub.',
-      `Задача: ${ISSUE}`,
-      `Страница блокнота: ${card.id}`,
+      'Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче в трекере.',
+      `Трекер: ${app}`,
+      `Задача: ${url}`,
+      `Страница блокнота: ${page.id}`,
       '',
-      '# Падает вход',
-      body,
+      `# ${page.title}`,
+      page.body,
       '',
-      'Оставь в задаче короткий комментарий инструментами коннектора GitHub: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай, если об этом не просят.',
-      NO_GITHUB,
-    ].join('\n'),
-  )
+      'Оставь в задаче короткий комментарий инструментами коннектора этого трекера: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай и её статус не меняй.',
+      NONE,
+    ].join('\n')
+  expect(submits[4].text).toBe(comment('GitHub', ISSUE, card))
   expect(await text('Просьба ушла Claude.')).toBeDefined()
 
-  // Карточка без задачи — без кнопки; в следующей просьбе «Уже на доске» — обе задачи
+  // Карточка из другого трекера — кнопка с его названием, и «Обновить в приложении» тоже нет
+  await ui.press({ key: 'arcade-back' })
+  const other = pages().find((p) => p.title === 'Экспорт')
+  await ui.press({ key: `arcade-card-${other.id}` })
+  await ui.press({ key: `arcade-card-${other.id}` })
+  expect(await ui.find({ key: 'arcade-note-tracker' })).toMatchObject({ props: { label: 'Итог — в ClickUp' } })
+  expect(await ui.find({ key: 'arcade-note-push' })).toBeUndefined()
+  await ui.press({ key: 'arcade-note-tracker' })
+  expect(submits[5].text).toBe(comment('ClickUp', CLICKUP, other))
+
+  // Карточка без задачи — без кнопки
   await ui.press({ key: 'arcade-back' })
   const own = pages().find((p) => p.title === 'Своя')
   await ui.press({ key: `arcade-card-${own.id}` })
   await ui.press({ key: `arcade-card-${own.id}` })
-  expect(await ui.find({ key: 'arcade-note-github' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-note-tracker' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-note-push' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-note-notion' })).toBeDefined()
+
+  // Выбор трекера доска помнит; в следующей просьбе «Уже на доске» — все три задачи
   await ui.press({ key: 'arcade-back' })
-  await noteInput(ui, 'arcade-board-github-', 'https://github.com/octo/app/issues')
-  const have = submits[3].text.split('\n')[3]
+  expect(await ui.find({ key: 'arcade-board-tracker' })).toMatchObject({ props: { value: 'other' } })
+  await ui.select({ key: 'arcade-board-tracker', value: 'github' })
+  await noteInput(ui, 'arcade-board-tasks-', 'https://github.com/octo/app/issues')
+  const have = submits[6].text.split('\n')[4]
   expect(have.startsWith('Уже на доске: ')).toBe(true)
-  expect(have.slice('Уже на доске: '.length).split(', ').sort()).toEqual([OLD, ISSUE].sort())
+  expect(have.slice('Уже на доске: '.length).split(', ').sort()).toEqual([OLD, ISSUE, CLICKUP].sort())
   await ui.unmount()
 })
 

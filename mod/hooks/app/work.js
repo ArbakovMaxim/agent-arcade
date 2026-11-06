@@ -1,7 +1,7 @@
 // Arcade: блокнот и доски проектов.
 import { clipboardCommand, openUrlCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
-import { COL_NAMES, MAX_BODY, PROMPTS_COL, PROMPT_COLS, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, isPrompts, issueUrl, latestEdits, mergeText, rebaseNotes, restoreNotes, updateCard, updatePage } from '../notes.js'
+import { COL_NAMES, MAX_BODY, PROMPTS_COL, PROMPT_COLS, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, isPrompts, latestEdits, mergeText, rebaseNotes, restoreNotes, trackerTask, updateCard, updatePage } from '../notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../desks.js'
 import { LAUNCH_TIMEOUT_MS, S, nb, pr } from './state.js'
 import { log } from './status.js'
@@ -386,9 +386,9 @@ export async function sendNote($, id, queued = false, auto = false) {
   const last = board?.board.cols.at(-1)
   if (last && columnOf(page, board.board.cols) !== last.id)
     lines.push(`${t('Это карточка доски')} «${board.title}». ${t('Когда сделаешь — перенеси её в колонку')} «${colName(last)}» (${t('колонка')} ${last.id}) ${t('действием move того же инструмента.')}`)
-  // Задача GitHub — Claude прочитает её коннектором, если нужно больше. Комментарий в задачу — только кнопкой «Итог — в GitHub»
-  const issue = issueUrl(page)
-  if (issue) lines.push(`${t('Это задача GitHub')}: ${issue} — ${t('подробности, обсуждение и код читай там инструментами коннектора GitHub, если он подключён.')}`)
+  // Задача трекера — Claude прочитает её коннектором, если нужно больше. Комментарий в задачу — только кнопкой «Итог — в …»
+  const task = trackerTask(page, Boolean(board))
+  if (task) lines.push(`${t('Это задача в трекере')} ${task.app}: ${task.url} — ${t('подробности и обсуждение читай там инструментами коннектора этого трекера, если он подключён.')}`)
   if (queued) lines.push(t('Карточки идут очередью Arcade: перенесёшь эту в последнюю колонку — следующую Arcade даст сам. Нужно решение человека — не переноси, спроси.'))
   const sent = await giveClaude($, lines.join('\n'), 'page')
   // Карточку отдали этой сессии кнопкой — другие сессии видят «у сессии «…»» и очередью её не берут (очередь отмечает сама)
@@ -397,11 +397,13 @@ export async function sendNote($, id, queued = false, auto = false) {
   return sent
 }
 
-// «Итог — в GitHub» на карточке: Claude пишет комментарий в задачу карточки
-export async function issueComment($, id) {
+// «Итог — в …» на карточке: Claude пишет комментарий в задачу карточки — в том трекере, где она
+export async function trackerComment($, id) {
   if (!(await editNotes($, (list) => list))) return
   const page = S.notes.find((p) => p.id === id)
-  if (page && issueUrl(page)) await giveClaude($, githubPrompt('comment', { page }), 'ask')
+  const parent = page?.parent ? S.notes.find((p) => p.id === page.parent) : null
+  const task = page && trackerTask(page, Boolean(parent && isBoard(parent)))
+  if (task) await giveClaude($, trackerPrompt('comment', { page, task }), 'ask')
 }
 
 // Страницу отдали Claude — в итоги дня; не вышло отдать — нет
@@ -503,34 +505,44 @@ export function connectorPrompt(kind, { page = null, app = '', what = '' }) {
   return [t(intro), ...data, ...content, '', t(todo), t('Нет инструментов этого приложения — ничего не делай, только объясни, как подключить его коннектор в Claude.')].join('\n')
 }
 
-// Просьба к Claude про GitHub — тоже через коннектор, без ключей: забрать открытые задачи на доску карточками (import:
-// board — доска, what — откуда, как вписал человек) или написать итог карточки комментарием в её задаче (comment:
-// page — карточка). Уже взятые на доску задачи Claude пропускает — их адреса в просьбе
-export const GITHUB_ISSUES = 20 // задач за раз, не больше
-export function githubPrompt(kind, { board = null, page = null, what = '', notes = [] }) {
+// Просьба к Claude про трекер задач — тоже через коннектор, без ключей: забрать открытые задачи на доску карточками
+// (import: tracker — GitHub, Linear, Jira или другой, board — доска, what — откуда, как вписал человек) или написать итог
+// карточки комментарием в её задаче (comment: page — карточка, task — её задача). Уже взятые на доску задачи Claude
+// пропускает — их адреса в просьбе. Задачу Claude не закрывает и статус её не меняет
+export const TRACKERS = ['github', 'linear', 'jira', 'other']
+export const TRACKER_NAMES = { github: 'GitHub', linear: 'Linear', jira: 'Jira', other: 'Другой трекер' }
+export const TRACKER_ISSUES = 20 // задач за раз, не больше
+// Трекер доски по умолчанию — тот, из которого последняя карточка-задача; задач нет — GitHub
+export function boardTracker(board, notes) {
+  const task = notes.filter((p) => p.parent === board.id).map((p) => trackerTask(p, true)).filter(Boolean).at(-1)
+  return task ? (TRACKERS.find((k) => TRACKER_NAMES[k] === task.app) ?? 'other') : 'github'
+}
+export function trackerPrompt(kind, { tracker = 'github', board = null, page = null, task = null, what = '', notes = [] }) {
   const t = (text) => tr(text, S.lang)
-  const none = t('Нет инструментов GitHub — ничего не делай, только объясни, как подключить коннектор GitHub в Claude.')
+  const none = t('Нет инструментов этого трекера — ничего не делай, только объясни, как подключить его коннектор в Claude.')
   if (kind === 'import') {
-    const have = [...new Set(notes.filter((p) => p.parent === board.id).map(issueUrl).filter(Boolean))]
+    const have = [...new Set(notes.filter((p) => p.parent === board.id).map((p) => trackerTask(p, true)?.url).filter(Boolean))]
     return [
-      t('Забери задачи из GitHub на доску из моего блокнота Arcade.'),
+      t('Забери задачи из трекера на доску из моего блокнота Arcade.'),
+      `${t('Трекер')}: ${tracker === 'other' ? t('какой — видно из «Откуда»') : TRACKER_NAMES[tracker]}`,
       `${t('Доска')}: «${board.title}» (id ${board.id})`,
       `${t('Откуда')}: ${what}`,
       ...(have.length ? [`${t('Уже на доске')}: ${have.join(', ')}`] : []),
       '',
-      `${t('Прочитай открытые задачи (issues) инструментами коннектора GitHub — не больше')} ${GITHUB_ISSUES}. ${t('Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — адрес задачи и коротко её суть, app — GitHub, url — адрес задачи.')}`,
+      `${t('Прочитай открытые задачи инструментами коннектора этого трекера — не больше')} ${TRACKER_ISSUES}. ${t('Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — первой строкой «трекер: адрес задачи», дальше коротко её суть, app — название трекера, url — адрес задачи.')}`,
       none,
     ].join('\n')
   }
   return [
-    t('Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче GitHub.'),
-    `${t('Задача')}: ${issueUrl(page)}`,
+    t('Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче в трекере.'),
+    `${t('Трекер')}: ${task.app}`,
+    `${t('Задача')}: ${task.url}`,
     `${t('Страница блокнота')}: ${page.id}`,
     '',
     `# ${page.title}`,
     page.body,
     '',
-    t('Оставь в задаче короткий комментарий инструментами коннектора GitHub: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай, если об этом не просят.'),
+    t('Оставь в задаче короткий комментарий инструментами коннектора этого трекера: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай и её статус не меняй.'),
     none,
   ].join('\n')
 }
@@ -980,12 +992,13 @@ export async function sendBoard($, id) {
   noteToBoard($)
 }
 
-// «Задачи из GitHub»: Claude забирает открытые задачи на доску карточками; what — репозиторий или ссылка, как вписали
-export async function importIssues($, id, what) {
+// «Задачи из трекера»: Claude забирает открытые задачи на доску карточками; tracker — какой трекер выбран, what —
+// репозиторий, ключ проекта или ссылка, как вписали
+export async function importIssues($, id, tracker, what) {
   if (!(await editBoard($, (list) => list))) return
   const board = S.notes.find((p) => p.id === id && isBoard(p))
   if (!board) return
-  await giveClaude($, githubPrompt('import', { board, what, notes: S.notes }), 'ask')
+  await giveClaude($, trackerPrompt('import', { tracker, board, what, notes: S.notes }), 'ask')
   noteToBoard($)
 }
 

@@ -1,12 +1,12 @@
 // Arcade: экран блокнота.
 import { openUrlCommand } from '../browsers.js'
 import { keep, tr } from '../i18n.js'
-import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, issueUrl, moveCard, noteLines, notesOrder, removePage, toggleLine, updateCard, updatePage } from '../notes.js'
+import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, moveCard, noteLines, notesOrder, removePage, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../notes.js'
 import { dayKey, quickParse } from '../calendar.js'
 import { NOTE_LINES, S, nb } from '../app/state.js'
 import { clip } from '../app/status.js'
 import { dayText } from '../app/calendar.js'
-import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, cardTaker, colName, connectorPrompt, copyPage, createPage, deskPerson, editNotes, giveClaude, issueComment, makeSummary, openLink, pageToChat, releaseCard, sendNote } from '../app/work.js'
+import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, cardTaker, colName, connectorPrompt, copyPage, createPage, deskPerson, editNotes, giveClaude, makeSummary, openLink, pageToChat, releaseCard, sendNote, trackerComment } from '../app/work.js'
 import { chatTitle, loadChats } from '../app/talk.js'
 
 const CHAT_PICK = 8 // чатов в выборе «Отправить в чат» — последние по переписке
@@ -99,6 +99,8 @@ export function notesScreen($, e, kit) {
     const id = page.id
     const parent = page.parent ? S.notes.find((p) => p.id === page.parent) : null
     const children = S.notes.filter((p) => p.parent === id)
+    // Задача трекера у карточки — итог в неё кнопкой «Итог — в …» с названием трекера
+    const task = trackerTask(page, Boolean(parent && isBoard(parent)))
     const lines = noteLines(page.body)
     // Набранное в поле «Текст» — черновик страницы (nb.draft); from — текст, с которого начали набирать
     const typed = (value) => ({ id, text: String(value ?? ''), from: nb.draft?.id === id ? nb.draft.from : page.body })
@@ -428,10 +430,10 @@ export function notesScreen($, e, kit) {
       gap,
       Button({ key: 'arcade-note-send', label: 'Отдать Claude', onPress: () => sendNote($, id) }),
       dim('  Claude получит страницу и сможет отмечать пункты и дописывать её.'),
-      ...(issueUrl(page)
+      ...(task
         ? [
-            Button({ key: 'arcade-note-github', label: 'Итог — в GitHub', onPress: () => issueComment($, id) }),
-            dim('  Claude напишет в задачу GitHub комментарий: что сделано по карточке. Задачу не закроет.'),
+            keep(Button({ key: 'arcade-note-tracker', label: `${tr('Итог — в', S.lang)} ${task.app}`, onPress: () => trackerComment($, id) })),
+            dim('  Claude напишет в задачу комментарий: что сделано по карточке. Задачу не закроет и статус не поменяет.'),
           ]
         : []),
       ...(S.acct.session ? chatItems : []),
@@ -439,8 +441,8 @@ export function notesScreen($, e, kit) {
       ...(page.link
         ? [
             keep(dim(`  ${tr('Связана с', S.lang)} ${page.link.app}: ${page.link.url}`)),
-            // Задачу GitHub текстом карточки не переписываем: итог в неё — комментарием, кнопкой выше
-            ...(issueUrl({ link: page.link }) ? [] : [Button({ key: 'arcade-note-push', label: 'Обновить в приложении', onPress: () => askApp('update') })]),
+            // Задачу трекера текстом карточки не переписываем: итог в неё — комментарием, кнопкой выше
+            ...(taskLink(page.link) || task?.url === page.link.url ? [] : [Button({ key: 'arcade-note-push', label: 'Обновить в приложении', onPress: () => askApp('update') })]),
             Button({ key: 'arcade-note-pull', label: 'Забрать из приложения', onPress: () => askApp('pull') }),
             ...(openUrlCommand(S.platform, page.link.url) ? [Button({ key: 'arcade-note-open', label: 'Открыть в браузере', onPress: () => openLink($, page.link.url) })] : []),
             Button({

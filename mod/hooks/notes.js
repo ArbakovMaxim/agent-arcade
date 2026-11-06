@@ -53,12 +53,35 @@ export function cleanLink(app, url) {
   return { app: name, url: href }
 }
 
-// Задача GitHub страницы: адрес задачи или запроса на слияние из связи, иначе первый такой адрес в тексте; нет — ''.
-// В тексте — потому что на общую доску связь не уходит, а адрес Claude пишет и в текст карточки
-const ISSUE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull)\/\d+/
-export function issueUrl(page) {
-  const m = ISSUE.exec(page?.link?.url ?? '') ?? ISSUE.exec(page?.body ?? '')
-  return m ? m[0] : ''
+// Задача трекера у страницы: { app, url } или null. Трекеры — GitHub, Linear, Jira и любой другой: Arcade с ними не
+// говорит, задачи читает и комментарии пишет Claude коннектором. Адреса задач GitHub (и запросов на слияние), Linear и
+// Jira узнаём сами. Задача — из связи; иначе у карточки доски — первая строка «Трекер: адрес» (так Claude заводит
+// карточки из любого трекера); иначе — первый узнанный адрес задачи в тексте. Из текста — потому что на общую доску
+// связь не уходит
+const KNOWN = [
+  ['GitHub', /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:issues|pull)\/\d+/],
+  ['Linear', /https:\/\/linear\.app\/[\w-]+\/issue\/[A-Za-z][A-Za-z0-9]*-\d+/],
+  ['Jira', /https:\/\/[\w-]+\.atlassian\.net\/browse\/[A-Z][A-Z0-9_]*-\d+/],
+]
+const known = (text) => {
+  for (const [app, re] of KNOWN) {
+    const m = re.exec(String(text ?? ''))
+    if (m) return { app, url: m[0] }
+  }
+  return null
+}
+// Первая строка карточки «Трекер: https://…»: название — буквы, цифры, пробел и . & + _ -
+const FIRST = new RegExp(`^([\\p{L}\\p{N}][\\p{L}\\p{N} .&+_-]{0,${MAX_APP - 1}}):\\s*(https?:\\/\\/\\S+)\\s*$`, 'u')
+// Связь страницы — с задачей трекера (адрес GitHub, Linear или Jira); такую текстом карточки не переписываем
+export const taskLink = (link) => (link ? known(link.url) : null)
+export function trackerTask(page, card = false) {
+  const linked = taskLink(page?.link)
+  if (linked) return linked
+  if (card) {
+    const m = FIRST.exec(String(page?.body ?? '').split('\n', 1)[0].trim())
+    if (m && m[2].length <= MAX_URL) return known(m[2]) ?? { app: m[1].trim(), url: m[2] }
+  }
+  return known(page?.body)
 }
 
 // «ГГГГ-ММ-ДД», и такой день есть в календаре; иначе ''. Срок карточки и день события календаря
@@ -519,7 +542,7 @@ export const NOTES_TOOL = {
       text: { type: 'string', description: 'Markdown lines: the new page text (create, replace) or lines to add (append)' },
       item: { type: 'string', description: 'Checklist item: its number from 1, or a part of its text (check)' },
       done: { type: 'boolean', description: 'check: true ticks (default), false unticks' },
-      app: { type: 'string', description: `Name of the other app, e.g. Notion, up to ${MAX_APP} characters (link, create)` },
+      app: { type: 'string', description: `Name of the other app, e.g. Notion, or a tracker such as GitHub, Linear or Jira, up to ${MAX_APP} characters (link, create)` },
       url: { type: 'string', description: 'Address of the page in that app, e.g. https://www.notion.so/… (link, create)' },
       due: { type: 'string', description: 'Due date of a board card as YYYY-MM-DD, local time (create, due); "" removes it (due)' },
     },
