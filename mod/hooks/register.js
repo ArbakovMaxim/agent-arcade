@@ -106,7 +106,7 @@ export function register(on) {
       })
       $.clock.every(CHATS_POLL_MS, () => {
         // Список — на всех экранах чатов: в широкой панели Desktop он слева от переписки, нового чата и участников
-        if (chatsOn() && (S.menu === 'chats' || S.menu.startsWith('chats:'))) loadChats($, true).catch(chatError)
+        if (chatsOn() && (S.menu === 'chats' || S.menu.startsWith('chats:') || S.menu === 'today')) loadChats($, true).catch(chatError)
       })
       // «В сети» — пока панель открыта на библиотеке: отметка раз в PULSE_MS, а когда просили — сразу
       $.clock.every(PULSE_SOON_MS, () => {
@@ -128,8 +128,10 @@ export function register(on) {
       $.clock.after(4_000, () => pushBoards($))
       // Блокнот на экране — перечитываем: его могли поправить в другой сессии Claude Code
       $.clock.every(NOTES_POLL_MS, () => {
-        if (S.paneOpen && S.view === 'library' && notesShown()) refreshNotes($).catch(chatError)
-        if (S.paneOpen && S.view === 'library' && calendarShown()) refreshCalendar($).catch(chatError)
+        // «Сегодня» показывает и сроки карточек, и события — перечитываем оба
+        const today = S.menu === 'today'
+        if (S.paneOpen && S.view === 'library' && (notesShown() || today)) refreshNotes($).catch(chatError)
+        if (S.paneOpen && S.view === 'library' && (calendarShown() || today)) refreshCalendar($).catch(chatError)
       })
       // Отметка сессии — маленькая запись раз в несколько секунд; чужие читаем, только когда они нужны. Очередь, которую
       // остановили во всех сессиях, — тут же

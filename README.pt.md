@@ -22,6 +22,7 @@ Tudo no catálogo é gratuito: os jogos têm licenças abertas, os livros e audi
 
 - **Caderno e quadros de projetos.** Páginas, subpáginas e checklists que o Claude também mantém, e quadros com colunas e cartões. *Passar ao Claude* entrega uma página ou um cartão ao Claude: ele marca o que foi feito e escreve o resultado ali. Uma página ou cartão mostra o texto formatado, com os botões *Editar* e *Copiar*. Todas as suas sessões abertas do Claude Code compartilham o caderno, então cada uma pode pegar o seu próprio cartão do mesmo quadro. Compartilhe um quadro com amigos, e todos trabalham no mesmo. Envie uma página para o Notion ou outro aplicativo, ou traga uma de lá, pelos conectores do Claude; dite na caixa de mensagem do Claude e leve o texto para uma página.
 - **O Claude trabalha no seu quadro.** *Fila para o Claude* entrega ao Claude os cartões da primeira coluna um por um: o próximo vai quando o anterior está em *Feito*, e uma pergunta do Claude ou um cartão inacabado interrompe a fila. Os cartões têm prazos que aparecem no calendário, e num quadro compartilhado todos veem quem pegou cada cartão. Traga issues do GitHub para um quadro como cartões e publique o resultado de volta como comentário, pelo conector do GitHub do Claude. *Resumo do dia* monta uma página de stand-up — o que foi passado ao Claude, o que está feito, o que está em andamento — para enviar à conversa da sua equipe.
+- **Hoje.** O primeiro bloco de *Trabalho* reúne numa tela o que está esperando por você: sessões esperando uma permissão ou uma resposta (uma pergunta com opções se responde ali mesmo), os eventos de hoje, os cartões com prazo hoje ou atrasados, os cartões que você pegou em quadros compartilhados, as conversas não lidas e uma linha com os limites do Claude.
 - **Agentes.** *Agentes*, na seção *Trabalho*, mostra cada sessão do Claude Code com o Arcade neste computador, por pasta: se está trabalhando, aguardando permissão, se terminou o turno ou está livre, e há quanto tempo, com o seu cartão e o lugar na fila. Quando o Claude em outra sessão faz uma pergunta com opções, você responde com um botão direto no cartão dela. Quando outra sessão pede permissão ou faz uma pergunta, aparece um aviso no seu próprio painel. A fila de um quadro pode rodar em várias sessões ao mesmo tempo, e duas sessões não pegam o mesmo cartão.
 - **Limites.** O bloco *Limites*, na seção *Trabalho*, mostra as janelas de limite do Claude — 5 horas, a semana e o limite de gastos — com porcentagem, barra e quando cada uma reinicia, além do contexto e do custo desta e das suas outras sessões. Os números vêm do próprio Claude Code. Se um limite acabar no meio da fila de um quadro, um botão a continua depois do reinício.
 - **Calendário.** No Desktop, um mês de quadradinhos de dia do mesmo tamanho, com um ponto na cor de cada evento; no terminal e no VS Code, a lista do que vem por aí. Um evento entra com uma linha, como «fri 9:30 standup», e pode se repetir todos os dias, nos dias úteis, toda semana, todo mês ou todo ano. Escolha a cor e quando ser lembrado, de uma lista ou com suas palavras (como «45 min before» ou «the day before at 20:00»); o lembrete chega como notificação do sistema. Os prazos dos cartões dos quadros também aparecem ali. O Claude também anota e altera eventos: «anota uma ligação na sexta às 15:00».
@@ -96,7 +97,7 @@ No PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Ler e ouvir** | Livros, Audiolivros, Artigos, Podcasts |
 | **Assistir** | YouTube, Twitch, TikTok |
 | **Social** | Amigos, Conversas, **Entrar com o GitHub** (ou **Conta** depois de entrar) |
-| **Trabalho** | Caderno, Quadro de projetos, Calendário, Agentes, Limites |
+| **Trabalho** | Hoje, Caderno, Quadro de projetos, Calendário, Agentes, Limites |
 | **Mais** | Janela do Arcade, Configurações, 🌐 idioma, 🐞 Relatar um erro, ☕ Apoiar o projeto |
 
 Clique no título de uma seção para recolhê-la ou expandi-la. Uma seção recolhida mostra `▸` e quantos blocos ela contém, e *Social* também mostra novas mensagens 💬 e pedidos de amizade 👥. O Arcade lembra quais seções estão recolhidas. Uma seção de que você não precisa pode ser ocultada em **Configurações**: ela some do menu por completo, com título e blocos; *Mais*, com as configurações, fica sempre. Depois de entrar, o cabeçalho do menu mostra seu @apelido com os mesmos contadores.
@@ -170,6 +171,19 @@ Fica na seção *Trabalho* do menu. Os números vêm do próprio Claude Code, os
 - **Só com o Claude Code aberto.** Só uma sessão aberta, num computador que não esteja em repouso, consegue continuar a fila. Se o Claude Code estava fechado ou o computador em repouso, *Limites* avisa: *A fila “Lançamento” não continuou depois que o limite reiniciou: o Claude Code estava fechado ou o computador em repouso*; se a sessão que esperava foi fechada — *…não começou depois que o limite reiniciou: a sessão estava fechada*. O × remove a mensagem.
 - **Um aviso em 80 e 90%.** Quando uma janela chega a 80%, e depois a 90%, um aviso aparece no painel do Arcade — uma vez por limiar em todas as sessões. Desative-o em *Configurações → Notificações*.
 - **Qual Claude Code.** Nem toda versão do Claude Code informa os limites aos plugins — verificado no 2.1.302 e no 2.1.316. Se a sua não informa, a tela avisa isso, e o resto do Arcade funciona normalmente.
+
+## Hoje
+
+O primeiro bloco da seção *Trabalho* do menu: o que está esperando por você, de todo o Arcade, numa só tela. Não guarda nada próprio: tudo vem do que o Arcade já sabe.
+
+- **Esperando por você.** As sessões deste computador que esperam uma permissão ou uma resposta, a que espera há mais tempo no topo, como em [Agentes](#agentes). Uma pergunta com opções se responde aqui mesmo com um botão; a permissão só se dá na própria sessão.
+- **No calendário.** Os eventos de hoje; os que já passaram ficam mais apagados. Pressionar um abre o evento no [calendário](#calendário).
+- **Prazo.** Os cartões dos quadros com prazo hoje ou atrasados que ainda não estão na última coluna, com o nome do quadro; pressionar um abre o cartão.
+- **Meus cartões.** Os cartões que você pegou em quadros compartilhados e que ainda não estão feitos.
+- **Conversas.** As conversas não lidas, se você entrou; pressionar uma abre a conversa.
+- **Limites.** Uma linha de [Limites](#limites), por exemplo *5 horas: 62%, reinicia às 14:30*; amarela a partir de 80%.
+
+Os blocos vazios ficam ocultos; quando nada espera, a tela diz *Nada pendente para hoje.* No Desktop as sessões são cartões; no terminal e no VS Code tudo são linhas.
 
 ## Para equipes
 

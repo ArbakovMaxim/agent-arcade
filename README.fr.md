@@ -22,6 +22,7 @@ Tout le catalogue est gratuit : les jeux sont sous licences libres, les livres e
 
 - **Carnet et tableaux de projets.** Des pages, des sous-pages et des checklists que Claude tient aussi, et des tableaux avec des colonnes et des cartes. *Donner à Claude* transmet une page ou une carte à Claude : il coche ce qui est fait et y écrit le résultat. Une page ou une carte affiche son texte mis en forme, avec les boutons *Modifier* et *Copier*. Toutes vos sessions Claude Code ouvertes partagent le carnet, si bien que chacune peut prendre sa propre carte sur le même tableau. Partagez un tableau avec vos amis, et tout le monde travaille sur le même. Envoyez une page vers Notion ou une autre application, ou importez-en une, via les connecteurs de Claude ; dictez dans la zone de saisie de Claude et déplacez le texte sur une page.
 - **Claude traite votre tableau.** *File d’attente pour Claude* confie à Claude les cartes de la première colonne une par une : la suivante part dès que la précédente est dans *Fait*, et une question de Claude ou une carte inachevée arrête la file d’attente. Les cartes ont des échéances qui s’affichent dans le calendrier, et sur un tableau partagé chacun voit qui a pris quelle carte. Importez des issues GitHub sur un tableau sous forme de cartes et renvoyez le résultat en commentaire, via le connecteur GitHub de Claude. *Bilan du jour* crée une page pour le stand-up — ce qui est allé à Claude, ce qui est fait, ce qui est en cours — à envoyer dans la discussion de votre équipe.
+- **Aujourd’hui.** La première tuile de *Travail* rassemble sur un seul écran ce qui vous attend : les sessions qui attendent une autorisation ou une réponse (une question à options se règle sur place), les événements du jour, les cartes à échéance aujourd’hui ou en retard, les cartes que vous avez prises sur les tableaux partagés, les discussions non lues et une ligne avec les limites de Claude.
 - **Agents.** *Agents* dans *Travail* montre chaque session Claude Code avec Arcade sur cet ordinateur, par dossier : si elle travaille, attend une autorisation, a terminé son tour ou est libre, et depuis combien de temps, avec sa carte et sa place dans la file d’attente. Quand Claude dans une autre session pose une question à choix, vous y répondez d’un bouton directement dans sa carte. Quand une autre session demande une autorisation ou pose une question, un bandeau dans votre propre panneau vous le signale. La file d’attente d’un tableau peut tourner dans plusieurs sessions à la fois, et deux sessions ne reçoivent pas la même carte.
 - **Limites.** La tuile *Limites* dans *Travail* affiche les fenêtres de limite de Claude — 5 heures, la semaine et la limite de dépenses — avec un pourcentage, une barre et l’heure de réinitialisation de chacune, ainsi que le contexte et le coût de cette session et de vos autres sessions. Les chiffres viennent de Claude Code lui-même. Si une limite est épuisée au milieu de la file d’attente d’un tableau, un bouton la reprend après la réinitialisation.
 - **Calendrier.** Dans Desktop, un mois de cases de jour de même taille avec un point de la couleur de chaque événement ; dans le terminal et VS Code, la liste de ce qui arrive. Un événement s’ajoute en une ligne, comme « fri 9:30 standup », et peut se répéter tous les jours, en semaine, toutes les semaines, tous les mois ou tous les ans. Choisissez sa couleur et quand être prévenu, dans une liste ou avec vos propres mots (comme « 45 min before » ou « the day before at 20:00 ») ; le rappel arrive en notification système. Les échéances des cartes des tableaux y figurent aussi. Claude ajoute et modifie aussi des événements : « ajoute un appel vendredi à 15:00 ».
@@ -96,7 +97,7 @@ Dans PowerShell : `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin 
 | **Lire et écouter** | Livres, Livres audio, Articles, Podcasts |
 | **Regarder** | YouTube, Twitch, TikTok |
 | **Social** | Amis, Discussions, **Se connecter avec GitHub** (ou **Compte** une fois connecté) |
-| **Travail** | Carnet, Tableau de projets, Calendrier, Agents, Limites |
+| **Travail** | Aujourd’hui, Carnet, Tableau de projets, Calendrier, Agents, Limites |
 | **Plus** | Fenêtre Arcade, Paramètres, 🌐 langue, 🐞 Signaler un bug, ☕ Soutenir le projet |
 
 Cliquez sur le titre d’une section pour la replier ou la déplier. Une section repliée affiche `▸` et le nombre de tuiles qu’elle contient, et *Social* affiche aussi les nouveaux messages 💬 et les demandes d’ami 👥. Arcade se souvient des sections repliées. Une section dont vous n’avez pas besoin peut être masquée dans les **Paramètres** : elle disparaît complètement du menu, titre et tuiles compris ; *Plus*, qui contient les paramètres, reste toujours. Une fois connecté, l’en-tête du menu affiche votre @pseudo avec les mêmes compteurs.
@@ -170,6 +171,19 @@ C’est dans la section *Travail* du menu. Les chiffres viennent de Claude Code 
 - **Seulement quand Claude Code est ouvert.** Seule une session ouverte, sur un ordinateur qui ne dort pas, peut reprendre la file d’attente. Si Claude Code était fermé ou que l’ordinateur dormait, *Limites* l’indique : *La file d’attente « Lancement » n’a pas repris après la réinitialisation de la limite : Claude Code était fermé ou l’ordinateur dormait.* ; si la session qui attendait a été fermée : *…n’a pas démarré après la réinitialisation de la limite : la session était fermée.* La × efface la note.
 - **Un bandeau à 80 et 90 %.** Quand une fenêtre atteint 80 %, puis 90 %, un bandeau s’affiche dans le panneau Arcade — une fois par seuil pour toutes les sessions. Désactivez-le dans *Paramètres → Notifications*.
 - **Quel Claude Code.** Toutes les versions de Claude Code ne transmettent pas les limites aux plugins — vérifié sur 2.1.302 et 2.1.316. Si la vôtre ne le fait pas, l’écran l’indique et le reste d’Arcade fonctionne comme d’habitude.
+
+## Aujourd’hui
+
+La première tuile de la section *Travail* du menu : ce qui vous attend, dans tout Arcade, sur un seul écran. Elle ne garde rien d’elle-même : tout vient de ce qu’Arcade sait déjà.
+
+- **En attente de toi.** Les sessions de cet ordinateur qui attendent une autorisation ou une réponse, celle qui attend depuis le plus longtemps en haut, comme dans [Agents](#agents). Une question à options se règle ici même d’un bouton ; l’autorisation ne se donne que dans la session elle-même.
+- **Au calendrier.** Les événements du jour ; ceux déjà passés sont plus pâles. Un appui ouvre l’événement dans le [calendrier](#calendrier).
+- **Échéance.** Les cartes des tableaux à échéance aujourd’hui ou en retard qui ne sont pas encore dans la dernière colonne, avec le nom du tableau ; un appui ouvre la carte.
+- **Mes cartes.** Les cartes que vous avez prises sur les tableaux partagés et qui ne sont pas encore faites.
+- **Discussions.** Les discussions non lues, si vous êtes connecté ; un appui ouvre la discussion.
+- **Limites.** Une ligne tirée de [Limites](#limites), par exemple *5 heures: 62%, réinitialisation à 14:30* ; jaune à partir de 80 %.
+
+Les blocs vides sont masqués ; quand rien n’attend, l’écran l’indique : *Rien en attente aujourd’hui.* Dans Desktop les sessions sont des cartes ; dans le terminal et VS Code tout est en lignes.
 
 ## Pour les équipes
 

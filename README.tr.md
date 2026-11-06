@@ -22,6 +22,7 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 
 - **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri, sütunlu ve kartlı panolar. *Claude'a ver* bir sayfayı ya da kartı Claude’a iletir: Claude yapılanları işaretler ve sonucu oraya yazar. Sayfa ya da kart, metnini *Düzenle* ve *Kopyala* düğmeleriyle biçimlendirilmiş olarak gösterir. Açık tüm Claude Code oturumları defteri paylaşır, böylece her biri aynı panodan kendi kartını alabilir. Bir panoyu arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın. Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı.
 - **Claude panondaki işleri sırayla halleder.** *Claude için kuyruk* ilk sütundaki kartları Claude’a tek tek verir: bir önceki *Bitti*’ye geçince sıradaki gider, Claude’un bir sorusu ya da yarım kalan bir kart da kuyruğu durdurur. Kartların takvimde görünen son tarihleri vardır, ortak panoda da kimin hangi kartı üstlendiğini herkes görür. GitHub issue’larını panoya kart olarak getir ve sonucu, Claude’un GitHub bağlayıcısıyla issue’ya yorum olarak geri yaz. *Günün özeti* bir stand-up sayfası hazırlar — Claude’a ne gitti, ne bitti, ne sürüyor — ekibinin sohbetine göndermen için.
+- **Bugün.** *İş* bölümündeki ilk kutucuk seni bekleyen her şeyi tek ekranda toplar: izin ya da yanıt bekleyen oturumlar (seçenekli bir soru orada hemen yanıtlanır), bugünün etkinlikleri, son tarihi bugün olan ya da geçmiş kartlar, ortak panolarda üstlendiğin kartlar, okunmamış sohbetler ve Claude limitlerinin bir satırı.
 - **Ajanlar.** *İş* bölümündeki *Ajanlar*, bu bilgisayarda Arcade açık her Claude Code oturumunu klasörüne göre gösterir: çalışıyor, izin bekliyor, yanıtını bitirdi ya da boşta, ne kadar süredir öyle olduğu, kartı ve kuyruktaki yeri. Başka bir oturumdaki Claude seçenekli bir soru sorduğunda, onu doğrudan o oturumun kartındaki bir düğmeyle yanıtlarsın. Başka bir oturum izin istediğinde ya da soru sorduğunda kendi panelinde kısa bir uyarı bunu söyler. Bir panonun kuyruğu aynı anda birkaç oturumda çalışabilir ve iki oturum aynı kartı almaz.
 - **Limitler.** *İş* bölümündeki *Limitler* kutucuğu Claude’un limit pencerelerini — 5 saat, hafta ve harcama limiti — yüzde, çubuk ve her birinin sıfırlanma saatiyle, ayrıca bu ve diğer oturumlarının bağlamını ve maliyetini gösterir. Rakamlar Claude Code’un kendisinden gelir. Bir panonun kuyruğunun ortasında limit biterse, tek bir düğme kuyruğu sıfırlamadan sonra sürdürür.
 - **Takvim.** Desktop’ta aynı boyda gün kutucuklarından bir ay, her etkinliğin renginde bir noktayla; terminalde ve VS Code’da yaklaşanların listesi. Bir etkinlik tek satırla eklenir, örneğin «fri 9:30 standup», ve her gün, hafta içi, her hafta, her ay ya da her yıl tekrarlanabilir. Rengini ve ne zaman hatırlatılacağını listeden ya da kendi sözlerinle seç (örneğin «45 min before» ya da «the day before at 20:00»); hatırlatma sistem bildirimi olarak gelir. Pano kartlarının son tarihleri de burada görünür. Claude da etkinlik ekler ve değiştirir: «cuma 15:00’e bir görüşme ekle».
@@ -96,7 +97,7 @@ PowerShell’de: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 | **Oku ve dinle** | Kitaplar, Sesli kitaplar, Makaleler, Podcast’ler |
 | **İzle** | YouTube, Twitch, TikTok |
 | **Sosyal** | Arkadaşlar, Sohbetler, **GitHub ile giriş yap** (giriş yaptıktan sonra **Hesap**) |
-| **İş** | Defter, Proje panosu, Takvim, Ajanlar, Limitler |
+| **İş** | Bugün, Defter, Proje panosu, Takvim, Ajanlar, Limitler |
 | **Diğer** | Arcade penceresi, Ayarlar, 🌐 dil, 🐞 Hata bildir, ☕ Projeye destek ol |
 
 Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltılmış bölüm `▸` ve içindeki kutucuk sayısını gösterir; *Sosyal* ayrıca yeni mesajları 💬 ve arkadaşlık isteklerini 👥 gösterir. Arcade hangi bölümlerin daraltıldığını hatırlar. İhtiyacın olmayan bir bölümü **Ayarlar**’dan gizleyebilirsin: başlığı ve kutucuklarıyla birlikte menüden tamamen kalkar; ayarların bulunduğu *Diğer* her zaman kalır. Giriş yaptıktan sonra menü başlığı @takma adını aynı sayaçlarla gösterir.
@@ -170,6 +171,19 @@ Menünün *İş* bölümündedir. Rakamlar Claude Code’un kendisinden gelir, d
 - **Yalnızca Claude Code açıkken.** Kuyruğa yalnızca açık bir oturum, bilgisayar uykuda değilken devam edebilir. Claude Code kapalıydıysa ya da bilgisayar uykudaydıysa *Limitler* bunu söyler: *“Sürüm” kuyruğu limit sıfırlandıktan sonra devam etmedi: Claude Code kapalıydı ya da bilgisayar uykudaydı*; bekleyen oturum kapatıldıysa — *…limit sıfırlandıktan sonra başlamadı: oturum kapalıydı*. × bu notu kaldırır.
 - **%80 ve %90’da uyarı.** Bir pencere %80’e, sonra %90’a ulaştığında Arcade panelinde kısa bir uyarı çıkar — her eşik için tüm oturumlarda bir kez. *Ayarlar → Bildirimler*’de kapatılır.
 - **Hangi Claude Code.** Her Claude Code sürümü limitleri eklentilere bildirmez — 2.1.302 ve 2.1.316’da denendi. Seninki bildirmiyorsa ekran bunu söyler, Arcade’in geri kalanı her zamanki gibi çalışır.
+
+## Bugün
+
+Menünün *İş* bölümündeki ilk kutucuk: tüm Arcade’den seni bekleyenler, tek ekranda. Kendine ait bir şey saklamaz: hepsi Arcade’in zaten bildiklerinden gelir.
+
+- **Seni bekleyenler.** Bu bilgisayarda izin ya da yanıt bekleyen oturumlar, en uzun bekleyen en üstte, [Ajanlar](#ajanlar)’daki gibi. Seçenekli bir soru burada hemen bir düğmeyle yanıtlanır; izin yalnızca oturumun kendisinde verilir.
+- **Takvimde.** Bugünün etkinlikleri; geçmiş olanlar daha soluk. Birine basınca [takvimde](#takvim) açılır.
+- **Son tarih.** Son tarihi bugün olan ya da geçmiş, henüz son sütunda olmayan pano kartları, panonun adıyla; birine basınca kart açılır.
+- **Kartlarım.** Ortak panolarda üstlendiğin ve henüz bitmemiş kartlar.
+- **Sohbetler.** Giriş yaptıysan okunmamış sohbetler; birine basınca sohbet açılır.
+- **Limitler.** [Limitler](#limitler)’den tek satır, örneğin *5 saat: 62%, sıfırlanma: 14:30*; %80’den itibaren sarı.
+
+Boş bloklar gizlenir; bekleyen bir şey yoksa ekran *Bugünlük bu kadar.* der. Desktop’ta oturumlar kart, terminalde ve VS Code’da her şey satırdır.
 
 ## Ekipler için
 

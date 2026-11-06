@@ -22,6 +22,7 @@ Todo el catálogo es gratuito: los juegos tienen licencias abiertas y los libros
 
 - **Cuaderno y tableros de proyectos.** Páginas, subpáginas y listas de tareas que también lleva Claude, y tableros con columnas y tarjetas. *Dar a Claude* le pasa una página o una tarjeta a Claude: marca lo hecho y escribe ahí el resultado. Una página o tarjeta muestra su texto con formato, con los botones *Editar* y *Copiar*. Todas tus sesiones abiertas de Claude Code comparten el cuaderno, así que cada una puede tomar su propia tarjeta del mismo tablero. Comparte un tablero con tus amigos y todos trabajáis en el mismo. Envía una página a Notion u otra aplicación, o trae una desde allí, mediante los conectores de Claude; dicta en el cuadro de mensaje de Claude y pasa el texto a una página.
 - **Claude avanza por tu tablero.** *Cola para Claude* le pasa a Claude las tarjetas de la primera columna una a una: la siguiente va cuando la anterior está en *Hecho*, y una pregunta de Claude o una tarjeta sin terminar detiene la cola. Las tarjetas tienen fechas de vencimiento que aparecen en el calendario, y en un tablero compartido todos ven quién tomó cada tarjeta. Trae issues de GitHub a un tablero como tarjetas y publica el resultado de vuelta como comentario, mediante el conector de GitHub de Claude. *Resumen del día* crea una página para el stand-up — qué se pasó a Claude, qué está hecho, qué está en curso — para enviarla al chat de tu equipo.
+- **Hoy.** La primera ficha de *Trabajo* reúne en una pantalla lo que te espera: sesiones que esperan un permiso o una respuesta (una pregunta con opciones se responde ahí mismo), los eventos de hoy, las tarjetas que vencen hoy o ya vencidas, las tarjetas que tomaste en tableros compartidos, los chats sin leer y una línea con los límites de Claude.
 - **Agentes.** *Agentes* en *Trabajo* muestra todas las sesiones de Claude Code con Arcade en este ordenador, por carpeta: si trabaja, espera permiso, terminó su turno o está libre, y desde hace cuánto, con su tarjeta y su lugar en la cola. Cuando Claude en otra sesión hace una pregunta con opciones, la respondes con un botón en su propia tarjeta. Cuando otra sesión pide permiso o hace una pregunta, te lo dice un aviso en tu propio panel. La cola de un tablero puede funcionar en varias sesiones a la vez, y dos sesiones no reciben la misma tarjeta.
 - **Límites.** La ficha *Límites* en *Trabajo* muestra las ventanas de límite de Claude — 5 horas, la semana y el límite de gasto — con un porcentaje, una barra y cuándo se reinicia cada una, además del contexto y el coste de esta sesión y de tus otras sesiones. Las cifras vienen del propio Claude Code. Si un límite se agota en medio de la cola de un tablero, un botón la sigue tras el reinicio.
 - **Calendario.** En Desktop, un mes de casillas de día del mismo tamaño con un punto del color de cada evento; en la terminal y VS Code, la lista de lo próximo. Un evento se apunta con una línea, como «fri 9:30 standup», y puede repetirse cada día, los días laborables, cada semana, cada mes o cada año. Elige su color y cuándo avisarte, de una lista o con tus propias palabras (como «45 min before» o «the day before at 20:00»); el recordatorio llega como notificación del sistema. Ahí aparecen también las fechas de vencimiento de las tarjetas de los tableros. Claude también apunta y cambia eventos: «apunta una llamada el viernes a las 15:00».
@@ -96,7 +97,7 @@ En PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Leer y escuchar** | Libros, Audiolibros, Artículos, Podcasts |
 | **Ver** | YouTube, Twitch, TikTok |
 | **Social** | Amigos, Chats, **Iniciar sesión con GitHub** (o **Cuenta** una vez iniciada la sesión) |
-| **Trabajo** | Cuaderno, Tablero de proyectos, Calendario, Agentes, Límites |
+| **Trabajo** | Hoy, Cuaderno, Tablero de proyectos, Calendario, Agentes, Límites |
 | **Más** | Ventana de Arcade, Ajustes, 🌐 idioma, 🐞 Informar de un error, ☕ Apoya el proyecto |
 
 Pulsa el título de una sección para plegarla o desplegarla. Una sección plegada muestra `▸` y cuántos elementos contiene, y *Social* muestra además los mensajes nuevos 💬 y las solicitudes de amistad 👥. Arcade recuerda qué secciones has plegado. Una sección que no necesites se puede ocultar en **Ajustes**: desaparece del menú por completo, con su título y sus elementos; *Más*, donde están los ajustes, siempre se queda. Con la sesión iniciada, la cabecera del menú muestra tu @alias con los mismos contadores.
@@ -170,6 +171,19 @@ Está en la sección *Trabajo* del menú. Las cifras vienen del propio Claude Co
 - **Solo con Claude Code abierto.** Solo una sesión abierta, en un ordenador que no esté en reposo, puede seguir la cola. Si Claude Code estaba cerrado o el ordenador en reposo, *Límites* lo dice: *La cola «Lanzamiento» no siguió tras reiniciarse el límite: Claude Code estaba cerrado o el ordenador en reposo.*; si se cerró la sesión que esperaba: *…no arrancó tras reiniciarse el límite: la sesión estaba cerrada.* La × quita la nota.
 - **Un aviso al 80 y al 90 %.** Cuando una ventana llega al 80 % y luego al 90 %, aparece un aviso en el panel de Arcade, una vez por umbral en todas las sesiones. Se desactiva en *Ajustes → Notificaciones*.
 - **Qué Claude Code.** No todas las versiones de Claude Code informan de los límites a los plugins; comprobado en 2.1.302 y 2.1.316. Si la tuya no lo hace, la pantalla lo dice y el resto de Arcade funciona como siempre.
+
+## Hoy
+
+La primera ficha de la sección *Trabajo* del menú: lo que te espera, de todo Arcade, en una sola pantalla. No guarda nada propio: todo sale de lo que Arcade ya sabe.
+
+- **Te esperan.** Las sesiones de este ordenador que esperan un permiso o una respuesta, la que más lleva esperando arriba, como en [Agentes](#agentes). Una pregunta con opciones se responde aquí mismo con un botón; el permiso se da solo en la propia sesión.
+- **En el calendario.** Los eventos de hoy; los que ya pasaron, más tenues. Al pulsar uno se abre en el [calendario](#calendario).
+- **Vencimiento.** Las tarjetas de los tableros que vencen hoy o ya vencidas y que aún no están en la última columna, con el nombre del tablero; al pulsar una se abre la tarjeta.
+- **Mis tarjetas.** Las tarjetas que tomaste en tableros compartidos y que aún no están hechas.
+- **Chats.** Los chats sin leer, si has iniciado sesión; al pulsar uno se abre el chat.
+- **Límites.** Una línea de [Límites](#límites), por ejemplo *5 horas: 62%, se reinicia a las 14:30*; amarilla desde el 80%.
+
+Los bloques vacíos se ocultan; cuando nada espera, la pantalla dice *Nada pendiente por hoy.* En Desktop las sesiones son tarjetas; en la terminal y en VS Code todo son líneas.
 
 ## Para equipos
 

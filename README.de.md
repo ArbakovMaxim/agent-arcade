@@ -22,6 +22,7 @@ Alles im Katalog ist kostenlos: Die Spiele stehen unter offenen Lizenzen, die B�
 
 - **Notizbuch und Projektboards.** Seiten, Unterseiten und Checklisten, die auch Claude führt, und Boards mit Spalten und Karten. *An Claude geben* übergibt Claude eine Seite oder Karte: Claude hakt Erledigtes ab und schreibt das Ergebnis dazu. Eine Seite oder Karte zeigt ihren Text formatiert, mit den Knöpfen *Bearbeiten* und *Kopieren*. Alle offenen Claude-Code-Sitzungen teilen sich das Notizbuch, so kann jede ihre eigene Karte vom selben Board nehmen. Teile ein Board mit Freunden, und alle arbeiten am selben. Schick eine Seite über Claudes Connectors an Notion oder eine andere App oder hol eine von dort; diktiere in Claudes Eingabefeld und übertrag den Text auf eine Seite.
 - **Claude arbeitet dein Board ab.** *Warteschlange für Claude* gibt Claude die Karten der ersten Spalte nacheinander: Die nächste geht los, sobald die vorige in *Erledigt* ist, und eine Frage von Claude oder eine unfertige Karte stoppt die Warteschlange. Karten haben Fälligkeitsdaten, die im Kalender erscheinen, und auf einem geteilten Board sieht jeder, wer welche Karte genommen hat. Hol GitHub-Issues als Karten auf ein Board und schick das Ergebnis als Kommentar zurück — über Claudes GitHub-Connector. *Tageszusammenfassung* erstellt eine Seite fürs Standup — was an Claude ging, was erledigt ist, was in Arbeit ist — zum Senden in den Chat deines Teams.
+- **Heute.** Die erste Kachel in *Arbeit* zeigt auf einem Bildschirm, was auf dich wartet: Sitzungen, die auf eine Erlaubnis oder eine Antwort warten (eine Frage mit Optionen beantwortest du gleich dort), die Termine von heute, Karten, die heute fällig oder überfällig sind, deine Karten auf geteilten Boards, ungelesene Chats und eine Zeile mit Claudes Limits.
 - **Agenten.** *Agenten* im Bereich *Arbeit* zeigt jede Claude-Code-Sitzung mit Arcade auf diesem Computer, nach Ordner: ob sie arbeitet, auf Erlaubnis wartet, ihren Zug beendet hat oder frei ist, und wie lange schon, mit ihrer Karte und ihrem Platz in der Warteschlange. Stellt Claude in einer anderen Sitzung eine Frage mit Optionen, antwortest du per Knopf direkt in ihrer Karte. Bittet eine andere Sitzung um Erlaubnis oder stellt eine Frage, sagt dir das eine Einblendung in deinem eigenen Panel. Die Warteschlange eines Boards kann in mehreren Sitzungen gleichzeitig laufen, und zwei Sitzungen bekommen nicht dieselbe Karte.
 - **Limits.** Die Kachel *Limits* im Bereich *Arbeit* zeigt Claudes Limit-Fenster — 5 Stunden, die Woche und das Ausgabenlimit — mit Prozentwert, Balken und dem Zeitpunkt, zu dem jedes zurückgesetzt wird, dazu Kontext und Kosten dieser und deiner anderen Sitzungen. Die Zahlen stammen von Claude Code selbst. Läuft ein Limit mitten in der Warteschlange eines Boards ab, setzt ein Knopf sie nach dem Reset fort.
 - **Kalender.** In Desktop ein Monat aus gleich großen Tageskacheln mit einem Punkt in der Farbe jedes Termins, im Terminal und in VS Code die Liste der nächsten Termine. Ein Termin entsteht mit einer Zeile, etwa „fri 9:30 standup“, und kann sich täglich, werktags, wöchentlich, monatlich oder jährlich wiederholen. Wähle seine Farbe und wann du erinnert wirst, aus einer Liste oder in eigenen Worten (etwa „45 min before“ oder „the day before at 20:00“); die Erinnerung kommt als Systembenachrichtigung. Die Fälligkeitsdaten von Boardkarten stehen ebenfalls dort. Auch Claude trägt Termine ein und ändert sie: „trag für Freitag um 15:00 ein Telefonat ein“.
@@ -96,7 +97,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Lesen & hören** | Bücher, Hörbücher, Artikel, Podcasts |
 | **Ansehen** | YouTube, Twitch, TikTok |
 | **Soziales** | Freunde, Chats, **Mit GitHub anmelden** (oder **Konto** nach der Anmeldung) |
-| **Arbeit** | Notizbuch, Projektboard, Kalender, Agenten, Limits |
+| **Arbeit** | Heute, Notizbuch, Projektboard, Kalender, Agenten, Limits |
 | **Mehr** | Arcade-Fenster, Einstellungen, 🌐 Sprache, 🐞 Fehler melden, ☕ Projekt unterstützen |
 
 Ein Klick auf den Titel eines Bereichs klappt ihn zu oder auf. Ein zugeklappter Bereich zeigt `▸` und wie viele Kacheln er enthält, *Soziales* zusätzlich neue Nachrichten 💬 und Freundschaftsanfragen 👥. Arcade merkt sich, welche Bereiche zugeklappt sind. Einen Bereich, den du nicht brauchst, kannst du in den **Einstellungen** ausblenden: Dann fehlt er im Menü ganz, samt Titel und Kacheln; *Mehr* mit den Einstellungen bleibt immer. Nach der Anmeldung zeigt der Menükopf deinen @Namen mit denselben Zählern.
@@ -170,6 +171,19 @@ Du findest sie im Bereich *Arbeit* des Menüs. Die Zahlen stammen von Claude Cod
 - **Nur solange Claude Code offen ist.** Nur eine offene Sitzung auf einem Computer, der nicht schläft, kann die Warteschlange fortsetzen. War Claude Code geschlossen oder schlief der Computer, sagt *Limits* das: *Die Warteschlange „Release“ ist nach dem Limit-Reset nicht weitergegangen: Claude Code war geschlossen oder der Computer schlief.*; wurde die wartende Sitzung geschlossen: *…ist nach dem Limit-Reset nicht gestartet: Die Sitzung war geschlossen.* Das × entfernt den Hinweis.
 - **Eine Einblendung bei 80 und 90 %.** Erreicht ein Fenster 80 % und dann 90 %, erscheint im Arcade-Panel eine Einblendung — pro Schwelle einmal für alle Sitzungen. Ausschalten kannst du sie unter *Einstellungen → Benachrichtigungen*.
 - **Welches Claude Code.** Nicht jede Version von Claude Code meldet Plugins die Limits — geprüft mit 2.1.302 und 2.1.316. Meldet deine sie nicht, sagt der Bildschirm das, und der Rest von Arcade funktioniert wie gewohnt.
+
+## Heute
+
+Die erste Kachel im Bereich *Arbeit* des Menüs: was auf dich wartet, aus ganz Arcade, auf einem Bildschirm. Sie speichert nichts Eigenes — alles stammt aus dem, was Arcade ohnehin weiß.
+
+- **Wartet auf dich.** Sitzungen auf diesem Computer, die auf eine Erlaubnis oder eine Antwort warten, die am längsten wartende oben, wie in [Agenten](#agenten). Eine Frage mit Optionen beantwortest du gleich hier mit einem Knopf; eine Erlaubnis gibt es nur in der Sitzung selbst.
+- **Im Kalender.** Die Termine von heute; vergangene sind blasser. Ein Druck öffnet den Termin im [Kalender](#kalender).
+- **Fällig.** Board-Karten, die heute fällig oder überfällig sind und noch nicht in der letzten Spalte stehen, mit dem Namen des Boards; ein Druck öffnet die Karte.
+- **Meine Karten.** Karten auf geteilten Boards, die du genommen hast und die noch nicht erledigt sind.
+- **Chats.** Ungelesene Chats, wenn du angemeldet bist; ein Druck öffnet den Chat.
+- **Limits.** Eine Zeile aus [Limits](#limits), etwa *5 Stunden: 62%, wird um 14:30 zurückgesetzt*; ab 80 % gelb.
+
+Leere Blöcke sind ausgeblendet; wartet nichts, sagt der Bildschirm *Für heute ist alles erledigt.* In Desktop sind die Sitzungen Karten, im Terminal und in VS Code ist alles Zeilen.
 
 ## Für Teams
 

@@ -36,33 +36,7 @@ export function agentsScreen($, e, kit) {
   const wrapRow = (key, children) => Box({ key, flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, rowGap: desktop ? 'sm' : 0, children })
   // Крестик у другой сессии — скрыть: её нет в списке и нет всплывашек о ней, пока её не вернут из «Скрытых»
   const hideButton = (r) => (r.me ? [] : [keep(Button({ key: `agents-hide-${r.sid}`, label: '×', plain: true, dimColor: true, onPress: () => hideAgent($, r.sid, true) }))])
-  // Чего ждёт сессия. Запрос разрешения — только показать: разрешают в самой сессии. Вопрос — варианты кнопками: один
-  // вопрос с одним ответом уходит сразу, иначе — отметить варианты и «Ответить». Вопрос и варианты — Claude, без перевода
-  const askLines = (r) => {
-    const ask = askOf(r)
-    if (!ask) return []
-    const id = r.sid || 'me'
-    if (ask.kind === 'permission') {
-      const what = ask.what ? `${ask.tool}: ${ask.what}` : ask.tool
-      return [...(what ? [keep(dim(what))] : []), dim('Разрешение даётся только в самой сессии.')]
-    }
-    if (isSent(r, ask)) return [dim('Ответ отправлен — сессия получит его через секунду.')]
-    const picks = picksOf(r, ask)
-    const one = ask.questions.length === 1 && !ask.questions[0].multi
-    return [
-      ...ask.questions.flatMap((q, qi) => [
-        ...(q.header ? [keep(dim(q.header))] : []),
-        keep(Text({ ...(desktop ? { wrap: 'wrap' } : {}), children: [q.question] })),
-        wrapRow(
-          `agents-q-${id}-${qi}`,
-          q.options.map((label, oi) =>
-            keep(Button({ key: `agents-q-${id}-${qi}-${oi}`, label: `${picks[qi].includes(label) ? '✓ ' : ''}${label}`, onPress: () => pickOption($, r, ask, qi, label) })),
-          ),
-        ),
-      ]),
-      ...(!one && allPicked(r, ask) ? [Button({ key: `agents-send-${id}`, label: 'Ответить', onPress: () => sendAnswer($, r, ask, picksOf(r, ask)) })] : []),
-    ]
-  }
+  const asks = (r) => askLines($, kit, r)
   const card = (r) => {
     const hex = STATUS_HEX[r.status] ?? STATUS_HEX.idle
     const lines = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean)
@@ -77,7 +51,7 @@ export function agentsScreen($, e, kit) {
       paddingX: 'sm',
       paddingY: 'xs',
       children: [
-        Box({ flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(strong(nameOf(r))), status(r), ...lines.map((x) => keep(dim(x))), ...askLines(r)] }),
+        Box({ flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(strong(nameOf(r))), status(r), ...lines.map((x) => keep(dim(x))), ...asks(r)] }),
         ...hideButton(r),
       ],
     })
@@ -92,7 +66,7 @@ export function agentsScreen($, e, kit) {
       children: [
         r.me ? head : Box({ flexDirection: 'row', columnGap: 2, children: [head, ...hideButton(r)] }),
         ...(rest ? [keep(dim(`  ${rest}`))] : []),
-        ...(askOf(r) ? [Box({ key: `agents-ask-${r.sid || 'me'}`, flexDirection: 'column', paddingLeft: 2, children: askLines(r) })] : []),
+        ...(askOf(r) ? [Box({ key: `agents-ask-${r.sid || 'me'}`, flexDirection: 'column', paddingLeft: 2, children: asks(r) })] : []),
       ],
     })
   }
@@ -117,5 +91,36 @@ export function agentsScreen($, e, kit) {
     dim('Очередь доски можно запустить в нескольких сессиях: нажми «Очередь для Claude» на той же доске в каждой — свободная сессия возьмёт следующую карточку.'),
     ...noticeLines,
     ...hint,
+  ]
+}
+
+// Чего ждёт сессия. Запрос разрешения — только показать: разрешают в самой сессии. Вопрос — варианты кнопками: один
+// вопрос с одним ответом уходит сразу, иначе — отметить варианты и «Ответить». Вопрос и варианты — Claude, без перевода.
+// prefix — начало ключей: у «Агентов» и «Сегодня» свои
+export function askLines($, kit, r, prefix = 'agents') {
+  const { Box, Button, Text, desktop, dim } = kit
+  const wrapRow = (key, children) => Box({ key, flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, rowGap: desktop ? 'sm' : 0, children })
+  const ask = askOf(r)
+  if (!ask) return []
+  const id = r.sid || 'me'
+  if (ask.kind === 'permission') {
+    const what = ask.what ? `${ask.tool}: ${ask.what}` : ask.tool
+    return [...(what ? [keep(dim(what))] : []), dim('Разрешение даётся только в самой сессии.')]
+  }
+  if (isSent(r, ask)) return [dim('Ответ отправлен — сессия получит его через секунду.')]
+  const picks = picksOf(r, ask)
+  const one = ask.questions.length === 1 && !ask.questions[0].multi
+  return [
+    ...ask.questions.flatMap((q, qi) => [
+      ...(q.header ? [keep(dim(q.header))] : []),
+      keep(Text({ ...(desktop ? { wrap: 'wrap' } : {}), children: [q.question] })),
+      wrapRow(
+        `${prefix}-q-${id}-${qi}`,
+        q.options.map((label, oi) =>
+          keep(Button({ key: `${prefix}-q-${id}-${qi}-${oi}`, label: `${picks[qi].includes(label) ? '✓ ' : ''}${label}`, onPress: () => pickOption($, r, ask, qi, label) })),
+        ),
+      ),
+    ]),
+    ...(!one && allPicked(r, ask) ? [Button({ key: `${prefix}-send-${id}`, label: 'Ответить', onPress: () => sendAnswer($, r, ask, picksOf(r, ask)) })] : []),
   ]
 }

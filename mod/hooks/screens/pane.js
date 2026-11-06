@@ -31,6 +31,7 @@ import { notesScreen } from './notes.js'
 import { boardsScreen } from './boards.js'
 import { agentsScreen } from './agents.js'
 import { usageScreen } from './usage.js'
+import { todayScreen } from './today.js'
 import { calendarScreen } from './calendar.js'
 
 export async function drawPane($, e) {
@@ -166,8 +167,8 @@ export async function drawPane($, e) {
       S.libraryNotice = ''
       $.ui.invalidate('ui.render')
       // Блокнот, доски и календарь — свежие: их могли поправить в другой сессии Claude Code
-      if (notesShown()) refreshNotes($).catch(modError)
-      if (calendarShown()) refreshCalendar($).catch(modError)
+      if (notesShown() || id === 'today') refreshNotes($).catch(modError)
+      if (calendarShown() || id === 'today') refreshCalendar($).catch(modError)
     }
     const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') })
     const dim = (text) => Text({ dimColor: true, children: [text] })
@@ -476,6 +477,7 @@ export async function drawPane($, e) {
     else if (calendarShown()) items = calendarScreen($, e, kit)
     else if (S.menu === 'agents') items = agentsScreen($, e, kit)
     else if (S.menu === 'usage') items = usageScreen($, e, kit)
+    else if (S.menu === 'today') items = todayScreen($, e, kit)
     else if (S.menu === 'tiktok') items = tiktokScreen($, e, kit)
     else if (S.menu === 'twitch' || S.menu.startsWith('twitch:')) items = twitchScreen($, e, kit)
     else if (S.menu === 'articles' || S.menu === 'podcasts') items = readsScreen($, e, kit)
