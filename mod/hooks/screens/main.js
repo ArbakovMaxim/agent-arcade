@@ -9,7 +9,7 @@ import { desktopWindow } from '../app/desktop.js'
 import { TOPICS_TTL_MS, loadTopics, loadTwitch } from '../app/watch.js'
 import { finishWelcome, loadReports, syncAccount, toggleSection } from '../app/profile.js'
 import { friendsCall, loadChats, pulseSoon } from '../app/talk.js'
-import { boardsOpened } from '../app/work.js'
+import { boardsOpened, loadBoards, modError } from '../app/work.js'
 import { usageNow } from '../app/usage.js'
 
 // Первый запуск: что есть в Arcade и какие разделы показывать. Показаны все — лишнее человек убирает нажатием,
@@ -282,6 +282,21 @@ export function mainScreen($, e, kit) {
     ),
     // Работа: блокнот, доска проектов и календарь, которые ведут и человек, и Claude, и сессии Claude Code на этом компьютере
     ...foldable('work', 'Работа', [
+      // «Сегодня» — первым: что ждёт человека из всех разделов разом. Чаты и общие доски — свежие с сайта
+      Button({
+        key: 'arcade-menu-today',
+        label: 'Сегодня',
+        ...(S.menuFrom === 'today' ? { autoFocus: true } : {}),
+        onPress: () => {
+          open('today')()
+          usageNow($).then(() => $.ui.invalidate('ui.render'))
+          if (S.acct.session) {
+            loadChats($, true).catch(modError)
+            loadBoards($, true).catch(modError)
+          }
+        },
+      }),
+      dim('  вопросы сессий, события, сроки и чаты — на одном экране'),
       Button({
         key: 'arcade-menu-notes',
         label: 'Блокнот',

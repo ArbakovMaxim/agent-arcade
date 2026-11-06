@@ -1077,6 +1077,17 @@ const EXACT = {
   'Очередь «{0}» не запустилась после сброса лимита: сессия была закрыта.': "The queue “{0}” didn't start after the limit reset: the session was closed.",
   'Лимит Claude на 80 и 90%: да': 'Claude usage limit at 80 and 90%: on',
   'Лимит Claude на 80 и 90%: нет': 'Claude usage limit at 80 and 90%: off',
+  // Сегодня: всё, что ждёт человека, на одном экране
+  '  вопросы сессий, события, сроки и чаты — на одном экране': '  session questions, events, due dates and chats on one screen',
+  'Ждут тебя': 'Waiting for you',
+  'В календаре': 'On the calendar',
+  'Сроки': 'Due',
+  'Мои карточки': 'My cards',
+  'и ещё {0}': 'and {0} more',
+  'просрочено, срок {0}': 'overdue, due {0}',
+  'Непрочитанных сообщений: {0}': 'Unread messages: {0}',
+  'сброс в {0}': 'resets at {0}',
+  'На сегодня всё.': 'All clear for today.',
 }
 
 const SIGNAL = { 'плашка, игра идёт': 'banner, game keeps running', 'пауза и плашка': 'pause and banner', 'сразу к агенту': 'straight back to the agent' }

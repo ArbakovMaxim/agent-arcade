@@ -22,6 +22,7 @@ Tutto il catalogo è gratuito: i giochi hanno licenze aperte, i libri e gli audi
 
 - **Quaderno e bacheche dei progetti.** Pagine, sottopagine e checklist che tiene anche Claude, e bacheche con colonne e schede. *Dai a Claude* passa una pagina o una scheda a Claude: spunta ciò che è fatto e ci scrive il risultato. Una pagina o una scheda mostra il testo formattato, con i pulsanti *Modifica* e *Copia*. Tutte le sessioni aperte di Claude Code condividono il quaderno, così ognuna può prendere la propria scheda dalla stessa bacheca. Condividi una bacheca con gli amici, e tutti lavorano sulla stessa. Invia una pagina a Notion o a un’altra app, o portane una da lì, tramite i connettori di Claude; detta nella casella del prompt di Claude e sposta il testo su una pagina.
 - **Claude porta avanti la tua bacheca.** *Coda per Claude* passa a Claude le schede della prima colonna una alla volta: la successiva parte quando la precedente è in *Fatto*, e una domanda di Claude o una scheda incompiuta ferma la coda. Le schede hanno scadenze che compaiono nel calendario, e su una bacheca condivisa tutti vedono chi ha preso quale scheda. Porta le issue di GitHub su una bacheca come schede e pubblica il risultato come commento, tramite il connettore GitHub di Claude. *Riepilogo del giorno* crea una pagina per lo stand-up — cosa è andato a Claude, cosa è fatto, cosa è in corso — da inviare nella chat della tua squadra.
+- **Oggi.** Il primo riquadro di *Lavoro* raccoglie in una schermata ciò che ti aspetta: le sessioni in attesa di un permesso o di una risposta (a una domanda con opzioni si risponde lì stesso), gli eventi di oggi, le schede in scadenza oggi o già scadute, le schede che hai preso sulle bacheche condivise, le chat non lette e una riga con i limiti di Claude.
 - **Agenti.** *Agenti* in *Lavoro* mostra ogni sessione di Claude Code con Arcade su questo computer, per cartella: se lavora, attende il permesso, ha finito il turno o è libera, e da quanto tempo, con la sua scheda e il suo posto nella coda. Quando Claude in un’altra sessione fa una domanda con opzioni, rispondi con un pulsante direttamente nella sua scheda. Quando un’altra sessione chiede il permesso o fa una domanda, te lo dice un avviso nel tuo pannello. La coda di una bacheca può andare in più sessioni insieme, e due sessioni non ricevono la stessa scheda.
 - **Limiti.** Il riquadro *Limiti* in *Lavoro* mostra le finestre di limite di Claude — 5 ore, la settimana e il limite di spesa — con la percentuale, una barra e quando si ripristina ciascuna, oltre al contesto e al costo di questa e delle altre tue sessioni. I numeri vengono da Claude Code stesso. Se un limite finisce a metà della coda di una bacheca, un pulsante la riprende dopo il ripristino.
 - **Calendario.** In Desktop, un mese di caselle dei giorni tutte della stessa misura, con un pallino del colore di ogni evento; nel terminale e in VS Code, l’elenco dei prossimi. Un evento si segna con una riga, come «fri 9:30 standup», e può ripetersi ogni giorno, nei giorni feriali, ogni settimana, mese o anno. Scegli il colore e quando ricevere il promemoria, da un elenco o con parole tue (come «45 min before» o «the day before at 20:00»); il promemoria arriva come notifica di sistema. Ci sono anche le scadenze delle schede delle bacheche. Anche Claude segna e modifica gli eventi: «segna una chiamata venerdì alle 15:00».
@@ -96,7 +97,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Leggi e ascolta** | Libri, Audiolibri, Articoli, Podcast |
 | **Guarda** | YouTube, Twitch, TikTok |
 | **Social** | Amici, Chat, **Accedi con GitHub** (o **Account** dopo l’accesso) |
-| **Lavoro** | Quaderno, Bacheca dei progetti, Calendario, Agenti, Limiti |
+| **Lavoro** | Oggi, Quaderno, Bacheca dei progetti, Calendario, Agenti, Limiti |
 | **Altro** | Finestra di Arcade, Impostazioni, 🌐 lingua, 🐞 Segnala un errore, ☕ Sostieni il progetto |
 
 Fai clic sul titolo di una sezione per comprimerla o espanderla. Una sezione compressa mostra `▸` e quanti riquadri contiene, e *Social* mostra anche i nuovi messaggi 💬 e le richieste di amicizia 👥. Arcade ricorda quali sezioni sono compresse. Una sezione che non ti serve si può nascondere nelle **Impostazioni**: sparisce del tutto dal menu, titolo e riquadri compresi; *Altro*, con le impostazioni, resta sempre. Dopo l’accesso, l’intestazione del menu mostra il tuo @nome con gli stessi contatori.
@@ -170,6 +171,19 @@ Si trova nella sezione *Lavoro* del menu. Come il quaderno, il calendario resta 
 - **Solo con Claude Code aperto.** Solo una sessione aperta, su un computer che non dorme, può riprendere la coda. Se Claude Code era chiuso o il computer dormiva, *Limiti* lo dice: *La coda «Rilascio» non è ripresa dopo il ripristino del limite: Claude Code era chiuso o il computer dormiva*; se la sessione che aspettava è stata chiusa — *…non è partita dopo il ripristino del limite: la sessione era chiusa*. La × toglie il messaggio.
 - **Un avviso all’80 e al 90%.** Quando una finestra arriva all’80%, e poi al 90%, compare un avviso nel pannello di Arcade — una volta per soglia in tutte le sessioni. Si disattiva in *Impostazioni → Notifiche*.
 - **Quale Claude Code.** Non tutte le versioni di Claude Code comunicano i limiti ai plugin — verificato su 2.1.302 e 2.1.316. Se la tua non lo fa, la schermata lo dice, e il resto di Arcade funziona come al solito.
+
+## Oggi
+
+Il primo riquadro della sezione *Lavoro* del menu: ciò che ti aspetta, da tutto Arcade, in un’unica schermata. Non conserva nulla di suo: tutto viene da ciò che Arcade sa già.
+
+- **In attesa di te.** Le sessioni di questo computer in attesa di un permesso o di una risposta, quella che aspetta da più tempo in cima, come in [Agenti](#agenti). A una domanda con opzioni si risponde qui stesso con un pulsante; il permesso si dà solo nella sessione stessa.
+- **Nel calendario.** Gli eventi di oggi; quelli già passati sono più tenui. Premendone uno si apre nel [calendario](#calendario).
+- **Scadenza.** Le schede delle bacheche in scadenza oggi o già scadute che non sono ancora nell’ultima colonna, con il nome della bacheca; premendone una si apre la scheda.
+- **Le mie schede.** Le schede che hai preso sulle bacheche condivise e non ancora fatte.
+- **Chat.** Le chat non lette, se hai effettuato l’accesso; premendone una si apre la chat.
+- **Limiti.** Una riga da [Limiti](#limiti), per esempio *5 ore: 62%, si ripristina alle 14:30*; gialla dall’80%.
+
+I blocchi vuoti sono nascosti; quando non aspetta nulla, la schermata dice *Per oggi è tutto.* In Desktop le sessioni sono schede; nel terminale e in VS Code tutto è a righe.
 
 ## Per le squadre
 

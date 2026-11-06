@@ -245,7 +245,7 @@ export async function agentsTick($) {
     }
     holdCheck(now)
     if (ag.ready && (bodyOf(recordOf(0)) !== ag.sent || now - ag.wrote >= AGENT_WRITE_MS)) await put($)
-    const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'usage' || /^(boards|board:|note:)/.test(S.menu))
+    const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'usage' || S.menu === 'today' || /^(boards|board:|note:)/.test(S.menu))
     if (shown || ((S.agNotify || S.agDone) && now - ag.read >= AGENT_READ_MS)) {
       await readSlots($, now)
       if (await readHidden($)) ag.sig = ''

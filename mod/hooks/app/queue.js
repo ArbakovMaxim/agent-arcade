@@ -235,7 +235,7 @@ export async function usagePoll($) {
   }
   // Перерисовать — и когда Claude Code перестал или снова начал отвечать: экран скажет, что лимитов он не сообщает
   if (!u && api === S.us.api) return
-  if (S.paneOpen && S.view === 'library' && (S.menu === 'usage' || S.menu === 'agents')) $.ui.invalidate('ui.render')
+  if (S.paneOpen && S.view === 'library' && (S.menu === 'usage' || S.menu === 'agents' || S.menu === 'today')) $.ui.invalidate('ui.render')
 }
 
 // Записи ожиданий из $.store: только целые

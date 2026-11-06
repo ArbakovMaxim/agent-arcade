@@ -22,6 +22,7 @@ Cały katalog jest darmowy: gry mają otwarte licencje, książki i audiobooki n
 
 - **Notatnik i tablice projektów.** Strony, podstrony i listy kontrolne, które prowadzi też Claude, oraz tablice z kolumnami i kartami. *Wyślij do Claude* przekazuje Claude stronę lub kartę: odhacza to, co zrobione, i dopisuje tam wynik. Strona lub karta pokazuje sformatowany tekst z przyciskami *Edytuj* i *Kopiuj*. Wszystkie otwarte sesje Claude Code dzielą notatnik, więc każda może wziąć własną kartę z tej samej tablicy. Udostępnij tablicę znajomym, a wszyscy pracują na tej samej. Wyślij stronę do Notion lub innej aplikacji albo sprowadź ją stamtąd przez konektory Claude; podyktuj tekst w polu wpisywania Claude i przenieś go na stronę.
 - **Claude przechodzi przez twoją tablicę.** *Kolejka dla Claude* przekazuje Claude karty z pierwszej kolumny po jednej: następna idzie, gdy poprzednia jest już w *Gotowe*, a pytanie od Claude albo niedokończona karta zatrzymuje kolejkę. Karty mają terminy widoczne w kalendarzu, a na wspólnej tablicy wszyscy widzą, kto wziął którą kartę. Zgłoszenia z GitHuba trafiają na tablicę jako karty, a wynik wraca do nich jako komentarz — przez konektor GitHub w Claude. *Podsumowanie dnia* tworzy stronę na standup — co trafiło do Claude, co zrobione, co w toku — do wysłania do czatu zespołu.
+- **Dzisiaj.** Pierwszy kafelek w *Pracy* zbiera na jednym ekranie wszystko, co na ciebie czeka: sesje czekające na pozwolenie albo odpowiedź (na pytanie z opcjami odpowiada się od razu tam), dzisiejsze wydarzenia, karty z terminem na dziś i po terminie, karty wzięte przez ciebie na wspólnych tablicach, nieprzeczytane czaty i jedną linijkę z limitami Claude.
 - **Agenci.** *Agenci* w sekcji *Praca* pokazują każdą sesję Claude Code z Arcade na tym komputerze, według folderu: czy Claude w niej pracuje, czeka na zgodę, skończył odpowiadać, czy sesja jest wolna, i od jak dawna, a także jej kartę i miejsce w kolejce. Gdy Claude w innej sesji zadaje pytanie z opcjami, odpowiesz przyciskiem prosto w jej karcie. Gdy inna sesja prosi o zgodę lub zadaje pytanie, mówi o tym komunikat w twoim własnym panelu. Kolejka tablicy może działać w kilku sesjach naraz, a dwie sesje nie dostaną tej samej karty.
 - **Limity.** Kafelek *Limity* w sekcji *Praca* pokazuje okna limitów Claude — 5 godzin, tydzień i limit wydatków — z procentem, paskiem i godziną odnowienia każdego z nich, a także kontekst i koszt tej i innych twoich sesji. Liczby pochodzą od samego Claude Code. Jeśli limit skończy się w trakcie kolejki tablicy, jeden przycisk wznowi ją po odnowieniu.
 - **Kalendarz.** W Desktop miesiąc z kafelków dni tej samej wielkości, z kropką w kolorze każdego wydarzenia; w terminalu i VS Code lista najbliższych. Wydarzenie dodaje się jedną linijką, np. „fri 9:30 standup”, i może się powtarzać codziennie, w dni robocze, co tydzień, co miesiąc albo co roku. Wybierz jego kolor i kiedy przypomnieć, z listy albo własnymi słowami (np. „45 min before” albo „the day before at 20:00”); przypomnienie przychodzi jako powiadomienie systemowe. Są tam również terminy kart z tablic. Claude też dodaje i zmienia wydarzenia: „dodaj rozmowę w piątek o 15:00”.
@@ -96,7 +97,7 @@ W PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mark
 | **Czytaj i słuchaj** | Książki, Audiobooki, Artykuły, Podcasty |
 | **Oglądaj** | YouTube, Twitch, TikTok |
 | **Społeczność** | Znajomi, Czaty, **Zaloguj się przez GitHub** (albo **Konto** po zalogowaniu) |
-| **Praca** | Notatnik, Tablica projektów, Kalendarz, Agenci, Limity |
+| **Praca** | Dzisiaj, Notatnik, Tablica projektów, Kalendarz, Agenci, Limity |
 | **Więcej** | Okno Arcade, Ustawienia, 🌐 język, 🐞 Zgłoś błąd, ☕ Wesprzyj projekt |
 
 Kliknij tytuł sekcji, aby ją zwinąć lub rozwinąć. Zwinięta sekcja pokazuje `▸` i liczbę kafelków w środku, a *Społeczność* także nowe wiadomości 💬 i zaproszenia do znajomych 👥. Arcade pamięta, które sekcje są zwinięte. Niepotrzebną sekcję można ukryć w **Ustawieniach**: znika wtedy z menu całkowicie, razem z tytułem i kafelkami; *Więcej* z ustawieniami zostaje zawsze. Po zalogowaniu nagłówek menu pokazuje twój @nick z tymi samymi licznikami.
@@ -170,6 +171,19 @@ Są w sekcji *Praca* menu. Liczby pochodzą od samego Claude Code, te same, któ
 - **Tylko gdy Claude Code jest otwarty.** Wznowić kolejkę może tylko otwarta sesja, gdy komputer nie śpi. Jeśli Claude Code był zamknięty albo komputer spał, *Limity* o tym powiedzą: *Kolejka „Wydanie” nie ruszyła po odnowieniu limitu: Claude Code był zamknięty albo komputer spał*; jeśli zamknięto sesję, która czekała — *…nie wystartowała po odnowieniu limitu: sesja była zamknięta*. × usuwa tę informację.
 - **Komunikat przy 80 i 90%.** Gdy okno dojdzie do 80%, a potem do 90%, w panelu Arcade pojawia się krótki komunikat — o każdym progu raz we wszystkich sesjach. Wyłącza się go w *Ustawienia → Powiadomienia*.
 - **Który Claude Code.** Nie każda wersja Claude Code podaje limity wtyczkom — sprawdzone na 2.1.302 i 2.1.316. Jeśli twoja ich nie podaje, ekran o tym powie, a reszta Arcade działa jak zwykle.
+
+## Dzisiaj
+
+Pierwszy kafelek w sekcji *Praca* menu: wszystko, co na ciebie czeka, z całego Arcade — na jednym ekranie. Nie przechowuje niczego własnego: wszystko pochodzi z tego, co Arcade już wie.
+
+- **Czekają na ciebie.** Sesje na tym komputerze, które czekają na pozwolenie albo odpowiedź — najdłużej czekające na górze, jak w [Agentach](#agenci). Na pytanie z opcjami odpowiada się tu od razu przyciskiem; pozwolenie daje się tylko w samej sesji.
+- **W kalendarzu.** Dzisiejsze wydarzenia; te, które już minęły, są bledsze. Naciśnięcie otwiera wydarzenie w [kalendarzu](#kalendarz).
+- **Termin.** Karty tablic z terminem na dziś i po terminie, które nie są jeszcze w ostatniej kolumnie, z nazwą tablicy; naciśnięcie otwiera kartę.
+- **Moje karty.** Karty na wspólnych tablicach wzięte przez ciebie i jeszcze niezrobione.
+- **Czaty.** Nieprzeczytane czaty, jeśli logowanie jest wykonane; naciśnięcie otwiera czat.
+- **Limity.** Jedna linijka z [Limitów](#limity), na przykład *5 godzin: 62%, odnowi się o 14:30*; od 80% żółta.
+
+Puste bloki są ukryte; gdy nic nie czeka, ekran mówi *Na dziś to wszystko.* W Desktop sesje są kartami, w terminalu i VS Code wszystko jest linijkami.
 
 ## Dla zespołów
 
