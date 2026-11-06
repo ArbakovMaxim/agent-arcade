@@ -1,9 +1,9 @@
 // Arcade: блокнот и доски проектов.
 import { clipboardCommand, openUrlCommand } from '../browsers.js'
 import { tr } from '../i18n.js'
-import { COL_NAMES, MAX_BODY, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, issueUrl, latestEdits, mergeText, rebaseNotes, restoreNotes, updateCard, updatePage } from '../notes.js'
+import { COL_NAMES, MAX_BODY, PROMPTS_COL, PROMPT_COLS, addPage, applyNotesTool, checkStats, cleanBody, columnCards, columnOf, fits, isBoard, isPrompts, issueUrl, latestEdits, mergeText, rebaseNotes, restoreNotes, updateCard, updatePage } from '../notes.js'
 import { MAX_MEMBERS, adoptBoard, applySync, cardId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../desks.js'
-import { LAUNCH_TIMEOUT_MS, S, nb } from './state.js'
+import { LAUNCH_TIMEOUT_MS, S, nb, pr } from './state.js'
 import { log } from './status.js'
 import { holdCard } from './agents.js'
 import { accountNote } from './profile.js'
@@ -99,7 +99,7 @@ export const NOTES_POLL_MS = 3_000
 export function refreshNotes($) {
   return fresh($, (moved) => moved)
 }
-export const notesShown = () => /^(notes|boards)$|^(note|board):/.test(S.menu)
+export const notesShown = () => /^(notes|boards|prompts)$|^(note|board):/.test(S.menu)
 
 // Записать правку блокнота: base — блокнот до неё, S.notes — после. Другая сессия, пока эта правила, записала свой —
 // правка ложится поверх него (rebaseNotes). check — через NOTES_CHECK_MS проверить, что правка на месте. Только в
@@ -195,6 +195,32 @@ function follow($, list, site = false) {
   }
   if (!same(shown, shown && list.find((p) => p.id === shown.id))) S.dk.field++
   if (S.dk.pick && !list.some((p) => p.id === S.dk.pick)) S.dk.pick = ''
+  // «Промпты»: открытый на правку шаблон удалили — к списку шаблонов, с заметкой; поменяли, а человек в нём ничего не
+  // набрал, — поля рисуются заново. Набор, у которого открыты настройки, удалили — к списку
+  if (S.menu === 'prompts' && pr.edit) {
+    const wasCard = old.find((p) => p.id === pr.edit)
+    const nowCard = list.find((p) => p.id === pr.edit)
+    if (!nowCard) {
+      if (nb.draft?.id === pr.edit) nb.draft = null
+      pr.edit = ''
+      pr.confirm = ''
+      pr.focus = ''
+      pr.note = site ? 'Открытый шаблон удалили в общем наборе.' : 'Открытый шаблон удалили в другой сессии.'
+      pr.bad = true
+      pr.field++
+      gone = true
+    } else if (!same(wasCard, nowCard) && nb.draft?.id !== pr.edit) pr.field++
+  }
+  if (S.menu === 'prompts' && pr.set) {
+    const nowSet = list.find((p) => p.id === pr.set && isPrompts(p))
+    if (!nowSet) {
+      pr.set = ''
+      pr.confirm = ''
+      pr.note = site ? 'Набора больше нет на сайте или тебя в нём нет — у тебя осталась своя копия.' : 'Открытый набор удалили в другой сессии.'
+      pr.bad = true
+      gone = true
+    } else if (!same(old.find((p) => p.id === pr.set), nowSet)) pr.field++
+  }
   $.ui.invalidate('ui.render')
   return gone
 }
@@ -269,7 +295,7 @@ export function notesTool($, input) {
     const draft = withDraft(S.notes, at)
     clashNote(draft.clash)
     const base = draft.list ?? S.notes
-    const out = applyNotesTool(base, input, at, cardId)
+    const out = applyNotesTool(base, input, at, cardId, tr('Мои промпты', S.lang))
     if (out.changed || base !== S.notes) await notesChanged($, out.notes, [...noteChanges(S.notes, base, at, 'me'), ...noteChanges(base, out.notes, at, 'claude')])
     return out
   })
@@ -296,6 +322,7 @@ const GIVEN = {
   page: ['Страница ушла Claude.', 'Claude занят — страница ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось отдать страницу — попробуй ещё раз, когда Claude освободится.'],
   ask: ['Просьба ушла Claude.', 'Claude занят — просьба ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось передать просьбу — попробуй ещё раз, когда Claude освободится.'],
   board: ['Доска ушла Claude.', 'Claude занят — доска ждёт в поле ввода: отправь её, когда он освободится.', 'Не получилось отдать доску — попробуй ещё раз, когда Claude освободится.'],
+  prompt: ['Шаблон ушёл Claude.', 'Claude занят — шаблон ждёт в поле ввода: отправь его, когда он освободится.', 'Не получилось отдать шаблон — попробуй ещё раз, когда Claude освободится.'],
 }
 
 // Текст — Claude: сразу, если он свободен, иначе — в поле ввода, к тому, что там уже набрано. true — ушёл сразу
@@ -552,6 +579,7 @@ export const BOARD_POLL_MS = 6_000 // сверка открытой общей �
 export const BOARDS_POLL_MS = 30_000 // список общих досок на экране «Доска проектов»
 const PUSH_DELAY_MS = 1_500 // правки копятся столько, прежде чем уйти на сайт
 const BOARD_SYNCS = 5 // сверок подряд, пока у доски остаются правки
+const SHOWN_SETS = 5 // общих наборов, которые экран «Промпты» сверяет по таймеру
 export const modError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
 // Название колонки: своё — как вписали, стандартное — на языке интерфейса
 export const colName = (c) => c.name || tr(COL_NAMES[c.id] ?? c.id, S.lang)
@@ -563,7 +591,7 @@ function boardNote(error, made = false) {
   if (error === 'owner') return 'Это может только хозяин доски.'
   if (error === 'gone') return 'Доски больше нет на сайте или тебя на ней нет — у тебя осталась своя копия.'
   if (error === 'full') return 'На доске уже 20 человек — больше не позвать.'
-  if (error === 'many') return 'Своих общих досок — не больше 3. Больше — скоро по подписке.'
+  if (error === 'many') return 'Своих общих досок и наборов промптов — не больше 3. Больше — скоро по подписке.'
   if (error === 'nohandle') return 'Сначала возьми свой @ник.'
   if (error === 'often' || error === 'limit') return made ? 'Досок сегодня создано слишком много — попробуй завтра.' : 'Слишком часто — подожди минуту.'
   if (error === 'big') return 'Доска не приняла правки — их слишком много за раз.'
@@ -584,6 +612,14 @@ export function forgetDesk($, share) {
     delete S.desks[share]
     return saveDesks($)
   })
+}
+
+// Общие доски на экране — что сверять по таймеру: открытая доска (или доска открытой карточки), а на экране «Промпты» —
+// все общие наборы шаблонов
+export function shownShares() {
+  if (S.menu === 'prompts') return S.notes.filter((p) => isPrompts(p) && p.board.share).map((p) => p.board.share).slice(0, SHOWN_SETS)
+  const share = shownBoard()?.board.share
+  return share ? [share] : []
 }
 
 // Доска на экране: открытая доска или доска открытой карточки
@@ -631,7 +667,7 @@ export async function syncBoard($, share, { names = false } = {}, round = 0) {
       }
       if (answer.error) {
         S.dk.trouble = { share, text: boardNote(answer.error) }
-        if (shownBoard()?.board.share === share) $.ui.invalidate('ui.render')
+        if (shownShares().includes(share)) $.ui.invalidate('ui.render')
         return false
       }
       const at = await $.clock.now()
@@ -652,7 +688,7 @@ export async function syncBoard($, share, { names = false } = {}, round = 0) {
         S.dk.note = 'Блокнот полон — не все карточки доски поместились.'
         S.dk.bad = true
       }
-      const shown = shownBoard()?.board.share === share
+      const shown = shownShares().includes(share)
       if (done.notes !== S.notes) await boardChanged($, done.notes)
       else if (shown && before !== JSON.stringify([done.base.owner, done.base.members, done.base.names, S.dk.trouble, S.dk.note])) $.ui.invalidate('ui.render')
       await saveDesks($)
@@ -958,5 +994,124 @@ function noteToBoard($) {
   S.dk.bad = nb.bad
   nb.note = ''
   nb.bad = false
+  $.ui.invalidate('ui.render')
+}
+
+// --- Промпты --------------------------------------------------------------------------------------------------------
+// Набор шаблонов — доска с одной колонкой (notes.isPrompts), шаблон — её карточка: название, текст, место. Хранилище,
+// сверка общего набора с сайтом и инструмент Claude — общие с досками. Экран — screens/prompts.js
+
+// Экран «Промпты» — и когда открыли страницу набора или шаблона (board:… или note:…): экран их забирает к себе
+export function promptsShown() {
+  if (S.menu === 'prompts') return true
+  const id = S.menu.startsWith('board:') ? S.menu.slice(6) : S.menu.startsWith('note:') ? S.menu.slice(5) : ''
+  const page = id ? S.notes.find((p) => p.id === id) : null
+  return Boolean(page && (isPrompts(page) || (page.parent && isPrompts(S.notes.find((p) => p.id === page.parent)))))
+}
+
+// Заметки общих досок (S.dk.note) — словами про наборы, когда их показывает экран «Промпты»
+const PROMPT_NOTES = {
+  'Доска общая — друзья увидят её в своей «Доске проектов».': 'Набор общий — друзья увидят его в своих «Промптах».',
+  'Доски больше нет на сайте или тебя на ней нет — у тебя осталась своя копия.': 'Набора больше нет на сайте или тебя в нём нет — у тебя осталась своя копия.',
+  'На доске уже 20 человек — больше не позвать.': 'В наборе уже 20 человек — больше не позвать.',
+  'Ты больше не на этой доске — у тебя осталась своя копия.': 'Ты больше не в этом наборе — у тебя осталась своя копия.',
+  'Доска удалена с сайта — у тебя и у друзей остались свои копии.': 'Набор удалён с сайта — у тебя и у друзей остались свои копии.',
+  'Звать на доску можно только друзей.': 'Звать в набор можно только друзей.',
+  'Это может только хозяин доски.': 'Это может только хозяин набора.',
+  'Досок сегодня создано слишком много — попробуй завтра.': 'Общих наборов сегодня создано слишком много — попробуй завтра.',
+  'Доска на сайте полна — часть карточек осталась только у тебя.': 'Набор на сайте полон — часть шаблонов осталась только у тебя.',
+  'Блокнот полон — не все карточки доски поместились.': 'Блокнот полон — не все шаблоны набора поместились.',
+  'Доска не приняла правки — их слишком много за раз.': 'Набор не принял правки — их слишком много за раз.',
+  'Общие доски на сайте сейчас выключены.': 'Общие наборы на сайте сейчас выключены.',
+  'Впиши название доски.': 'Впиши название набора.',
+}
+export const promptNote = (text) => PROMPT_NOTES[text] ?? text
+
+// Заметка правки или giveClaude — под шаблонами
+function noteToPrompts($) {
+  pr.note = nb.note
+  pr.bad = nb.bad
+  nb.note = ''
+  nb.bad = false
+  $.ui.invalidate('ui.render')
+}
+
+// Правка наборов с экрана «Промпты»: как в блокноте (editNotes), заметка — под шаблонами. null — набор или шаблон
+// удалили в другой сессии: экран ушёл к списку со своей заметкой
+export async function editPrompts($, change, saved = '') {
+  const done = await editNotes($, change, saved)
+  if (done === null) return null
+  noteToPrompts($)
+  return done
+}
+
+// Новый набор шаблонов; first — сразу и первый шаблон в нём (тогда он открывается на правку)
+export async function createPromptSet($, title, first = '') {
+  let card = null
+  const done = await editPrompts($, (list, at) => {
+    const made = addPage(list, { title, board: { cols: PROMPT_COLS } }, at)
+    if (made.error) return made.error === 'empty' ? 'Впиши название набора.' : NOTES_FULL
+    if (!first) return made.notes
+    const added = addPage(made.notes, { title: first, parent: made.page.id, id: cardId(), col: PROMPTS_COL }, at)
+    if (added.error) return added.error === 'empty' ? 'Впиши название шаблона.' : NOTES_FULL
+    card = added.page
+    return added.notes
+  })
+  if (!done) return
+  pr.field++
+  if (card) {
+    pr.edit = card.id
+    pr.focus = 'text'
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Новый шаблон — вниз набора setId, и сразу открыть его: курсор — в поле «Текст»
+export async function addPrompt($, setId, title) {
+  let card = null
+  const done = await editPrompts($, (list, at) => {
+    if (!isPrompts(list.find((p) => p.id === setId))) return 'Набор удалили в другой сессии.'
+    const made = addPage(list, { title, parent: setId, id: cardId(), col: PROMPTS_COL }, at)
+    if (made.error) return made.error === 'empty' ? 'Впиши название шаблона.' : NOTES_FULL
+    card = made.page
+    return made.notes
+  })
+  if (!done || !card) return
+  pr.field++
+  pr.edit = card.id
+  pr.focus = 'text'
+  $.ui.invalidate('ui.render')
+}
+
+// Шаблон с текстом — или null: пустой открывается на правку с заметкой. Набранное в поле «Текст» — сначала в шаблон
+async function promptText($, id) {
+  if (!(await editPrompts($, (list) => list))) return null
+  const page = S.notes.find((p) => p.id === id)
+  if (!page) return null
+  if (page.body.trim()) return page.body
+  pr.edit = id
+  pr.focus = 'text'
+  pr.note = 'В шаблоне пока нет текста — впиши его.'
+  pr.bad = true
+  $.ui.invalidate('ui.render')
+  return null
+}
+
+// Шаблон — Claude, как «Дать Claude»: сразу, если он свободен, иначе — ждёт в поле ввода
+export async function sendPrompt($, id) {
+  const text = await promptText($, id)
+  if (text === null) return
+  await giveClaude($, text, 'prompt')
+  noteToPrompts($)
+}
+
+// Шаблон — в поле ввода Claude, к тому, что там уже набрано, без отправки: дописать и отправить самому
+export async function promptToField($, id) {
+  const text = await promptText($, id)
+  if (text === null) return
+  const { text: draft } = await $.prompt.read().catch(() => ({ text: '' }))
+  const filled = await $.prompt.fill({ text: String(draft ?? '').trim() ? `\n${text}` : text, mode: 'append' }).catch(() => ({}))
+  pr.note = filled.isFilled ? 'Шаблон — в поле ввода: допиши и отправь.' : 'Не получилось вставить шаблон в поле ввода.'
+  pr.bad = !filled.isFilled
   $.ui.invalidate('ui.render')
 }

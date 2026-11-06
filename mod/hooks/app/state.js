@@ -210,6 +210,11 @@ S.myTopics = []
 S.notes = []
 export const nb = { note: '', bad: false, confirm: null, draft: null, field: 0, focus: '', editing: '', take: '', chat: '', sending: '' }
 export const NOTES_TOOL_NAME = `mcp__arcade__${NOTES_TOOL.name}`
+// «Промпты» (наборы шаблонов — доски notes.isPrompts): edit — какой шаблон открыт на правку, set — у какого набора открыты
+// настройки, confirm — что удалить по второму нажатию ('card:id' или 'set:id'), note — заметка под шаблонами (bad — о
+// беде), focus — поле или кнопка в фокусе после перерисовки, field — номер полей: после записи поле пустеет. Набранный
+// и ещё не сохранённый текст шаблона — в nb.draft, как у страницы блокнота
+export const pr = { edit: '', set: '', confirm: '', note: '', bad: false, focus: '', field: 0 }
 // Календарь (calendar.js): события и экран — открытый месяц «ГГГГ-ММ» и выбранный день, ответ и подтверждение удаления;
 // field — номер поля ввода: после записи поле пустеет; focus — кнопка, на которой фокус после перерисовки,
 // back — список, из которого открыли событие
