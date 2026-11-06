@@ -11,13 +11,13 @@ import { dayText } from '../app/calendar.js'
 import { armBoard, cancelWait, endQueue, missedClear, startQueue, stopEverywhere, waitFor } from '../app/queue.js'
 import { clockText } from '../app/usage.js'
 import { boardMates, sessionOf } from '../app/agents.js'
-import { boardMembers, cardTaker, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, importIssues, loadBoards, makeSummary, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
+import { TRACKERS, TRACKER_NAMES, boardMembers, boardTracker, cardTaker, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, importIssues, loadBoards, makeSummary, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
 
 // Доска проектов: список досок и экран доски — колонки с карточками, перенос выбранной карточки кнопками,
 // колонки, общий доступ с друзьями. Карточку открывает экран страницы блокнота. Названия досок, колонок и
 // карточек, ники — человека, без перевода (keep)
 export function boardsScreen($, e, kit) {
-  const { Box, Button, Input, TILE_GAP, Text, desktop, dim, gap, hint, makeButton, noticeLines, now, open, section, tileWidth, tiles } = kit
+  const { Box, Button, Input, Select, TILE_GAP, Text, desktop, dim, gap, hint, makeButton, noticeLines, now, open, section, tileWidth, tiles } = kit
   let items
   if (S.menu.startsWith('note:')) S.menu = `board:${S.menu.slice(5)}`
   const board = S.menu.startsWith('board:') ? S.notes.find((p) => p.id === S.menu.slice(6) && isBoard(p)) : null
@@ -146,6 +146,45 @@ export function boardsScreen($, e, kit) {
       return editBoard($, (list, at) => moveCard(list, S.dk.pick, where, at))
     }
     const focusOn = (name) => (S.dk.focus === name ? { autoFocus: true } : {})
+    // «Задачи из трекера»: какой трекер — выбором из списка (где выбора нет — кнопкой по кругу), откуда — полем.
+    // Выбор помнится до конца сессии; по умолчанию — трекер последней карточки-задачи доски
+    const tracker = S.dk.tracker?.[id] ?? boardTracker(board, S.notes)
+    const setTracker = (value) => {
+      S.dk.tracker = { ...(S.dk.tracker ?? {}), [id]: value }
+      S.dk.focus = 'tracker'
+      S.dk.note = ''
+      $.ui.invalidate('ui.render')
+    }
+    const trackerOptions = TRACKERS.map((k) => ({ value: k, label: tr(TRACKER_NAMES[k], S.lang) }))
+    const TRACKER_FIELD = {
+      github: ['owner/repo или ссылка на задачи', 'Впиши репозиторий GitHub (owner/repo) или ссылку на задачи.'],
+      linear: ['ключ команды (ENG) или ссылка', 'Впиши ключ команды Linear или ссылку на задачи.'],
+      jira: ['ключ проекта (PROJ) или ссылка', 'Впиши ключ проекта Jira или ссылку на задачи.'],
+      other: ['ссылка или название: ClickUp, Asana…', 'Впиши ссылку на задачи или название трекера.'],
+    }[tracker]
+    const trackerItems = [
+      Select
+        ? keep(Select({ key: 'arcade-board-tracker', label: tr('Трекер', S.lang), options: trackerOptions, value: tracker, ...focusOn('tracker'), onSelect: setTracker }))
+        : keep(
+            Button({
+              key: 'arcade-board-tracker',
+              label: `${tr('Трекер', S.lang)}: ${tr(TRACKER_NAMES[tracker], S.lang)}`,
+              ...focusOn('tracker'),
+              onPress: () => setTracker(TRACKERS[(TRACKERS.indexOf(tracker) + 1) % TRACKERS.length]),
+            }),
+          ),
+      Input({
+        key: `arcade-board-tasks-${field}`,
+        label: 'Задачи из трекера',
+        placeholder: TRACKER_FIELD[0],
+        submitLabel: tr('Забрать', S.lang),
+        onSubmit: (value) => {
+          const what = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 300)
+          if (!what) return say(TRACKER_FIELD[1])
+          return importIssues($, id, tracker, what)
+        },
+      }),
+    ]
     // Карточка: первое нажатие выбирает её, второе — открывает
     const cardButton = (c) => {
       const mark = c.id === S.dk.pick
@@ -430,19 +469,9 @@ export function boardsScreen($, e, kit) {
       ...matesLine,
       ...missedLines,
       gap,
-      // Задачи GitHub — карточками через коннектор Claude: Arcade с GitHub не говорит, ключи ему не нужны
-      Input({
-        key: `arcade-board-github-${field}`,
-        label: 'Задачи из GitHub',
-        placeholder: 'owner/repo или ссылка на задачи',
-        submitLabel: tr('Забрать', S.lang),
-        onSubmit: (value) => {
-          const what = String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 300)
-          if (!what) return say('Впиши репозиторий GitHub (owner/repo) или ссылку на задачи.')
-          return importIssues($, id, what)
-        },
-      }),
-      dim('  Claude заберёт открытые задачи карточками через коннектор GitHub. Итог по карточке он напишет в задачу кнопкой «Итог — в GitHub» на карточке.'),
+      // Задачи трекера — карточками через коннектор Claude: Arcade с трекерами не говорит, ключи ему не нужны
+      ...trackerItems,
+      dim('  Claude заберёт открытые задачи карточками через коннектор трекера. Итог по карточке он напишет в задачу кнопкой «Итог — в …» на карточке.'),
       section('Колонки'),
       // В Desktop у полей колонок нет подписи слева (название и так в поле): подписи разной длины сдвигали поля
       // и кнопки вразнобой. «Убрать колонку» — в той же строке, что и поле

@@ -1063,26 +1063,39 @@ const EXACT = {
   'Это карточка доски': 'This is a card on the board',
   'Когда сделаешь — перенеси её в колонку': 'When done, move it to the column',
   'действием move того же инструмента.': 'with the move action of the same tool.',
-  'Это задача GitHub': 'This is a GitHub issue',
-  'подробности, обсуждение и код читай там инструментами коннектора GitHub, если он подключён.': 'read the details, discussion and code there with the GitHub connector tools, if it is connected.',
-  'Задачи из GitHub': 'Issues from GitHub',
+  'Это задача в трекере': 'This is an issue in the tracker',
+  'подробности и обсуждение читай там инструментами коннектора этого трекера, если он подключён.':
+    "read the details and discussion there with this tracker's connector tools, if it is connected.",
+  'Трекер': 'Tracker',
+  'Другой трекер': 'Other tracker',
+  'Задачи из трекера': 'Issues from a tracker',
   'owner/repo или ссылка на задачи': 'owner/repo or a link to issues',
+  'ключ команды (ENG) или ссылка': 'team key (ENG) or a link',
+  'ключ проекта (PROJ) или ссылка': 'project key (PROJ) or a link',
+  'ссылка или название: ClickUp, Asana…': 'a link or a name: ClickUp, Asana…',
   'Впиши репозиторий GitHub (owner/repo) или ссылку на задачи.': 'Enter a GitHub repository (owner/repo) or a link to issues.',
-  '  Claude заберёт открытые задачи карточками через коннектор GitHub. Итог по карточке он напишет в задачу кнопкой «Итог — в GitHub» на карточке.':
-    '  Claude brings open issues in as cards through the GitHub connector. The “Result to GitHub” button on a card has Claude post the result to its issue.',
-  'Итог — в GitHub': 'Result to GitHub',
-  '  Claude напишет в задачу GitHub комментарий: что сделано по карточке. Задачу не закроет.': "  Claude will comment on the GitHub issue with what was done on the card. It won't close the issue.",
-  'Нет инструментов GitHub — ничего не делай, только объясни, как подключить коннектор GitHub в Claude.': 'If you have no GitHub tools, do nothing else — just explain how to connect the GitHub connector in Claude.',
-  'Забери задачи из GitHub на доску из моего блокнота Arcade.': 'Bring GitHub issues onto a board in my Arcade notebook.',
+  'Впиши ключ команды Linear или ссылку на задачи.': 'Enter a Linear team key or a link to issues.',
+  'Впиши ключ проекта Jira или ссылку на задачи.': 'Enter a Jira project key or a link to issues.',
+  'Впиши ссылку на задачи или название трекера.': "Enter a link to the issues or the tracker's name.",
+  '  Claude заберёт открытые задачи карточками через коннектор трекера. Итог по карточке он напишет в задачу кнопкой «Итог — в …» на карточке.':
+    "  Claude brings open issues in as cards through the tracker's connector. The “Result to …” button on a card has Claude post the result to its issue.",
+  'Итог — в': 'Result to',
+  '  Claude напишет в задачу комментарий: что сделано по карточке. Задачу не закроет и статус не поменяет.':
+    "  Claude will comment on the issue with what was done on the card. It won't close the issue or change its status.",
+  'Нет инструментов этого трекера — ничего не делай, только объясни, как подключить его коннектор в Claude.':
+    'If you have no tools for this tracker, do nothing else — just explain how to connect its connector in Claude.',
+  'Забери задачи из трекера на доску из моего блокнота Arcade.': 'Bring issues from a tracker onto a board in my Arcade notebook.',
+  'какой — видно из «Откуда»': 'which one — see “From”',
   'Откуда': 'From',
   'Уже на доске': 'Already on the board',
-  'Прочитай открытые задачи (issues) инструментами коннектора GitHub — не больше': 'Read the open issues with the GitHub connector tools — no more than',
-  'Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — адрес задачи и коротко её суть, app — GitHub, url — адрес задачи.':
-    'Add each one that is not on the board yet as a card: mcp__arcade__notes, action create, parent — the board id, title — the issue title, text — the issue URL and its gist in short, app — GitHub, url — the issue URL.',
-  'Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче GitHub.': 'Post the result of a card from my Arcade notebook as a comment on its GitHub issue.',
+  'Прочитай открытые задачи инструментами коннектора этого трекера — не больше': "Read the open issues with this tracker's connector tools — no more than",
+  'Каждую, которой ещё нет на доске, заведи карточкой: mcp__arcade__notes, action create, parent — id доски, title — название задачи, text — первой строкой «трекер: адрес задачи», дальше коротко её суть, app — название трекера, url — адрес задачи.':
+    'Add each one that is not on the board yet as a card: mcp__arcade__notes, action create, parent — the board id, title — the issue title, text — first line “tracker: issue URL”, then its gist in short, app — the tracker name, url — the issue URL.',
+  'Напиши итог по карточке из моего блокнота Arcade комментарием в её задаче в трекере.':
+    'Post the result of a card from my Arcade notebook as a comment on its issue in the tracker.',
   'Задача': 'Issue',
-  'Оставь в задаче короткий комментарий инструментами коннектора GitHub: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай, если об этом не просят.':
-    "Leave a short comment on the issue with the GitHub connector tools: what was done, judging by the card text and ticked items, in the issue's language. Don't close the issue unless asked to.",
+  'Оставь в задаче короткий комментарий инструментами коннектора этого трекера: что сделано — по тексту и отмеченным пунктам карточки, на языке задачи. Задачу не закрывай и её статус не меняй.':
+    "Leave a short comment on the issue with this tracker's connector tools: what was done, judging by the card text and ticked items, in the issue's language. Don't close the issue or change its status.",
   'Очередь для Claude': 'Queue for Claude',
   'Остановить очередь': 'Stop the queue',
   '  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Задаст вопрос или не доделает — очередь встанет.':
