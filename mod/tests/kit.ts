@@ -132,12 +132,18 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   const blits: any[] = []
   const launches: any[] = []
   const toasts: string[] = []
+  const gits: string[][] = [] // с чем мод запускал git
   const clipboard = { exit: 0, calls: [] as any[] } // системный буфер обмена: чем программа закончит и что ей дали
   const clock = mock.clock(on)
   // Тесты пишутся на русском интерфейсе: если окружение не задаёт язык, пусть он будет русским (без него теперь — английский)
   mock.env(on, 'LANG' in env || 'LC_ALL' in env || 'LC_MESSAGES' in env ? env : { ...env, LANG: 'ru_RU.UTF-8' })
   on('process.run', ($: any, e: any) => {
     if (e.argv[0] === 'uname') return { value: { exitCode: 0, stdout: `${uname}\n`, stderr: '' } }
+    // git для «Что поменялось» в «Агентах»: ответ — agents.git(argv); без него папка — не git
+    if (e.argv[0] === 'git') {
+      gits.push(e.argv)
+      return { value: agents?.git ? agents.git(e.argv) : { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git' } }
+    }
     // Системный буфер обмена: текст — во входном потоке программы
     if (e.init?.stdin !== undefined) {
       clipboard.calls.push({ argv: e.argv, env: e.init.env ?? {}, stdin: e.init.stdin })
@@ -292,7 +298,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard }
+  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits }
 }
 
 export const BASH_MS = 2_000

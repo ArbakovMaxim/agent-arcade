@@ -83,6 +83,7 @@ function recordOf(at) {
     claim: ag.claim,
     ask: S.ask ?? null,
     usage: usageOf(),
+    changes: ag.changes ?? null,
   }
 }
 // Замер лимитов и контекста этой сессии (usage.js) — для чужих «Агентов» и «Лимитов»
@@ -251,7 +252,7 @@ export async function agentsTick($) {
       if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
       notify($, others)
-      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at]).sort())
+      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
         if (shown) $.ui.invalidate('ui.render')
@@ -438,7 +439,7 @@ export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }

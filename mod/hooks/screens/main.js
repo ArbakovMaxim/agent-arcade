@@ -352,7 +352,10 @@ export function mainScreen($, e, kit) {
         key: 'arcade-menu-agents',
         label: 'Агенты',
         ...(S.menuFrom === 'agents' ? { autoFocus: true } : {}),
-        onPress: open('agents'),
+        onPress: () => {
+          if (S.chg) S.chg.note = ''
+          open('agents')()
+        },
       }),
       dim('  сессии Claude Code на этом компьютере: что делает каждая'),
       Button({
