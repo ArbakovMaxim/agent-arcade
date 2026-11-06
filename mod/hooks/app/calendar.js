@@ -4,6 +4,7 @@ import { tr } from '../i18n.js'
 import { REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, addDays, addEvent, applyCalendarTool, cardDues, dayKey, dueReminders, markAlerted, nextReminder, quickParse, remindAt, removeEvent, restoreCalendar, updateEvent } from '../calendar.js'
 import { S, cal } from './state.js'
 import { log } from './status.js'
+import { refreshNotes } from './work.js'
 
 const modError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
 
@@ -12,7 +13,7 @@ const modError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
 let calJson = ''
 let queue = Promise.resolve()
 
-function fresh($, work) {
+export function fresh($, work) {
   const run = queue.then(async () => work(await readCalendar($)))
   queue = run.catch(() => {})
   return run
@@ -41,7 +42,8 @@ async function readCalendar($) {
 
 // Календарь поменялся в другой сессии: экран идёт за ним, напоминания — тоже. Поля открытого события рисуются заново,
 // только если поменялось само событие, а не отметка о показанном напоминании
-const sameEvent = (a, b) => ['title', 'day', 'time', 'note', 'remind', 'color', 'repeat'].every((k) => a[k] === b[k])
+const sameEvent = (a, b) =>
+  ['title', 'day', 'time', 'note', 'remind', 'color', 'repeat', 'cwd', 'missed'].every((k) => a[k] === b[k]) && JSON.stringify(a.give ?? null) === JSON.stringify(b.give ?? null)
 function follow($, list) {
   const open = S.menu.startsWith('calendar:') ? S.menu.slice(9) : ''
   const was = open ? S.calendar.find((e) => e.id === open) : null
@@ -67,7 +69,7 @@ export function refreshCalendar($) {
 }
 export const calendarShown = () => S.menu === 'calendar' || S.menu.startsWith('calendar:')
 
-async function calendarChanged($, list) {
+export async function calendarChanged($, list) {
   S.calendar = list
   calJson = JSON.stringify(list)
   $.ui.invalidate('ui.render')
@@ -80,10 +82,12 @@ async function calendarChanged($, list) {
 }
 
 // Инструмент календаря у Claude — поверх свежего календаря: list видит события других сессий
-export function calendarTool($, input) {
+export async function calendarTool($, input) {
+  // Задание смотрит в блокнот (доска, карточка, шаблон) — сначала свежий блокнот: его могли поправить в другой сессии
+  if (input?.give || input?.target !== undefined) await refreshNotes($).catch(() => {})
   return fresh($, async () => {
     const at = await $.clock.now()
-    const out = applyCalendarTool(S.calendar, input, at, cardDues(S.notes))
+    const out = applyCalendarTool(S.calendar, input, at, cardDues(S.notes), { notes: S.notes, cwd: S.ag?.path ?? '' })
     if (out.changed) await calendarChanged($, out.list)
     return out
   })
@@ -99,6 +103,7 @@ const PROBLEMS = {
   repeat: 'Такого повтора нет.',
   full: 'Календарь полон — удали старые события.',
   missing: 'Событие удалили в другой сессии.',
+  give: 'Такого задания для Claude нет.',
 }
 
 // change(list, at) → новый список или { error }. true — сделано, false — нет (заметка скажет почему), null — открытое
@@ -175,11 +180,11 @@ export async function deleteEvent($, id) {
 // закрыли, а часы компьютера — уйти вперёд во сне. Таймеры всех открытых сессий срабатывают разом, поэтому сессия
 // помечает напоминания своей отметкой (me) и через CLAIM_MS перечитывает хранилище: показывает та, чья отметка осталась
 const RECHECK_MS = 10 * 60_000
-const CLAIM_MS = 500
+export const CLAIM_MS = 500
 // Напоминание показали позже его времени больше чем на LATE_MS (Claude Code был закрыт) — «Пропущено»
-const LATE_MS = 2 * 60_000
+export const LATE_MS = 2 * 60_000
 const SHOW_MAX = 3
-const me = `s${Math.random().toString(36).slice(2, 10)}`
+export const me = `s${Math.random().toString(36).slice(2, 10)}`
 let timer = null
 let gen = 0
 

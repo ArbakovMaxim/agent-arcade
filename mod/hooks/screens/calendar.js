@@ -1,8 +1,12 @@
 // Arcade: экран календаря.
+import { fill } from '../chats.js'
 import { keep, tr } from '../i18n.js'
-import { ALL_DAY_HOUR, COLORS, DEFAULT_COLOR, REPEATS, addDays, addMonths, between, cardDues, colorOf, compareEvents, dayKey, monthGrid, parseRemind, quickParse, weekday } from '../calendar.js'
+import { ALL_DAY_HOUR, COLORS, DEFAULT_COLOR, GIVE_KEY, GIVE_KINDS, REPEATS, addDays, addMonths, between, cardDues, colorOf, compareEvents, dayKey, giveTargets, monthGrid, parseRemind, quickParse, weekday } from '../calendar.js'
+import { columnOf } from '../notes.js'
 import { S, cal } from '../app/state.js'
+import { samePath } from '../app/agents.js'
 import { addFromScreen, dayText, deleteEvent, editEvent, nextRemind, remindChoices, whenText } from '../app/calendar.js'
+import { dropMissed, missedTasks, runMissed } from '../app/schedule.js'
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
@@ -28,6 +32,29 @@ const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1)
 const dm = (day) => `${day.slice(8)}.${day.slice(5, 7)}`
 const clock = (min) => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`
 const remindValue = (m) => (m === null ? 'none' : String(m))
+// «Дать Claude»: что событие даёт Claude в своё время — в выборе и коротко в карточке события
+const GIVE_NAMES = { none: 'Ничего', queue: 'Очередь доски', card: 'Одну карточку', prompt: 'Шаблон из «Промптов»', text: 'Свой текст' }
+const GIVE_SHORT = { queue: 'очередь доски', card: 'карточка', prompt: 'шаблон', text: 'свой текст' }
+const GIVE_PICK = { queue: 'Выбери доску', card: 'Выбери карточку', prompt: 'Выбери шаблон' }
+const GIVE_EMPTY = {
+  queue: '  Досок проектов пока нет — заведи доску в «Работе».',
+  card: '  На досках проектов пока нет карточек, кроме сделанных.',
+  prompt: '  Шаблонов пока нет — заведи их в «Промптах».',
+}
+// Когда пропущенное задание должно было пойти: «сегодня 9:00», «06.11 18:30»
+const stampText = (ms, today) => {
+  const d = new Date(ms)
+  return `${dayText(dayKey(ms), today)} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+// Цели задания для выбора: доски проектов; карточки досок (без сделанных) — «Доска · Карточка»; шаблоны — «Набор · Шаблон»
+function giveOptions(kind) {
+  const list = giveTargets(S.notes, kind)
+  if (kind === 'queue') return list.map((b) => ({ value: b.id, label: b.title }))
+  const parent = (p) => S.notes.find((b) => b.id === p.parent)
+  return list
+    .filter((p) => kind !== 'card' || columnOf(p, parent(p).board.cols) !== parent(p).board.cols.at(-1).id)
+    .map((p) => ({ value: p.id, label: `${parent(p).title} · ${p.title}` }))
+}
 
 // Напоминание словами. У события со временем — «за 15 мин», «за 1 ч 30 мин», «за сутки»; у события на весь день —
 // часами: «в 8:00», «накануне в 21:00», «за 2 дн. в 9:00»
@@ -79,6 +106,7 @@ export function calendarScreen($, e, kit) {
     cal.note = ''
     cal.bad = false
     cal.confirm = false
+    cal.giveKind = null
     cal.focus = ''
     cal.back = `${list}-${ref(x)}`
     open(x.card ? `note:${x.card}` : `calendar:${x.id}`)()
@@ -89,6 +117,7 @@ export function calendarScreen($, e, kit) {
       cal.note = ''
       cal.bad = false
       cal.confirm = false
+      cal.giveKind = null
       cal.focus = cal.back || `ev-${ev.id}`
       open('calendar')()
     }
@@ -210,6 +239,106 @@ export function calendarScreen($, e, kit) {
             onPress: () => setRepeat(repeats[(repeats.indexOf(ev.repeat ?? '') + 1) % repeats.length]),
           }),
         )
+    // Дать Claude: вид задания — выбором из списка (где выбора нет — кнопкой по кругу); цель — вторым выбором, свой текст —
+    // полем. Выбранный, но ещё не заданный вид ждёт в cal.giveKind. Задание помнит папку сессии, где его дали
+    const g = ev.give ?? null
+    const here = S.ag?.path ?? ''
+    const kind = cal.giveKind?.id === ev.id ? cal.giveKind.kind : (g?.kind ?? 'none')
+    const pick = (name, label, options, value, onSelect) =>
+      Select
+        ? keep(
+            Select({
+              key: `arcade-cal-${name}`,
+              label: tr(label, S.lang),
+              options,
+              value,
+              ...focusOn(name),
+              onSelect: (v) => {
+                cal.focus = name
+                onSelect(v)
+              },
+            }),
+          )
+        : keep(
+            Button({
+              key: `arcade-cal-${name}`,
+              label: `${tr(label, S.lang)}: ${options.find((o) => o.value === value)?.label ?? ''}`,
+              ...focusOn(name),
+              onPress: () => {
+                cal.focus = name
+                const real = options.filter((o) => o.value !== 'pick')
+                onSelect(real[(real.findIndex((o) => o.value === value) + 1) % real.length].value)
+              },
+            }),
+          )
+    const setGive = async (give, saved = '') => {
+      if (await editEvent($, ev.id, { give, ...(ev.cwd || !here ? {} : { cwd: here }) }, saved)) {
+        cal.giveKind = null
+        if (give.kind === 'text') cal.field++
+        $.ui.invalidate('ui.render')
+      }
+    }
+    const kindPick = pick(
+      'give-kind',
+      'Что дать',
+      ['none', ...GIVE_KINDS].map((k) => ({ value: k, label: tr(GIVE_NAMES[k], S.lang) })),
+      kind,
+      (value) => {
+        if (value === 'none') {
+          cal.giveKind = null
+          if (g) return editEvent($, ev.id, { give: null }, '')
+        } else cal.giveKind = value === g?.kind ? null : { id: ev.id, kind: value }
+        $.ui.invalidate('ui.render')
+      },
+    )
+    const targetOf = () => {
+      const options = giveOptions(kind)
+      const current = g?.kind === kind ? g[GIVE_KEY[kind]] : ''
+      // Цель удалили — её имя остаётся в выборе, пока не выбрана другая
+      if (current && !options.some((o) => o.value === current)) options.unshift({ value: current, label: `${g.name} — ${tr('больше нет', S.lang)}` })
+      if (!options.length) return [dim(GIVE_EMPTY[kind])]
+      if (!current) options.unshift({ value: 'pick', label: tr(GIVE_PICK[kind], S.lang) })
+      return [
+        pick('give-target', GIVE_NAMES[kind], options, current || 'pick', (value) => {
+          if (value === 'pick' || value === current) return
+          setGive({ kind, [GIVE_KEY[kind]]: value, name: giveTargets(S.notes, kind).find((p) => p.id === value)?.title ?? '' })
+        }),
+      ]
+    }
+    const textField = Input({
+      key: `arcade-cal-task-${cal.field}`,
+      label: 'Текст для Claude',
+      rows: 4,
+      value: g?.kind === 'text' ? g.text : '',
+      placeholder: 'проверь открытые PR и напиши, что горит',
+      submitLabel: tr('Сохранить', S.lang),
+      onSubmit: (value) => (value.trim() ? setGive({ kind: 'text', text: value }, 'Сохранено.') : say('Напиши, что дать Claude.')),
+    })
+    const inFolder = !ev.cwd || samePath(ev.cwd, here)
+    const missedLine = Number.isFinite(ev.missed)
+      ? [
+          Text({ color: 'warning', children: [fill(tr('Пропущено {0}: Claude Code был закрыт или компьютер спал.', S.lang), [stampText(ev.missed, today)])] }),
+          inFolder
+            ? row([
+                Button({ key: 'arcade-cal-run-missed', label: 'Запустить сейчас', ...focusOn('run-missed'), onPress: () => runMissed($, ev.id) }),
+                Button({ key: 'arcade-cal-drop-missed', label: 'Не запускать', ...focusOn('drop-missed'), onPress: () => dropMissed($, ev.id) }),
+              ])
+            : dim('  Запустить можно в сессии Claude Code в папке задания.'),
+        ]
+      : []
+    const giveBlock =
+      kind === 'none'
+        ? [kindPick, dim('  В своё время событие даст Claude очередь доски, одну карточку, шаблон из «Промптов» или свой текст.')]
+        : [
+            ...stack('cal-event-give', [kindPick, ...(kind === 'text' ? [textField] : targetOf())]),
+            dim(ev.time ? '  В своё время — в открытой сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.' : '  В 9:00 — в открытой сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.'),
+            ...(g && ev.cwd ? [keep(dim(`  ${tr('Папка', S.lang)}: ${ev.cwd}`))] : []),
+            ...(g && ev.cwd && here && !inFolder
+              ? [Button({ key: 'arcade-cal-give-here', label: 'Запускать в этой папке', ...focusOn('give-here'), onPress: () => editEvent($, ev.id, { cwd: here }) })]
+              : []),
+            dim('  Работает, пока открыт Claude Code и компьютер не спит. Задание идёт в режиме разрешений сессии: вне Auto Claude может ждать разрешения.'),
+            ...missedLine,
+          ]
     // Когда: «Завтра 15:00»; у серии — «🔁 По будням, 09:30 · первый раз сегодня»
     const when = ev.repeat ? `🔁 ${repeatText(ev.repeat)}, ${ev.time || tr('весь день', S.lang)} · ${tr('первый раз', S.lang)} ${dayText(ev.day, today)}` : cap(whenText(ev, today))
     const title = desktop ? { size: 'heading', weight: 'semibold', wrap: 'wrap' } : { bold: true }
@@ -263,6 +392,9 @@ export function calendarScreen($, e, kit) {
       strong('Напоминание'),
       ...stack('cal-event-remind', [remindPick, remindOwn]),
       dim('  Приходит системным уведомлением, пока открыт Claude Code.'),
+      gap,
+      strong('Дать Claude'),
+      ...giveBlock,
       ...(cal.confirm
         ? []
         : [
@@ -291,7 +423,7 @@ export function calendarScreen($, e, kit) {
   // В Desktop событие — карточка его цвета: название кнопкой, ниже когда и напоминание, первая строка заметки
   const eventCard = (x, when, list) => {
     const hex = colorOf(x)
-    const line = (x.card ? [when, `${tr('доска', S.lang)} ${x.board}`, x.done ? tr('сделано', S.lang) : ''] : [when, x.repeat ? `🔁 ${repeatText(x.repeat)}` : '', x.remind === null ? '' : `🔔 ${remindText(x)}`]).filter(Boolean).join(' · ')
+    const line = (x.card ? [when, `${tr('доска', S.lang)} ${x.board}`, x.done ? tr('сделано', S.lang) : ''] : [when, x.repeat ? `🔁 ${repeatText(x.repeat)}` : '', x.remind === null ? '' : `🔔 ${remindText(x)}`, x.give ? `🤖 ${tr(GIVE_SHORT[x.give.kind], S.lang)}` : '', Number.isFinite(x.missed) ? `⚠ ${tr('пропущено', S.lang)}` : '']).filter(Boolean).join(' · ')
     const first = x.note?.split('\n')[0] ?? ''
     return Box({
       key: `cal-card-${list}-${ref(x)}`,
@@ -333,19 +465,46 @@ export function calendarScreen($, e, kit) {
       },
     }),
     dim(desktop ? '  День и время — словами или числами: «пт 9:30 стендап», «12.11 ревью». Без дня — на выбранный день, без времени — на весь день.' : '  День и время — словами или числами: «пт 9:30 стендап», «12.11 ревью». Без дня — на сегодня, без времени — на весь день.'),
-    dim('  Цвет и напоминание — в самом событии. Claude тоже ведёт календарь: «запиши созвон в пятницу в 15:00», «что у меня завтра?».'),
+    dim('  Цвет, напоминание и «Дать Claude» — в самом событии. Claude тоже ведёт календарь: «запиши созвон в пятницу в 15:00», «что у меня завтра?».'),
   ]
   const upcomingList = [
     section('Ближайшее'),
     ...(upcoming.length
       ? stack(
           'cal-upcoming',
-          upcoming.map((x) => (desktop ? eventCard(x, whenOf(x), 'ev') : eventButton(x, `${whenOf(x)} · ${x.title}${x.repeat ? ' 🔁' : ''}`, 'ev'))),
+          upcoming.map((x) => (desktop ? eventCard(x, whenOf(x), 'ev') : eventButton(x, `${whenOf(x)} · ${x.title}${x.repeat ? ' 🔁' : ''}${x.give ? ' 🤖' : ''}`, 'ev'))),
         )
       : [dim(S.calendar.length ? 'В ближайший месяц событий нет.' : 'Календарь пуст — запиши первое событие.')]),
   ]
   const reminders = [gap, dim('Напоминания приходят системным уведомлением, пока открыт Claude Code; пропущенные — при следующем запуске.')]
-  if (!desktop) return [Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') }), gap, ...addField, ...noteLine, ...upcomingList, ...reminders, ...noticeLines, ...hint]
+  // Пропущенные задания этой папки: Claude Code был закрыт или компьютер спал — задним числом само не идёт,
+  // только по «Запустить сейчас»
+  const missed = missedTasks()
+  const missedBlock = missed.length
+    ? [
+        section('Пропущено'),
+        ...stack(
+          'cal-missed',
+          missed.map((x) =>
+            Box({
+              key: `cal-missed-${x.id}`,
+              flexDirection: 'column',
+              rowGap: 'xs',
+              children: [
+                keep(Text({ ...(desktop ? { wrap: 'wrap' } : {}), children: [dot(x), ` ${x.title} · ${stampText(x.missed, today)}`] })),
+                row([
+                  Button({ key: `arcade-cal-run-${x.id}`, label: 'Запустить сейчас', ...focusOn(`run-${x.id}`), onPress: () => runMissed($, x.id) }),
+                  Button({ key: `arcade-cal-drop-${x.id}`, label: 'Не запускать', ...focusOn(`drop-${x.id}`), onPress: () => dropMissed($, x.id) }),
+                ]),
+              ],
+            }),
+          ),
+        ),
+        dim('  Задание не пошло в своё время: Claude Code был закрыт или компьютер спал. Само задним числом не запускается.'),
+        gap,
+      ]
+    : []
+  if (!desktop) return [Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') }), gap, ...missedBlock, ...addField, ...noteLine, ...upcomingList, ...reminders, ...noticeLines, ...hint]
 
   // Сетка месяца: 7 плиток одного размера в ряд, растянутых на всю ширину панели — плитка шире, чем выше. На плитке —
   // число кнопкой и цветные точки событий дня; выбранный день — в рамке цвета выбора, сегодняшний — с подложкой.
@@ -443,6 +602,7 @@ export function calendarScreen($, e, kit) {
   return [
     Button({ key: 'arcade-back', label: '← Назад', onPress: open('main') }),
     gap,
+    ...missedBlock,
     row([
       Button({ key: 'arcade-cal-prev', label: '‹', ...focusOn('prev'), onPress: shift(-1, 'prev') }),
       keep(Text({ size: 'heading', weight: 'semibold', children: [monthTitle] })),

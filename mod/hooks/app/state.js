@@ -219,7 +219,7 @@ export const pr = { edit: '', set: '', confirm: '', note: '', bad: false, focus:
 // field — номер поля ввода: после записи поле пустеет; focus — кнопка, на которой фокус после перерисовки,
 // back — список, из которого открыли событие
 S.calendar = []
-export const cal = { month: '', day: '', note: '', bad: false, confirm: false, field: 0, focus: '', back: '' }
+export const cal = { month: '', day: '', note: '', bad: false, confirm: false, field: 0, focus: '', back: '', giveKind: null }
 export const CALENDAR_TOOL_NAME = `mcp__arcade__${CALENDAR_TOOL.name}`
 export const NOTE_LINES = 400 // строк страницы на экране; дальше — в поле «Текст» по «Редактировать»
 // Доска проектов: основы общих досок (desks.js), список общих досок с сайта и состояние экрана. trouble — беда сверки

@@ -359,8 +359,9 @@ export function cardTaker(page) {
 
 // Страницу — Claude. Карточку общей доски — ещё и пометить, что её взял я: прежде сверить доску с сайтом, и если её уже
 // взял другой — сказать об этом, отдать только по второму нажатию. queued — карточку даёт очередь Claude: ей нужно
-// знать, ушла ли карточка (true — ушла сразу, 'taken' — её уже взял другой, очередь берёт следующую)
-export async function sendNote($, id, queued = false) {
+// знать, ушла ли карточка (true — ушла сразу, 'taken' — её уже взял другой, очередь берёт следующую). auto — карточку даёт
+// задание по расписанию (schedule.js): взятую другим не отдаёт, тоже 'taken'
+export async function sendNote($, id, queued = false, auto = false) {
   if (!(await editNotes($, (list) => list))) return false
   const start = cardTaker(S.notes.find((p) => p.id === id))
   if (start.base && start.me) await syncBoard($, start.share).catch(modError)
@@ -368,7 +369,7 @@ export async function sendNote($, id, queued = false) {
   if (!page) return false
   const { board, base, me, taken } = cardTaker(page)
   if (base && me && taken !== me) {
-    if (taken && queued) return 'taken'
+    if (taken && (queued || auto)) return 'taken'
     if (taken && nb.take !== id) {
       nb.take = id
       nb.note = `${tr('Карточку уже взял', S.lang)} ${deskPerson(taken, base)}. ${tr('Нажми «Отдать Claude» ещё раз, чтобы всё равно отдать её своему Claude.', S.lang)}`

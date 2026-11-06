@@ -4,7 +4,7 @@
 // напоминания — в hooks/app/calendar.js, экран — в hooks/screens/calendar.js, инструмент — в hooks/register.js.
 // Время — по часам компьютера: день — «ГГГГ-ММ-ДД», время — «ЧЧ:ММ». У события на весь день времени нет, и напоминание
 // о нём считается от 9:00 этого дня
-import { MAX_TITLE, cleanBody, cleanDay, cleanTitle, columnOf, isBoard } from './notes.js'
+import { MAX_TITLE, cleanBody, cleanDay, cleanTitle, columnOf, isBoard, isPrompts, isProjectBoard } from './notes.js'
 
 export { cleanDay }
 
@@ -70,6 +70,31 @@ export const cleanColor = (v) => (v === null || v === undefined || v === '' ? ''
 export const REPEATS = ['daily', 'weekdays', 'weekly', 'monthly', 'yearly']
 export const cleanRepeat = (v) => (v === null || v === undefined || v === '' ? '' : REPEATS.includes(v) ? v : undefined)
 
+// «Дать Claude» — задание по расписанию: в своё время событие даёт Claude очередь доски, одну карточку, шаблон из
+// «Промптов» или свой текст. give — { kind: 'queue', board, name } | { kind: 'card', card, name } | { kind: 'prompt',
+// prompt, name } | { kind: 'text', text }; name — название цели, каким оно было, когда её выбрали (цель могут удалить).
+// cwd — папка сессии, где задание дали: оно идёт только в открытой сессии этой папки. Отметки — во времени запуска раза
+// (fireAt): fired — последний раз, с которым разобрались; firedBy — какая сессия его взяла; held — раз, который пришёл,
+// пока Claude был занят (ждёт конца хода); missed — раз, когда ни одной сессии этой папки не было (ждёт «Запустить сейчас»)
+export const GIVE_KINDS = ['queue', 'card', 'prompt', 'text']
+export const GIVE_KEY = { queue: 'board', card: 'card', prompt: 'prompt' }
+export const MAX_TASK = 4_000
+const MAX_PATH = 1_000
+const PAGE_ID = /^[a-z0-9]{1,20}$/
+export function cleanGive(g) {
+  if (!g || typeof g !== 'object' || !GIVE_KINDS.includes(g.kind)) return null
+  if (g.kind === 'text') {
+    const text = cleanBody(g.text).trim().slice(0, MAX_TASK)
+    return text ? { kind: 'text', text } : null
+  }
+  const key = GIVE_KEY[g.kind]
+  if (typeof g[key] !== 'string' || !PAGE_ID.test(g[key])) return null
+  return { kind: g.kind, [key]: g[key], name: cleanTitle(g.name) }
+}
+const cleanCwd = (v) => (typeof v === 'string' && v.length <= MAX_PATH ? v.trim() : '')
+// Отметки задания — всё, кроме самого задания и папки
+const TASK_MARKS = ['fired', 'firedBy', 'held', 'missed']
+
 // Сдвиг дня и месяца («ГГГГ-ММ»)
 export function addDays(day, n) {
   const d = dateOf(day)
@@ -100,6 +125,13 @@ export function remindAt(ev) {
 }
 // Конец события для пропущенных напоминаний: событие на весь день идёт до полуночи
 const endOf = (ev) => startOf(ev) + (ev.time ? 0 : DAY_MS)
+// Когда задание события уходит Claude, мс: в его время, а у события на весь день — в 9:00
+export function fireAt(ev) {
+  const d = dateOf(ev.day)
+  if (ev.time) d.setHours(Number(ev.time.slice(0, 2)), Number(ev.time.slice(3)))
+  else d.setHours(ALL_DAY_HOUR)
+  return d.getTime()
+}
 
 // Бывает ли событие в этот день: обычное — в свой, повторяющееся — с первого раза по своему правилу. Месячное 31-го
 // пропускает короткие месяцы, годовое 29 февраля — невисокосные годы
@@ -128,6 +160,20 @@ export function lastReminded(ev, now) {
     if (!occursOn(ev, d)) continue
     const x = instance(ev, d)
     if (remindAt(x) <= now) return x
+  }
+  return null
+}
+// Последний раз задания, которому к now уже пора было уйти; нет — null. У серии смотрим сегодня, вчера и позавчера:
+// раньше — давно прошедшие, их уже не запускают
+export function lastFired(ev, now) {
+  if (!ev.give) return null
+  if (!ev.repeat) return fireAt(ev) <= now ? ev : null
+  const today = dayKey(now)
+  const stop = addDays(today, -2)
+  for (let d = today; d >= stop && d >= ev.day; d = addDays(d, -1)) {
+    if (!occursOn(ev, d)) continue
+    const x = instance(ev, d)
+    if (fireAt(x) <= now) return x
   }
   return null
 }
@@ -175,6 +221,14 @@ export function restoreCalendar(saved) {
     if (cleanRepeat(e.repeat)) ev.repeat = e.repeat
     if (Number.isFinite(e.alerted)) ev.alerted = e.alerted
     if (ev.alerted !== undefined && typeof e.alertedBy === 'string' && e.alertedBy.length <= 20) ev.alertedBy = e.alertedBy
+    const give = cleanGive(e.give)
+    if (give) {
+      ev.give = give
+      const cwd = cleanCwd(e.cwd)
+      if (cwd) ev.cwd = cwd
+      for (const k of ['fired', 'held', 'missed']) if (Number.isFinite(e[k])) ev[k] = e[k]
+      if (ev.fired !== undefined && typeof e.firedBy === 'string' && e.firedBy.length <= 20) ev.firedBy = e.firedBy
+    }
     out.push(ev)
   }
   return out.sort(compareEvents)
@@ -189,17 +243,27 @@ function settle(ev, now) {
   delete ev.alertedBy
   return ev
 }
+// Задание так же: раз, время которого уже прошло, когда задание дали или сдвинули, — не пропущенный, его не запускаем
+function settleTask(ev, now) {
+  for (const k of TASK_MARKS) delete ev[k]
+  const last = lastFired(ev, now)
+  if (last) ev.fired = fireAt(last)
+  return ev
+}
 
 // Новое событие. Календарь полон — уходит самое старое событие, прошедшее больше месяца назад (не серия: она ещё идёт);
 // таких нет — { error }
-export function addEvent(list, { title, day, time = '', note = '', remind, color = '', repeat = '' }, now) {
+export function addEvent(list, { title, day, time = '', note = '', remind, color = '', repeat = '', give = null, cwd = '' }, now) {
   const name = cleanTitle(title)
   if (!name) return { error: 'title' }
   const d = cleanDay(day)
   if (!d) return { error: 'day' }
   const t = time ? cleanTime(time) : ''
   if (time && !t) return { error: 'time' }
-  const r = remind === undefined ? defaultRemind(t) : cleanRemind(remind)
+  const g = give ? cleanGive(give) : null
+  if (give && !g) return { error: 'give' }
+  // Задание без слова о напоминании — без него: напоминать о ночной очереди незачем
+  const r = remind === undefined ? (g ? null : defaultRemind(t)) : cleanRemind(remind)
   if (r === undefined) return { error: 'remind' }
   const c = cleanColor(color)
   if (c === undefined) return { error: 'color' }
@@ -220,6 +284,11 @@ export function addEvent(list, { title, day, time = '', note = '', remind, color
   if (c) ev.color = c
   if (p) ev.repeat = p
   settle(ev, now)
+  if (g) {
+    ev.give = g
+    if (cleanCwd(cwd)) ev.cwd = cleanCwd(cwd)
+    settleTask(ev, now)
+  }
   return { list: [...base, ev].sort(compareEvents), event: ev }
 }
 
@@ -265,9 +334,23 @@ export function updateEvent(list, id, changes, now) {
     if (p) ev.repeat = p
     else delete ev.repeat
   }
+  // give: null — больше не давать Claude (уходят и папка, и отметки); cwd — папка, где задание идёт
+  if (changes.give !== undefined) {
+    if (changes.give) {
+      const g = cleanGive(changes.give)
+      if (!g) return { error: 'give' }
+      ev.give = g
+    } else for (const k of ['give', 'cwd', ...TASK_MARKS]) delete ev[k]
+  }
+  if (changes.cwd !== undefined && ev.give) {
+    if (cleanCwd(changes.cwd)) ev.cwd = cleanCwd(changes.cwd)
+    else delete ev.cwd
+  }
   ev.day = firstDay(ev.day, ev.repeat)
   // Сдвинули время напоминания или повтор — оно снова впереди (или уже прошло — тогда не показываем)
   if (remindAt(ev) !== remindAt(old) || ev.repeat !== old.repeat) settle(ev, now)
+  // Задание дали только что или сдвинули его время — так же
+  if (ev.give && (!old.give || fireAt(ev) !== fireAt(old) || ev.repeat !== old.repeat)) settleTask(ev, now)
   return { list: list.map((e) => (e.id === id ? ev : e)).sort(compareEvents), event: ev }
 }
 
@@ -318,6 +401,30 @@ export function dueReminders(list, now) {
     ;(endOf(x) >= now - MISSED_MS ? due : stale).push(x)
   }
   return { due, stale }
+}
+// Задания, которым пора и с которыми ещё не разобрались: раз события (instance у серии) и его время запуска at
+export function dueTasks(list, now) {
+  const out = []
+  for (const ev of list) {
+    const x = lastFired(ev, now)
+    if (!x) continue
+    const at = fireAt(x)
+    if (Number.isFinite(ev.fired) && ev.fired >= at) continue
+    out.push({ ...x, at })
+  }
+  return out
+}
+// Отметки задания: marks — { fired, firedBy, held, missed }; undefined убирает отметку
+export function markTask(list, id, marks) {
+  return list.map((e) => {
+    if (e.id !== id || !e.give) return e
+    const ev = { ...e }
+    for (const [k, v] of Object.entries(marks)) {
+      if (v === undefined) delete ev[k]
+      else ev[k] = v
+    }
+    return ev
+  })
 }
 // Отметить напоминания показанными. by — какая сессия их показывает: таймеры всех сессий срабатывают разом, и показывает
 // та, чья отметка осталась в хранилище. now — для серий: у них отмечается последний раз, которому было пора
@@ -521,8 +628,19 @@ const repeatLabel = (ev) => {
   const first = ev.first ?? ev.day
   return `repeats ${ev.repeat === 'weekly' ? `every ${WEEKDAYS_EN[dateOf(first).getDay()]}` : REPEAT_EN[ev.repeat]} from ${first}, `
 }
+const GIVE_EN = { queue: 'the queue of board', card: 'board card', prompt: 'prompt template' }
+const TARGET_EN = { queue: 'board', card: 'board card', prompt: 'prompt template' }
+const giveLabel = (g) => (g.kind === 'text' ? `the text "${clip(g.text.replace(/\n/g, ' / '))}"` : `${GIVE_EN[g.kind]} "${g.name}" (${g[GIVE_KEY[g.kind]]})`)
+const stampLabel = (ms) => {
+  const d = new Date(ms)
+  return `${dayKey(ms)} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+const taskLine = (ev) =>
+  ev.give
+    ? `\n  at ${ev.time || `${ALL_DAY_HOUR}:00`} gives Claude ${giveLabel(ev.give)} in a Claude Code session in ${ev.cwd || 'any folder'}${ev.missed ? `; missed on ${stampLabel(ev.missed)}, waits for the user to press Run now in Arcade` : ''}`
+    : ''
 const eventLine = (ev) =>
-  `- ${ev.id}: ${whenLabel(ev)} — ${ev.title} (${ev.repeat ? repeatLabel(ev) : ''}${remindLabel(ev)}${ev.color ? `, ${ev.color}` : ''})${ev.note ? `\n  note: ${ev.note.replace(/\n/g, ' / ')}` : ''}`
+  `- ${ev.id}: ${whenLabel(ev)} — ${ev.title} (${ev.repeat ? repeatLabel(ev) : ''}${remindLabel(ev)}${ev.color ? `, ${ev.color}` : ''})${ev.note ? `\n  note: ${ev.note.replace(/\n/g, ' / ')}` : ''}${taskLine(ev)}`
 const todayLine = (now) => {
   const d = new Date(now)
   return `Today is ${WEEKDAYS_EN[d.getDay()]} ${dayKey(now)}, ${pad(d.getHours())}:${pad(d.getMinutes())} local time.`
@@ -540,7 +658,12 @@ export const CALENDAR_TOOL = {
     'Without remind a new event reminds 15 minutes before, an all-day one at 9:00. ' +
     `color is one of ${Object.keys(COLORS).join(', ')}; without it the event is ${DEFAULT_COLOR}, color "" resets it. ` +
     'repeat makes the event a series: daily, weekdays (Monday to Friday), weekly (the same weekday), monthly (the same date) or yearly; its day is the first time. ' +
-    'list shows every time of a series under the series id; update and remove change the whole series; repeat "" stops repeating.',
+    'list shows every time of a series under the series id; update and remove change the whole series; repeat "" stops repeating. ' +
+    'give makes the event a scheduled task for Claude: at its time (an all-day event at 9:00) Arcade gives Claude, in an open Claude Code session in the folder where the task was set (this session\'s folder), one of: ' +
+    'queue (runs the queue of an Arcade board; target is the board), card (one board card; target is the card), prompt (a template from Prompts; target is the template) or text (task is the text, sent as is). ' +
+    'target is an id or exact title from the notes tool. It runs in one session only; if Claude is busy, it waits for the end of the turn. ' +
+    "If no session of that folder was open at the time, Arcade shows it as missed with Run now and never runs it later by itself. It runs in the session's current permission mode and needs Claude Code open and the computer awake. " +
+    'give "" stops the task. Without remind a new task has no reminder. Set a task only when the user asks for one.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -554,6 +677,9 @@ export const CALENDAR_TOOL = {
       color: { type: 'string', enum: [...Object.keys(COLORS), ''], description: `Event color, default ${DEFAULT_COLOR} (add, update)` },
       repeat: { type: 'string', enum: [...REPEATS, ''], description: 'Repeat the event from its day; "" stops repeating (add, update)' },
       days: { type: 'integer', description: `How many days to show, 1 to ${MAX_LIST_DAYS} (list, default ${LIST_DAYS})` },
+      give: { type: 'string', enum: [...GIVE_KINDS, ''], description: 'Make the event a scheduled task for Claude; "" stops it (add, update)' },
+      target: { type: 'string', description: 'Board (give queue), board card (give card) or prompt template (give prompt): id or exact title (add, update)' },
+      task: { type: 'string', description: `The text Claude gets at the event's time (give text), up to ${MAX_TASK} characters (add, update)` },
     },
     required: ['action'],
   },
@@ -568,6 +694,45 @@ const ERRORS = {
   color: `color is one of ${Object.keys(COLORS).join(', ')}, or "" for the default.`,
   repeat: `repeat is one of ${REPEATS.join(', ')}, or "" to stop repeating.`,
   full: `The calendar is full: ${MAX_EVENTS} events. The user can delete old ones in Arcade.`,
+  give: `give is one of ${GIVE_KINDS.join(', ')}, or "" to stop the task.`,
+}
+// Куда задание может смотреть: queue — доски проектов, card — их карточки, prompt — шаблоны наборов «Промптов»
+export function giveTargets(notes, kind) {
+  const boards = notes.filter(kind === 'prompt' ? isPrompts : isProjectBoard)
+  if (kind === 'queue') return boards
+  const ids = new Set(boards.map((b) => b.id))
+  return notes.filter((p) => ids.has(p.parent))
+}
+function findTarget(notes, kind, ref) {
+  const key = String(ref ?? '').trim()
+  const list = giveTargets(notes, kind)
+  const byId = list.find((p) => p.id === key)
+  if (byId) return { page: byId }
+  const named = list.filter((p) => p.title.toLowerCase() === key.toLowerCase())
+  if (named.length === 1) return { page: named[0] }
+  if (named.length > 1) return { error: `Several ${TARGET_EN[kind]}s are called "${clip(key)}": ${named.map((p) => p.id).join(', ')}. Pass the id.` }
+  return { error: `No ${TARGET_EN[kind]} "${clip(key)}". Read the notebook with the notes tool to find it.` }
+}
+// give, target и task из вызова → { give } (null — убрать задание), {} — задание не трогали, { error }. current — задание
+// события до правки: без give правится его цель или текст
+function giveFrom(input, current, notes) {
+  const touched = input.target !== undefined || input.task !== undefined
+  const kind = input.give !== undefined ? input.give : touched ? current?.kind : undefined
+  if (kind === undefined) return touched ? { error: 'Pass give too: queue, card, prompt or text.' } : {}
+  if (kind === '' || kind === null) return { give: null }
+  if (!GIVE_KINDS.includes(kind)) return { error: ERRORS.give }
+  if (kind === 'text' && input.target !== undefined) return { error: 'target is for give queue, card or prompt; give text takes task.' }
+  if (kind !== 'text' && input.task !== undefined) return { error: 'task is for give text; give queue, card or prompt takes target.' }
+  if (kind === 'text') {
+    const text = input.task !== undefined ? input.task : current?.kind === 'text' ? current.text : ''
+    const give = cleanGive({ kind, text })
+    return give ? { give } : { error: 'Pass task: the text Claude gets.' }
+  }
+  const ref = input.target !== undefined ? input.target : current?.kind === kind ? current[GIVE_KEY[kind]] : undefined
+  if (ref === undefined) return { error: `Pass target: the ${TARGET_EN[kind]} id or exact title.` }
+  const found = findTarget(notes, kind, ref)
+  if (found.error) return found
+  return { give: { kind, [GIVE_KEY[kind]]: found.page.id, name: found.page.title } }
 }
 // Событие по id или точному названию; несколько с таким названием — { error }
 function findEvent(list, ref) {
@@ -582,8 +747,9 @@ function findEvent(list, ref) {
 const remindFrom = (v) => (v === -1 ? null : v)
 
 // Вызов инструмента: → { list, text, isError?, changed? }; list — календарь после вызова. cards — сроки карточек досок
-// (cardDues): list показывает и их, а правят их инструментом блокнота
-export function applyCalendarTool(list, input, now, cards = []) {
+// (cardDues): list показывает и их, а правят их инструментом блокнота. notes — блокнот (цели заданий), cwd — папка
+// сессии, где Claude даёт задание
+export function applyCalendarTool(list, input, now, cards = [], { notes = [], cwd = '' } = {}) {
   const head = todayLine(now)
   const fail = (text) => ({ list, text: `${head}\n${text}`, isError: true })
   const action = input?.action
@@ -600,7 +766,10 @@ export function applyCalendarTool(list, input, now, cards = []) {
     return { list, text: `${head}\nEvents from ${span}:\n${shown.map(eventLine).join('\n')}${dueText}` }
   }
   if (action === 'add') {
-    const out = addEvent(list, { title: input.title, day: input.day, time: input.time ?? '', note: input.note ?? '', remind: remindFrom(input.remind), color: input.color ?? '', repeat: input.repeat ?? '' }, now)
+    const g = giveFrom(input, null, notes)
+    if (g.error) return fail(g.error)
+    const task = g.give ? { give: g.give, cwd } : {}
+    const out = addEvent(list, { title: input.title, day: input.day, time: input.time ?? '', note: input.note ?? '', remind: remindFrom(input.remind), color: input.color ?? '', repeat: input.repeat ?? '', ...task }, now)
     if (out.error) return fail(ERRORS[out.error])
     return { list: out.list, text: `${head}\nAdded:\n${eventLine(out.event)}`, changed: true }
   }
@@ -611,7 +780,13 @@ export function applyCalendarTool(list, input, now, cards = []) {
     const changes = {}
     for (const key of ['title', 'day', 'time', 'note', 'color', 'repeat']) if (input[key] !== undefined) changes[key] = input[key]
     if (input.remind !== undefined) changes.remind = remindFrom(input.remind)
-    if (!Object.keys(changes).length) return fail('Nothing to change: pass title, day, time, note, remind, color or repeat.')
+    const g = giveFrom(input, found.event.give, notes)
+    if (g.error) return fail(g.error)
+    if (g.give !== undefined) {
+      changes.give = g.give
+      if (g.give && !found.event.cwd && cwd) changes.cwd = cwd
+    }
+    if (!Object.keys(changes).length) return fail('Nothing to change: pass title, day, time, note, remind, color, repeat or give.')
     const out = updateEvent(list, found.event.id, changes, now)
     if (out.error) return fail(ERRORS[out.error])
     return { list: out.list, text: `${head}\nUpdated:\n${eventLine(out.event)}`, changed: true }
