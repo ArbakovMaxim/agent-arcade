@@ -10,6 +10,7 @@ import { TOPICS_TTL_MS, loadTopics, loadTwitch } from '../app/watch.js'
 import { finishWelcome, loadReports, syncAccount, toggleSection } from '../app/profile.js'
 import { friendsCall, loadChats, pulseSoon } from '../app/talk.js'
 import { boardsOpened } from '../app/work.js'
+import { usageNow } from '../app/usage.js'
 
 // Первый запуск: что есть в Arcade и какие разделы показывать. Показаны все — лишнее человек убирает нажатием,
 // вернуть можно в настройках. Язык угадан по окружению — сменить его можно здесь же. Вернулись с выбора языка
@@ -323,6 +324,16 @@ export function mainScreen($, e, kit) {
         onPress: open('agents'),
       }),
       dim('  сессии Claude Code на этом компьютере: что делает каждая'),
+      Button({
+        key: 'arcade-menu-usage',
+        label: 'Лимиты',
+        ...(S.menuFrom === 'usage' ? { autoFocus: true } : {}),
+        onPress: () => {
+          open('usage')()
+          usageNow($).then(() => $.ui.invalidate('ui.render'))
+        },
+      }),
+      dim('  лимиты Claude, контекст и расходы сессий'),
     ]),
     ...foldable('more', 'Ещё', [
       ...windowTiles,

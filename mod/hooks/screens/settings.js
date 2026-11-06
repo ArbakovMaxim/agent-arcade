@@ -263,6 +263,17 @@ export function settingsScreen($, e, kit) {
       },
     }),
     dim('  всплывашка в панели Arcade, без звука'),
+    // Окно лимита Claude дошло до 80 и 90% (плитка «Лимиты»): о каждом пороге — раз во всех сессиях
+    Button({
+      key: 'arcade-usage-warn',
+      label: `Лимит Claude на 80 и 90%: ${S.us.warn ? 'да' : 'нет'}`,
+      onPress: async () => {
+        S.us.warn = !S.us.warn
+        $.ui.invalidate('ui.render')
+        await $.store.set('usageWarn', S.us.warn)
+      },
+    }),
+    dim('  всплывашка в панели Arcade, без звука'),
   ]
   // Проверка и назначение клавиш — только в терминале: в VS Code клавиши идут через строку 🎮, в Desktop поля нет
   const keyTiles =
