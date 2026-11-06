@@ -22,6 +22,7 @@ Everything in the catalog is free: the games are openly licensed, the books and 
 
 - **Notebook and project boards.** Pages, subpages and checklists that Claude keeps too, and boards with columns and cards. *Give to Claude* hands a page or a card to Claude: it ticks off what's done and writes the result there. A page or card shows its text formatted, with *Edit* and *Copy* buttons. All your open Claude Code sessions share the notebook, so each one can take its own card from the same board. Share a board with friends, and everyone works on the same board. Send a page to Notion or another app, or bring one in, through Claude's connectors; dictate into Claude's prompt box and move the text onto a page.
 - **Claude works through your board.** *Queue for Claude* hands Claude the cards of the first column one by one: the next goes once the last one is in *Done*, and the queue stops when Claude asks a question or leaves a card unfinished. Cards have due dates that show in the calendar, and on a shared board everyone sees who took which card. Bring GitHub issues onto a board as cards and post the result back as a comment, through Claude's GitHub connector. *Daily summary* makes a standup page — what went to Claude, what's done, what's in progress — to send to your team's chat.
+- **Prompts.** Requests you type again and again become one-click templates: a press sends one to Claude, like *Give to Claude*, and *To the prompt box* lets you finish it first. Share a set with friends, and the whole team has the same prompts. Claude saves templates too: “save this as a prompt in Arcade”.
 - **Today.** The first tile in *Work* gathers what is waiting for you on one screen: sessions waiting for permission or an answer (a question with options is answered right there), today's events, cards due today or overdue, cards you took on shared boards, unread chats and one line of Claude's limits.
 - **Agents.** *Agents* in *Work* shows every Claude Code session with Arcade on this computer, by folder: working, waiting for permission, finished its turn or idle, and for how long, with its card and place in the queue. When Claude in another session asks a question with options, you answer it with a button right in its card. When another session asks for permission or a question, a toast in your own pane says so. A board's queue can run in several sessions at once, and two sessions don't get the same card.
 - **Usage.** The *Usage* tile in *Work* shows Claude's limit windows — 5 hours, the week and the spend limit — with a percentage, a bar and when each resets, plus the context and cost of this and your other sessions. The numbers come from Claude Code itself. If a limit runs out in the middle of a board's queue, one button continues it after the reset.
@@ -97,7 +98,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 | **Read & listen** | Books, Audiobooks, Articles, Podcasts |
 | **Watch** | YouTube, Twitch, TikTok |
 | **Social** | Friends, Chats, **Sign in with GitHub** (or **Account** once you're signed in) |
-| **Work** | Today, Notebook, Project board, Calendar, Agents, Usage |
+| **Work** | Today, Notebook, Project board, Prompts, Calendar, Agents, Usage |
 | **More** | Arcade window, Settings, 🌐 language, 🐞 Report a bug, ☕ Support the project |
 
 Press a section's title to fold or unfold it. A folded section shows `▸` and how many tiles it holds, and *Social* also shows new messages 💬 and friend requests 👥. Arcade remembers which sections you folded. A section you don't need can be hidden in **Settings**: it is gone from the menu entirely, title and tiles; *More*, which holds the settings, always stays. Signed in, the menu header shows your @handle with the same counters.
@@ -132,6 +133,16 @@ Both are in the *Work* section of the menu.
 - **GitHub issues.** *Issues from GitHub* on a board takes `owner/repo` or a link to issues: Claude reads up to 20 open issues through its GitHub connector and adds those not on the board yet as cards. On such a card, *Result to GitHub* has Claude post a short comment on the issue about what was done; it doesn't close the issue. Arcade itself never talks to GitHub and needs no keys.
 - **Daily summary.** The button under the boards and in the notebook makes a page “Summary DD.MM”: what went to Claude today, what's done — cards moved to the last column, ticked items — and what's still in progress. Give it to Claude, edit it, or send it to a chat.
 - **Send to a chat.** Signed in, *Send to a chat* posts any page to one of your recent chats as text, with headings and checklist marks kept.
+
+## Prompts
+
+A tile in the *Work* section of the menu: your own prompt templates, each sent to Claude with one press.
+
+- **Templates.** A template is a name on a button and the text that goes to Claude. Type a name in *New template*, then the text; Enter saves. Templates live in sets: the first one goes into *My prompts*, and *New set* makes another. A template can be renamed, edited, moved with *↑ Up* and *↓ Down*, and deleted with a second press.
+- **One press.** Pressing a template sends its text to Claude as is, like *Give to Claude*: at once if Claude is free; if it's busy, the template waits in the prompt box until you send it. *To the prompt box* adds it to what you've typed there, without sending, so you can finish it. Under each template is the first line of its text; ✎ opens it for editing.
+- **Claude saves them too.** Say “save this as a prompt in Arcade”, and Claude adds a template through the `mcp__arcade__notes` tool.
+- **Shared sets.** Signed in with a @handle, open *Set settings*, tick friends and press *Share*: everyone has the same templates and name, and changes show up within seconds. Friends' shared sets show up in your *Prompts* by themselves. As with [shared boards](#notebook-and-project-boards), the owner invites and removes people, anyone can leave, and everyone keeps their own copy. Shared sets count toward your 3 shared boards.
+- **Not commands.** Templates are buttons in the Arcade panel, not Claude Code commands: slash commands and skills work as before. Templates are kept on this computer with the notebook and count toward its 200 pages.
 
 ## Calendar
 

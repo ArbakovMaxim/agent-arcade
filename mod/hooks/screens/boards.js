@@ -1,7 +1,7 @@
 // Arcade: экран досок проектов.
 import { fill } from '../chats.js'
 import { keep, tr } from '../i18n.js'
-import { addColumn, checkStats, cleanTitle, columnCards, isBoard, moveCard, notesOrder, removeColumn, removePage, renameColumn, updatePage } from '../notes.js'
+import { addColumn, checkStats, cleanTitle, columnCards, isBoard, isProjectBoard, moveCard, notesOrder, removeColumn, removePage, renameColumn, updatePage } from '../notes.js'
 import { MAX_MEMBERS, colId } from '../desks.js'
 import { S, nb } from '../app/state.js'
 import { startLogin } from '../app/profile.js'
@@ -73,7 +73,7 @@ export function boardsScreen($, e, kit) {
       ),
     )
   if (!board) {
-    const boards = notesOrder(S.notes).filter(isBoard)
+    const boards = notesOrder(S.notes).filter(isProjectBoard)
     const focusId = (boards.find((b) => S.menuFrom === `board:${b.id}`) ?? boards[0])?.id
     // Плитка доски: название, под ним — сколько карточек и общая ли она
     const boardTile = (b) => {

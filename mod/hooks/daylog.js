@@ -1,6 +1,6 @@
 // Arcade: итоги дня — журнал того, что ушло Claude и что сделано в блокноте, и текст страницы «Итоги» из него.
 import { dayKey } from './calendar.js'
-import { checkStats, columnOf, isBoard, notesOrder } from './notes.js'
+import { checkStats, columnOf, isBoard, isPrompts, notesOrder } from './notes.js'
 
 export const LOG_DAYS = 14 // сколько дней журнал помнит: «в работе» — и то, что отдали Claude за это время
 export const LOG_MAX = 500 // записей в журнале, не больше
@@ -44,6 +44,7 @@ export function noteChanges(before, after, at, by) {
     const was = old.get(p.id)
     if (!was || isBoard(p)) continue
     const board = p.parent ? boards.get(p.parent) : null
+    if (isPrompts(board)) continue
     const where = board ? { board: board.title } : {}
     if (board) {
       const cols = board.board.cols
@@ -88,7 +89,7 @@ export function daySummary(log, notes, day, me = '') {
   const doing = []
   for (const p of notesOrder(notes)) {
     const board = p.parent ? pages.get(p.parent) : null
-    if (isBoard(p)) continue
+    if (isBoard(p) || isPrompts(board)) continue
     if (isBoard(board)) {
       const cols = board.board.cols
       const col = columnOf(p, cols)

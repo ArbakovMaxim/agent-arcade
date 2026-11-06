@@ -93,6 +93,13 @@ export function cleanCols(list) {
 }
 
 export const isBoard = (page) => Boolean(page && !page.parent && page.board)
+// Набор шаблонов промптов — доска с одной колонкой PROMPTS_COL: шаблоны — её карточки (название, текст, порядок), общий
+// набор сверяется с друзьями как общая доска. Среди досок его не показываем
+export const PROMPTS_COL = 'prompts'
+export const PROMPT_COLS = [{ id: PROMPTS_COL }]
+export const isPrompts = (page) => isBoard(page) && page.board.cols.length === 1 && page.board.cols[0].id === PROMPTS_COL
+// Доска, но не набор шаблонов
+export const isProjectBoard = (page) => isBoard(page) && !isPrompts(page)
 // Колонка карточки; такой колонки на доске нет (её убрали) — первая
 export const columnOf = (card, cols) => (cols.some((c) => c.id === card.col) ? card.col : cols[0].id)
 // Карточки колонки сверху вниз
@@ -467,7 +474,12 @@ const linkLabel = (page) => (page.link ? ` [${page.link.app}]` : '')
 const dueLabel = (page) => (page.due ? ` (due ${page.due})` : '')
 // Название колонки для Claude: своё или английское по умолчанию
 const colLabel = (col) => col.name ?? COL_EN[col.id] ?? col.id
-const boardLabel = (page) => (page.board ? ` [board${page.board.share ? ', shared with friends' : ''}: ${page.board.cols.map(colLabel).join(', ')}]` : '')
+const boardLabel = (page) =>
+  isPrompts(page)
+    ? ` [prompt templates${page.board.share ? ', shared with friends' : ''}]`
+    : page.board
+      ? ` [board${page.board.share ? ', shared with friends' : ''}: ${page.board.cols.map(colLabel).join(', ')}]`
+      : ''
 // Колонка по id, своему названию или названию по умолчанию (по-английски или по-русски), без регистра
 function findColumn(cols, ref) {
   const key = String(ref ?? '').trim().toLowerCase()
@@ -491,6 +503,8 @@ export const NOTES_TOOL = {
     'create a card with parent set to the board and column, move it with move (page and column); read a board to see its columns and cards. ' +
     'A card can have a due date: due on create, or action due (page and due; "" removes it); the user sees it on the board and in the Arcade calendar. ' +
     'A board shared with friends syncs with them, so cards may change between calls. ' +
+    'Prompt templates: a prompt set is a page whose subpages are templates (title is the name, text is the prompt); the user sends a template to Claude with one click in the Prompts tile of Arcade. ' +
+    'When the user asks to save something as a prompt (template) in Arcade, use create with prompt: true, title and text: it goes into the prompt set given in parent, else into their own set. ' +
     'Pages are found by id or exact title. Nothing is deleted here: the user deletes pages in Arcade.',
   inputSchema: {
     type: 'object',
@@ -500,6 +514,7 @@ export const NOTES_TOOL = {
       title: { type: 'string', description: `New page title, up to ${MAX_TITLE} characters (create)` },
       parent: { type: 'string', description: 'Id or title of a top-level page or board to put the new page or card under (create)' },
       board: { type: 'boolean', description: 'create: true makes a project board with columns To do, Doing, Done' },
+      prompt: { type: 'boolean', description: "create: true saves a prompt template (title: its name, text: the prompt) into a prompt set: parent, else the user's own set" },
       column: { type: 'string', description: 'Board column name or id: where a new card goes (create, default the first column) or moves to (move)' },
       text: { type: 'string', description: 'Markdown lines: the new page text (create, replace) or lines to add (append)' },
       item: { type: 'string', description: 'Checklist item: its number from 1, or a part of its text (check)' },
@@ -514,19 +529,22 @@ export const NOTES_TOOL = {
 }
 
 // Вызов инструмента: → { notes, text, isError?, changed? }. notes — блокнот после вызова; makeId — id новой карточки
-// доски (у общей доски id карточек случайные, чтобы не совпасть с карточками друзей)
-export function applyNotesTool(notes, input, now, makeId) {
+// доски (у общей доски id карточек случайные, чтобы не совпасть с карточками друзей); setName — название нового набора
+// шаблонов, если Claude сохраняет шаблон, а своего набора нет
+export function applyNotesTool(notes, input, now, makeId, setName = 'My prompts') {
   const fail = (text) => ({ notes, text, isError: true })
   const action = input?.action
   if (action === 'list') {
     if (!notes.length) return { notes, text: 'The notebook is empty.' }
     const column = (p) => {
       const board = p.parent && notes.find((b) => b.id === p.parent && b.board)
+      if (isPrompts(board)) return ' (prompt template)'
       return board ? ` (${colLabel(board.board.cols.find((c) => c.id === columnOf(p, board.board.cols)))})` : ''
     }
     const lines = notesOrder(notes).map((p) => `${p.parent ? '  - ' : '- '}${p.id}: ${p.title}${boardLabel(p)}${column(p)}${dueLabel(p)}${statsLabel(p.body)}${linkLabel(p)}`)
     return { notes, text: `Notebook pages:\n${lines.join('\n')}` }
   }
+  if (action === 'create' && (input.prompt || isPrompts(findPage(notes, input.parent)))) return createPrompt(notes, input, now, makeId, setName)
   if (action === 'create') {
     const parent = input.parent ? findPage(notes, input.parent) : null
     if (input.parent && !parent) return fail(`No page "${clip(input.parent)}" to put the new page under.`)
@@ -569,11 +587,19 @@ export function applyNotesTool(notes, input, now, makeId) {
     const parent = page.parent ? notes.find((p) => p.id === page.parent) : null
     const children = notes.filter((p) => p.parent === page.id)
     const linked = page.link ? `\nLinked to ${page.link.app}: ${page.link.url}` : ''
-    const under = parent?.board
+    const under = isPrompts(parent)
+      ? ` (prompt template in ${parent.title})`
+      : parent?.board
       ? ` (card on board ${parent.title}, column ${colLabel(parent.board.cols.find((c) => c.id === columnOf(page, parent.board.cols)))}${page.due ? `, due ${page.due}` : ''})`
       : parent
         ? ` (under ${parent.title})`
         : ''
+    if (isPrompts(page)) {
+      const shared = page.board.share ? ' (shared with friends)' : ''
+      const cards = columnCards(notes, page, PROMPTS_COL)
+      const list = cards.length ? cards.map((p) => `- ${p.id}: ${p.title}`).join('\n') : '(no templates)'
+      return { notes, text: `Prompt set ${page.id}: ${page.title}${shared}\n\n## Templates (read one for its text)\n${list}` }
+    }
     if (page.board) {
       const shared = page.board.share ? ' (shared with friends)' : ''
       const cols = page.board.cols.map((c) => {
@@ -629,6 +655,7 @@ export function applyNotesTool(notes, input, now, makeId) {
   if (action === 'move') {
     const board = page.parent ? notes.find((p) => p.id === page.parent && p.board) : null
     if (!board) return fail(`${page.title} is not a card on a board.`)
+    if (isPrompts(board)) return fail(NO_COLUMNS)
     const col = findColumn(board.board.cols, input.column)
     if (!col) return fail(`No column "${clip(input.column)}" on ${board.title}. Columns: ${columnList(board.board.cols)}.`)
     if (col.id === columnOf(page, board.board.cols)) return { notes, text: `${page.title} is already in ${colLabel(col)}.` }
@@ -636,6 +663,7 @@ export function applyNotesTool(notes, input, now, makeId) {
   }
   if (action === 'due') {
     if (!page.parent || !notes.some((p) => p.id === page.parent && p.board)) return fail(`${page.title} is not a card on a board; only cards have a due date.`)
+    if (isPrompts(notes.find((p) => p.id === page.parent))) return fail(NO_COLUMNS)
     if (typeof input.due !== 'string') return fail(BAD_DUE)
     const due = input.due.trim() ? cleanDay(input.due) : ''
     if (input.due.trim() && !due) return fail(BAD_DUE)
@@ -647,5 +675,39 @@ export function applyNotesTool(notes, input, now, makeId) {
 
 const clip = (text) => String(text ?? '').slice(0, 80)
 const NOTEBOOK_FULL = 'The notebook is full. Ask the user to delete pages they do not need.'
+const NO_COLUMNS = 'This is a prompt template: templates have no columns or due dates. The user orders them in the Prompts tile of Arcade.'
+const NO_PROMPT_TITLE = 'The template needs a title: its name on the button.'
+
+// Шаблон промпта от Claude: в набор parent, иначе — в первый свой необщий набор, а нет такого — в новый набор setName
+function createPrompt(notes, input, now, makeId, setName) {
+  const fail = (text) => ({ notes, text, isError: true })
+  if (input.board) return fail('A prompt template goes into a prompt set: create it without board.')
+  if (input.due || input.column) return fail(NO_COLUMNS)
+  if (!cleanTitle(input.title)) return fail(NO_PROMPT_TITLE)
+  if (typeof input.text !== 'string' || !input.text.trim()) return fail('Give the prompt itself in text.')
+  if (input.text.length > MAX_BODY) return fail(`The text is too long: up to ${MAX_BODY} characters.`)
+  const link = input.app || input.url ? cleanLink(input.app, input.url) : null
+  if ((input.app || input.url) && !link) return fail(BAD_LINK)
+  let list = notes
+  let set = input.parent ? findPage(notes, input.parent) : notesOrder(notes).find((p) => isPrompts(p) && !p.board.share)
+  if (input.parent && !set) return fail(`No prompt set "${clip(input.parent)}".`)
+  if (set && !isPrompts(set)) return fail(`"${set.title}" is not a prompt set. Leave parent out to use the user's own set.`)
+  if (!set) {
+    const made = addPage(list, { title: setName, board: { cols: PROMPT_COLS } }, now)
+    if (made.error) return fail(NOTEBOOK_FULL)
+    list = made.notes
+    set = made.page
+  }
+  const made = addPage(list, { title: input.title, body: input.text, parent: set.id, id: makeId?.(), col: PROMPTS_COL }, now)
+  if (made.error) return fail(made.error === 'full' ? NOTEBOOK_FULL : NO_PROMPT_TITLE)
+  list = link ? updatePage(made.notes, made.page.id, { link }, now) : made.notes
+  if (!fits(list)) return fail(NOTEBOOK_FULL)
+  const shared = set.board.share ? ' The set is shared with friends: they get it too.' : ''
+  return {
+    notes: list,
+    text: `Saved prompt template ${made.page.id}: ${made.page.title} in ${set.title}.${shared} The user sends it to Claude with one click in the Prompts tile of Arcade.`,
+    changed: true,
+  }
+}
 const BAD_DUE = 'due must be a real date as YYYY-MM-DD, or "" to remove it.'
 const BAD_LINK = `A link needs app (e.g. Notion, up to ${MAX_APP} characters) and url: the full address of the page in that app, like https://…, up to ${MAX_URL} characters.`

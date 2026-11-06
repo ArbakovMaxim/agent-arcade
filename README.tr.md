@@ -22,6 +22,7 @@ Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kita
 
 - **Defter ve proje panoları.** Claude’un da tuttuğu sayfalar, alt sayfalar ve kontrol listeleri, sütunlu ve kartlı panolar. *Claude'a ver* bir sayfayı ya da kartı Claude’a iletir: Claude yapılanları işaretler ve sonucu oraya yazar. Sayfa ya da kart, metnini *Düzenle* ve *Kopyala* düğmeleriyle biçimlendirilmiş olarak gösterir. Açık tüm Claude Code oturumları defteri paylaşır, böylece her biri aynı panodan kendi kartını alabilir. Bir panoyu arkadaşlarınla paylaş, herkes aynı pano üzerinde çalışsın. Claude’un bağlayıcılarıyla bir sayfayı Notion’a ya da başka bir uygulamaya gönder veya oradan al; Claude’un giriş kutusuna dikte et ve metni bir sayfaya taşı.
 - **Claude panondaki işleri sırayla halleder.** *Claude için kuyruk* ilk sütundaki kartları Claude’a tek tek verir: bir önceki *Bitti*’ye geçince sıradaki gider, Claude’un bir sorusu ya da yarım kalan bir kart da kuyruğu durdurur. Kartların takvimde görünen son tarihleri vardır, ortak panoda da kimin hangi kartı üstlendiğini herkes görür. GitHub issue’larını panoya kart olarak getir ve sonucu, Claude’un GitHub bağlayıcısıyla issue’ya yorum olarak geri yaz. *Günün özeti* bir stand-up sayfası hazırlar — Claude’a ne gitti, ne bitti, ne sürüyor — ekibinin sohbetine göndermen için.
+- **Promptlar.** Tekrar tekrar yazdığın istekler tek basışla giden şablonlara dönüşür: bir şablona basınca *Claude'a ver* gibi Claude’a gider, *Giriş kutusuna* ise önce onu tamamlamanı sağlar. Bir seti arkadaşlarınla paylaş, tüm ekip aynı promptları kullansın. Claude da şablon kaydeder: «bunu Arcade’de prompt olarak kaydet».
 - **Bugün.** *İş* bölümündeki ilk kutucuk seni bekleyen her şeyi tek ekranda toplar: izin ya da yanıt bekleyen oturumlar (seçenekli bir soru orada hemen yanıtlanır), bugünün etkinlikleri, son tarihi bugün olan ya da geçmiş kartlar, ortak panolarda üstlendiğin kartlar, okunmamış sohbetler ve Claude limitlerinin bir satırı.
 - **Ajanlar.** *İş* bölümündeki *Ajanlar*, bu bilgisayarda Arcade açık her Claude Code oturumunu klasörüne göre gösterir: çalışıyor, izin bekliyor, yanıtını bitirdi ya da boşta, ne kadar süredir öyle olduğu, kartı ve kuyruktaki yeri. Başka bir oturumdaki Claude seçenekli bir soru sorduğunda, onu doğrudan o oturumun kartındaki bir düğmeyle yanıtlarsın. Başka bir oturum izin istediğinde ya da soru sorduğunda kendi panelinde kısa bir uyarı bunu söyler. Bir panonun kuyruğu aynı anda birkaç oturumda çalışabilir ve iki oturum aynı kartı almaz.
 - **Limitler.** *İş* bölümündeki *Limitler* kutucuğu Claude’un limit pencerelerini — 5 saat, hafta ve harcama limiti — yüzde, çubuk ve her birinin sıfırlanma saatiyle, ayrıca bu ve diğer oturumlarının bağlamını ve maliyetini gösterir. Rakamlar Claude Code’un kendisinden gelir. Bir panonun kuyruğunun ortasında limit biterse, tek bir düğme kuyruğu sıfırlamadan sonra sürdürür.
@@ -97,7 +98,7 @@ PowerShell’de: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 | **Oku ve dinle** | Kitaplar, Sesli kitaplar, Makaleler, Podcast’ler |
 | **İzle** | YouTube, Twitch, TikTok |
 | **Sosyal** | Arkadaşlar, Sohbetler, **GitHub ile giriş yap** (giriş yaptıktan sonra **Hesap**) |
-| **İş** | Bugün, Defter, Proje panosu, Takvim, Ajanlar, Limitler |
+| **İş** | Bugün, Defter, Proje panosu, Promptlar, Takvim, Ajanlar, Limitler |
 | **Diğer** | Arcade penceresi, Ayarlar, 🌐 dil, 🐞 Hata bildir, ☕ Projeye destek ol |
 
 Bir bölümü daraltmak ya da genişletmek için başlığına tıkla. Daraltılmış bölüm `▸` ve içindeki kutucuk sayısını gösterir; *Sosyal* ayrıca yeni mesajları 💬 ve arkadaşlık isteklerini 👥 gösterir. Arcade hangi bölümlerin daraltıldığını hatırlar. İhtiyacın olmayan bir bölümü **Ayarlar**’dan gizleyebilirsin: başlığı ve kutucuklarıyla birlikte menüden tamamen kalkar; ayarların bulunduğu *Diğer* her zaman kalır. Giriş yaptıktan sonra menü başlığı @takma adını aynı sayaçlarla gösterir.
@@ -132,6 +133,16 @@ Tarayıcı penceresi ayrı bir Arcade penceresidir (varsayılan tarayıcında ya
 - **GitHub issue’ları.** Panodaki *GitHub’dan issue’lar* alanı `owner/repo` ya da issue’lara bir bağlantı alır: Claude, GitHub bağlayıcısıyla en fazla 20 açık issue okur ve panoda henüz olmayanları kart olarak ekler. Böyle bir kartta *Sonuç GitHub’a* düğmesiyle Claude, issue’ya ne yapıldığını anlatan kısa bir yorum yazar; issue’yu kapatmaz. Arcade’in kendisi GitHub’la hiç konuşmaz ve anahtara ihtiyaç duymaz.
 - **Günün özeti.** Panoların altındaki ve defterdeki düğme «Özet GG.AA» adlı bir sayfa hazırlar: bugün Claude’a ne gitti, ne bitti — son sütuna taşınan kartlar, işaretlenen maddeler — ve ne hâlâ sürüyor. Onu Claude’a verebilir, düzenleyebilir ya da bir sohbete gönderebilirsin.
 - **Sohbete gönder.** Giriş yaptıysan *Sohbete gönder* herhangi bir sayfayı son sohbetlerinden birine metin olarak, başlıkları ve kontrol listesi işaretleri korunarak gönderir.
+
+## Promptlar
+
+Menünün *İş* bölümünde bir kutucuk: her biri tek basışla Claude’a giden kendi prompt şablonların.
+
+- **Şablonlar.** Şablon, düğmedeki bir ad ve Claude’a gidecek metindir. *Yeni şablon*’a bir ad yaz, sonra metni; Enter kaydeder. Şablonlar setlerde durur: ilki *Promptlarım*’a gider, *Yeni set* bir set daha açar. Şablon yeniden adlandırılabilir, düzenlenebilir, *↑ Yukarı* ve *↓ Aşağı* ile taşınabilir ve ikinci basışla silinebilir.
+- **Tek basış.** Bir şablona basmak, metnini olduğu gibi Claude’a gönderir, *Claude'a ver* gibi: Claude boştaysa hemen; meşgulse şablon, sen gönderene kadar giriş kutusunda bekler. *Giriş kutusuna* onu orada yazdıklarının sonuna ekler, göndermez; böylece tamamlayabilirsin. Her şablonun altında metninin ilk satırı görünür; ✎ onu düzenlemek için açar.
+- **Claude da kaydeder.** «bunu Arcade’de prompt olarak kaydet» de, Claude `mcp__arcade__notes` aracıyla bir şablon ekler.
+- **Ortak setler.** @takma adla giriş yaptıysan *Set ayarları*’nı aç, arkadaşlarını işaretle ve *Paylaş*’a bas: herkeste aynı şablonlar ve ad olur, değişiklikler birkaç saniye içinde görünür. Arkadaşlarının ortak setleri senin *Promptlar* kutucuğunda kendiliğinden görünür. [Ortak panolarda](#defter-ve-proje-panoları) olduğu gibi sahip kişileri davet eder ve çıkarır, setten herkes çıkabilir ve herkesin kendi kopyası kalır. Ortak setler, kendine ait 3 ortak pano sınırına dahildir.
+- **Komut değil.** Şablonlar Arcade panelindeki düğmelerdir, Claude Code komutları değil: eğik çizgi komutları ve skill’ler eskisi gibi çalışır. Şablonlar defterle birlikte bu bilgisayarda tutulur ve defterin 200 sayfasına dahildir.
 
 ## Takvim
 

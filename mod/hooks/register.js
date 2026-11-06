@@ -19,7 +19,7 @@ import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from 
 import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall, pressed } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
-import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
+import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownShares, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
 import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
 import { usageNow } from './app/usage.js'
@@ -114,16 +114,16 @@ export function register(on) {
       })
       // Всплывающие уведомления о сообщениях — и при закрытой панели, пока они включены и человек вошёл
       $.clock.every(POPUP_POLL_MS, () => watchMessages($).catch(chatError))
-      // Доска проектов: открытую общую доску сверяем с сайтом, список общих досок на её экране — обновляем; свои правки,
-      // не ушедшие в прошлый раз, — на сайт вскоре после старта
+      // Доска проектов: открытую общую доску (на экране «Промпты» — общие наборы) сверяем с сайтом, список общих досок
+      // на её экране — обновляем; свои правки, не ушедшие в прошлый раз, — на сайт вскоре после старта
       $.clock.every(BOARD_POLL_MS, () => {
         if (!chatsOn()) return
-        const share = shownBoard()?.board.share
-        if (share && (!S.desks[share] || !S.dk.me)) loadBoards($, true).catch(chatError)
-        else if (share) syncBoard($, share).catch(chatError)
+        const shares = shownShares()
+        if (shares.some((share) => !S.desks[share]) || (shares.length && !S.dk.me)) loadBoards($, true).catch(chatError)
+        else for (const share of shares) syncBoard($, share).catch(chatError)
       })
       $.clock.every(BOARDS_POLL_MS, () => {
-        if (chatsOn() && S.menu === 'boards') loadBoards($, true).catch(chatError)
+        if (chatsOn() && /^(boards|prompts)$/.test(S.menu)) loadBoards($, true).catch(chatError)
       })
       $.clock.after(4_000, () => pushBoards($))
       // Блокнот на экране — перечитываем: его могли поправить в другой сессии Claude Code

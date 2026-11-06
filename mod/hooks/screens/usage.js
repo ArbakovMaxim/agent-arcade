@@ -3,7 +3,7 @@
 // не считает. Окна — у учётной записи, общие для всех её сессий: на экране — самый свежий замер из всех сессий
 import { fill } from '../chats.js'
 import { keep, tr } from '../i18n.js'
-import { isBoard } from '../notes.js'
+import { isProjectBoard } from '../notes.js'
 import { S } from '../app/state.js'
 import { agentsList, agoText, othersNow } from '../app/agents.js'
 import { clockText, freshLimits, limitName, pctText, resetText, usdText } from '../app/usage.js'
@@ -115,7 +115,7 @@ export function usageScreen($, e, kit) {
       }),
     )
   }
-  const boards = S.notes.filter((p) => isBoard(p))
+  const boards = S.notes.filter((p) => isProjectBoard(p))
   const armRows = boards.length
     ? [
         dim('Продолжать очередь после сброса самой, без кнопки, — на досках (нажми, чтобы отметить):'),
