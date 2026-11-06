@@ -21,7 +21,8 @@ import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/pro
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownBoard, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
-import { queueNext, queueStopCheck, queueTurnDone, queueTurnStart } from './app/queue.js'
+import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
+import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
 import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
 import { drawPane } from './screens/pane.js'
@@ -47,6 +48,7 @@ export function register(on) {
       S.agNotify = (await $.store.get('agentsNotify')) !== false
       S.agDone = (await $.store.get('agentsDone')) === true
       S.agHidden = hiddenOf(await $.store.get('agentsHidden'))
+      S.us.warn = (await $.store.get('usageWarn')) !== false
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
       await loadNotes($)
@@ -58,6 +60,8 @@ export function register(on) {
       }
       // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
       await startAgents($, home)
+      // Очередь, которая ждала сброса лимита Claude до перезапуска, — ждёт дальше; доски «продолжать после сброса»
+      await resumeStart($).catch((err) => log(`очередь после сброса: ${err?.message ?? err}`))
       S.catalog = restoreCatalog(await $.store.get('catalog')) ?? S.catalog
       const savedGame = await $.store.get('lastGame')
       S.played = games().some((g) => g.id === savedGame)
@@ -132,7 +136,12 @@ export function register(on) {
       $.clock.every(AGENT_TICK_MS, async () => {
         await agentsTick($)
         if (S.queue) await queueStopCheck($).catch(chatError)
+        await resumeTick($)
       })
+      // Лимиты и контекст — что Claude Code знает уже сейчас (контекст, расходы; окна лимитов — после первого ответа);
+      // дальше — раз в полминуты и после каждого хода
+      $.clock.after(1_000, () => usageNow($))
+      $.clock.every(USAGE_POLL_MS, () => usagePoll($).catch(chatError))
       // Напоминания календаря: пропущенные, пока Claude Code был закрыт, — чуть погодя после старта; дальше таймер сам
       $.clock.after(5_000, () => remindNow($).catch(chatError))
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
@@ -301,6 +310,7 @@ export function register(on) {
       S.askVisible = false
       // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
       if (S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
+      $.clock.after(0, () => usagePoll($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
       if (S.paneOpen && S.view !== 'library') {
         S.agentAlert = 'done'
         if (S.onDone === 'pause') {

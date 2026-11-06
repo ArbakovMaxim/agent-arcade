@@ -82,7 +82,13 @@ function recordOf(at) {
     queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0, started: q.started ?? 0 } : null,
     claim: ag.claim,
     ask: S.ask ?? null,
+    usage: usageOf(),
   }
+}
+// Замер лимитов и контекста этой сессии (usage.js) — для чужих «Агентов» и «Лимитов»
+const usageOf = () => {
+  const u = S.us?.me
+  return u ? { ctx: u.ctx, usd: u.usd, limits: u.limits, at: u.at } : null
 }
 const bodyOf = (rec) => JSON.stringify({ ...rec, at: 0 })
 
@@ -239,13 +245,13 @@ export async function agentsTick($) {
     }
     holdCheck(now)
     if (ag.ready && (bodyOf(recordOf(0)) !== ag.sent || now - ag.wrote >= AGENT_WRITE_MS)) await put($)
-    const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || /^(boards|board:|note:)/.test(S.menu))
+    const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'usage' || /^(boards|board:|note:)/.test(S.menu))
     if (shown || ((S.agNotify || S.agDone) && now - ag.read >= AGENT_READ_MS)) {
       await readSlots($, now)
       if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
       notify($, others)
-      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what]).sort())
+      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
         if (shown) $.ui.invalidate('ui.render')
@@ -411,13 +417,28 @@ export function boardMates(id) {
   return ag?.on ? othersFrom(ag.read).filter((r) => r.queue?.board === id) : []
 }
 
+// Другие открытые сессии — перечитать отметки сейчас
+export async function readOthers($) {
+  const ag = S.ag
+  if (!ag?.on) return null
+  const now = await $.clock.now()
+  await readSlots($, now)
+  return othersFrom(now)
+}
+
+// Другие открытые сессии, как их прочитали в последний раз: для «Лимитов»
+export function othersNow() {
+  const ag = S.ag
+  return ag?.on ? othersFrom(ag.read) : []
+}
+
 // Список для вкладки «Агенты»: эта сессия и другие открытые, по порядку — ждёт разрешения, закончил ход, работает,
 // свободна; в одном состоянии — дольше в нём выше
 export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }

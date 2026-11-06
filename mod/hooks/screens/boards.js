@@ -8,7 +8,8 @@ import { startLogin } from '../app/profile.js'
 import { friendsCall } from '../app/talk.js'
 import { dayKey } from '../calendar.js'
 import { dayText } from '../app/calendar.js'
-import { endQueue, startQueue, stopEverywhere } from '../app/queue.js'
+import { armBoard, cancelWait, endQueue, missedClear, startQueue, stopEverywhere, waitFor } from '../app/queue.js'
+import { clockText } from '../app/usage.js'
 import { boardMates, sessionOf } from '../app/agents.js'
 import { boardMembers, cardTaker, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, importIssues, loadBoards, makeSummary, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
 
@@ -330,6 +331,26 @@ export function boardsScreen($, e, kit) {
     // Очередь этой доски в других сессиях на этом компьютере: какие — по папке
     const mates = boardMates(id)
     const matesLine = mates.length ? [keep(dim(`  ${fill(tr('Очередь идёт и в других сессиях: {0}', S.lang), [mates.map((r) => `«${r.name}»`).join(', ')])}`))] : []
+    // Кончился лимит Claude посреди очереди этой доски: продолжить после сброса — кнопкой, уже ждёт — когда и «Не
+    // продолжать»; не продолжилась (сессию закрыли, компьютер спал) — заметка с крестиком. Здесь же — продолжать сама
+    const waitHere = S.qr.wait?.board === id ? S.qr.wait : null
+    const offerHere = !waitHere && S.qr.offer?.board === id && now < S.qr.offer.at ? S.qr.offer : null
+    const armed = S.qr.armed.includes(id)
+    const resumeTiles = [
+      ...(waitHere ? [Button({ key: 'arcade-board-resume-off', label: 'Не продолжать', onPress: () => cancelWait($) }), keep(dim(`  ${fill(tr('Очередь продолжится в {0}.', S.lang), [clockText(waitHere.at, now)])}`))] : []),
+      ...(offerHere
+        ? [
+            Button({ key: 'arcade-board-resume', label: fill(tr('Продолжить очередь после сброса в {0}', S.lang), [clockText(offerHere.at, now)]), onPress: () => waitFor($, offerHere) }),
+            dim('  Claude продолжит с той же карточки, пока Claude Code открыт и компьютер не спит.'),
+          ]
+        : []),
+      Button({ key: 'arcade-board-resume-auto', label: `Продолжать очередь после сброса лимита: ${armed ? 'да' : 'нет'}`, onPress: () => armBoard($, id, !armed) }),
+      dim('  кончился лимит Claude — очередь встанет и сама продолжится после сброса'),
+    ]
+    const missedHere = S.qr.missed.filter((m) => m.board === id)
+    const missedLines = missedHere.map((m) =>
+      Box({ key: `arcade-board-missed-${id}`, flexDirection: 'row', columnGap: 2, children: [keep(Text({ color: 'warning', children: [`  ${m.text}`] })), Button({ key: 'arcade-board-missed-off', label: '×', plain: true, dimColor: true, onPress: () => missedClear($, id) })] }),
+    )
     // «Остановить везде» — пока очередь идёт здесь или в другой сессии
     const stopAll =
       queued || mates.length
@@ -400,12 +421,14 @@ export function boardsScreen($, e, kit) {
           Button({ key: 'arcade-board-queue', label: queued ? 'Остановить очередь' : 'Очередь для Claude', onPress: () => (queued ? endQueue($) : startQueue($, id)) }),
           dim('  Claude по очереди берёт карточки из первой колонки: следующую — когда перенесёт прошлую в последнюю. Задаст вопрос или не доделает — очередь встанет.'),
           ...stopAll,
+          ...resumeTiles,
           ...deleteItems,
         ],
         40,
       ),
       ...queueLine,
       ...matesLine,
+      ...missedLines,
       gap,
       // Задачи GitHub — карточками через коннектор Claude: Arcade с GitHub не говорит, ключи ему не нужны
       Input({
