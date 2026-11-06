@@ -1,12 +1,13 @@
 // Arcade: экран «Агенты» — сессии Claude Code с Arcade на этом компьютере: что делает каждая, какую карточку, где очередь,
 // чего ждёт. На вопрос Claude (AskUserQuestion) здесь можно ответить; разрешение на инструмент — только в самой сессии.
-// Ненужную сейчас сессию можно скрыть крестиком и вернуть из «Скрытых»
+// Ненужную сейчас сессию можно скрыть крестиком и вернуть из «Скрытых». У каждой — что поменялось в её папке по git
 import { fill } from '../chats.js'
 import { keep, tr } from '../i18n.js'
 import { S } from '../app/state.js'
 import { STATUS_LABEL, agentsList, agoText, hideAgent } from '../app/agents.js'
 import { allPicked, askOf, isSent, pickOption, picksOf, sendAnswer } from '../app/asks.js'
 import { pctText, usdText } from '../app/usage.js'
+import { changesOf, overlapsOf, reviewChanges } from '../app/changes.js'
 
 // Цвет состояния: ждёт разрешения — бедой, закончил ход — успехом, работает — подсказкой, свободна — серым
 const STATUS_COLOR = { permission: 'error', done: 'success', working: 'suggestion', idle: '' }
@@ -37,6 +38,7 @@ export function agentsScreen($, e, kit) {
   // Крестик у другой сессии — скрыть: её нет в списке и нет всплывашек о ней, пока её не вернут из «Скрытых»
   const hideButton = (r) => (r.me ? [] : [keep(Button({ key: `agents-hide-${r.sid}`, label: '×', plain: true, dimColor: true, onPress: () => hideAgent($, r.sid, true) }))])
   const asks = (r) => askLines($, kit, r)
+  const changes = (r) => changesLines($, kit, r, all)
   const card = (r) => {
     const hex = STATUS_HEX[r.status] ?? STATUS_HEX.idle
     const lines = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean)
@@ -51,7 +53,7 @@ export function agentsScreen($, e, kit) {
       paddingX: 'sm',
       paddingY: 'xs',
       children: [
-        Box({ flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(strong(nameOf(r))), status(r), ...lines.map((x) => keep(dim(x))), ...asks(r)] }),
+        Box({ flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(strong(nameOf(r))), status(r), ...lines.map((x) => keep(dim(x))), ...changes(r), ...asks(r)] }),
         ...hideButton(r),
       ],
     })
@@ -66,6 +68,7 @@ export function agentsScreen($, e, kit) {
       children: [
         r.me ? head : Box({ flexDirection: 'row', columnGap: 2, children: [head, ...hideButton(r)] }),
         ...(rest ? [keep(dim(`  ${rest}`))] : []),
+        ...(changesOf(r) ? [Box({ key: `agents-chg-${r.sid || 'me'}`, flexDirection: 'column', paddingLeft: 2, children: changes(r) })] : []),
         ...(askOf(r) ? [Box({ key: `agents-ask-${r.sid || 'me'}`, flexDirection: 'column', paddingLeft: 2, children: asks(r) })] : []),
       ],
     })
@@ -84,6 +87,7 @@ export function agentsScreen($, e, kit) {
     dim('Сессии Claude Code с Arcade на этом компьютере — по папке. Закрытая сессия пропадает отсюда меньше чем за минуту. Всё это видно только на этом компьютере.'),
     gap,
     ...rows,
+    ...(S.chg.note ? [gap, Text({ ...(S.chg.bad ? { color: 'warning' } : { dimColor: true }), children: [S.chg.note] })] : []),
     ...awayRows,
     ...off,
     ...others,
@@ -92,6 +96,53 @@ export function agentsScreen($, e, kit) {
     ...noticeLines,
     ...hint,
   ]
+}
+
+// Что поменялось в папке сессии по git: строка «ветка · изменено файлов · не закоммичено» — нажатием раскрывает файлы
+// с числом строк; ниже — какие файлы правит и другая сессия. У своей — «Дать Claude: проверить изменения». Не git —
+// ничего. Имена веток и файлов — человека, без перевода (keep)
+export function changesLines($, kit, r, all) {
+  const { Box, Button, Text, dim } = kit
+  const c = changesOf(r)
+  if (!c) return []
+  const t = (text) => tr(text, S.lang)
+  const id = r.sid || 'me'
+  const head = [c.branch ? fill(t('ветка {0}'), [c.branch]) : t('без ветки')]
+  head.push(...(c.n ? [fill(t('изменено файлов: {0}'), [c.n]), t('не закоммичено')] : [t('изменений нет')]))
+  if (c.ahead) head.push(fill(t('не отправлено коммитов: {0}'), [c.ahead]))
+  if (!c.n) return [keep(dim(head.join(' · ')))]
+  const open = S.chg.open.has(id)
+  const toggle = () => {
+    if (open) S.chg.open.delete(id)
+    else S.chg.open.add(id)
+    $.ui.invalidate('ui.render')
+  }
+  const out = [keep(Button({ key: `agents-changes-${id}`, label: `${open ? '▾' : '▸'} ${head.join(' · ')}`, plain: true, onPress: toggle }))]
+  if (open) {
+    const fileText = (x) => {
+      if (x.state === 'new') return `${x.path} · ${t('новый файл')}`
+      if (x.state === 'bin') return `${x.path} · ${t('двоичный файл')}`
+      return x.add == null ? x.path : `${x.path}  +${x.add} −${x.del ?? 0}`
+    }
+    out.push(...c.files.map((x) => keep(dim(`  ${fileText(x)}`))))
+    if (c.n > c.files.length) out.push(keep(dim(`  ${fill(t('и ещё файлов: {0}'), [c.n - c.files.length])}`)))
+  }
+  // Пересечения с другими сессиями — предупреждением: одни и те же файлы правят двое
+  const warn = (text) => keep(Text({ color: 'warning', children: [text] }))
+  const names = (who) => who.map((w) => w.name).join('», «')
+  const ov = overlapsOf(r, all)
+  const sameMe = ov.same.filter((w) => w.me)
+  const sameOthers = ov.same.filter((w) => !w.me)
+  if (sameOthers.length) out.push(warn(fill(t('Та же папка, что у сессии «{0}»: изменения общие — чьи они, не различить.'), [names(sameOthers)])))
+  if (sameMe.length) out.push(warn(t('Та же папка, что у этой сессии: изменения общие — чьи они, не различить.')))
+  for (const x of ov.files.slice(0, 3)) {
+    const others = x.who.filter((w) => !w.me)
+    if (others.length) out.push(warn(fill(t('{0} правит и сессия «{1}»'), [x.path, names(others)])))
+    if (x.who.some((w) => w.me)) out.push(warn(fill(t('{0} правит и эта сессия'), [x.path])))
+  }
+  if (ov.files.length > 3) out.push(warn(fill(t('и ещё общих файлов: {0}'), [ov.files.length - 3])))
+  if (r.me) out.push(Button({ key: 'agents-review', label: 'Дать Claude: проверить изменения', onPress: () => reviewChanges($) }))
+  return out
 }
 
 // Чего ждёт сессия. Запрос разрешения — только показать: разрешают в самой сессии. Вопрос — варианты кнопками: один
