@@ -84,6 +84,7 @@ S.sep = '/'
 S.osNotify = true // системные уведомления «агент закончил» и «ждёт разрешения», пока играешь в окне
 S.asked = false // в этом ходе на вопрос уже ответили
 S.askVisible = false
+S.askStep = 'ask' // 'later' — после «Не сейчас»: на сколько отложить строку (app/later.js)
 S.paneOpen = false
 S.paneSeen = false // панель в этой сессии уже открывали: сама (followPane) она здесь больше не откроется
 S.netWaiting = [] // кто ждёт в сети: [{ id, title, count }] — из /api/lobbies сайта, раз в минуту

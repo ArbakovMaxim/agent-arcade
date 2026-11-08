@@ -8,6 +8,8 @@ import { graphicsLabel, launch, startAssign } from '../app/play.js'
 import { MOUSE_NOTE, builtinBrowser, desktopLabel, desktopOptions, openerLabel, openerOptions, windowMode } from '../app/window.js'
 import { followBookLang } from '../app/read.js'
 import { saveSetting } from '../app/profile.js'
+import { laterClear, laterUntil } from '../app/later.js'
+import { hhmm } from '../app/usage.js'
 
 // Выбор языка: плитки, как остальное меню, в Desktop — с флажком; каждый язык подписан на самом себе, текущий
 // отмечен
@@ -198,6 +200,23 @@ export function settingsScreen($, e, kit) {
       },
     }),
     dim('  над полем ввода, когда агент работает дольше этого; выключена — Arcade открывается командой /arcade'),
+    // Отложили по «Не сейчас» — до какого времени или до перезапуска Claude; нажатие возвращает строку сразу
+    ...(S.askAfter && laterUntil(kit.now)
+      ? [
+          Button({
+            key: 'arcade-ask-later-off',
+            label:
+              laterUntil(kit.now) === Infinity
+                ? 'Строка «сыграть?» отложена до перезапуска Claude — вернуть'
+                : `Строка «сыграть?» отложена до ${hhmm(laterUntil(kit.now))} — вернуть`,
+            onPress: async () => {
+              await laterClear($)
+              $.ui.invalidate('ui.render')
+            },
+          }),
+          dim('  отложили кнопкой «Не сейчас»; отсрочка общая для всех сессий на этом компьютере'),
+        ]
+      : []),
     Button({
       key: 'arcade-on-done',
       label: `Когда агент закончил: ${SIGNAL_LABELS[S.onDone]}`,

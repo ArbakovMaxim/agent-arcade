@@ -17,6 +17,7 @@ import { loadReads } from '../app/read.js'
 import { toggleFavorite, toggleHidden } from '../app/profile.js'
 import { answerInvite } from '../app/talk.js'
 import { modError, notesShown, promptsShown, refreshNotes } from '../app/work.js'
+import { laterOn } from '../app/later.js'
 import { calendarShown, refreshCalendar } from '../app/calendar.js'
 import { gameScreen } from './game.js'
 import { mainScreen, welcomeScreen } from './main.js'
@@ -470,7 +471,11 @@ export async function drawPane($, e) {
     else if (S.menu === 'friends:invite' && S.ol.to && S.acct.handle) items = inviteScreen($, e, kit)
     else if (S.menu === 'friends' || S.menu === 'friends:remove' || S.menu === 'friends:invite') items = friendsScreen($, e, kit)
     else if (S.menu === 'chats' || S.menu.startsWith('chats:')) items = chatsScreen($, e, kit)
-    else if (S.menu === 'settings') items = settingsScreen($, e, kit)
+    else if (S.menu === 'settings') {
+      // Отсрочку «сыграть?» могли поменять в другой сессии — перечитать (не чаще раза в LATER_READ_MS)
+      await laterOn($, now)
+      items = settingsScreen($, e, kit)
+    }
     else if (S.menu === 'youtube') items = youtubeScreen($, e, kit)
     else if (S.menu.startsWith('youtube:')) items = youtubeTopicScreen($, e, kit)
     else if (promptsShown()) items = promptsScreen($, e, kit)

@@ -85,7 +85,7 @@ In PowerShell: `$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin mar
 
 - **`/arcade`** opens the menu at any time.
 - Leave the pane open, and new sessions open it on their own: in the terminal at start, in Desktop and VS Code when they connect to the session; the keyboard stays with the prompt. Close it by hand (the close mark or Esc), and it stops opening by itself until you open it again.
-- When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now. In Settings → Notifications you can choose when it appears — from 10 seconds to 5 minutes — or turn it off.
+- When the agent works for more than 10 seconds, *“play?”* appears above the prompt: **`1`** — play here, in the panel; **`2`** — in a browser window (where available); **`3`** — not now, then pick for how long: 5 or 10 minutes, until Claude restarts (in every session on this computer) or just this time. In Settings → Notifications you can choose when it appears — from 10 seconds to 5 minutes — or turn it off.
 - Arrow keys or Tab to choose, Enter to open; the mouse works too. Game controls are shown under each game.
 - When the agent finishes or waits for permission, a banner appears over the game: **Back to agent** or **Keep playing**.
 
