@@ -6,6 +6,7 @@
 import { fill } from '../chats.js'
 import { tr } from '../i18n.js'
 import { columnOf, isBoard } from '../notes.js'
+import { launchCheck } from './later.js'
 import { S } from './state.js'
 import { log } from './status.js'
 
@@ -37,7 +38,7 @@ const slotPath = (slot) => `${S.ag.dir}${S.sep}s${slot}.json`
 // Запустить отметки — из session.start. Нет домашней папки или id сессии — их нет: очередь идёт по-старому, одна
 export async function startAgents($, home) {
   const old = S.ag
-  S.ag = { on: false, dir: '', sid: '', name: '', path: '', slot: 0, ready: false, status: S.status, since: 0, wrote: 0, sent: '', read: 0, sig: '', files: {}, seen: null, card: null, doneAt: 0, claim: null, joinWarn: '', chain: Promise.resolve(), taking: null, ticking: false }
+  S.ag = { on: false, dir: '', sid: '', name: '', path: '', slot: 0, ready: false, status: S.status, since: 0, wrote: 0, sent: '', read: 0, sig: '', files: {}, seen: null, card: null, doneAt: 0, claim: null, joinWarn: '', chain: Promise.resolve(), taking: null, ticking: false, launched: false }
   if (!home) return
   try {
     const ag = S.ag
@@ -176,6 +177,12 @@ function takeSlot($) {
     const now = await $.clock.now()
     await readSlots($, now, true)
     const own = Object.entries(ag.files).find(([, f]) => f.rec?.sid === ag.sid && now - f.rec.at < AGENT_TTL_MS / 2)
+    // Первое место этого процесса: своей свежей отметки нет (не перезагрузка мода) и других открытых сессий нет —
+    // Claude только что запустили: отсрочка «сыграть?» до перезапуска кончается (later.js)
+    if (!ag.launched) {
+      ag.launched = true
+      await launchCheck($, now, !own && !othersFrom(now).length)
+    }
     if (own) {
       ag.slot = Number(own[0])
       ag.ready = true

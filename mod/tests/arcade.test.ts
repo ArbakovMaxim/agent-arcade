@@ -322,6 +322,178 @@ test('пока в полосе вопрос Claude Code, «сыграть?» у�
   await band.unmount()
 })
 
+// «Не сейчас» — отложить строку «сыграть?». Отсрочка лежит в домашней папке — USERPROFILE задан; ОС не определена:
+// в вопросе «Играть» (1) и «Не сейчас» (2)
+const LATER_ENV = { USERPROFILE: 'C:\\Users\\max' }
+const LATER_FILE = '.claude/arcade/ask-later.json'
+const LAUNCH_FILE = '.claude/arcade/launch.json'
+const askShown = async ($: any) => {
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  const shown = Boolean(await band.find({ type: 'Text', text: /сыграть\?/ }))
+  await band.unmount()
+  return shown
+}
+// Нажать «Не сейчас», а во втором шаге — key
+const askLater = async ($: any, key: string) => {
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'arcade-later' })
+  await band.press({ key })
+  await band.unmount()
+}
+
+test('«Не сейчас» — второй шаг: на сколько не спрашивать; «5 мин» — ни в этом ходе, ни в следующем, потом строка возвращается сама', HEAVY, async ($, on) => {
+  const { clock, diskFile } = stubs(on, { env: LATER_ENV })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(11_000)
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'arcade-later' })
+  // Вместо вопроса — на сколько отложить, с цифрами
+  expect(await band.find({ type: 'Text', text: /сыграть\?/ })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: 'Не спрашивать:' })).toBeDefined()
+  expect(await band.find({ key: 'arcade-later-5' })).toMatchObject({ props: { label: '5 мин', hotkey: '1' } })
+  expect(await band.find({ key: 'arcade-later-10' })).toMatchObject({ props: { label: '10 мин', hotkey: '2' } })
+  expect(await band.find({ key: 'arcade-later-restart' })).toMatchObject({ props: { label: 'До перезапуска Claude', hotkey: '3' } })
+  expect(await band.find({ key: 'arcade-later-now' })).toMatchObject({ props: { label: 'Только сейчас', hotkey: '4' } })
+  await band.press({ key: 'arcade-later-5' })
+  expect(await band.find({ key: 'arcade-later-10' })).toBeUndefined() // строка ушла
+  await band.unmount()
+  // Отсрочка — в файле, общем для всех сессий этого компьютера: до какого времени
+  const { v, until } = JSON.parse(diskFile(LATER_FILE))
+  expect(v).toBe(1)
+  expect(until - clock.now()).toBeGreaterThan(299_000)
+  expect(until - clock.now()).toBeLessThanOrEqual(300_000)
+  // Следующий ход в эти 5 минут — строки нет
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  await clock.advance(60_000)
+  await $.turn.start({ turnId: 't2' })
+  await clock.advance(20_000)
+  expect(await askShown($)).toBe(false)
+  await clock.advance(until - clock.now() - 5_000)
+  expect(await askShown($)).toBe(false)
+  // Отсрочка кончилась посреди хода — строка появляется
+  await clock.advance(7_000)
+  expect(await askShown($)).toBe(true)
+})
+
+test('«Только сейчас» — как раньше: строки нет до конца хода, в следующем ходе она снова; «Не сейчас» без выбора — тоже', HEAVY, async ($, on) => {
+  const { clock, diskFile } = stubs(on, { env: LATER_ENV })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(11_000)
+  await askLater($, 'arcade-later-now')
+  await clock.advance(30_000)
+  expect(await askShown($)).toBe(false)
+  expect(diskFile(LATER_FILE)).toBeUndefined() // ничего не откладывали
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  await $.turn.start({ turnId: 't2' })
+  await clock.advance(11_000)
+  expect(await askShown($)).toBe(true)
+  // «Не сейчас» нажали, а срок не выбрали — второй шаг висит до конца хода, следующий ход начинается с вопроса
+  const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  await band.press({ key: 'arcade-later' })
+  expect(await band.find({ key: 'arcade-later-5' })).toBeDefined()
+  await band.unmount()
+  await $.turn.complete({ turnId: 't2', answer: '', reason: 'answer' })
+  expect(await askShown($)).toBe(false)
+  await $.turn.start({ turnId: 't3' })
+  await clock.advance(11_000)
+  const next = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await next.find({ type: 'Text', text: /сыграть\?/ })).toBeDefined()
+  expect(await next.find({ key: 'arcade-later-5' })).toBeUndefined()
+  await next.unmount()
+  expect(diskFile(LATER_FILE)).toBeUndefined()
+})
+
+test('отложили в другой сессии этого компьютера — показанная строка уходит; в настройках «отложена до … — вернуть» возвращает её', HEAVY, async ($, on) => {
+  const { clock, diskFile, putFile } = stubs(on, { env: LATER_ENV })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(11_000)
+  expect(await askShown($)).toBe(true)
+  putFile(`C:\\Users\\max\\${LATER_FILE.replace(/\//g, '\\')}`, JSON.stringify({ v: 1, until: clock.now() + 10 * 60_000 }))
+  await clock.advance(6_000) // файл перечитываем не чаще раза в 5 секунд
+  expect(await askShown($)).toBe(false)
+  // Настройки: когда строка вернётся — и кнопка вернуть её сейчас
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-ask-later-off' })).toMatchObject({ props: { label: expect.stringMatching(/^Строка «сыграть\?» отложена до \d{1,2}:\d{2} — вернуть$/) } })
+  expect(await ui.find({ type: 'Text', text: /отсрочка общая для всех сессий на этом компьютере/ })).toBeDefined()
+  await ui.press({ key: 'arcade-ask-later-off' })
+  expect(await ui.find({ key: 'arcade-ask-later-off' })).toBeUndefined()
+  expect(JSON.parse(diskFile(LATER_FILE))).toEqual({ v: 1 })
+  await ui.unmount()
+  await clock.advance(2_000)
+  expect(await askShown($)).toBe(true)
+})
+
+test('«До перезапуска Claude»: строки нет в следующих ходах и после перезагрузки мода', HEAVY, async ($, on) => {
+  const me = { sid: 'sess-me', root: 'D:\\work\\web' }
+  const { clock, diskFile } = stubs(on, { env: LATER_ENV, agents: me })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(3_000)
+  // Других сессий нет — это запуск Claude: его id в файле
+  const launch = JSON.parse(diskFile(LAUNCH_FILE))
+  expect(launch).toMatchObject({ v: 1 })
+  expect(launch.id).toMatch(/^[0-9a-z]+$/)
+  await $.turn.start({ turnId: 't1' })
+  await clock.advance(11_000)
+  await askLater($, 'arcade-later-restart')
+  expect(JSON.parse(diskFile(LATER_FILE))).toEqual({ v: 1, launch: launch.id })
+  await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
+  for (const turnId of ['t2', 't3']) {
+    await $.turn.start({ turnId })
+    await clock.advance(11 * 60_000)
+    expect(await askShown($)).toBe(false)
+    await $.turn.complete({ turnId, answer: '', reason: 'answer' })
+  }
+  // Настройки — «до перезапуска Claude»
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ key: 'arcade-ask-later-off' })).toMatchObject({ props: { label: 'Строка «сыграть?» отложена до перезапуска Claude — вернуть' } })
+  await ui.unmount()
+  // Перезагрузка мода: своя свежая отметка на месте — запуск тот же, отсрочка держится
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(3_000)
+  expect(JSON.parse(diskFile(LAUNCH_FILE)).id).toBe(launch.id)
+  await $.turn.start({ turnId: 't4' })
+  await clock.advance(20_000)
+  expect(await askShown($)).toBe(false)
+})
+
+for (const [title, others, shown] of [
+  ['других открытых сессий нет — новый запуск Claude, строка снова спрашивает', false, true],
+  ['другая сессия открыта — Claude не перезапускали, строки нет', true, false],
+] as [string, boolean, boolean][]) {
+  test(`«До перезапуска Claude» и новая сессия: ${title}`, HEAVY, async ($, on) => {
+    const disk: Record<string, string> = {
+      [`C:\\Users\\max\\.claude\\arcade\\ask-later.json`]: JSON.stringify({ v: 1, launch: 'old1' }),
+      [`C:\\Users\\max\\.claude\\arcade\\launch.json`]: JSON.stringify({ v: 1, id: 'old1', at: 0 }),
+    }
+    if (others)
+      disk['C:\\Users\\max\\.claude\\arcade\\agents\\s5.json'] = JSON.stringify({ v: 1, sid: 'sess-x', name: 'api', path: 'D:\\work\\api', status: 'idle', since: 0, card: null, queue: null, claim: null, at: 0 })
+    const { clock, diskFile } = stubs(on, { env: LATER_ENV, agents: { sid: 'sess-me', root: 'D:\\work\\web' }, disk })
+    await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+    await $.turn.start({ turnId: 't1' })
+    await clock.advance(11_000)
+    expect(await askShown($)).toBe(shown)
+    expect(JSON.parse(diskFile(LAUNCH_FILE)).id === 'old1').toBe(!shown)
+  })
+}
+
+test('отложить «сыграть?»: переводы', () => {
+  expect(tr('Не спрашивать:', 'en')).toBe('Don’t ask for:')
+  expect(tr('5 мин', 'en')).toBe('5 min')
+  expect(tr('До перезапуска Claude', 'en')).toBe('Until Claude restarts')
+  expect(tr('Только сейчас', 'en')).toBe('Just this time')
+  expect(tr('Строка «сыграть?» отложена до 14:05 — вернуть', 'en')).toBe('“Play?” line is snoozed until 14:05 — bring it back')
+  expect(tr('Строка «сыграть?» отложена до перезапуска Claude — вернуть', 'en')).toBe('“Play?” line is snoozed until Claude restarts — bring it back')
+  for (const lang of ['uk', 'de', 'ja']) {
+    expect(tr('До перезапуска Claude', lang)).not.toBe('Until Claude restarts')
+    expect(tr('Строка «сыграть?» отложена до 14:05 — вернуть', lang)).toContain('14:05')
+  }
+})
+
 test('запрос разрешения виден в панели, а событие уходит дальше без изменений', async ($, on) => {
   stubs(on)
   await start($)
