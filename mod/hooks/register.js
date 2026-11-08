@@ -26,6 +26,7 @@ import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart
 import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
 import { changesPoll } from './app/changes.js'
+import { laterOn, laterSet, startLater } from './app/later.js'
 import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
@@ -60,6 +61,8 @@ export function register(on) {
         S.sep = home.includes('\\') ? '\\' : '/'
         S.dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(S.sep)
       }
+      // «Не сейчас» у строки «сыграть?» — отсрочка файлом в ~/.claude/arcade, общая для сессий этого компьютера
+      startLater(home)
       // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
       await startAgents($, home)
       // «Что поменялось» в «Агентах»: ветка и незакоммиченные файлы — git читает сейчас и в конце каждого хода, не по таймеру
@@ -208,8 +211,18 @@ export function register(on) {
       let quiet = 0
       $.clock.every(1000, async () => {
         const now = await $.clock.now()
-        if (S.status === 'working' && S.askAfter > 0 && !S.asked && !S.paneOpen && now - S.turnStartedAt >= S.askAfter * 1000) {
-          S.askVisible = true
+        const due = () => S.status === 'working' && S.askAfter > 0 && !S.asked && !S.paneOpen && now - S.turnStartedAt >= S.askAfter * 1000
+        if (due()) {
+          // Строку отложили — здесь или в другой сессии этого компьютера: её нет, а показанная уходит. Отсрочка
+          // кончилась посреди хода — строка появляется
+          const later = await laterOn($, now)
+          if (later && S.askVisible) {
+            S.askVisible = false
+            $.ui.invalidate('ui.render')
+          } else if (!later && !S.askVisible && due()) {
+            S.askStep = 'ask'
+            S.askVisible = true
+          }
         }
         quiet = S.paneOpen && S.status !== 'working' ? quiet + 1 : 0
         if (S.askVisible || (S.paneOpen && (quiet === 0 || quiet % 60 === 0))) $.ui.invalidate('ui.render')
@@ -553,6 +566,34 @@ export function register(on) {
     // Строку выключили в настройках — здесь или на другом компьютере — она уходит сразу, не дожидаясь хода
     if (!S.askVisible || !S.askAfter || e.props.hasSurvey) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
+    // После «Не сейчас» — на сколько отложить: на 5 или 10 минут, до перезапуска Claude (во всех сессиях этого
+    // компьютера) или только в этом ходе, как было раньше
+    if (S.askStep === 'later') {
+      const choice = (key, label, hotkey, kind) =>
+        Button({
+          key,
+          label,
+          hotkey,
+          plain: true,
+          onPress: async () => {
+            S.asked = true
+            S.askVisible = false
+            $.ui.invalidate('ui.render')
+            if (kind) await laterSet($, kind).catch((err) => log(`отсрочка «сыграть?»: ${err?.message ?? err}`))
+          },
+        })
+      return Box({
+        flexDirection: 'row',
+        columnGap: 2,
+        children: [
+          Text({ children: ['Не спрашивать:'] }),
+          choice('arcade-later-5', '5 мин', '1', 5),
+          choice('arcade-later-10', '10 мин', '2', 10),
+          choice('arcade-later-restart', 'До перезапуска Claude', '3', 'restart'),
+          choice('arcade-later-now', 'Только сейчас', '4', null),
+        ],
+      })
+    }
     const now = await $.clock.now()
     const canWindow = (S.platform !== null || e.surface === 'desktop') && webGame(S.lastGame)
     return Box({
@@ -603,9 +644,9 @@ export function register(on) {
           label: 'Не сейчас',
           hotkey: canWindow ? '3' : '2',
           plain: true,
+          // Второй шаг — на сколько отложить; не выбрали — строка уйдёт с концом хода
           onPress: () => {
-            S.asked = true
-            S.askVisible = false
+            S.askStep = 'later'
             $.ui.invalidate('ui.render')
           },
         }),

@@ -686,6 +686,8 @@ const EXACT = {
   'Размер панели: обычный': 'Pane size: normal',
   'во всю ширину разговор с агентом сжимается в узкую полосу; поправить ширину можно мышью': 'at full width the agent chat shrinks to a narrow strip; you can adjust the width with the mouse',
   'Строка «сыграть?»: выключена': '“Play?” line: off',
+  'Строка «сыграть?» отложена до перезапуска Claude — вернуть': '“Play?” line is snoozed until Claude restarts — bring it back',
+  'отложили кнопкой «Не сейчас»; отсрочка общая для всех сессий на этом компьютере': 'snoozed with “Not now”; the snooze applies to all sessions on this computer',
   'над полем ввода, когда агент работает дольше этого; выключена — Arcade открывается командой /arcade': 'above the input box once the agent has been working this long; when off, open Arcade with the /arcade command',
   'для игры в панели Claude; в окне браузера — системное уведомление': 'for games in the Claude pane; in a browser window you get a system notification',
   'Уведомления, пока играешь в окне: да': 'Notifications while playing in a window: on',
@@ -716,6 +718,9 @@ const EXACT = {
   'Играть': 'Play',
   'В окне': 'In a window',
   'Не сейчас': 'Not now',
+  'Не спрашивать:': 'Don’t ask for:',
+  'До перезапуска Claude': 'Until Claude restarts',
+  'Только сейчас': 'Just this time',
   // Игра
   'Кликни по экрану — играть · Esc — к агенту · Backspace — библиотека': 'Click the screen to play · Esc — back to the agent · Backspace — library',
   'Клавиатура — в строке 🎮 над строкой ввода Claude · кнопки — мышью': 'Keyboard — in the 🎮 line above the Claude prompt · buttons — with the mouse',
@@ -1334,6 +1339,7 @@ const RULES = [
   [/^Игры открываются (.+)\.$/, (m) =>
     `Games open ${m[1] === 'здесь, в панели' ? 'here, in the pane' : m[1] === 'во встроенном браузере Claude' ? "in Claude's built-in browser" : `in ${where(m[1].replace(/^в /, ''))}`}.`],
   [/^Строка «сыграть\?»: через (.+)$/, (m) => `“Play?” line: after ${dur(m[1])}`],
+  [/^Строка «сыграть\?» отложена до (\d{1,2}:\d{2}) — вернуть$/, (m) => `“Play?” line is snoozed until ${m[1]} — bring it back`],
   [/^Когда агент закончил: (.+)$/, (m) => `When the agent finishes: ${SIGNAL[m[1]] ?? m[1]}`],
   [/^Когда агент ждёт разрешения: (.+)$/, (m) => `When the agent asks for permission: ${SIGNAL[m[1]] ?? m[1]}`],
   [/^Открыть (.+) в окне$/, (m) => `Open ${tr(m[1], 'en')} in a window`],
