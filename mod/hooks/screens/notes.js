@@ -1,13 +1,14 @@
 // Arcade: экран блокнота.
 import { openUrlCommand } from '../browsers.js'
 import { keep, tr } from '../i18n.js'
-import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, moveCard, noteLines, notesOrder, removePage, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../notes.js'
+import { MAX_APP, MAX_URL, appendText, checkStats, cleanTitle, columnOf, isBoard, isPrompts, moveCard, noteLines, notesOrder, removePage, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../notes.js'
 import { dayKey, quickParse } from '../calendar.js'
 import { NOTE_LINES, S, nb } from '../app/state.js'
 import { clip } from '../app/status.js'
 import { dayText } from '../app/calendar.js'
 import { CONNECTOR_HINT, NOTE_TOO_LONG, VOICE_HINT, boardsOpened, cardTaker, colName, connectorPrompt, copyPage, createPage, deskPerson, editNotes, giveClaude, makeSummary, openLink, pageToChat, releaseCard, sendNote, trackerComment } from '../app/work.js'
 import { chatTitle, loadChats } from '../app/talk.js'
+import { setCheck } from '../app/check.js'
 
 const CHAT_PICK = 8 // чатов в выборе «Отправить в чат» — последние по переписке
 
@@ -234,6 +235,29 @@ export function notesScreen($, e, kit) {
           )
         : dim('  Пусто — без срока. Стереть и сохранить — убрать срок.'),
     ]
+    // Своя проверка карточки для очереди (check.js): пусто — команда доски
+    const boardCmd = isBoard(parent) ? (S.qc.boards[parent.id] ?? '') : ''
+    const checkItems =
+      isBoard(parent) && !isPrompts(parent)
+        ? [
+            keep(
+              Input({
+                key: `arcade-note-check-${nb.field}`,
+                label: tr('Своя проверка', S.lang),
+                placeholder: boardCmd ? `${tr('как у доски', S.lang)}: ${boardCmd}` : tr('у доски проверки нет', S.lang),
+                value: S.qc.cards[id] ?? '',
+                submitLabel: tr('Сохранить', S.lang),
+                onSubmit: async (value) => {
+                  const cmd = await setCheck($, 'cards', id, value)
+                  nb.note = cmd ? 'Своя проверка сохранена.' : 'Своей проверки нет — как у доски.'
+                  nb.bad = false
+                  $.ui.invalidate('ui.render')
+                },
+              }),
+            ),
+            dim('  Очередь запустит её вместо проверки доски, когда Claude перенесёт карточку в последнюю колонку. Хранится только на этом компьютере.'),
+          ]
+        : []
     const cardPlace = isBoard(parent)
       ? [
           ...takenItems,
@@ -260,6 +284,7 @@ export function notesScreen($, e, kit) {
             ),
           }),
           ...dueItems,
+          ...checkItems,
         ]
       : []
     // Панель Desktop не даёт выделить текст вне полей ввода: без правки текст виден и копируется кнопкой, поле «Текст» —
