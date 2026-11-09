@@ -23,6 +23,7 @@ import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, no
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
 import { scheduleTick } from './app/schedule.js'
 import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
+import { loadChecks } from './app/check.js'
 import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
 import { changesPoll } from './app/changes.js'
@@ -55,6 +56,8 @@ export function register(on) {
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
       await loadNotes($)
+      // Команды проверки между карточками очереди — только этого компьютера (check.js)
+      await loadChecks($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
       await loadCalendar($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
       const home = (await $.env.get('USERPROFILE')) || (await $.env.get('HOME'))
       if (home) {

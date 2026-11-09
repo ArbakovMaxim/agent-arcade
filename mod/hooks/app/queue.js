@@ -13,12 +13,14 @@ import { S, nb } from './state.js'
 import { log } from './status.js'
 import { AGENT_TTL_MS, boardMates, dropCard, queueMates, readOthers, samePath, takeCard } from './agents.js'
 import { clockText, limitHit, resetText, spentWindow, usageNow, warnCheck } from './usage.js'
-import { cardTaker, checkNotes, colName, editNotes, modError, refreshNotes, sendNote } from './work.js'
+import { cardTaker, checkNotes, colName, editNotes, giveClaude, modError, refreshNotes, sendNote } from './work.js'
+import { checkCard, codeText, hasMark } from './check.js'
 
 export const QUEUE_MAX = 10 // карточек за один запуск очереди, не больше: дальше — снова кнопкой
 // Очередь сейчас: board — id доски, card — карточка у Claude, given — какие уже отданы, sent — карточка ушла, а её ход
 // ещё не начался, turn — ход Claude с этой карточкой, started — когда запущена, of — сколько карточек будет в этом
-// запуске (для «карточка 3 из 10»), joined — с какой сессией эта присоединилась (заметка после первой карточки)
+// запуске (для «карточка 3 из 10»), joined — с какой сессией эта присоединилась (заметка после первой карточки), check —
+// какие карточки проверить командой доски, прежде чем дать следующую (check.js)
 S.queue = null
 // «Остановить везде»: в $.store под этим ключом — { [id доски]: когда }; очередь, запущенная раньше, встаёт
 const STOP_KEY = 'queueStop'
@@ -146,6 +148,7 @@ export async function startQueue($, id, { retry = '', auto = false } = {}) {
     return say(`${t('Очередь уже идёт на доске')} «${other?.title ?? ''}». ${t('Останови её там, чтобы начать здесь.')}`)
   }
   if (S.status === 'working' || S.status === 'permission') return say(t('Claude занят — запусти очередь, когда он закончит ход.'))
+  if (S.qc.running) return say(t('Идёт проверка между карточками — запусти очередь, когда она кончится.'))
   if (!(await editNotes($, (list) => list))) return
   nb.note = ''
   if (!S.notes.some((p) => p.id === id && isBoard(p))) return
@@ -163,7 +166,12 @@ export async function startQueue($, id, { retry = '', auto = false } = {}) {
   S.qr.offer = null
   S.qr.err = null
   if (!auto && S.qr.wait?.board === id) await cancelWait($, false)
-  S.queue = { board: id, card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry }
+  // Карточки, чья проверка не прошла, а Claude их уже снова перенёс в последнюю колонку, — сначала проверить. Чужие (их
+  // проверяет своя сессия, в своей папке) — нет: свои помним с этой сессии, а одна на доске — любые с пометкой
+  const board = S.notes.find((p) => p.id === id)
+  const last = board.board.cols.at(-1).id
+  const check = S.notes.filter((p) => p.parent === id && columnOf(p, board.board.cols) === last && hasMark(p.body) && (S.qc.mine.has(p.id) || !mates.length)).map((p) => p.id)
+  S.queue = { board: id, card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry, check }
   await queueNext($)
 }
 
@@ -401,11 +409,33 @@ export async function queueStopCheck($) {
 
 // Следующая карточка очереди: после старта — сразу, после хода Claude — таймером, новым ходом (не изнутри конца прошлого)
 export async function queueNext($) {
-  if (!S.queue) return
-  await giveNext($).catch((err) => {
+  const queue = S.queue
+  if (!queue) return
+  await (async () => {
+    if (await checksFail($, queue)) return
+    await giveNext($)
+  })().catch((err) => {
     modError(err)
     stopQueue($, t('Очередь остановлена: ошибка Arcade.'))
   })
+}
+
+// Проверка между карточками: true — дальше нельзя (не прошла или очередь остановили, пока шла). Не прошла — очередь
+// встаёт, а Claude получает вывод
+async function checksFail($, queue) {
+  while (queue.check?.length) {
+    const fail = await checkCard($, queue.check.shift())
+    if (S.queue !== queue) return true
+    if (!fail) continue
+    stopQueue($, fill(t('Проверка после «{0}» не прошла — {1}. Карточка вернулась в «{2}», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.'), [fail.title, codeText(fail.code), fail.col]))
+    const sent = await giveClaude($, fail.text, 'check')
+    if (!sent && nb.note) S.dk.note = `${S.dk.note} ${t(nb.note)}`
+    nb.note = ''
+    nb.bad = false
+    $.ui.invalidate('ui.render')
+    return true
+  }
+  return S.queue !== queue
 }
 
 // Кнопка «Остановить очередь»: текущую карточку Claude доделает, следующую не получит
@@ -460,5 +490,7 @@ export async function queueTurnDone($, e) {
     const title = card?.title ?? ''
     return stopQueue($, `${t('Очередь стоит: Claude закончил ход, а карточка')} «${title}» ${t('не в колонке')} «${colName(last)}». ${t('Посмотри, что он ответил.')}`)
   }
+  // Карточка сделана — перед следующей её проверит команда доски, если она есть (queueNext)
+  queue.check = [card.id]
   return true
 }

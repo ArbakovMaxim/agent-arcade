@@ -9,7 +9,8 @@ import { friendsCall } from '../app/talk.js'
 import { dayKey } from '../calendar.js'
 import { dayText } from '../app/calendar.js'
 import { armBoard, cancelWait, endQueue, missedClear, startQueue, stopEverywhere, waitFor } from '../app/queue.js'
-import { clockText } from '../app/usage.js'
+import { clockText, hhmm } from '../app/usage.js'
+import { codeText, hasMark, setCheck } from '../app/check.js'
 import { boardMates, sessionOf } from '../app/agents.js'
 import { TRACKERS, TRACKER_NAMES, boardMembers, boardTracker, cardTaker, colName, createBoard, createCard, deskPerson, editBoard, forgetDesk, importIssues, loadBoards, makeSummary, modError, sendBoard, shareBoard, syncBoard, unshareBoard } from '../app/work.js'
 
@@ -205,7 +206,7 @@ export function boardsScreen($, e, kit) {
       return keep(desktop ? makeButton({ ...props, children: [Text({ wrap: 'wrap', children: [label] })] }) : Button(props))
     }
     // Под карточкой: сколько пунктов отмечено, срок (прошёл, а карточка не в последней колонке, — цветом беды), кто
-    // её взял на общей доске и какая сессия Claude Code на этом компьютере её делает
+    // её взял на общей доске, какая сессия Claude Code на этом компьютере её делает и не прошла ли она проверку очереди
     const today = dayKey(now)
     const lastCol = board.board.cols.at(-1).id
     const cardAbout = (card, col) => {
@@ -214,10 +215,11 @@ export function boardsScreen($, e, kit) {
       const late = card.due && card.due < today && col !== lastCol
       const by = col === lastCol ? null : sessionOf(card.id)
       const session = by ? (by.me ? tr('у этой сессии', S.lang) : fill(tr('у сессии «{0}»', S.lang), [by.name])) : ''
-      const parts = [total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '', session]
+      const failed = hasMark(card.body)
+      const parts = [failed ? `⚠ ${tr('проверка не прошла', S.lang)}` : '', total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '', session]
       const text = parts.filter(Boolean).join(' · ')
       if (!text) return []
-      return [keep(late ? Text({ color: 'warning', children: [`  ${text}`] }) : dim(`  ${text}`))]
+      return [keep(late || failed ? Text({ color: 'warning', children: [`  ${text}`] }) : dim(`  ${text}`))]
     }
     const columnBox = (c) => {
       const cards = columnCards(S.notes, board, c.id)
@@ -386,6 +388,37 @@ export function boardsScreen($, e, kit) {
       Button({ key: 'arcade-board-resume-auto', label: `Продолжать очередь после сброса лимита: ${armed ? 'да' : 'нет'}`, onPress: () => armBoard($, id, !armed) }),
       dim('  кончился лимит Claude — очередь встанет и сама продолжится после сброса'),
     ]
+    // Проверка между карточками очереди (check.js): команда — только этого компьютера и задаётся только здесь; идёт —
+    // какая и после какой карточки; последний итог — с концом вывода
+    const running = S.qc.running?.board === id ? S.qc.running : null
+    const lastCheck = running ? null : S.qc.last[id]
+    const checkItems = [
+      keep(
+        Input({
+          key: `arcade-board-check-${field}`,
+          label: tr('Проверка между карточками', S.lang),
+          placeholder: 'npm test',
+          value: S.qc.boards[id] ?? '',
+          submitLabel: tr('Сохранить', S.lang),
+          onSubmit: async (value) => {
+            const cmd = await setCheck($, 'boards', id, value)
+            say(cmd ? 'Проверка сохранена: очередь запустит её после каждой карточки.' : 'Проверки нет: очередь не проверяет карточки.', false)
+          },
+        }),
+      ),
+      dim('  Claude перенёс карточку в последнюю колонку — очередь запускает команду в папке сессии. Код 0 — следующая карточка; иначе карточка вернётся во вторую колонку, а Claude получит конец вывода. Команда идёт без запроса разрешения, как хук Claude Code, и хранится только на этом компьютере: ни Claude, ни участники доски её не поменяют.'),
+      ...(running ? [keep(dim(`  ${fill(tr('Идёт проверка после «{0}»: {1}', S.lang), [running.title, running.cmd])}`))] : []),
+      ...(lastCheck
+        ? [
+            keep(
+              lastCheck.ok
+                ? dim(`  ✓ ${fill(tr('Проверка после «{0}» прошла', S.lang), [lastCheck.title])} · ${hhmm(lastCheck.at)}`)
+                : Text({ color: 'warning', children: [`  ⚠ ${fill(tr('Проверка после «{0}» не прошла', S.lang), [lastCheck.title])} — ${codeText(lastCheck.code)} · ${hhmm(lastCheck.at)}`] }),
+            ),
+            ...(lastCheck.ok ? [] : lastCheck.tail.split('\n').slice(-5).filter(Boolean).map((l) => keep(dim(`    ${l.slice(0, 200)}`)))),
+          ]
+        : []),
+    ]
     const missedHere = S.qr.missed.filter((m) => m.board === id)
     const missedLines = missedHere.map((m) =>
       Box({ key: `arcade-board-missed-${id}`, flexDirection: 'row', columnGap: 2, children: [keep(Text({ color: 'warning', children: [`  ${m.text}`] })), Button({ key: 'arcade-board-missed-off', label: '×', plain: true, dimColor: true, onPress: () => missedClear($, id) })] }),
@@ -468,6 +501,8 @@ export function boardsScreen($, e, kit) {
       ...queueLine,
       ...matesLine,
       ...missedLines,
+      gap,
+      ...checkItems,
       gap,
       // Задачи трекера — карточками через коннектор Claude: Arcade с трекерами не говорит, ключи ему не нужны
       ...trackerItems,
