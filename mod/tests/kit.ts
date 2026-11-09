@@ -134,6 +134,9 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   const toasts: string[] = []
   const gits: string[][] = [] // с чем мод запускал git
   const clipboard = { exit: 0, calls: [] as any[] } // системный буфер обмена: чем программа закончит и что ей дали
+  // Проверка между карточками очереди: answer — { exitCode, stdout, stderr }, функция (команда) → такой ответ, 'time' —
+  // время вышло; calls — с чем запускали (команда — в ARCADE_CHECK)
+  const checks = { answer: { exitCode: 0, stdout: '', stderr: '' } as any, calls: [] as any[] }
   const clock = mock.clock(on)
   // Тесты пишутся на русском интерфейсе: если окружение не задаёт язык, пусть он будет русским (без него теперь — английский)
   mock.env(on, 'LANG' in env || 'LC_ALL' in env || 'LC_MESSAGES' in env ? env : { ...env, LANG: 'ru_RU.UTF-8' })
@@ -143,6 +146,14 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     if (e.argv[0] === 'git') {
       gits.push(e.argv)
       return { value: agents?.git ? agents.git(e.argv) : { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git' } }
+    }
+    // Проверка между карточками: команда — в переменной ARCADE_CHECK
+    if (e.init?.env?.ARCADE_CHECK !== undefined) {
+      const cmd = e.init.env.ARCADE_CHECK
+      checks.calls.push({ argv: e.argv, cmd, cwd: e.init.cwd, timeoutMs: e.init.timeoutMs })
+      const answer = typeof checks.answer === 'function' ? checks.answer(cmd) : checks.answer
+      if (answer === 'time') return { deny: `process timed out after ${e.init.timeoutMs} ms` }
+      return { value: { exitCode: 0, stdout: '', stderr: '', ...answer } }
     }
     // Системный буфер обмена: текст — во входном потоке программы
     if (e.init?.stdin !== undefined) {
@@ -298,7 +309,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits }
+  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits, checks }
 }
 
 export const BASH_MS = 2_000

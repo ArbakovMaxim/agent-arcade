@@ -3222,12 +3222,16 @@ test('итоги дня: журнал — что ушло Claude и что сд�
       { at: 4, kind: 'deleted', id: 'p1', title: 'x' },
       { at: 5, kind: 'gave', id: 'P!', title: 'x' },
       { at: 6, kind: 'gave', id: 'p2', title: '' },
+      { at: 7, kind: 'check', id: 'c1', title: 'Логин', board: 'Sprint', ok: false, code: 1, cmd: 'npm test', tail: '1\n2\n3\n4\n5\n6' },
+      { at: 8, kind: 'check', id: 'c1', title: 'Логин', ok: 'да', code: 'x', cmd: 5 },
       null,
     ]),
   ).toEqual([
     { at: 1, kind: 'gave', id: 'p1', title: 'Релиз' },
     { at: 2, kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'claude' },
     { at: 3, kind: 'checked', id: 'p1', title: 'Релиз', n: 1 },
+    { at: 7, kind: 'check', id: 'c1', title: 'Логин', board: 'Sprint', ok: false, code: 1, cmd: 'npm test', tail: '2\n3\n4\n5\n6' },
+    { at: 8, kind: 'check', id: 'c1', title: 'Логин', ok: false, code: -1, cmd: '', tail: '' },
   ])
   expect(restoreLog('x')).toEqual([])
   // Старше двух недель — прочь; записей — не больше LOG_MAX
@@ -3313,6 +3317,36 @@ test('итоги дня: журнал — что ушло Claude и что сд�
     ].join('\n'),
   )
   expect(summaryBody({ gave: [], done: [], checked: [], doing: [] }, t, name)).toBe('## Отдано Claude\nПусто.\n\n## Сделано\nПусто.\n\n## В работе\nПусто.')
+  expect(sum.checks).toEqual([])
+
+  // Проверки между карточками: у карточки — последняя; не прошла позже, чем её перенесли в «Готово», — не сделана
+  const checkLog = [
+    ...log,
+    { at: hour('11:10'), kind: 'check', id: 'c1', title: 'Логин', board: 'Sprint', ok: true, code: 0, cmd: 'npm test', tail: '' },
+    { at: hour('11:20'), kind: 'check', id: 'c1', title: 'Логин', board: 'Sprint', ok: false, code: 1, cmd: 'npm test', tail: 'FAIL login.test.js\n1 failed' },
+    { at: hour('11:40'), kind: 'check', id: 'c8', title: 'Удалённая', board: 'Старая', ok: true, code: 0, cmd: 'cargo build', tail: '' },
+    { at: hour('12:00'), kind: 'check', id: 'c3', title: 'Тег', board: 'Sprint', ok: false, code: -1, cmd: 'npm test', tail: '' },
+  ]
+  const withChecks: any = daySummary(checkLog, notes, '2026-11-02')
+  expect(withChecks.done.map((x: any) => x.id)).toEqual(['c8'])
+  expect(withChecks.checks).toEqual([
+    { id: 'c1', title: 'Логин', board: 'Sprint', ok: false, code: 1, cmd: 'npm test', tail: 'FAIL login.test.js\n1 failed' },
+    { id: 'c8', title: 'Удалённая', board: 'Старая', ok: true, code: 0, cmd: 'cargo build', tail: '' },
+    { id: 'c3', title: 'Тег', board: 'Sprint', ok: false, code: -1, cmd: 'npm test', tail: '' },
+  ])
+  // Claude исправил и снова перенёс — сделана
+  const fixed = [...checkLog, { at: hour('12:30'), kind: 'done', id: 'c1', title: 'Логин', board: 'Sprint', by: 'claude' }]
+  expect(daySummary(fixed, notes, '2026-11-02').done.map((x: any) => x.id)).toEqual(['c1', 'c8'])
+  expect(summaryBody(withChecks, t, name).split('\n\n').at(-1)).toBe(
+    [
+      '## Проверки между карточками',
+      '- ✗ Логин · доска «Sprint»: `npm test` — код 1',
+      '    FAIL login.test.js',
+      '    1 failed',
+      '- ✓ Удалённая · доска «Старая»: `cargo build`',
+      '- ✗ Тег · доска «Sprint»: `npm test` — время вышло или команда не запустилась',
+    ].join('\n'),
+  )
 
   // В чат — текстом: заголовки с двоеточием, чек-лист значками, длинное — обрезано
   expect(chatText({ title: 'Итоги 02.11', body }, MAX_TEXT).split('\n').slice(0, 5)).toEqual(['Итоги 02.11', '', 'Отдано Claude:', '- Релиз', '- Тег · доска «Sprint»'])
@@ -5086,6 +5120,133 @@ test('доска: очередь для Claude — карточки по одн�
     await done('I')
   })
   expect(submits.length).toBe(9)
+})
+
+test('доска: проверка между карточками — код 0 даёт следующую, иначе карточка во «В работе», очередь стоит, Claude получает вывод; своя команда карточки и без команды', async ($, on) => {
+  const { checks, clock, saved, submits, toasts } = stubs(on, { env: WINDOWS, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const page = (title: string) => pages().find((p) => p.title === title)
+  const board = () => pages().find(isBoard)
+  const col = (title: string) => columnOf(page(title), board().board.cols)
+  const card = (n: number) => submits[n].text.match(/\(id (\w+)\)/)[1]
+  const done = (title: string) => $.tool.call({ tool: NOTES, action: 'move', page: page(title).id, column: 'done' })
+  const turn = async (id: string, n: number, work: () => Promise<unknown>) => {
+    await $.turn.start({ turnId: id, text: submits[n].text })
+    await work()
+    await $.turn.complete({ turnId: id, answer: '', reason: 'answer' })
+    await clock.advance(10)
+  }
+  const label = async () => (await ui.find({ key: 'arcade-board-queue' }))?.props.label
+  const openCard = async (title: string) => {
+    await ui.press({ key: `arcade-card-${page(title).id}` })
+    await ui.press({ key: `arcade-card-${page(title).id}` })
+  }
+  const stopped = (title: string, why: string) => `Проверка после «${title}» не прошла — ${why}. Карточка вернулась в «В работе», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.`
+
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
+  for (const title of ['A', 'B', 'C', 'D']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-menu-boards' })
+  await ui.press({ key: `arcade-desk-${board().id}` })
+
+  // Команда доски — с экрана доски; хранится только на этом компьютере, в блокнот не попадает
+  await noteInput(ui, 'arcade-board-check-', '  npm test ')
+  expect(await text('Проверка сохранена: очередь запустит её после каждой карточки.')).toBeDefined()
+  expect(await text(/^  Claude перенёс карточку в последнюю колонку — очередь запускает команду в папке сессии\./)).toBeDefined()
+  expect(saved.get('queueCheck')).toEqual({ boards: { [board().id]: 'npm test' }, cards: {} })
+  expect(JSON.stringify(pages())).not.toContain('npm test')
+
+  // У карточки C — своя команда; пусто — как у доски
+  await openCard('C')
+  expect((await ui.find({ key: (await noteKey(ui, 'arcade-note-check-'))! }))?.props.placeholder).toBe('как у доски: npm test')
+  await noteInput(ui, 'arcade-note-check-', 'npm run lint')
+  expect(await text('Своя проверка сохранена.')).toBeDefined()
+  expect(saved.get('queueCheck')).toEqual({ boards: { [board().id]: 'npm test' }, cards: { [page('C').id]: 'npm run lint' } })
+  await ui.press({ key: 'arcade-back' })
+
+  // Код 0 — следующая карточка; команда — в папке сессии, не дольше 10 минут, через переменную окружения
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(card(0)).toBe(page('A').id)
+  await turn('t1', 0, () => done('A'))
+  expect(checks.calls).toEqual([{ argv: ['cmd.exe', '/d', '/c', '%ARCADE_CHECK%'], cmd: 'npm test', cwd: undefined, timeoutMs: 600_000 }])
+  expect(submits.length).toBe(2)
+  expect(card(1)).toBe(page('B').id)
+  expect(col('A')).toBe('done')
+  expect(await text(/^  ✓ Проверка после «A» прошла · \d\d:\d\d$/)).toBeDefined()
+
+  // Иначе — очередь стоит, карточка во «В работе» с пометкой, а Claude получает конец вывода
+  checks.answer = { exitCode: 1, stdout: '\x1b[31mFAIL\x1b[0m b.test.js\n', stderr: '1 failed\n' }
+  await turn('t2', 1, () => done('B'))
+  expect(checks.calls.length).toBe(2)
+  expect(submits.length).toBe(3)
+  expect(submits[2].text.split('\n')).toEqual([
+    `Проверка между карточками не прошла: карточка «B» (id ${page('B').id}) на доске «Sprint».`,
+    'Команда: npm test',
+    'Итог: код 1.',
+    '',
+    'Конец вывода:',
+    '```',
+    'FAIL b.test.js',
+    '1 failed',
+    '```',
+    '',
+    'Карточка вернулась в колонку «В работе». Исправь, что сломалось, и снова перенеси карточку в колонку «Готово» (колонка done) действием move инструмента mcp__arcade__notes. Команду можно запустить и самому — как обычно, с разрешения. Очередь продолжит человек, когда запустит её снова: Arcade сначала проверит эту карточку.',
+  ])
+  expect(col('B')).toBe('doing')
+  expect(page('B').body).toMatch(/^⚠ Проверка не прошла — код 1, \d\d:\d\d$/)
+  expect(await text(stopped('B', 'код 1'))).toMatchObject({ props: { color: 'warning' } })
+  expect(toasts).toContain(stopped('B', 'код 1'))
+  expect(await label()).toBe('Очередь для Claude')
+  expect(await text(/^  ⚠ Проверка после «B» не прошла — код 1 · \d\d:\d\d$/)).toMatchObject({ props: { color: 'warning' } })
+  expect(await text('    FAIL b.test.js')).toBeDefined()
+  expect(await text(/^  ⚠ проверка не прошла/)).toMatchObject({ props: { color: 'warning' } })
+  expect((saved.get('daylog') as any[]).filter((x) => x.kind === 'check').map((x) => [x.title, x.ok, x.code, x.cmd, x.tail])).toEqual([
+    ['A', true, 0, 'npm test', ''],
+    ['B', false, 1, 'npm test', 'FAIL b.test.js\n1 failed'],
+  ])
+
+  // Claude исправил и снова перенёс — очередь стоит, пока её не запустят; запустили — сначала снова проверка этой карточки
+  checks.answer = { exitCode: 0 }
+  await turn('t3', 2, () => done('B'))
+  expect(submits.length).toBe(3)
+  expect(checks.calls.length).toBe(2)
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(checks.calls.map((c) => c.cmd)).toEqual(['npm test', 'npm test', 'npm test'])
+  expect(page('B').body).toBe('')
+  expect(col('B')).toBe('done')
+  expect(card(3)).toBe(page('C').id)
+
+  // Своя команда карточки — вместо доски; время вышло — тоже не прошла
+  checks.answer = (cmd: string) => (cmd === 'npm run lint' ? 'time' : { exitCode: 0 })
+  await turn('t4', 3, () => done('C'))
+  expect(checks.calls.at(-1).cmd).toBe('npm run lint')
+  expect(submits.length).toBe(5)
+  expect(submits[4].text.split('\n').slice(1, 3)).toEqual(['Команда: npm run lint', 'Итог: время вышло.'])
+  expect(await text(stopped('C', 'время вышло'))).toBeDefined()
+  expect(col('C')).toBe('doing')
+
+  // Без команды — как раньше: карточки идут без проверки, а старая пометка снимается
+  await noteInput(ui, 'arcade-board-check-', '')
+  expect(await text('Проверки нет: очередь не проверяет карточки.')).toBeDefined()
+  await openCard('C')
+  expect((await ui.find({ key: (await noteKey(ui, 'arcade-note-check-'))! }))?.props.placeholder).toBe('у доски проверки нет')
+  await noteInput(ui, 'arcade-note-check-', ' ')
+  expect(await text('Своей проверки нет — как у доски.')).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  expect(saved.get('queueCheck')).toEqual({ boards: {}, cards: {} })
+  await turn('t5', 4, () => done('C'))
+  const calls = checks.calls.length
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(page('C').body).toBe('')
+  expect(card(5)).toBe(page('D').id)
+  await turn('t6', 5, () => done('D'))
+  expect(checks.calls.length).toBe(calls)
+  expect(submits.length).toBe(6)
+  expect(await text('Очередь пройдена: в колонке «Сделать» карточек больше нет.')).toBeDefined()
+  await ui.unmount()
 })
 
 test('доска: очередь в двух сессиях — перенос карточки в «Готово» затёрла другая сессия, очередь не встаёт', async ($, on) => {
