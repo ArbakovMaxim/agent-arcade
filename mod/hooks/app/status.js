@@ -100,6 +100,7 @@ export function statusText(now) {
   if (S.status === 'working') return `Агент работает ${workedText(workedSeconds(now))}`
   if (S.status === 'permission') return S.ask?.kind === 'question' ? 'Агент задал вопрос — Esc, чтобы ответить' : 'Агент ждёт разрешения — Esc, чтобы ответить'
   if (S.status === 'done') return 'Агент закончил — Esc, чтобы вернуться'
+  if (S.status === 'background') return `Агент работает в фоне · агентов: ${S.bg.n}`
   return 'Агент свободен'
 }
 

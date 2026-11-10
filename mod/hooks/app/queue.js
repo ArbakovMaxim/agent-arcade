@@ -147,7 +147,7 @@ export async function startQueue($, id, { retry = '', auto = false } = {}) {
     const other = S.notes.find((p) => p.id === S.queue.board)
     return say(`${t('Очередь уже идёт на доске')} «${other?.title ?? ''}». ${t('Останови её там, чтобы начать здесь.')}`)
   }
-  if (S.status === 'working' || S.status === 'permission') return say(t('Claude занят — запусти очередь, когда он закончит ход.'))
+  if (S.status === 'working' || S.status === 'permission' || S.status === 'background') return say(t('Claude занят — запусти очередь, когда он закончит ход.'))
   if (S.qc.running) return say(t('Идёт проверка между карточками — запусти очередь, когда она кончится.'))
   if (!(await editNotes($, (list) => list))) return
   nb.note = ''
@@ -354,7 +354,7 @@ export async function resumeTick($) {
       await saveWait($)
       return missedAdd($, w, 'Очередь «{0}» не продолжилась после сброса лимита: Claude Code был закрыт или компьютер спал.')
     }
-    if (S.queue || S.status === 'working' || S.status === 'permission') return
+    if (S.queue || S.status === 'working' || S.status === 'permission' || S.status === 'background') return
     // Окно всё ещё кончилось (лимит сдвинулся, сброс другого окна) — ждать до нового сброса
     const u = await usageNow($)
     if (S.qr.wait !== w) return
@@ -445,14 +445,19 @@ export function endQueue($) {
 }
 
 // Начался ход Claude. Ход с карточкой очереди — её; продолжение без текста и ход, где Claude по просьбе Arcade открывает
-// игру и работает дальше, — тоже её. Любой другой — человек попросил о своём: очередь встаёт
-export function queueTurnStart($, e) {
+// игру и работает дальше, — тоже её. wake — ход по уведомлению о фоновой задаче (кончился агент в фоне): та же работа,
+// очередь не встаёт. Любой другой — человек попросил о своём: очередь встаёт
+export function queueTurnStart($, e, wake = false) {
   const queue = S.queue
   if (!queue) return
   const text = e.text ?? ''
   if (queue.sent && text.includes(`(id ${queue.card})`)) {
     queue.sent = false
     queue.turn = e.turnId
+    return
+  }
+  if (wake) {
+    if (!queue.sent) queue.turn = e.turnId
     return
   }
   if (!queue.sent && (!text.trim() || S.asking)) {

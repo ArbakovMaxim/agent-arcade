@@ -54,9 +54,9 @@ export async function drawPane($, e) {
   // поле то же — набранное не сбивается
   if (game || S.menu !== 'search') finder.shown = false
 
-  // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает — жёлтый, ждёт разрешения —
-  // красный, закончил — зелёный, свободен — серый. Цвета — ключи темы: читаются и на светлой, и на тёмной
-  const statusColor = S.status === 'permission' ? 'error' : S.status === 'working' ? 'warning' : S.status === 'done' ? 'success' : 'inactive'
+  // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает (и в фоне) — жёлтый, ждёт
+  // разрешения — красный, закончил — зелёный, свободен — серый. Цвета — ключи темы: читаются и на светлой, и на тёмной
+  const statusColor = S.status === 'permission' ? 'error' : S.status === 'working' || S.status === 'background' ? 'warning' : S.status === 'done' ? 'success' : 'inactive'
   const headerOf = (extra = []) => Box({
     flexDirection: 'row',
     columnGap: 2,

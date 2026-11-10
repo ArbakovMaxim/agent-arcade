@@ -86,8 +86,9 @@ function resume($) {
   }
   S.ask = null
   if (S.status !== 'permission') return
-  S.status = 'working'
-  log('агент снова работает')
+  // Разрешения ждал субагент в фоне, а главный ход уже кончился — снова «в фоне», не «работает»
+  S.status = S.agentTurn || !S.bg?.end ? 'working' : 'background'
+  log(S.status === 'working' ? 'агент снова работает' : 'агенты снова работают в фоне')
   $.ui.invalidate('ui.render')
 }
 

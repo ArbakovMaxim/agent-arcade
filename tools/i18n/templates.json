@@ -3,6 +3,7 @@
   "Agent has been working for {0} — play? Waiting online: {1}",
   "Agent has been working for {0} — play?",
   "Agent has been working for {0}",
+  "Agent is working in the background · agents: {0}",
   "{0} s",
   "{0} min",
   "{0} min {1} s",

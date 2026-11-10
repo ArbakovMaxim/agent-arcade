@@ -1141,6 +1141,8 @@ const EXACT = {
   'ждёт разрешения': 'waiting for permission',
   'закончил ход': 'finished the turn',
   'работает': 'working',
+  'работает в фоне': 'working in the background',
+  'работает в фоне · агентов: {0}': 'working in the background · agents: {0}',
   'свободна': 'idle',
   'меньше минуты': 'less than a minute',
   '«{0}» на доске «{1}»': '“{0}” on the board “{1}”',
@@ -1369,6 +1371,7 @@ const RULES = [
   [/^Arcade · (.+)$/, (m) => `Arcade · ${tr(m[1], 'en')}`], // заголовок списка: «Arcade · Книги»
   [/^добровольно, на развитие Arcade — (.+)$/, (m) => `voluntary, for Arcade’s development — ${m[1]}`],
   [/^Страница поддержки: (.+)$/, (m) => `Support page: ${m[1]}`],
+  [/^Агент работает в фоне · агентов: (\d+)$/, (m) => `Agent is working in the background · agents: ${m[1]}`],
   [/^Агент работает (.+)$/, (m) => `Agent has been working for ${dur(m[1])}`],
   [/^(\d+) (игра|игры|игр)$/, (m) => games(m[1])],
   [/^Графика: (\S+)(.*)$/, (m) => `Graphics: ${GRAPHICS[m[1]] ?? m[1]}${m[2].replace('сейчас', 'now').replace('пиксели', 'pixels').replace('символы', 'characters')}`],
