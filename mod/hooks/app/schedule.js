@@ -1,13 +1,15 @@
 // Arcade: задания по расписанию — «Дать Claude» у события календаря. В своё время событие даёт Claude очередь доски,
 // одну карточку, шаблон из «Промптов» или свой текст — в открытой сессии той папки, где задание дали, и только в одной.
 // Claude занят — задание ждёт конца хода. Ни одной сессии этой папки не было — «Пропущено» с «Запустить сейчас»: задним
-// числом само не идёт. Задание уходит обычным сообщением в режиме разрешений сессии: новых прав Arcade не даёт
+// числом само не идёт. Задание уходит обычным сообщением в режиме разрешений сессии: новых прав Arcade не даёт.
+// Пропущенное говорит о себе сразу: в срок сессии его папки не было — любая запущенная сессия с Arcade показывает
+// системное уведомление (одна, как напоминания). Само задание в чужой папке не идёт: там другой контекст и другие права
 import { fill } from '../chats.js'
 import { MISSED_MS, dueTasks, markTask } from '../calendar.js'
 import { tr } from '../i18n.js'
 import { isProjectBoard, isPrompts } from '../notes.js'
 import { samePath } from './agents.js'
-import { CLAIM_MS, LATE_MS, calendarChanged, fresh, me, refreshCalendar } from './calendar.js'
+import { CLAIM_MS, LATE_MS, calendarChanged, fresh, me, osNotify, refreshCalendar } from './calendar.js'
 import { startQueue } from './queue.js'
 import { S, cal } from './state.js'
 import { log } from './status.js'
@@ -25,6 +27,17 @@ S.sc = { going: false, read: 0, gap: 0 }
 // Задание этой сессии: дано в её папке (или без папки — тогда в любой)
 const mine = (ev) => Boolean(ev.give) && (!ev.cwd || samePath(ev.cwd, S.ag?.path))
 const busy = (now) => Boolean(S.queue) || S.status === 'working' || S.status === 'permission' || S.status === 'background' || now < S.sc.gap
+// Задание другой папки, которое в свой срок никто не взял: прошло больше LATE_MS (сессия той папки взяла бы его сразу
+// или отметила held, если Claude занят), но не больше MISSED_MS, и о нём ещё не сказали
+const folder = (p) => String(p ?? '').split(/[\\/]+/).filter(Boolean).pop() || p
+function lostTasks(list, now) {
+  if (!S.ag?.path) return []
+  const others = list.filter((e) => e.give && e.cwd && !samePath(e.cwd, S.ag.path))
+  return dueTasks(others, now).filter((x) => {
+    const ev = list.find((e) => e.id === x.id)
+    return now - x.at > LATE_MS && now - x.at <= MISSED_MS && ev.held !== x.at && ev.warned !== x.at
+  })
+}
 
 // Шаг — вместе с отметками сессий и «Очередью после сброса лимита» (resumeTick: тот же S.qr.awake — с каких пор сессия
 // на ногах). Пришло время задания — взять его: отметка своей сессией, через CLAIM_MS перечитать — запускает та, чья
@@ -38,6 +51,7 @@ export async function scheduleTick($) {
       S.sc.read = now
       await refreshCalendar($)
     }
+    if (lostTasks(S.calendar, now).length) await warnLost($, now)
     if (!dueTasks(S.calendar.filter(mine), now).length) return
     const taken = await fresh($, async () => {
       const before = S.calendar
@@ -75,11 +89,16 @@ export async function scheduleTick($) {
     // x — раз события до отметки, missed у него прежний: пропущенный — тот, что в календаре сейчас помечен missed
     const missedNow = ours.filter((x) => S.calendar.some((e) => e.id === x.id && e.missed === x.at))
     const toRun = ours.find((x) => !missedNow.includes(x))
+    // Всплывашка — всегда (человек тут, в этой сессии); системное уведомление — если о пропуске ещё не сказала сессия
+    // другой папки
+    const loud = []
     for (const x of missedNow) {
       const text = fill(t('Пропущено по расписанию: «{0}» — Claude Code был закрыт или компьютер спал. Запустить можно в календаре Arcade.'), [x.title])
       log(`по расписанию: ${text}`)
       $.ui.toast(text)
+      if (!S.calendar.some((e) => e.id === x.id && e.warned === x.at)) loud.push(text)
     }
+    if (loud.length) osNotify($, loud.join('\n'))
     if (!toRun) return
     // Пока брали, Claude мог занять ход — тогда задание снова ждёт его конца
     if (busy(await $.clock.now())) {
@@ -92,6 +111,31 @@ export async function scheduleTick($) {
   } finally {
     S.sc.going = false
   }
+}
+
+// Сказать о заданиях других папок, которые в срок никто не взял: отметка своей сессией, через CLAIM_MS перечитать —
+// говорит та, чья отметка осталась. Сессия той папки, когда её запустят, сама отметит пропущенное с «Запустить сейчас»
+async function warnLost($, now) {
+  const marked = await fresh($, async () => {
+    const lost = lostTasks(S.calendar, now)
+    if (!lost.length) return []
+    let list = S.calendar
+    for (const x of lost) list = markTask(list, x.id, { warned: x.at, warnedBy: me })
+    await calendarChanged($, list)
+    return lost
+  })
+  if (!marked.length) return
+  await new Promise((done) => $.clock.after(CLAIM_MS, done))
+  const ours = await fresh($, async () => marked.filter((x) => S.calendar.some((e) => e.id === x.id && e.warned === x.at && e.warnedBy === me)))
+  if (!ours.length) return
+  const lines = ours.map((x) =>
+    fill(t('Пропущено по расписанию: «{0}» — в папке {1} не было запущенной сессии Claude Code. Открой сессию этой папки и нажми «Запустить сейчас» в календаре Arcade.'), [x.title, folder(x.cwd)]),
+  )
+  for (const text of lines) {
+    log(`по расписанию: ${text}`)
+    $.ui.toast(text)
+  }
+  osNotify($, lines.join('\n'))
 }
 
 // Отдать задание Claude и сказать, как вышло: '' — ушло, иначе — почему нет
