@@ -9,10 +9,10 @@ import { allPicked, askOf, isSent, pickOption, picksOf, sendAnswer } from '../ap
 import { pctText, usdText } from '../app/usage.js'
 import { changesOf, overlapsOf, reviewChanges } from '../app/changes.js'
 
-// Цвет состояния: ждёт разрешения — бедой, закончил ход — успехом, работает — подсказкой, свободна — серым
-const STATUS_COLOR = { permission: 'error', done: 'success', working: 'suggestion', idle: '' }
+// Цвет состояния: ждёт разрешения — бедой, закончил ход — успехом, работает (и в фоне) — подсказкой, свободна — серым
+const STATUS_COLOR = { permission: 'error', done: 'success', working: 'suggestion', background: 'suggestion', idle: '' }
 // Те же цвета для рамки и подложки карточки в Desktop
-const STATUS_HEX = { permission: '#e5484d', done: '#30a46c', working: '#3e63dd', idle: '#8b8d98' }
+const STATUS_HEX = { permission: '#e5484d', done: '#30a46c', working: '#3e63dd', background: '#3e63dd', idle: '#8b8d98' }
 
 // Сессии — в Desktop карточками, как события календаря, в терминале и VS Code — строками. Имена папок и названия
 // карточек — человека, без перевода (keep)
@@ -25,7 +25,9 @@ export function agentsScreen($, e, kit) {
   const strong = (text) => Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [text] } : { bold: true, children: [text] })
   const nameOf = (r) => (r.me ? `${r.name} · ${tr('эта сессия', S.lang)}` : r.name)
   const labelOf = (r) => (askOf(r)?.kind === 'question' ? 'ждёт ответа' : STATUS_LABEL[r.status] ?? STATUS_LABEL.idle)
-  const stateOf = (r) => `${tr(labelOf(r), S.lang)} · ${tr(agoText(now - r.since), S.lang)}`
+  // В фоне — и сколько там агентов: главный ход кончился, а они работают
+  const labelText = (r) => (r.status === 'background' && r.bg > 0 && !askOf(r) ? fill(tr('работает в фоне · агентов: {0}', S.lang), [r.bg]) : tr(labelOf(r), S.lang))
+  const stateOf = (r) => `${labelText(r)} · ${tr(agoText(now - r.since), S.lang)}`
   const cardOf = (r) => (r.card ? (r.card.boardTitle ? fill(tr('«{0}» на доске «{1}»', S.lang), [r.card.title, r.card.boardTitle]) : `«${r.card.title}»`) : '')
   const queueOf = (r) => (r.queue?.of ? fill(tr('Очередь: карточка {0} из {1}', S.lang), [r.queue.n, r.queue.of]) : '')
   // Контекст и расходы — по последнему ответу Claude в той сессии (цифры Claude Code)

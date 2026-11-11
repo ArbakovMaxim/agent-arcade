@@ -75,7 +75,10 @@ export const ARROWS = ['up', 'down', 'left', 'right']
 export const IME_CHARS = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
 
 // Состояние живёт в модуле и сбрасывается при перезагрузке кода; клавиши и последняя игра хранятся в $.store
-S.status = 'idle' // idle | working | permission | done
+S.status = 'idle' // idle | working | permission | done | background — главный ход кончился, агенты ещё работают в фоне
+// Фон (app/background.js): n — сколько агентов работает; end — отложенный конец хода { turnId, e }, пока ждём фон
+S.bg = { n: 0, zeroAt: 0, checking: false, end: null }
+S.wake = false // идёт ход по уведомлению о фоновой задаче (prompt.submit) — не просьба человека
 S.turnStartedAt = 0
 S.windowOpenedAt = 0 // когда в последний раз открылось окно игры в браузере: оттуда Claude Code не видно
 S.mine = [] // свои игры: { id, console, title, sha256 }; сами файлы — копии в папке данных

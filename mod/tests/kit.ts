@@ -70,7 +70,9 @@ export async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', agents, ask, deny, questionMs = 0 }: any = {}) {
+export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', agents, ask, deny, questionMs = 0, subagents = [] }: any = {}) {
+  // Субагенты и напарники сессии ($.agent.list): массив — тест меняет его по ходу; по умолчанию — никого
+  on('agent.list', () => ({ value: subagents.map((a: any) => ({ type: 'general-purpose', description: '', ...a })) }))
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
   const disk = new Map<string, any>(Object.entries(onDisk))
   // Тестовая среда приводит путь к виду своей ОС: на Linux — /work/D:\\…, на Windows — C:\\home\\…
