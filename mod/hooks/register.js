@@ -4,31 +4,32 @@
 // Здесь — только подписки на события Claude Code. Состояние и помощники — в hooks/app/, экраны панели — в hooks/screens/,
 // чистые модули без $ (каталог, переводы, ленты и т. п.) — рядом, в hooks/.
 import { parseCatalog, restoreCatalog, siteUrl } from './catalog.js'
-import { DETECT_ARGV, notifyCommand, parseDetection } from './browsers.js'
+import { DETECT_ARGV, parseDetection } from './browsers.js'
 import { detectLang, tr, translateTree } from './i18n.js'
 import { restoreMine } from './mine.js'
 import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
 import { NOTES_TOOL } from './notes.js'
 import { CALENDAR_TOOL } from './calendar.js'
 import { bookLang } from './books.js'
-import { CALENDAR_TOOL_NAME, DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, S, savedKeys } from './app/state.js'
+import { CALENDAR_TOOL_NAME, DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, PANE, S, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
 import { LOBBIES_EVERY_MS, log, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
 import { followPane, nesView, openPane, paneClosedBy, pressStart, readInput, releaseAll, runGameLoop, toLibrary, typedFrom } from './app/play.js'
 import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from './app/window.js'
-import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, closeWatchTab, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall, pressed } from './app/desktop.js'
+import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall, pressed } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownShares, syncBoard } from './app/work.js'
 import { calendarShown, calendarTool, loadCalendar, refreshCalendar, remindNow } from './app/calendar.js'
 import { scheduleTick } from './app/schedule.js'
-import { USAGE_POLL_MS, queueNext, queueStopCheck, queueTurnDone, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
+import { USAGE_POLL_MS, queueStopCheck, queueTurnStart, resumeStart, resumeTick, usagePoll } from './app/queue.js'
 import { loadChecks } from './app/check.js'
 import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
 import { changesPoll } from './app/changes.js'
 import { laterOn, laterSet, startLater } from './app/later.js'
 import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
+import { bgCheck, bgClear, bgCount, bgHold, bgResume, turnDone, wakeText } from './app/background.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
@@ -146,6 +147,8 @@ export function register(on) {
       // Отметка сессии — маленькая запись раз в несколько секунд; чужие читаем, только когда они нужны. Очередь, которую
       // остановили во всех сессиях, — тут же
       $.clock.every(AGENT_TICK_MS, async () => {
+        // Главный ход кончился, а агенты в фоне — сколько их ещё и не пора ли сказать «закончил»
+        await bgCheck($)
         await agentsTick($)
         if (S.queue) await queueStopCheck($).catch(chatError)
         await resumeTick($)
@@ -241,6 +244,7 @@ export function register(on) {
 
   // Сессия закрывается: место её отметки — свободно (после /clear сессия та же, место остаётся за ней)
   on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') bgClear($)
     await leaveAgents($, e.reason).catch((err) => log(`отметка сессии: ${err?.message ?? err}`))
     return next(e)
   })
@@ -252,20 +256,37 @@ export function register(on) {
     return attached
   })
 
+  // Уведомление о фоновой задаче (конец субагента и т. п.) будит Claude новым ходом — это не просьба человека. Только
+  // смотрим: что пришло, то и уходит дальше
+  on('prompt.submit', async ($, e, next) => {
+    if (e.origin?.kind !== 'task-notification' || e.turnId) return next(e)
+    S.wake = true
+    try {
+      return await next(e)
+    } finally {
+      S.wake = false
+    }
+  })
+
   on('turn.start', async ($, e, next) => {
     if (e.agentId) return next(e) // ход субагента — не ход агента: Claude как работал, так и работает
     try {
+      const wake = S.wake || wakeText(e.text)
+      // Claude ждал агентов в фоне и проснулся от уведомления — та же работа: время и «сыграть?» — с её начала
+      const going = bgResume() && wake
       S.agentTurn = e.turnId
       S.toolsRunning = 0
       S.interrupting = false
       S.status = 'working'
-      S.turnStartedAt = await $.clock.now()
-      S.asked = false
+      if (!going) {
+        S.turnStartedAt = await $.clock.now()
+        S.asked = false
+      }
       S.askVisible = false
       S.agentAlert = null
       S.paused = false
       asksReset()
-      queueTurnStart($, e)
+      queueTurnStart($, e, wake)
       log('агент начал ход')
       if (DEBUG) await $.ui.toast('arcade: агент начал ход')
     } catch (err) {
@@ -311,7 +332,12 @@ export function register(on) {
   on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => (next.origin?.plugin === $.plugin.name ? next(e) : questionCall($, e, next)))
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId) return next(e) // субагент закончил — агент ещё нет: «агент закончил» не про него
+    // Субагент закончил — агент ещё нет: «агент закончил» не про него. Но если главный ход уже кончился и ждал фона —
+    // пора пересчитать, кто там остался
+    if (e.agentId) {
+      if (S.bg?.end) $.clock.after(0, () => bgCheck($))
+      return next(e)
+    }
     const turnId = S.agentTurn
     S.agentTurn = null
     S.toolsRunning = 0
@@ -330,44 +356,13 @@ export function register(on) {
         S.pendingOpen = null
         desktopNotice($, await askClaude($, url, true), '', url)
       }
-      S.status = 'done'
       S.askVisible = false
-      // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
-      if (S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
       $.clock.after(0, () => usagePoll($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`)))
       $.clock.after(0, () => changesPoll($).catch((err) => log(`что поменялось: ${err?.message ?? err}`)))
-      if (S.paneOpen && S.view !== 'library') {
-        S.agentAlert = 'done'
-        if (S.onDone === 'pause') {
-          S.paused = true
-          releaseAll()
-        }
-        if (S.onDone === 'close') await $.ui.close({ id: PANE }) // панель закрывается — игра встаёт на паузу, клавиатура у Claude Code
-      }
-      log('агент закончил ход')
-      // Смотришь во встроенном браузере — вкладку закрываем, если так выбрано: снова виден разговор. Ход, которым Claude
-      // открыл её по просьбе Arcade, — не тот: его конец вкладку не закрывает. Закрыть не дали (в режиме Auto
-      // классификатор не пускает вызовы мода) — хотя бы сообщаем
-      const watching = Boolean(S.backOnDone && S.watchTab && S.watchTab.turn !== turnId)
-      const back = watching && (await closeWatchTab($))
-      if (back) await $.ui.toast(tr('Агент закончил — вкладку закрыл, перед тобой снова разговор', S.lang))
-      else if (S.paneOpen) await $.ui.toast(tr('Агент закончил — Esc, чтобы вернуться', S.lang))
-      else if (watching) await $.ui.toast(tr('Агент закончил — можно возвращаться', S.lang))
-      // Играешь в окне браузера — Claude Code не видно: системное уведомление, если ход был долгим
-      const now = await $.clock.now()
-      const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS && now - S.turnStartedAt >= NOTIFY_AFTER_MS
-        ? notifyCommand(S.platform, 'Claude Code', tr('Агент закончил — можно возвращаться', S.lang))
-        : null
-      if (command) {
-        $.clock.after(0, async () => {
-          try {
-            await $.process.run(command.argv, { env: command.env, timeoutMs: 15_000 })
-          } catch (err) {
-            log(`уведомление не показалось: ${err?.message ?? err}`)
-          }
-        })
-      }
-      $.ui.invalidate('ui.render')
+      // Агенты, запущенные в фоне, ещё работают — Claude не закончил: «закончил» скажем, когда фон опустеет (background.js)
+      const n = await bgCount($)
+      if (n > 0) await bgHold($, turnId, e, n)
+      else await turnDone($, turnId, e)
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)
     }

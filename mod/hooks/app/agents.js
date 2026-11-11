@@ -27,8 +27,11 @@ S.agNotify = true // всплывашка «Сессия «…» ждёт раз
 S.agDone = false // всплывашка «В сессии «…» Claude закончил ход» — настройка agentsDone
 S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
 
-const STATUS_ORDER = { permission: 0, done: 1, working: 2, idle: 3 }
-export const STATUS_LABEL = { permission: 'ждёт разрешения', done: 'закончил ход', working: 'работает', idle: 'свободна' }
+const STATUS_ORDER = { permission: 0, done: 1, working: 2, background: 2, idle: 3 }
+// background — главный ход кончился, а агенты, запущенные из него, ещё работают (app/background.js)
+export const STATUS_LABEL = { permission: 'ждёт разрешения', done: 'закончил ход', working: 'работает', background: 'работает в фоне', idle: 'свободна' }
+// Работает сам или его агенты в фоне — одна работа: «с каких пор» не сбрасывается, когда Claude просыпается от их конца
+const busy = (status) => status === 'working' || status === 'background'
 
 const base = (p) => String(p ?? '').split(/[\\/]+/).filter(Boolean).pop() ?? ''
 const norm = (p) => String(p ?? '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
@@ -77,6 +80,7 @@ function recordOf(at) {
     name: ag.name,
     path: ag.path,
     status: ag.status,
+    bg: ag.status === 'background' ? S.bg.n : 0,
     since: ag.since,
     at,
     card: ag.card,
@@ -248,8 +252,8 @@ export async function agentsTick($) {
     if (ag.ready && now - ag.wrote > AGENT_TTL_MS * 0.8) ag.ready = false
     if (!ag.ready) await takeSlot($)
     if (S.status !== ag.status) {
+      if (!busy(S.status) || !busy(ag.status)) ag.since = now
       ag.status = S.status
-      ag.since = now
     }
     holdCheck(now)
     if (ag.ready && (bodyOf(recordOf(0)) !== ag.sent || now - ag.wrote >= AGENT_WRITE_MS)) await put($)
@@ -259,7 +263,7 @@ export async function agentsTick($) {
       if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
       notify($, others)
-      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at]).sort())
+      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
         if (shown) $.ui.invalidate('ui.render')
@@ -446,7 +450,7 @@ export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, since: ag.status === S.status ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }

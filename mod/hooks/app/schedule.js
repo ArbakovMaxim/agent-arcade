@@ -24,7 +24,7 @@ S.sc = { going: false, read: 0, gap: 0 }
 
 // Задание этой сессии: дано в её папке (или без папки — тогда в любой)
 const mine = (ev) => Boolean(ev.give) && (!ev.cwd || samePath(ev.cwd, S.ag?.path))
-const busy = (now) => Boolean(S.queue) || S.status === 'working' || S.status === 'permission' || now < S.sc.gap
+const busy = (now) => Boolean(S.queue) || S.status === 'working' || S.status === 'permission' || S.status === 'background' || now < S.sc.gap
 
 // Шаг — вместе с отметками сессий и «Очередью после сброса лимита» (resumeTick: тот же S.qr.awake — с каких пор сессия
 // на ногах). Пришло время задания — взять его: отметка своей сессией, через CLAIM_MS перечитать — запускает та, чья
