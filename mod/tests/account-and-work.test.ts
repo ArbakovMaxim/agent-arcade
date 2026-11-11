@@ -6817,6 +6817,14 @@ test('по расписанию: задание у события — что д�
   // Хранилище: задание с папкой и отметками — как было; кривое задание — без папки и отметок
   const { firedBy: _by, ...kept } = marked[0]
   expect(restoreCalendar([{ ...marked[0], firedBy: 'x'.repeat(21) }, { id: 'e2', title: 'b', day: '2026-11-02', remind: null, give: { kind: 'zzz' }, cwd: 'D:\\x', fired: 5 }])).toEqual([kept, { id: 'e2', title: 'b', day: '2026-11-02', remind: null, at: 0 }])
+  // «Пропущено» от сессии другой папки: какой раз и какая сессия сказала; кривое — прочь
+  const warned = restoreCalendar([
+    { ...schTask('ew1', 'a', '2026-11-02', '10:00', 'x'), warned: 7, warnedBy: 'sme' },
+    { ...schTask('ew2', 'b', '2026-11-02', '10:00', 'x'), warned: 'вчера', warnedBy: 'sme' },
+  ])
+  expect([warned.length, warned[0].warned, warned[0].warnedBy, 'warned' in warned[1], 'warnedBy' in warned[1]]).toEqual([2, 7, 'sme', false, false])
+  // Другое время — и эта отметка заново
+  expect(['warned', 'warnedBy'].filter((k) => k in updateEvent(warned, 'ew1', { time: '11:00' }, T0).list[0])).toEqual([])
 })
 
 test('по расписанию: Claude даёт задание инструментом календаря — цель по названию или id, в ответе задание и папка', () => {
@@ -6870,7 +6878,7 @@ test('по расписанию: Claude даёт задание инструме
 })
 
 test('по расписанию: свой текст уходит Claude в своё время и только в сессии своей папки; Claude занят — ждёт конца хода', HEAVY, async ($, on) => {
-  const { clock, saved, submits, toasts } = stubs(on, {
+  const { clock, saved, submits, toasts, notifies } = stubs(on, {
     env: AG_ENV,
     agents: AG_ME,
     submit: true,
@@ -6904,12 +6912,19 @@ test('по расписанию: свой текст уходит Claude в св
   await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
   await clock.advance(3_500)
   expect(submits.map((s) => s.text)).toEqual(['проверь открытые PR', 'подведи итоги дня'])
-  expect(said()).toEqual(['По расписанию: «Проверка» — ушло Claude.', 'По расписанию: «Итоги» — ушло Claude.'])
+  // Задание другой папки за LATE_MS никто не взял — здесь о нём сказано, но здесь оно не идёт
+  const lost = 'Пропущено по расписанию: «Чужая» — в папке api не было запущенной сессии Claude Code. Открой сессию этой папки и нажми «Запустить сейчас» в календаре Arcade.'
+  expect(said()).toEqual(['По расписанию: «Проверка» — ушло Claude.', lost, 'По расписанию: «Итоги» — ушло Claude.'])
+  expect(notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').map((n) => n.env.ARCADE_TEXT)).toEqual([lost])
+  expect(ev('e2')).toMatchObject({ warned: at('2026-11-02', '12:01'), warnedBy: ev('e1').firedBy })
+  expect(['fired', 'held', 'missed'].filter((k) => k in ev('e2'))).toEqual([])
   expect(ev('e3')).toMatchObject({ fired: at('2026-11-02', '12:03') })
   expect('held' in ev('e3')).toBe(false)
-  // Дважды одно и то же не уходит
+  // Дважды одно и то же не уходит и не говорится
   await clock.advance(60_000)
   expect(submits.length).toBe(2)
+  expect(said().length).toBe(3)
+  expect(notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').length).toBe(1)
 })
 
 test('по расписанию: очередь доски запускается сама; цели нет — всплывашка с причиной', HEAVY, async ($, on) => {
@@ -6939,7 +6954,7 @@ test('по расписанию: очередь доски запускаетс�
 })
 
 test('по расписанию: пропущенное — всплывашкой и в календаре с «Запустить сейчас»; давнее — молча', HEAVY, async ($, on) => {
-  const { clock, saved, submits, toasts } = stubs(on, {
+  const { clock, saved, submits, toasts, notifies } = stubs(on, {
     env: AG_ENV,
     agents: AG_ME,
     submit: true,
@@ -6957,16 +6972,21 @@ test('по расписанию: пропущенное — всплывашко
   const ev = (id: string) => (saved.get('calendar') as any[]).find((e) => e.id === id)
   const said = () => toasts.filter((t) => /расписанию/.test(t))
   await clock.advance(6_000)
-  // Сессии этой папки в своё время не было — само задним числом не идёт
+  // Сессии этой папки в своё время не было — само задним числом не идёт; задание другой папки — только словом и не здесь
   expect(submits).toEqual([])
-  expect(said()).toEqual([
+  const lost = 'Пропущено по расписанию: «Чужое» — в папке api не было запущенной сессии Claude Code. Открой сессию этой папки и нажми «Запустить сейчас» в календаре Arcade.'
+  const own = [
     'Пропущено по расписанию: «Обзор» — Claude Code был закрыт или компьютер спал. Запустить можно в календаре Arcade.',
     'Пропущено по расписанию: «Ревью» — Claude Code был закрыт или компьютер спал. Запустить можно в календаре Arcade.',
-  ])
+  ]
+  expect(said()).toEqual([lost, ...own])
+  // Системным уведомлением — тоже: Claude Code мог быть свёрнут
+  expect(notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').map((n) => n.env.ARCADE_TEXT)).toEqual([lost, own.join('\n')])
   expect(ev('e1')).toMatchObject({ fired: at('2026-11-02', '10:00'), missed: at('2026-11-02', '10:00') })
   expect(ev('e3').fired).toBe(at('2026-10-30', '10:00'))
   expect(['firedBy', 'missed'].filter((k) => k in ev('e3'))).toEqual([])
   expect(['fired', 'missed'].filter((k) => k in ev('e4'))).toEqual([])
+  expect(ev('e4').warned).toBe(at('2026-11-02', '10:00'))
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'arcade-menu-calendar' })
@@ -6979,7 +6999,7 @@ test('по расписанию: пропущенное — всплывашко
   // «Запустить сейчас» — задание уходит Claude
   await ui.press({ key: 'arcade-cal-run-e1' })
   expect(submits.map((s) => s.text)).toEqual(['что горит?'])
-  expect(said()[2]).toBe('По расписанию: «Обзор» — ушло Claude.')
+  expect(said()[3]).toBe('По расписанию: «Обзор» — ушло Claude.')
   expect(await text('Задание ушло Claude.')).toBeDefined()
   expect('missed' in ev('e1')).toBe(false)
   expect(await ui.find({ key: 'arcade-cal-run-e1' })).toBeUndefined()
@@ -6993,6 +7013,87 @@ test('по расписанию: пропущенное — всплывашко
   expect(submits.length).toBe(1)
   await ui.press({ key: 'arcade-back' })
   expect(await text('Пропущено')).toBeUndefined()
+  await ui.unmount()
+})
+
+test('по расписанию: запущена только сессия другой папки — одно системное уведомление в срок, задание здесь не идёт', HEAVY, async ($, on) => {
+  const { clock, saved, submits, toasts, notifies } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    submit: true,
+    stored: { calendar: [schTask('e1', 'Деплой', '2026-11-02', '12:01', 'выкати релиз', 'D:\\work\\api')] },
+  })
+  await clock.advance(T0)
+  await start($)
+  const ev = (id: string) => (saved.get('calendar') as any[]).find((e) => e.id === id)
+  const said = () => toasts.filter((t) => /расписанию/.test(t))
+  const sent = () => notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').map((n) => n.env.ARCADE_TEXT)
+  // Пока сессия той папки ещё может взять задание (LATE_MS) — молчим
+  await clock.advance(170_000)
+  expect([said(), sent()]).toEqual([[], []])
+  // Не взяла — говорит запущенная сессия другой папки: всплывашкой и системным уведомлением
+  await clock.advance(20_000)
+  const lost = 'Пропущено по расписанию: «Деплой» — в папке api не было запущенной сессии Claude Code. Открой сессию этой папки и нажми «Запустить сейчас» в календаре Arcade.'
+  expect(said()).toEqual([lost])
+  expect(sent()).toEqual([lost])
+  expect(submits).toEqual([])
+  // Пропущенным его отметит сессия той папки, когда её запустят: «Запустить сейчас» — там
+  expect(['fired', 'firedBy', 'held', 'missed'].filter((k) => k in ev('e1'))).toEqual([])
+  expect(ev('e1')).toMatchObject({ warned: at('2026-11-02', '12:01') })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  expect(await ui.find({ key: 'arcade-cal-run-e1' })).toBeUndefined()
+  await ui.unmount()
+  // Ещё раз о том же — нет
+  await clock.advance(10 * 60_000)
+  expect([said().length, sent().length, submits.length]).toEqual([1, 1, 0])
+})
+
+test('по расписанию: о пропущенном другой папки говорит одна сессия из всех запущенных', HEAVY, async ($, on) => {
+  const { clock, saved, toasts, notifies } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    stored: { calendar: [schTask('e1', 'Деплой', '2026-11-02', '11:00', 'выкати релиз', 'D:\\work\\api')] },
+  })
+  await clock.advance(T0)
+  await start($)
+  const ev = () => (saved.get('calendar') as any[])[0]
+  // Сессия пометила своей отметкой; пока она ждёт, другая сессия пометила своей
+  for (let i = 0; i < 100 && ev().warned === undefined; i++) await clock.advance(100)
+  expect(ev().warnedBy).toMatch(/^s[a-z0-9]+$/)
+  saved.set('calendar', [{ ...ev(), warnedBy: 'sother' }])
+  await clock.advance(60_000)
+  expect(toasts.filter((t) => /расписанию/.test(t))).toEqual([])
+  expect(notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade')).toEqual([])
+})
+
+test('по расписанию: сессия своей папки при запуске — «Запустить сейчас»; уведомление ОС — если о пропуске ещё не сказали', HEAVY, async ($, on) => {
+  const { clock, saved, submits, toasts, notifies } = stubs(on, {
+    env: AG_ENV,
+    agents: AG_ME,
+    submit: true,
+    stored: {
+      calendar: [
+        // О «Деплое» уже сказала сессия другой папки, о «Ревью» — никто
+        { ...schTask('e1', 'Деплой', '2026-11-02', '10:00', 'выкати релиз'), warned: at('2026-11-02', '10:00'), warnedBy: 'sother' },
+        schTask('e2', 'Ревью', '2026-11-02', '11:00', 'сделай ревью'),
+      ],
+    },
+  })
+  await clock.advance(T0)
+  await start($)
+  await clock.advance(6_000)
+  const ev = (id: string) => (saved.get('calendar') as any[]).find((e) => e.id === id)
+  const missed = (title: string) => `Пропущено по расписанию: «${title}» — Claude Code был закрыт или компьютер спал. Запустить можно в календаре Arcade.`
+  expect(toasts.filter((t) => /расписанию/.test(t))).toEqual([missed('Деплой'), missed('Ревью')])
+  expect(notifies.filter((n) => n.env.ARCADE_TITLE === 'Календарь Arcade').map((n) => n.env.ARCADE_TEXT)).toEqual([missed('Ревью')])
+  expect(submits).toEqual([])
+  expect(ev('e1')).toMatchObject({ missed: at('2026-11-02', '10:00'), warned: at('2026-11-02', '10:00') })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-calendar' })
+  expect(await ui.find({ key: 'arcade-cal-run-e1' })).toMatchObject({ props: { label: 'Запустить сейчас' } })
+  await ui.press({ key: 'arcade-cal-run-e1' })
+  expect(submits.map((s) => s.text)).toEqual(['выкати релиз'])
   await ui.unmount()
 })
 
@@ -7030,7 +7131,7 @@ test('по расписанию в Desktop: «Дать Claude» в событи�
   await ui.select({ key: 'arcade-cal-give-target', value: 'brd' })
   expect(ev('e1')).toMatchObject({ give: { kind: 'queue', board: 'brd', name: 'Проект' }, cwd: 'D:\\work\\web' })
   expect(await text('  Папка: D:\\work\\web')).toBeDefined()
-  expect(await text('  В своё время — в открытой сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.')).toBeDefined()
+  expect(await text('  В своё время — в запущенной сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.')).toBeDefined()
   expect(await text('  Работает, пока открыт Claude Code и компьютер не спит. Задание идёт в режиме разрешений сессии: вне Auto Claude может ждать разрешения.')).toBeDefined()
   // Карточка — с доски проекта, кроме сделанных; шаблон — из набора «Промптов»
   await ui.select({ key: 'arcade-cal-give-kind', value: 'card' })

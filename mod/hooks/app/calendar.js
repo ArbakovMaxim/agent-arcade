@@ -281,7 +281,12 @@ async function showReminders($, events, now) {
   const lines = events.slice(0, SHOW_MAX).map(line)
   if (events.length > SHOW_MAX) lines.push(`${tr('и ещё', S.lang)} ${events.length - SHOW_MAX}`)
   await $.ui.toast(`${tr('Календарь', S.lang)}: ${lines.join('; ')}`)
-  const command = notifyCommand(S.platform, tr('Календарь Arcade', S.lang), lines.join('\n'))
+  osNotify($, lines.join('\n'))
+}
+
+// Системное уведомление «Календарь Arcade» — и при закрытой панели, и когда Claude Code свёрнут
+export function osNotify($, text) {
+  const command = notifyCommand(S.platform, tr('Календарь Arcade', S.lang), text)
   if (!command) return
   $.clock.after(0, async () => {
     try {

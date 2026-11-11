@@ -331,7 +331,7 @@ export function calendarScreen($, e, kit) {
         ? [kindPick, dim('  В своё время событие даст Claude очередь доски, одну карточку, шаблон из «Промптов» или свой текст.')]
         : [
             ...stack('cal-event-give', [kindPick, ...(kind === 'text' ? [textField] : targetOf())]),
-            dim(ev.time ? '  В своё время — в открытой сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.' : '  В 9:00 — в открытой сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.'),
+            dim(ev.time ? '  В своё время — в запущенной сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.' : '  В 9:00 — в запущенной сессии Claude Code в этой папке, только в одной. Claude занят — задание ждёт конца хода.'),
             ...(g && ev.cwd ? [keep(dim(`  ${tr('Папка', S.lang)}: ${ev.cwd}`))] : []),
             ...(g && ev.cwd && here && !inFolder
               ? [Button({ key: 'arcade-cal-give-here', label: 'Запускать в этой папке', ...focusOn('give-here'), onPress: () => editEvent($, ev.id, { cwd: here }) })]
