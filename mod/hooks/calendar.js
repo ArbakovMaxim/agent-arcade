@@ -75,7 +75,8 @@ export const cleanRepeat = (v) => (v === null || v === undefined || v === '' ? '
 // prompt, name } | { kind: 'text', text }; name — название цели, каким оно было, когда её выбрали (цель могут удалить).
 // cwd — папка сессии, где задание дали: оно идёт только в открытой сессии этой папки. Отметки — во времени запуска раза
 // (fireAt): fired — последний раз, с которым разобрались; firedBy — какая сессия его взяла; held — раз, который пришёл,
-// пока Claude был занят (ждёт конца хода); missed — раз, когда ни одной сессии этой папки не было (ждёт «Запустить сейчас»)
+// пока Claude был занят (ждёт конца хода); missed — раз, когда ни одной сессии этой папки не было (ждёт «Запустить сейчас»);
+// warned — раз, о котором сессия другой папки уже сказала «пропущено» (warnedBy — какая: говорит одна)
 export const GIVE_KINDS = ['queue', 'card', 'prompt', 'text']
 export const GIVE_KEY = { queue: 'board', card: 'card', prompt: 'prompt' }
 export const MAX_TASK = 4_000
@@ -93,7 +94,7 @@ export function cleanGive(g) {
 }
 const cleanCwd = (v) => (typeof v === 'string' && v.length <= MAX_PATH ? v.trim() : '')
 // Отметки задания — всё, кроме самого задания и папки
-const TASK_MARKS = ['fired', 'firedBy', 'held', 'missed']
+const TASK_MARKS = ['fired', 'firedBy', 'held', 'missed', 'warned', 'warnedBy']
 
 // Сдвиг дня и месяца («ГГГГ-ММ»)
 export function addDays(day, n) {
@@ -226,8 +227,9 @@ export function restoreCalendar(saved) {
       ev.give = give
       const cwd = cleanCwd(e.cwd)
       if (cwd) ev.cwd = cwd
-      for (const k of ['fired', 'held', 'missed']) if (Number.isFinite(e[k])) ev[k] = e[k]
+      for (const k of ['fired', 'held', 'missed', 'warned']) if (Number.isFinite(e[k])) ev[k] = e[k]
       if (ev.fired !== undefined && typeof e.firedBy === 'string' && e.firedBy.length <= 20) ev.firedBy = e.firedBy
+      if (ev.warned !== undefined && typeof e.warnedBy === 'string' && e.warnedBy.length <= 20) ev.warnedBy = e.warnedBy
     }
     out.push(ev)
   }
@@ -414,7 +416,7 @@ export function dueTasks(list, now) {
   }
   return out
 }
-// Отметки задания: marks — { fired, firedBy, held, missed }; undefined убирает отметку
+// Отметки задания: marks — { fired, firedBy, held, missed, warned, warnedBy }; undefined убирает отметку
 export function markTask(list, id, marks) {
   return list.map((e) => {
     if (e.id !== id || !e.give) return e
@@ -659,10 +661,11 @@ export const CALENDAR_TOOL = {
     `color is one of ${Object.keys(COLORS).join(', ')}; without it the event is ${DEFAULT_COLOR}, color "" resets it. ` +
     'repeat makes the event a series: daily, weekdays (Monday to Friday), weekly (the same weekday), monthly (the same date) or yearly; its day is the first time. ' +
     'list shows every time of a series under the series id; update and remove change the whole series; repeat "" stops repeating. ' +
-    'give makes the event a scheduled task for Claude: at its time (an all-day event at 9:00) Arcade gives Claude, in an open Claude Code session in the folder where the task was set (this session\'s folder), one of: ' +
+    'give makes the event a scheduled task for Claude: at its time (an all-day event at 9:00) Arcade gives Claude, in a running Claude Code session in the folder where the task was set (this session\'s folder), one of: ' +
     'queue (runs the queue of an Arcade board; target is the board), card (one board card; target is the card), prompt (a template from Prompts; target is the template) or text (task is the text, sent as is). ' +
     'target is an id or exact title from the notes tool. It runs in one session only; if Claude is busy, it waits for the end of the turn. ' +
-    "If no session of that folder was open at the time, Arcade shows it as missed with Run now and never runs it later by itself. It runs in the session's current permission mode and needs Claude Code open and the computer awake. " +
+    'If no session of that folder was running at the time (after a Claude Code restart a session runs again only once the user opens it), any running session with Arcade shows the user a system notification, ' +
+    "and that folder's session shows it as missed with Run now; Arcade never runs it later by itself or in another folder. It runs in the session's current permission mode and needs Claude Code running and the computer awake. " +
     'give "" stops the task. Without remind a new task has no reminder. Set a task only when the user asks for one.',
   inputSchema: {
     type: 'object',
