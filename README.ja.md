@@ -69,6 +69,16 @@ claude plugin install arcade@agent-arcade
 /plugin install arcade@agent-arcade
 ```
 
+または、マーケットプレイスの追加もまとめて 1 ステップで — ターミナルでもセッション内でも：
+
+```
+claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
 プラグインはすべてのセッションとアプリにインストールされます。VS Code 拡張機能には `/plugin` コマンドがないので、ターミナルからインストールしてください。新しい会話で拡張機能に読み込まれます。
 
 **アップデート：**
@@ -309,10 +319,10 @@ Arcade は、Claude Code がプラグインに与える権限の範囲で Claude
 - **エージェントの中断。** Claude Desktop のみで、エージェントの作業中に内蔵ブラウザーで何かを開いたときに起こります。Desktop はプラグインが自分でブラウザーを開くことを許していないためです。Arcade は実行中のツールが終わるのを待ち（10 秒たつと中断しますが、許可の確認が表示されている間は待ちます）、エージェントを止めて、ページを開いてから作業に戻るよう Claude に頼みます。これを避けたい場合は、*設定 → ゲームを開く場所* でブラウザーウィンドウを選んでください。
 - **会話。** トピックのために、あなた自身のセッション内の Haiku が会話の最後の数千文字を受け取ります。これは Claude の使用量に含まれます。Arcade のサイトが会話を見ることはありません。Arcade が入力欄に書き込んだり送信したりするのは、あなたが頼んだとき（たとえばノートの *Claude に渡す*、自分で始めた *キューで Claude に渡す* の次のカード、または *Claude に渡す* を設定した予定がその時刻に渡すタスク）か、上で説明したようにページを開くときだけです。
 - **使用量。** ターンが終わるたびと 30 秒ごとに、Arcade は上限、コンテキスト、費用について Claude Code 自身の計測値を Claude Code に問い合わせます。ステータスラインに表示されるものと同じです。費用はかからず、Claude の使用量にも含まれません。
-- **起動するプログラム。** Arcade ウィンドウ用のブラウザー（Windows では `%LOCALAPPDATA%\claude-arcade` の専用プロファイル付き）、通知（カレンダーのリマインダーを含む。Windows では PowerShell、macOS では `osascript`、Linux では `notify-send`）、インストール済みブラウザーの確認（Windows）または OS の確認（`uname`）。また、*エージェント* のために、各セッションのフォルダーで開始時と各ターンの終わりに、読み取りのみの `git`（`rev-parse`、`status`、`diff --numstat`）。また、ボードに *カード間チェック* のコマンドがあれば、キューのカードが最後の列に来たときに、セッションのフォルダーでそのコマンド。
-- **ファイル。** 書き込むのは、`/arcade-add` で追加した ROM（保存先は `~/.claude/arcade/roms`）と、*エージェント* と *使用量* 用の各セッションの小さな目印とそこから送った回答（保存先は `~/.claude/arcade/agents`）だけです。読み込むのは、指定されたファイル、そのコピー、それらの目印、プラグイン自身のファイルだけです。設定、ノート、カレンダー、お気に入りは Claude Code のプラグイン用ストレージに保存されます。
+- **起動するプログラム。** Arcade ウィンドウ用のブラウザー（Windows では `%LOCALAPPDATA%\claude-arcade` の専用プロファイル付き）、リンク用のいつものブラウザー（Desktop 以外での TikTok、GitHub でのサインイン、ノートからリンクしたアプリのページ、*プロジェクトを支援*、*利用規約とプライバシー*。Windows では PowerShell の `Start-Process`、macOS では `open`、Linux では `xdg-open`。https のウェブアドレスに限ります）、通知（カレンダーのリマインダーと新しいチャットメッセージのカードを含む。Windows では PowerShell、macOS では `osascript`、Linux では `notify-send`）、Desktop の *コピー* 用のシステムのクリップボード（Windows では PowerShell の `Set-Clipboard`、macOS では `pbcopy`、Linux では `wl-copy`、`xclip` または `xsel`。テキストは標準入力で渡します）、インストール済みブラウザーの確認（Windows）または OS の確認（`uname`）。また、*エージェント* のために、各セッションのフォルダーで開始時と各ターンの終わりに、読み取りのみの `git`（`rev-parse`、`status`、`diff --numstat`）。また、ボードに *カード間チェック* のコマンドがあれば、キューのカードが最後の列に来たときに、セッションのフォルダーでそのコマンド。
+- **ファイル。** 書き込み先は `~/.claude/arcade` だけです：`/arcade-add` で追加した ROM（`roms/<sha256>.b64`）、*エージェント* と *使用量* 用の各セッションの小さな目印（`agents/s<N>.json`）と *エージェント* から送った回答（`agents/a<N>.json`）、「プレイしますか？」の行の *あとで* による延期（`ask-later.json`）と、Claude Code のどの起動が現在のものか（`ask-later-run.json`）。どれもビルド、起動、設定、指示のためのファイルではなく、実行するものもありません。読み込むのは、`/arcade-add` に指定されたファイル、これらのファイル、プラグイン自身のファイルだけです。設定、ノート、カレンダー、お気に入りは Claude Code のプラグイン用ストレージに保存されます。
 - **環境変数。** `HOME` または `USERPROFILE`、`LANG`、`LC_ALL`、`LC_MESSAGES`、`LOCALAPPDATA`、`OS` を読み取りますが、どれも変更しません。
-- **ネットワーク。** プラグイン自体が通信するのは、Arcade のサイト（`agent-arcade.fefaodessa.workers.dev`）、YouTube チャンネルの RSS フィード、表示するブログやポッドキャストのフィードだけです。Desktop のパネルの画像（Twitch のアバターなど）は、それぞれのサービスから直接読み込まれます。ゲーム、本、動画は、ブラウザーで開いたページが読み込みます。
+- **ネットワーク。** プラグイン自体が通信するのは、Arcade のサイト（`agent-arcade.fefaodessa.workers.dev`）、YouTube チャンネルの RSS フィード、表示するブログやポッドキャストのフィードだけです（フィードの一覧は Arcade のサイトから届き、プラグインにもその写しがあります）。Desktop のパネルの画像（Twitch のアバターなど）は、それぞれのサービスから直接読み込まれます。ゲーム、本、動画は、ブラウザーで開いたページが読み込みます。
 
 ## プライバシー
 

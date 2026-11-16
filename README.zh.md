@@ -69,6 +69,16 @@ claude plugin install arcade@agent-arcade
 /plugin install arcade@agent-arcade
 ```
 
+或者一步完成，顺带添加插件市场 — 在终端或会话中均可：
+
+```
+claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
 插件会安装到所有会话和应用中。VS Code 扩展没有 `/plugin` 命令 — 请在终端中安装，扩展会在新对话中加载插件。
 
 **更新：**
@@ -309,10 +319,10 @@ Arcade 在 Claude Code 内部运行，拥有 Claude Code 给插件的权限。�
 - **中断智能体。** 仅在 Claude Desktop 中、智能体工作时你在内置浏览器里打开内容才会发生：Desktop 不允许插件自己打开浏览器。Arcade 会等当前工具结束（10 秒后会中断它，但只要屏幕上有授权请求就一直等），然后中断智能体，请 Claude 打开页面后继续工作。如果想避免这种情况，请在 *设置 → 游戏打开方式* 中选择浏览器窗口。
 - **你的对话。** 为了推荐主题，你自己会话中的 Haiku 会收到对话的最后几千个字符；这会计入你的 Claude 用量。Arcade 的网站永远看不到对话。只有在你要求时（例如笔记本中的 *交给 Claude*、你启动的 *排队交给 Claude* 中的下一张卡片，或设置了 *交给 Claude* 的日程到点时交出的任务），或者如上所述为了打开页面，Arcade 才会在输入框中写入或提交内容。
 - **用量。** 每一轮结束后以及每隔半分钟，Arcade 会向 Claude Code 询问它自己对限额、上下文和费用的读数 — 也就是状态栏显示的内容。这不产生任何费用，也不计入你的 Claude 用量。
-- **启动的程序。** 用于 Arcade 窗口的浏览器（在 Windows 上使用 `%LOCALAPPDATA%\claude-arcade` 中的独立配置文件）；通知（包括日历提醒）— Windows 上用 PowerShell，macOS 上用 `osascript`，Linux 上用 `notify-send`；检查装了哪些浏览器（Windows）或是什么系统（`uname`）。另外，为了 *智能体*，在每个会话自己的文件夹里、启动时和每一轮结束时运行只读的 `git`（`rev-parse`、`status` 和 `diff --numstat`）。另外，如果看板设了 *卡片间检查*，队列里的卡片到达最后一列时，会在会话文件夹里运行那条命令。
-- **文件。** 它只写入你用 `/arcade-add` 添加的 ROM（位置是 `~/.claude/arcade/roms`），以及每个会话为 *智能体* 和 *用量* 留下的小标记和从那里发出的回答（位置是 `~/.claude/arcade/agents`）；只读取你指定的文件、这些副本、这些标记和它自己的文件。设置、笔记本、日历和收藏保存在 Claude Code 的插件存储中。
+- **启动的程序。** 用于 Arcade 窗口的浏览器（在 Windows 上使用 `%LOCALAPPDATA%\claude-arcade` 中的独立配置文件）；用于打开链接的常用浏览器（Desktop 之外的 TikTok、使用 GitHub 登录、笔记本中链接的应用页面、*支持本项目*、*条款与隐私*；Windows 上用 PowerShell `Start-Process`，macOS 上用 `open`，Linux 上用 `xdg-open`，仅用于 https 网址）；通知（包括日历提醒和新聊天消息的卡片）— Windows 上用 PowerShell，macOS 上用 `osascript`，Linux 上用 `notify-send`；Desktop 中 *复制* 使用的系统剪贴板 — Windows 上用 PowerShell `Set-Clipboard`，macOS 上用 `pbcopy`，Linux 上用 `wl-copy`、`xclip` 或 `xsel`，文本通过标准输入传入；检查装了哪些浏览器（Windows）或是什么系统（`uname`）。另外，为了 *智能体*，在每个会话自己的文件夹里、启动时和每一轮结束时运行只读的 `git`（`rev-parse`、`status` 和 `diff --numstat`）。另外，如果看板设了 *卡片间检查*，队列里的卡片到达最后一列时，会在会话文件夹里运行那条命令。
+- **文件。** 它只写入 `~/.claude/arcade`：你用 `/arcade-add` 添加的 ROM（`roms/<sha256>.b64`）；每个会话为 *智能体* 和 *用量* 留下的小标记（`agents/s<N>.json`），以及从 *智能体* 发出的回答（`agents/a<N>.json`）；“玩一会儿吗？”提示行用 *以后再说* 设置的延后（`ask-later.json`），以及当前是 Claude Code 的哪一次启动（`ask-later-run.json`）。这些都不是构建、启动、设置或指令文件，也没有任何东西会运行它们。它只读取你交给 `/arcade-add` 的文件、这些文件和它自己的文件。设置、笔记本、日历和收藏保存在 Claude Code 的插件存储中。
 - **环境变量。** 读取 `HOME` 或 `USERPROFILE`、`LANG`、`LC_ALL`、`LC_MESSAGES`、`LOCALAPPDATA` 和 `OS`，不修改任何一个。
-- **网络。** 插件本身只与 Arcade 的网站（`agent-arcade.fefaodessa.workers.dev`）、YouTube 频道的 RSS 订阅源，以及它展示的博客和播客的订阅源通信。Desktop 面板中的图片（例如 Twitch 头像）直接从这些服务加载。游戏、书籍和视频由你在浏览器中打开的页面加载。
+- **网络。** 插件本身只与 Arcade 的网站（`agent-arcade.fefaodessa.workers.dev`）、YouTube 频道的 RSS 订阅源，以及它展示的博客和播客的订阅源通信（这些订阅源的列表来自 Arcade 的网站，插件中也有一份副本）。Desktop 面板中的图片（例如 Twitch 头像）直接从这些服务加载。游戏、书籍和视频由你在浏览器中打开的页面加载。
 
 ## 隐私
 
