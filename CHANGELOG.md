@@ -1,5 +1,10 @@
 # Changelog · Список изменений
 
+## 0.48.9 — Ссылки для карточки в каталоге · Links for the directory listing
+
+- `plugin.json` now names the documentation, support, privacy policy and terms pages, plus keywords, so the plugin directory doesn't have to guess them from the README · в `plugin.json` теперь указаны страницы документации, поддержки, политики конфиденциальности и условий, а также ключевые слова, чтобы каталогу плагинов не приходилось угадывать их по README
+- Nothing else changes for you · больше для тебя ничего не меняется
+
 ## 0.48.8 — Пояснения для каталога плагинов · Notes for the plugin directory
 
 - README has a new section, *Notes for the plugin directory review*: what files Arcade writes, which tools it calls itself and why, which prompts it submits, which programs it starts and with what, where it goes on the network, what its hooks do with permission requests, telemetry, prompts and commands, and where the bundled JSNES, the ROMs and the archives come from · в README новый раздел *Notes for the plugin directory review*: какие файлы Arcade пишет, какие инструменты вызывает сам и зачем, какие промпты отправляет, какие программы запускает и с чем, куда ходит по сети, что его хуки делают с запросами разрешений, телеметрией, промптами и командами, откуда взялись встроенный JSNES, ROM и архивы

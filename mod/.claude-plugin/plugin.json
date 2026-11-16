@@ -1,12 +1,17 @@
 {
   "name": "arcade",
   "displayName": "Arcade for Claude Code",
-  "version": "0.48.8",
+  "version": "0.48.9",
   "description": "Task boards Claude picks up, a notebook it keeps with you, team chats — and games while the agent works",
   "author": {
     "name": "Max Arbakov"
   },
   "homepage": "https://agent-arcade.fefaodessa.workers.dev/",
   "repository": "https://github.com/ArbakovMaxim/agent-arcade",
+  "documentationUrl": "https://github.com/ArbakovMaxim/agent-arcade#readme",
+  "supportUrl": "https://github.com/ArbakovMaxim/agent-arcade/issues",
+  "privacyPolicyUrl": "https://agent-arcade.fefaodessa.workers.dev/privacy",
+  "termsOfServiceUrl": "https://agent-arcade.fefaodessa.workers.dev/terms",
+  "keywords": ["task-board", "kanban", "notebook", "team-chat", "calendar", "agents", "productivity", "games"],
   "license": "AGPL-3.0-only"
 }
