@@ -15,7 +15,7 @@ import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/register.js'
 import { ANSWER_POLL_MS, asksReset, callSeen, toolDecided } from '../hooks/register.js'
-import { ARCADE_VERSION, S } from '../hooks/app/state.js'
+import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test, BASH_MS } from './kit.ts'
 
@@ -7679,4 +7679,9 @@ test('промпты по-английски: экран без русского
   expect(await ui.find({ key: 'arcade-prompt-set-delete' })).toMatchObject({ props: { label: 'Delete the set' } })
   expect(await cyrillic()).toEqual([])
   await ui.unmount()
+})
+
+test('подписки на вызовы блокнота и календаря — по тем же именам, что у зарегистрированных инструментов', async () => {
+  // В register.js имена в подписках записаны готовыми строками (каталог читает подписку как есть) — сверяем с регистрацией
+  expect([NOTES_TOOL_NAME, CALENDAR_TOOL_NAME]).toEqual(['mcp__arcade__notes', 'mcp__arcade__calendar'])
 })
