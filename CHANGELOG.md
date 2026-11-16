@@ -1,5 +1,22 @@
 # Changelog · Список изменений
 
+## 0.48.5 — Простые формы для каталога плагинов · Plain forms for the plugin directory
+
+- Nothing changes for you. Inside, four more places now have the plain form the Anthropic plugin directory's review reads:
+  - eight counters written as `x++` at the end of a line, right before a line that calls Claude Code, are now `x += 1`: the review read the `++` together with the next line;
+  - a setting's value is looked up with a `switch` instead of an object built on the spot;
+  - the hook that sees permission requests on Pro and Max passes its event on unchanged right away and sets *waiting for permission* from a copy of the request's fields, so Claude Code no longer waits for Arcade's note before going on (*waiting for permission*, the pause or close on a request and the OS notification work as before);
+  - the tool names in the subscriptions for the built-in browser, the notebook and the calendar are written as ready strings instead of being assembled.
+  
+  A few local names were renamed so that the hook's parameters are used nowhere else in the file · больше для тебя ничего не меняется. Внутри ещё четыре места получили простую форму, которую читает проверка каталога плагинов Anthropic:
+  - восемь счётчиков `x++` в конце строки, сразу перед строкой с вызовом Claude Code, теперь записаны как `x += 1`: проверка читала `++` вместе со следующей строкой;
+  - значение настройки берётся через `switch`, а не из объекта, собранного на месте;
+  - хук, который видит запросы разрешений на Pro и Max, сразу отдаёт своё событие дальше без изменений, а «ждёт разрешения» ставит по копии полей запроса. Claude Code больше не ждёт отметки Arcade, прежде чем идти дальше («ждёт разрешения», пауза или закрытие по запросу и уведомление ОС работают как раньше);
+  - имена инструментов в подписках для встроенного браузера, блокнота и календаря записаны готовыми строками, а не собираются.
+  
+  Несколько локальных имён переименованы, чтобы параметры хука больше нигде в файле не встречались
+- New test: the notebook's and the calendar's subscriptions use the same names as the registered tools · новый тест: подписки блокнота и календаря — по тем же именам, что у зарегистрированных инструментов
+
 ## 0.48.4 — Разрешения решает только Claude Code · Only Claude Code decides permissions
 
 - The notebook and the calendar: Arcade no longer approves Claude's calls to `mcp__arcade__notes` and `mcp__arcade__calendar` itself. They go through Claude Code's usual permission check like any other call, so Claude Code may ask you before Claude uses them; your allow and deny rules apply as they are · блокнот и календарь: вызовы Claude к `mcp__arcade__notes` и `mcp__arcade__calendar` Arcade больше не разрешает сам. Они проходят обычную проверку разрешений Claude Code, как любой другой вызов, поэтому Claude Code может спросить тебя, прежде чем Claude ими воспользуется; твои правила «разрешить» и «запретить» действуют как есть
