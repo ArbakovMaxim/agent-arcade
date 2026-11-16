@@ -996,8 +996,7 @@ export function desktopNotice($, outcome, opened, url) {
       'Claude сжимает контекст — когда закончит, Arcade попросит его открыть игру во встроенном браузере.',
     )
   else if (outcome === 'asking')
-    windowNotice(
-      $,
+    windowNotice($,
       pick(
         'Claude уже открывает это видео во встроенном браузере — подожди немного.',
         'Claude уже открывает эту ссылку во встроенном браузере — подожди немного.',
@@ -1005,8 +1004,7 @@ export function desktopNotice($, outcome, opened, url) {
       ),
     )
   else
-    windowNotice(
-      $,
+    windowNotice($,
       outcome === 'opened'
         ? opened
         : outcome === 'interrupted'
@@ -1416,10 +1414,10 @@ export async function loadBooks($, kind, { section = '', q = '', more = false } 
   const was = S.bk[kind]
   const request = was.request + 1
   const page = more ? was.page + 1 : 1
-  const next = more ? { ...was, loading: true, error: '', request } : { ...emptyBooks(request), section, q, loading: true }
-  S.bk = { ...S.bk, [kind]: next }
+  const bookState = more ? { ...was, loading: true, error: '', request } : { ...emptyBooks(request), section, q, loading: true }
+  S.bk = { ...S.bk, [kind]: bookState }
   $.ui.invalidate('ui.render')
-  const url = siteUrl(booksPath(kind, S.bk.lang, { section: next.section || 'popular', q: next.q, page }))
+  const url = siteUrl(booksPath(kind, S.bk.lang, { section: bookState.section || 'popular', q: bookState.q, page }))
   const answer = parseBooks(kind, await fetchWithin($, url, BOOKS_FETCH_MS))
   if (request !== S.bk[kind].request) return
   const cur = S.bk[kind]
@@ -2577,7 +2575,7 @@ export async function createGroup($, all = false) {
   }
   S.ch.picked = new Set()
   S.ch.groupName = ''
-  S.ch.field++
+  S.ch.field += 1
   await openChat($, answer.chat.id)
 }
 
@@ -2609,7 +2607,7 @@ export async function changeMembers($, body, done = '') {
     const entry = S.ch.list?.find((c) => c.id === answer.chat.id)
     if (entry) Object.assign(entry, { name: answer.chat.name, pic: answer.chat.pic })
     S.ch.note = done
-    S.ch.field++
+    S.ch.field += 1
     // Служебное сообщение о перемене — в переписку сразу
     pollChat($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
   }
@@ -2978,7 +2976,42 @@ export function applySetting(key, value) {
 
 // Настройка из SYNC_KEYS, как она сейчас в моде
 function settingValue(key) {
-  return { lang: S.lang, keys: S.keymap, notify: S.osNotify, wide: S.wide, keepMenu: S.keepMenu, backOnDone: S.backOnDone, onDone: S.onDone, onPermission: S.onPermission, myTopics: S.myTopics, twitchChannels: S.tw.channels, flappyBest: S.flappyBest, collapsed: S.collapsed, hidden: S.hidden, favorites: S.favorites, hideOnline: S.hideOnline, askAfter: S.askAfter }[key]
+  switch (key) {
+    case 'lang':
+      return S.lang
+    case 'keys':
+      return S.keymap
+    case 'notify':
+      return S.osNotify
+    case 'wide':
+      return S.wide
+    case 'keepMenu':
+      return S.keepMenu
+    case 'backOnDone':
+      return S.backOnDone
+    case 'onDone':
+      return S.onDone
+    case 'onPermission':
+      return S.onPermission
+    case 'myTopics':
+      return S.myTopics
+    case 'twitchChannels':
+      return S.tw.channels
+    case 'flappyBest':
+      return S.flappyBest
+    case 'collapsed':
+      return S.collapsed
+    case 'hidden':
+      return S.hidden
+    case 'favorites':
+      return S.favorites
+    case 'hideOnline':
+      return S.hideOnline
+    case 'askAfter':
+      return S.askAfter
+    default:
+      return undefined
+  }
 }
 
 // Сохранить настройку из SYNC_KEYS: в $.store, с отметкой времени, и — если вошли — через пару секунд на сайт
@@ -3648,7 +3681,7 @@ async function notesChanged($, list, entries = []) {
   const base = S.notes
   S.notes = list
   nb.draft = null
-  nb.field++
+  nb.field += 1
   $.ui.invalidate('ui.render')
   await saveNotes($, base)
   pushBoards($)
@@ -3691,15 +3724,15 @@ export function editNotes($, change, saved = '') {
     if (moved === 'gone') return null
     const at = await $.clock.now()
     const { list: base, clash } = withDraft(S.notes, at)
-    const next = base && change(base, at)
-    const problem = !base ? NOTE_TOO_LONG : typeof next === 'string' ? next : fits(next) ? '' : NOTES_FULL
+    const editedNotes = base && change(base, at)
+    const problem = !base ? NOTE_TOO_LONG : typeof editedNotes === 'string' ? editedNotes : fits(editedNotes) ? '' : NOTES_FULL
     nb.note = problem || (clash ? LINES_CLASH : saved)
     nb.bad = Boolean(problem || clash)
     if (problem) {
       $.ui.invalidate('ui.render')
       return false
     }
-    if (next !== S.notes) await notesChanged($, next, noteChanges(S.notes, next, at, 'me'))
+    if (editedNotes !== S.notes) await notesChanged($, editedNotes, noteChanges(S.notes, editedNotes, at, 'me'))
     else $.ui.invalidate('ui.render')
     return true
   })
@@ -3844,8 +3877,7 @@ export async function makeSummary($) {
   const log = restoreLog(await $.store.get('daylog').catch(() => null))
   const title = `${tr('Итоги', S.lang)} ${day.slice(8)}.${day.slice(5, 7)}`
   let id = ''
-  const done = await editNotes(
-    $,
+  const done = await editNotes($,
     (list, at) => {
       const page = list.find((p) => !p.parent && !isBoard(p) && p.title === title)
       // Сами итоги, отданные Claude, в итоги не идут
@@ -4777,7 +4809,7 @@ function calFollow($, list) {
     cal.bad = true
     cal.confirm = false
     gone = true
-  } else if (was && now && !sameEvent(was, now)) cal.field++
+  } else if (was && now && !sameEvent(was, now)) cal.field += 1
   schedule($)
   $.ui.invalidate('ui.render')
   return gone ? 'gone' : true
@@ -4853,8 +4885,7 @@ export async function addFromScreen($, text, base = '') {
   const today = dayKey(at)
   const parsed = quickParse(text, base || today, today)
   let made = null
-  const done = await editCalendar(
-    $,
+  const done = await editCalendar($,
     (list, now) => {
       const out = addEvent(list, parsed, now)
       made = out.event ?? null
@@ -4865,7 +4896,7 @@ export async function addFromScreen($, text, base = '') {
   if (!done || !made) return
   cal.day = made.day
   cal.month = made.day.slice(0, 7)
-  cal.field++
+  cal.field += 1
   $.ui.invalidate('ui.render')
 }
 
@@ -4939,8 +4970,8 @@ async function planNext($, my) {
   const now = await $.clock.now()
   const cards = await cardEvents($)
   if (my !== gen) return
-  const next = nextReminder([...S.calendar, ...cards], now)
-  const wait = next === null ? RECHECK_MS : Math.max(0, Math.min(next - now, RECHECK_MS))
+  const nextAt = nextReminder([...S.calendar, ...cards], now)
+  const wait = nextAt === null ? RECHECK_MS : Math.max(0, Math.min(nextAt - now, RECHECK_MS))
   timer = $.clock.after(wait, () => {
     timer = null
     remindNow($).catch(modError)
@@ -5496,11 +5527,11 @@ async function limitNote($, w, reset) {
   const when = resetText(reset, now)
   let why = `${t('Очередь остановлена: кончился лимит Claude')}${when ? ` — ${when}` : ''}.`
   if (reset > now) {
-    const next = { board: w.board, title: w.title, card: w.card, at: reset + RESUME_AFTER_MS }
+    const planned = { board: w.board, title: w.title, card: w.card, at: reset + RESUME_AFTER_MS }
     if (S.qr.armed.includes(w.board)) {
-      await waitFor($, next)
-      why += ` ${fill(t('Очередь продолжится в {0}.'), [clockText(next.at, now)])}`
-    } else S.qr.offer = next
+      await waitFor($, planned)
+      why += ` ${fill(t('Очередь продолжится в {0}.'), [clockText(planned.at, now)])}`
+    } else S.qr.offer = planned
   }
   return why
 }
@@ -5995,9 +6026,9 @@ export async function runMissed($, id) {
   }
   let ev = null
   await calFresh($, async () => {
-    const e = S.calendar.find((x) => x.id === id)
-    if (!e?.give || !Number.isFinite(e.missed)) return
-    ev = e
+    const missedEvent = S.calendar.find((x) => x.id === id)
+    if (!missedEvent?.give || !Number.isFinite(missedEvent.missed)) return
+    ev = missedEvent
     await calendarChanged($, markTask(S.calendar, id, { missed: undefined }))
   })
   if (!ev) return
@@ -6377,6 +6408,11 @@ export async function classicAsk($, e) {
   const ask = { kind: 'permission', tool: e.tool_name ?? '', what: whatOf(e.tool_input) }
   asks.set('classic', ask)
   await waitForPerson($, ask)
+}
+// Классический запрос разрешения показан: «ждёт разрешения» по копии полей, не дожидаясь (хук сразу отдаёт событие
+// дальше, решение — за человеком и Claude Code)
+export function permissionShown($, tool, input, mode) {
+  classicAsk($, { tool_name: tool, tool_input: input, permission_mode: mode }).catch(modError)
 }
 // Инструмент отработал: классический запрос закрыт (вопрос, если он открыт, — нет)
 export function classicDone($, e) {
@@ -9288,8 +9324,7 @@ export function notesScreen($, e, kit) {
     const typed = (value) => ({ id, text: String(value ?? ''), from: nb.draft?.id === id ? nb.draft.from : page.body })
     // Правка текста страницы: change(body) → новый текст, null — не помещается
     const editBody = (change, saved = '') =>
-      editNotes(
-        $,
+      editNotes($,
         (list, at) => {
           const now = list.find((p) => p.id === id)
           if (!now) return list
@@ -9331,13 +9366,13 @@ export function notesScreen($, e, kit) {
     const textBlock = (chunk) => {
       const md = []
       chunk.forEach((l, i) => {
-        const next = chunk[i + 1]?.kind
+        const nextKind = chunk[i + 1]?.kind
         if (l.kind === 'blank') md.push('')
         else if (l.kind === 'h1' || l.kind === 'h2') md.push(`${l.kind === 'h1' ? '#' : '##'} ${l.text}`)
         // После пункта списка — пустая строка, иначе следующий текст приклеится к пункту
-        else if (l.kind === 'bullet') md.push(`- ${l.text}`, ...(next === 'text' ? [''] : []))
+        else if (l.kind === 'bullet') md.push(`- ${l.text}`, ...(nextKind === 'text' ? [''] : []))
         // Строка за строкой — с переносом, а не одним абзацем
-        else md.push(`${l.text.trim()}${next === 'text' ? '  ' : ''}`)
+        else md.push(`${l.text.trim()}${nextKind === 'text' ? '  ' : ''}`)
       })
       const text = md.join('\n').trim()
       if (!text) return [gap]
@@ -9677,8 +9712,7 @@ export function notesScreen($, e, kit) {
               key: 'arcade-note-undo',
               label: 'Вернуть текст до правки Claude',
               onPress: () =>
-                editNotes(
-                  $,
+                editNotes($,
                   (list, at) => {
                     const now = list.find((p) => p.id === id)
                     return typeof now?.prev === 'string' ? updatePage(list, id, { body: now.prev, prev: undefined }, at) : list
@@ -10225,8 +10259,7 @@ export function boardsScreen($, e, kit) {
               submitLabel: tr('Сохранить', S.lang),
               onSubmit: (value) => {
                 if (cleanTitle(value) === colName(c)) return
-                return editBoard(
-                  $,
+                return editBoard($,
                   (list, at) => {
                     const done = renameColumn(list, id, c.id, value, at)
                     return done.error ? 'Впиши название колонки.' : done.notes
@@ -10243,8 +10276,7 @@ export function boardsScreen($, e, kit) {
                     key: `arcade-col-drop-${c.id}`,
                     label: 'Убрать колонку',
                     onPress: () =>
-                      editBoard(
-                        $,
+                      editBoard($,
                         (list, at) => {
                           const done = removeColumn(list, id, c.id, at)
                           if (done.error === 'busy') return 'В колонке есть карточки — сначала перенеси их.'
@@ -11394,7 +11426,7 @@ export function calendarScreen($, e, kit) {
               : 'Не понял, когда напомнить: пиши как «в 8:30», «накануне в 20:00» или «за 3 дня в 9:00» — не позже 9:00 этого дня и не раньше чем за неделю.',
           )
         if (await editEvent($, ev.id, { remind: m })) {
-          cal.field++
+          cal.field += 1
           $.ui.invalidate('ui.render')
         }
       },
@@ -11406,7 +11438,7 @@ export function calendarScreen($, e, kit) {
       cal.focus = 'repeat'
       const day = ev.day
       if ((await editEvent($, ev.id, { repeat }, '')) && S.calendar.find((x) => x.id === ev.id)?.day !== day) {
-        cal.field++
+        cal.field += 1
         $.ui.invalidate('ui.render')
       }
     }
@@ -11464,7 +11496,7 @@ export function calendarScreen($, e, kit) {
     const setGive = async (newGive, saved = '') => {
       if (await editEvent($, ev.id, { give: newGive, ...(ev.cwd || !here ? {} : { cwd: here }) }, saved)) {
         cal.giveKind = null
-        if (newGive.kind === 'text') cal.field++
+        if (newGive.kind === 'text') cal.field += 1
         $.ui.invalidate('ui.render')
       }
     }
@@ -11557,7 +11589,7 @@ export function calendarScreen($, e, kit) {
             const when = quickParse(value, ev.day, today)
             if (when.title) return say('Не понял, когда: пиши как «пт 15:00» или «2026-11-20 10:00».')
             if (await editEvent($, ev.id, { day: when.day, time: when.time, ...(when.repeat ? { repeat: when.repeat } : {}) })) {
-              cal.field++
+              cal.field += 1
               $.ui.invalidate('ui.render')
             }
           },
@@ -12558,14 +12590,12 @@ export function register(on) {
   })
 
   // Запрос разрешения — классическим хуком (Pro и Max) и по вердикту движка на вызов Claude (везде: на Team и Enterprise
-  // классические хуки плагинов выключены; вердикт спрашиваем в tool.call ниже). Что дальше — в app/asks
-  on('classic.PermissionRequest', async ($, e, next) => {
-    try {
-      await classicAsk($, e)
-    } catch (err) {
-      log(`ошибка мода: ${err?.message ?? err}`)
-    }
-    return next(e)
+  // классические хуки плагинов выключены; вердикт спрашиваем в tool.call ниже). Что дальше — в app/asks. Решение не
+  // трогаем: хук отдаёт своё событие дальше как есть, а «ждёт разрешения» ставит по копии полей. Имена параметров —
+  // только этого хука: каталог читает файл без областей видимости
+  on('classic.PermissionRequest', async ($, askEvent, passOn) => {
+    permissionShown($, askEvent.tool_name, askEvent.tool_input, askEvent.permission_mode)
+    return passOn(askEvent)
   })
 
   on('classic.PostToolUse', async ($, e, next) => {
@@ -12663,13 +12693,15 @@ export function register(on) {
   // Вызов инструмента блокнота: поверх свежего блокнота из хранилища (его могли поправить в другой сессии), несохранённый
   // текст поля «Текст» сначала уходит в страницу — правка Claude ложится поверх. Ошибку (нет страницы, не помещается)
   // модель получает ошибкой — отказом с текстом
-  on('tool.call', { tool: NOTES_TOOL_NAME }, async ($, e) => {
+  // Имя — готовой строкой, как NOTES_TOOL_NAME: каталог читает подписку как есть
+  on('tool.call', { tool: 'mcp__arcade__notes' }, async ($, e) => {
     const out = await notesTool($, e)
     return out.isError ? { deny: out.text } : { result: out.text }
   })
 
   // Вызов инструмента календаря
-  on('tool.call', { tool: CALENDAR_TOOL_NAME }, async ($, e) => {
+  // Имя — готовой строкой, как CALENDAR_TOOL_NAME
+  on('tool.call', { tool: 'mcp__arcade__calendar' }, async ($, e) => {
     const out = await calendarTool($, e)
     return out.isError ? { deny: out.text } : { result: out.text }
   })
@@ -12701,8 +12733,9 @@ export function register(on) {
     }
   })
 
-  // Игру, которую Arcade попросил открыть Claude, открыли — браузеру нужно место
-  on('tool.call', { tool: [`${BROWSER}preview_start`, `${BROWSER}navigate`] }, async ($, e, next) => {
+  // Игру, которую Arcade попросил открыть Claude, открыли — браузеру нужно место. Имена инструментов — готовыми строками
+  // (BROWSER + имя): каталог читает подписку как есть, а подстановку в шаблонной строке принимает за обращение к API
+  on('tool.call', { tool: ['mcp__Claude_Browser__preview_start', 'mcp__Claude_Browser__navigate'] }, async ($, e, next) => {
     const result = await next(e)
     try {
       if (S.opening && arcadeUrl(e.url) && !result?.deny && !result?.isError)
