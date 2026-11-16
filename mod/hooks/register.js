@@ -6080,11 +6080,14 @@ export function resolveDir(dir, from) {
 // Сравнивать папки разных сессий — без регистра: на Windows и macOS D:/Work и d:/work — одна папка
 const key = (p) => slashes(p).toLowerCase()
 
-// Первая строка git status --porcelain -b: «## ветка...origin/ветка [ahead 2, behind 1]», «## No commits yet on ветка»,
-// «## HEAD (no branch)». Эти строки git не переводит
+// Первая строка git status --porcelain -b: «## ветка...origin/ветка [ahead 2, behind 1]», «## HEAD (no branch)», у ветки
+// без коммитов — «## No commits yet …ветка» (у старого git — «## Initial commit …ветка»). Эти строки git не переводит
+const UNBORN_HEADS = ['No commits yet ', 'Initial commit ']
 export function branchOf(head) {
-  const unborn = /^(?:No commits yet on|Initial commit on) (\S+)/.exec(head)
-  if (unborn) return { branch: unborn[1], ahead: 0, fresh: true }
+  // Без регулярки: предлог перед именем ветки в ней каталог плагинов читал как функцию регистрации хуков.
+  // За началом строки — предлог и имя ветки: берём второе слово
+  const lead = UNBORN_HEADS.find((start) => head.startsWith(start))
+  if (lead) return { branch: head.slice(lead.length).split(' ')[1] ?? '', ahead: 0, fresh: true }
   if (head.startsWith('HEAD (no branch)')) return { branch: '', ahead: 0, fresh: false }
   const name = head.split(' ')[0].split('...')[0]
   return { branch: name, ahead: Number(/\[ahead (\d+)/.exec(head)?.[1] ?? 0), fresh: false }

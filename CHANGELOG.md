@@ -1,5 +1,10 @@
 # Changelog · Список изменений
 
+## 0.48.6 — Ещё одна простая форма для каталога · One more plain form for the directory
+
+- Nothing changes for you. Inside, the branch of a repository with no commits yet is read from git's status line without a regular expression: the review of the Anthropic plugin directory read the preposition before the branch name in it as the function that registers hooks · больше для тебя ничего не меняется. Внутри ветка репозитория без коммитов берётся из строки статуса git без регулярного выражения: проверка каталога плагинов Anthropic читала предлог перед именем ветки в нём как функцию регистрации хуков
+- New test: the branch from git's status line, for a usual branch, a branch with no commits, an old git and no branch · новый тест: ветка из строки статуса git — обычная, без коммитов, у старого git и без ветки
+
 ## 0.48.5 — Простые формы для каталога плагинов · Plain forms for the plugin directory
 
 - Nothing changes for you. Inside, four more places now have the plain form the Anthropic plugin directory's review reads:
