@@ -69,6 +69,16 @@ claude plugin install arcade@agent-arcade
 /plugin install arcade@agent-arcade
 ```
 
+또는 마켓플레이스 추가까지 한 번에 — 터미널에서도 세션 안에서도:
+
+```
+claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
 플러그인은 모든 세션과 앱에 설치됩니다. VS Code 확장에는 `/plugin` 명령이 없으니 터미널에서 설치하세요. 확장은 새 대화에서 플러그인을 불러옵니다.
 
 **업데이트:**
@@ -309,10 +319,10 @@ Arcade는 Claude Code가 플러그인에 주는 권한 안에서 Claude Code 내
 - **에이전트 중단.** Claude Desktop에서만, 에이전트가 작업하는 동안 내장 브라우저에서 무언가를 열 때 일어납니다. Desktop은 플러그인이 직접 브라우저를 열도록 허용하지 않기 때문입니다. Arcade는 실행 중인 도구가 끝나기를 기다렸다가(10초가 지나면 중단하지만, 권한 확인 창이 떠 있는 동안에는 기다립니다) 에이전트를 멈추고, Claude에게 페이지를 연 뒤 작업으로 돌아가 달라고 요청합니다. 이를 피하려면 *설정 → 게임 여는 곳*에서 브라우저 창을 고르세요.
 - **대화.** 주제 추천을 위해 내 세션의 Haiku가 대화의 마지막 몇천 자를 받습니다. 이는 Claude 사용량에 포함됩니다. Arcade 사이트는 대화를 볼 수 없습니다. Arcade가 입력창에 쓰거나 전송하는 것은 사용자가 요청할 때(예: 노트의 *Claude에게 넘기기*, 직접 시작한 *대기열로 Claude에게 넘기기*의 다음 카드, 또는 *Claude에게 넘기기*를 설정한 일정이 그 시간에 넘기는 작업)나 위에서 설명한 대로 페이지를 열 때뿐입니다.
 - **사용량.** 턴이 끝날 때마다, 그리고 30초마다 Arcade는 Claude Code에 한도, 컨텍스트, 비용에 대한 Claude Code 자체의 측정값을 묻습니다. 상태 표시줄에 나오는 바로 그 값입니다. 비용이 들지 않으며 Claude 사용량에도 포함되지 않습니다.
-- **실행하는 프로그램.** Arcade 창을 위한 브라우저(Windows에서는 `%LOCALAPPDATA%\claude-arcade`의 별도 프로필 사용), 알림(캘린더 알림 포함, Windows는 PowerShell, macOS는 `osascript`, Linux는 `notify-send`), 설치된 브라우저 확인(Windows) 또는 OS 확인(`uname`). 또한 *에이전트*를 위해 각 세션의 폴더에서 시작할 때와 매 턴이 끝날 때 읽기 전용 `git`(`rev-parse`, `status`, `diff --numstat`). 또한 보드에 *카드 사이 검사* 명령을 정해 두었다면, 대기열의 카드가 마지막 열에 도착할 때 세션 폴더에서 그 명령.
-- **파일.** 쓰는 것은 `/arcade-add`로 추가한 ROM(`~/.claude/arcade/roms`에)과 *에이전트*와 *사용량*을 위한 각 세션의 작은 표시와 거기서 보낸 답(`~/.claude/arcade/agents`에)뿐입니다. 읽는 것은 지정한 파일, 그 사본, 그 표시, 그리고 플러그인 자체 파일뿐입니다. 설정, 노트, 캘린더, 즐겨찾기는 Claude Code의 플러그인 저장소에 보관됩니다.
+- **실행하는 프로그램.** Arcade 창을 위한 브라우저(Windows에서는 `%LOCALAPPDATA%\claude-arcade`의 별도 프로필 사용), 링크를 여는 평소 쓰는 브라우저(Desktop 밖의 TikTok, GitHub 로그인, 노트에서 연결한 앱의 페이지, *프로젝트 후원하기*, *약관 및 개인정보*; Windows는 PowerShell `Start-Process`, macOS는 `open`, Linux는 `xdg-open`, https 웹 주소에만), 알림(캘린더 알림과 새 채팅 메시지 카드 포함, Windows는 PowerShell, macOS는 `osascript`, Linux는 `notify-send`), Desktop에서 *복사*를 위한 시스템 클립보드(Windows는 PowerShell `Set-Clipboard`, macOS는 `pbcopy`, Linux는 `wl-copy`, `xclip` 또는 `xsel`, 텍스트는 표준 입력으로 전달), 설치된 브라우저 확인(Windows) 또는 OS 확인(`uname`). 또한 *에이전트*를 위해 각 세션의 폴더에서 시작할 때와 매 턴이 끝날 때 읽기 전용 `git`(`rev-parse`, `status`, `diff --numstat`). 또한 보드에 *카드 사이 검사* 명령을 정해 두었다면, 대기열의 카드가 마지막 열에 도착할 때 세션 폴더에서 그 명령.
+- **파일.** 쓰는 곳은 `~/.claude/arcade`뿐입니다: `/arcade-add`로 추가한 ROM(`roms/<sha256>.b64`), *에이전트*와 *사용량*을 위한 각 세션의 작은 표시(`agents/s<N>.json`)와 *에이전트*에서 보낸 답(`agents/a<N>.json`), ‘플레이할까요?’ 줄의 *나중에* 미루기(`ask-later.json`)와 Claude Code의 어느 실행이 지금 실행인지(`ask-later-run.json`). 이 중 어느 것도 빌드, 시작, 설정, 지시 파일이 아니며 무엇도 이를 실행하지 않습니다. 읽는 것은 `/arcade-add`에 지정한 파일, 이 파일들, 그리고 플러그인 자체 파일뿐입니다. 설정, 노트, 캘린더, 즐겨찾기는 Claude Code의 플러그인 저장소에 보관됩니다.
 - **환경 변수.** `HOME` 또는 `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA`, `OS`를 읽으며 어느 것도 바꾸지 않습니다.
-- **네트워크.** 플러그인 자체는 Arcade 사이트(`agent-arcade.fefaodessa.workers.dev`), YouTube 채널의 RSS 피드, 그리고 보여 주는 블로그와 팟캐스트의 피드와만 통신합니다. Desktop 패널의 이미지(예: Twitch 아바타)는 해당 서비스에서 바로 불러옵니다. 게임, 책, 동영상은 브라우저에서 연 페이지가 불러옵니다.
+- **네트워크.** 플러그인 자체는 Arcade 사이트(`agent-arcade.fefaodessa.workers.dev`), YouTube 채널의 RSS 피드, 그리고 보여 주는 블로그와 팟캐스트의 피드와만 통신합니다. 이 피드 목록은 Arcade 사이트에서 받아 오며, 플러그인에도 사본이 있습니다. Desktop 패널의 이미지(예: Twitch 아바타)는 해당 서비스에서 바로 불러옵니다. 게임, 책, 동영상은 브라우저에서 연 페이지가 불러옵니다.
 
 ## 개인정보
 

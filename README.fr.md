@@ -69,6 +69,16 @@ Ou dans une session Claude Code :
 /plugin install arcade@agent-arcade
 ```
 
+Ou en une seule étape, qui ajoute le marketplace au passage — dans un terminal ou dans une session :
+
+```
+claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
 Le plugin est installé pour toutes les sessions et applications. L’extension VS Code n’a pas de commande `/plugin` : installez-le depuis un terminal, et l’extension le prendra en compte dans une nouvelle conversation.
 
 **Mise à jour :**
@@ -309,10 +319,10 @@ Arcade tourne dans Claude Code avec l’accès que Claude Code donne aux plugins
 - **Interrompre l’agent.** Uniquement dans Claude Desktop, quand vous ouvrez quelque chose dans le navigateur intégré pendant que l’agent travaille : Desktop ne laisse pas un plugin ouvrir le navigateur lui-même. Arcade attend la fin de l’outil en cours (il le coupe au bout de 10 secondes, mais attend tant qu’une demande d’autorisation est affichée), interrompt l’agent et demande à Claude d’ouvrir la page et de reprendre son travail. Pour éviter cela, choisissez une fenêtre de navigateur dans *Paramètres → Ouvrir les jeux*.
 - **Votre conversation.** Pour les sujets, Haiku reçoit dans votre propre session la fin de la conversation, quelques milliers de caractères ; cela compte dans votre utilisation de Claude. Le site d’Arcade ne voit jamais la conversation. Arcade n’écrit dans la zone de saisie ou ne l’envoie que lorsque vous le demandez — par exemple *Donner à Claude* dans le carnet, la carte suivante d’une *File d’attente pour Claude* que vous avez lancée, ou la tâche d’un événement réglé avec *Donner à Claude*, à son heure — ou pour ouvrir une page comme décrit ci-dessus.
 - **Limites.** Après chaque tour et toutes les trente secondes, Arcade demande à Claude Code sa propre mesure des limites, du contexte et du coût — ce qu’affiche la ligne d’état. Cela ne coûte rien et ne compte pas dans votre utilisation de Claude.
-- **Programmes.** Votre navigateur pour la fenêtre Arcade (sous Windows avec son propre profil dans `%LOCALAPPDATA%\claude-arcade`) ; les notifications, dont les rappels du calendrier — PowerShell sous Windows, `osascript` sous macOS, `notify-send` sous Linux ; une vérification des navigateurs installés (Windows) ou du système (`uname`). Et `git` en lecture seule (`rev-parse`, `status` et `diff --numstat`) dans le dossier de chaque session, au démarrage et à la fin de chaque tour, pour *Agents*. Et la commande de *Vérification entre cartes* d’un tableau, s’il y en a une, dans le dossier de la session, quand une carte de la file d’attente arrive dans la dernière colonne.
-- **Fichiers.** Il n’écrit que les ROM que vous ajoutez avec `/arcade-add`, dans `~/.claude/arcade/roms`, et la petite marque de chaque session pour *Agents* et *Limites*, avec les réponses envoyées depuis cet onglet, dans `~/.claude/arcade/agents` ; il ne lit que le fichier que vous indiquez, ces copies, ces marques et ses propres fichiers. Les paramètres, le carnet, le calendrier et les favoris sont gardés dans le stockage des plugins de Claude Code.
+- **Programmes.** Votre navigateur pour la fenêtre Arcade (sous Windows avec son propre profil dans `%LOCALAPPDATA%\claude-arcade`) ; votre navigateur habituel pour un lien — TikTok hors de Desktop, la connexion avec GitHub, la page d’une application liée depuis le carnet, *Soutenir le projet*, *Conditions et confidentialité* (PowerShell `Start-Process` sous Windows, `open` sous macOS, `xdg-open` sous Linux, uniquement pour des adresses web en https) ; les notifications, dont les rappels du calendrier et la carte d’un nouveau message de discussion — PowerShell sous Windows, `osascript` sous macOS, `notify-send` sous Linux ; le presse-papiers du système pour *Copier* dans Desktop — PowerShell `Set-Clipboard` sous Windows, `pbcopy` sous macOS, `wl-copy`, `xclip` ou `xsel` sous Linux, avec le texte sur l’entrée standard ; une vérification des navigateurs installés (Windows) ou du système (`uname`). Et `git` en lecture seule (`rev-parse`, `status` et `diff --numstat`) dans le dossier de chaque session, au démarrage et à la fin de chaque tour, pour *Agents*. Et la commande de *Vérification entre cartes* d’un tableau, s’il y en a une, dans le dossier de la session, quand une carte de la file d’attente arrive dans la dernière colonne.
+- **Fichiers.** Il n’écrit que dans `~/.claude/arcade` : les ROM que vous ajoutez avec `/arcade-add`, sous la forme `roms/<sha256>.b64` ; la petite marque de chaque session pour *Agents* et *Limites*, `agents/s<N>.json`, et les réponses envoyées depuis *Agents*, `agents/a<N>.json` ; le report *Pas maintenant* de la ligne « envie de jouer ? », `ask-later.json`, et le lancement de Claude Code en cours, `ask-later-run.json`. Aucun n’est un fichier de build, de démarrage, de paramètres ou d’instructions, et rien ne les exécute. Il ne lit que le fichier que vous indiquez à `/arcade-add`, ces fichiers et les siens. Les paramètres, le carnet, le calendrier et les favoris sont gardés dans le stockage des plugins de Claude Code.
 - **Variables d’environnement.** Il lit `HOME` ou `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` et `OS`, et n’en modifie aucune.
-- **Réseau.** Le plugin lui-même ne contacte que le site d’Arcade (`agent-arcade.fefaodessa.workers.dev`), les flux RSS des chaînes YouTube et les flux des blogs et podcasts qu’il affiche. Les images du panneau Desktop, comme les avatars Twitch, se chargent directement depuis ces services. Les jeux, livres et vidéos sont chargés par la page que vous ouvrez dans le navigateur.
+- **Réseau.** Le plugin lui-même ne contacte que le site d’Arcade (`agent-arcade.fefaodessa.workers.dev`), les flux RSS des chaînes YouTube et les flux des blogs et podcasts qu’il affiche — leur liste vient du site d’Arcade, avec une copie dans le plugin. Les images du panneau Desktop, comme les avatars Twitch, se chargent directement depuis ces services. Les jeux, livres et vidéos sont chargés par la page que vous ouvrez dans le navigateur.
 
 ## Confidentialité
 

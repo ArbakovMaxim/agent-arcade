@@ -69,6 +69,16 @@ Ya da bir Claude Code oturumunun içinde:
 /plugin install arcade@agent-arcade
 ```
 
+Ya da marketplace’i de yol üstünde ekleyen tek bir adımla — terminalde ya da bir oturumun içinde:
+
+```
+claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
 Eklenti tüm oturumlar ve uygulamalar için kurulur. VS Code eklentisinde `/plugin` komutu yok — terminalden kur, VS Code eklentisi yeni bir sohbette onu algılar.
 
 **Güncelleme:**
@@ -309,10 +319,10 @@ Arcade, Claude Code’un eklentilere verdiği erişimle Claude Code içinde çal
 - **Ajanı durdurma.** Yalnızca Claude Desktop’ta, ajan çalışırken yerleşik tarayıcıda bir şey açtığında: Desktop bir eklentinin tarayıcıyı kendi başına açmasına izin vermez. Arcade o anki aracın bitmesini bekler (10 saniye sonra onu keser, ama ekranda bir izin sorusu olduğu sürece bekler), ajanı durdurur ve Claude’dan sayfayı açıp işine dönmesini ister. Bundan kaçınmak için *Ayarlar → Oyunları aç* bölümünden bir tarayıcı penceresi seç.
 - **Sohbetin.** Konular için senin oturumundaki Haiku sohbetin sonunu, birkaç bin karakteri alır; bu, Claude kullanımına sayılır. Arcade sitesi sohbeti asla görmez. Arcade giriş kutusuna yalnızca sen istediğinde yazar ya da onu gönderir — örneğin defterdeki *Claude’a ver*, başlattığın *Claude için kuyruk*’un sıradaki kartı ya da *Claude’a ver* ile ayarlanmış bir etkinliğin saati gelince verdiği görev — ya da yukarıda anlatıldığı gibi bir sayfa açmak için.
 - **Limitler.** Her yanıttan sonra ve yarım dakikada bir Arcade, Claude Code’dan kendi limit, bağlam ve maliyet ölçümünü ister — durum satırının gösterdiğini. Bunun bir maliyeti yoktur ve Claude kullanımına sayılmaz.
-- **Programlar.** Arcade penceresi için tarayıcın (Windows’ta `%LOCALAPPDATA%\claude-arcade` içinde kendi profiliyle); takvim hatırlatmaları dahil bildirimler — Windows’ta PowerShell, macOS’ta `osascript`, Linux’ta `notify-send`; hangi tarayıcıların kurulu olduğunun (Windows) ya da hangi sistem olduğunun (`uname`) kontrolü. Ayrıca *Ajanlar* için her oturumun kendi klasöründe, başlarken ve her yanıtın sonunda yalnızca okuyan `git` (`rev-parse`, `status` ve `diff --numstat`). Ayrıca bir panoda *Kartlar arası kontrol* komutu varsa, kuyruktaki bir kart son sütuna geldiğinde oturumun klasöründe o komut.
-- **Dosyalar.** Yalnızca `/arcade-add` ile eklediğin ROM’ları `~/.claude/arcade/roms` içine, *Ajanlar* ve *Limitler* için her oturumun küçük işaretini ve oradan gönderilen yanıtları da `~/.claude/arcade/agents` içine yazar; yalnızca belirttiğin dosyayı, bu kopyaları, bu işaretleri ve kendi dosyalarını okur. Ayarlar, defter, takvim ve favoriler Claude Code’un eklenti deposunda durur.
+- **Programlar.** Arcade penceresi için tarayıcın (Windows’ta `%LOCALAPPDATA%\claude-arcade` içinde kendi profiliyle); bir bağlantı için her zamanki tarayıcın — Desktop dışında TikTok, GitHub ile giriş, defterden bağlantı verilen bir uygulamanın sayfası, *Projeye destek ol*, *Koşullar ve gizlilik* (Windows’ta PowerShell `Start-Process`, macOS’ta `open`, Linux’ta `xdg-open`, yalnızca https üzerinden web adresleri için); takvim hatırlatmaları ve yeni sohbet mesajı kartı dahil bildirimler — Windows’ta PowerShell, macOS’ta `osascript`, Linux’ta `notify-send`; Desktop’ta *Kopyala* için sistemin kopyalama panosu — Windows’ta PowerShell `Set-Clipboard`, macOS’ta `pbcopy`, Linux’ta `wl-copy`, `xclip` ya da `xsel`, metin standart girdiden verilir; hangi tarayıcıların kurulu olduğunun (Windows) ya da hangi sistem olduğunun (`uname`) kontrolü. Ayrıca *Ajanlar* için her oturumun kendi klasöründe, başlarken ve her yanıtın sonunda yalnızca okuyan `git` (`rev-parse`, `status` ve `diff --numstat`). Ayrıca bir panoda *Kartlar arası kontrol* komutu varsa, kuyruktaki bir kart son sütuna geldiğinde oturumun klasöründe o komut.
+- **Dosyalar.** Yalnızca `~/.claude/arcade` içine yazar: `/arcade-add` ile eklediğin ROM’lar, `roms/<sha256>.b64` olarak; *Ajanlar* ve *Limitler* için her oturumun küçük işareti, `agents/s<N>.json`, ve *Ajanlar*’dan gönderilen yanıtlar, `agents/a<N>.json`; “Oynamak ister misin?” satırının *Şimdi değil* ertelemesi, `ask-later.json`, ve Claude Code’un hangi açılışının şu anki olduğu, `ask-later-run.json`. Bunların hiçbiri bir derleme, başlangıç, ayar ya da talimat dosyası değildir ve hiçbir şey onları çalıştırmaz. Yalnızca `/arcade-add`’e belirttiğin dosyayı, bu dosyaları ve kendi dosyalarını okur. Ayarlar, defter, takvim ve favoriler Claude Code’un eklenti deposunda durur.
 - **Ortam değişkenleri.** `HOME` ya da `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` ve `OS` değişkenlerini okur; hiçbirini değiştirmez.
-- **Ağ.** Eklentinin kendisi yalnızca Arcade sitesiyle (`agent-arcade.fefaodessa.workers.dev`), YouTube kanallarının RSS akışlarıyla ve gösterdiği blog ve podcast’lerin akışlarıyla konuşur. Desktop panelindeki resimler, örneğin Twitch avatarları, doğrudan bu hizmetlerden yüklenir. Oyunları, kitapları ve videoları tarayıcıda açtığın sayfa yükler.
+- **Ağ.** Eklentinin kendisi yalnızca Arcade sitesiyle (`agent-arcade.fefaodessa.workers.dev`), YouTube kanallarının RSS akışlarıyla ve gösterdiği blog ve podcast’lerin akışlarıyla konuşur — bu akışların listesi Arcade sitesinden gelir, bir kopyası da eklentide bulunur. Desktop panelindeki resimler, örneğin Twitch avatarları, doğrudan bu hizmetlerden yüklenir. Oyunları, kitapları ve videoları tarayıcıda açtığın sayfa yükler.
 
 ## Gizlilik
 
