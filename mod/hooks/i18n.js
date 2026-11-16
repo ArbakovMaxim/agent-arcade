@@ -637,6 +637,11 @@ const EXACT = {
   'Панель и язык': 'Pane and language',
   'Уведомления': 'Notifications',
   'Клавиши': 'Keys',
+  'Разрешения Claude Code': 'Claude Code permissions',
+  'Claude Code может спросить, прежде чем Claude воспользуется блокнотом или календарём Arcade.':
+    'Claude Code may ask you before Claude uses the Arcade notebook or calendar.',
+  'Чтобы не спрашивал, добавь mcp__arcade__notes и mcp__arcade__calendar в permissions.allow в ~/.claude/settings.json. Сам Arcade эту настройку не пишет.':
+    'To skip the question, add mcp__arcade__notes and mcp__arcade__calendar to permissions.allow in ~/.claude/settings.json. Arcade never writes that setting itself.',
   'Условия и конфиденциальность': 'Terms and privacy',
   'Условия использования': 'Terms of Use',
   'Политика конфиденциальности': 'Privacy Policy',

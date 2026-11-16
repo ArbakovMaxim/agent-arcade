@@ -115,7 +115,7 @@ const empty = (o) => Object.values(o.exact).filter((v) => !v).length + Object.va
 
 // --- Мод ---------------------------------------------------------------------------------------------------------
 const { tr } = await import(pathToFileURL(path.join(ROOT, 'mod', 'hooks', 'i18n.js')).href)
-// Код мода — hooks/ с подпапками app/ и screens/; переводы, эмулятор и игры Денди не нужны
+// Код мода — hooks/ (с подпапкой app/); переводы, эмулятор и игры Денди не нужны
 const modFiles = fs
   .readdirSync(path.join(ROOT, 'mod', 'hooks'), { recursive: true })
   .map((f) => f.replaceAll('\\', '/'))

@@ -122,29 +122,29 @@ export function daySummary(log, notes, day, me = '') {
 
 // Текст страницы «Итоги» — разделами; t — перевод фразы, colName — название колонки. Названия страниц — как есть
 export function summaryBody(sum, t, colName) {
-  const on = (x) => (x.board ? ` · ${t('доска')} «${x.board}»` : '')
+  const onBoard = (x) => (x.board ? ` · ${t('доска')} «${x.board}»` : '')
   const who = (x) => (x.by === 'claude' ? ' · Claude' : '')
   const part = (title, lines) => [`## ${t(title)}`, ...(lines.length ? lines : [t('Пусто.')]), '']
   // Проверки между карточками — разделом, только когда они были
   const checks = sum.checks ?? []
   const checkLines = checks.map((x) =>
     [
-      `- ${x.ok ? '✓' : '✗'} ${x.title}${on(x)}: \`${x.cmd}\`${x.ok ? '' : ` — ${x.code >= 0 ? `${t('код')} ${x.code}` : t('время вышло или команда не запустилась')}`}`,
+      `- ${x.ok ? '✓' : '✗'} ${x.title}${onBoard(x)}: \`${x.cmd}\`${x.ok ? '' : ` — ${x.code >= 0 ? `${t('код')} ${x.code}` : t('время вышло или команда не запустилась')}`}`,
       ...(x.ok || !x.tail ? [] : x.tail.split('\n').map((l) => `    ${l}`)),
     ].join('\n'),
   )
   return [
     ...part(
       'Отдано Claude',
-      sum.gave.map((x) => `- ${x.title}${on(x)}`),
+      sum.gave.map((x) => `- ${x.title}${onBoard(x)}`),
     ),
     ...part('Сделано', [
-      ...sum.done.map((x) => `- ✓ ${x.title}${on(x)}${who(x)}`),
-      ...sum.checked.map((x) => `- ${x.title}${on(x)}: ${t('отмечено пунктов')} — ${x.n}${who(x)}`),
+      ...sum.done.map((x) => `- ✓ ${x.title}${onBoard(x)}${who(x)}`),
+      ...sum.checked.map((x) => `- ${x.title}${onBoard(x)}: ${t('отмечено пунктов')} — ${x.n}${who(x)}`),
     ]),
     ...part(
       'В работе',
-      sum.doing.map((x) => `- ${x.title}${on(x)}${x.col ? `, ${t('колонка')} «${colName(x.col)}»` : ''}${x.left ? `: ${t('осталось пунктов')} — ${x.left}` : ''}`),
+      sum.doing.map((x) => `- ${x.title}${onBoard(x)}${x.col ? `, ${t('колонка')} «${colName(x.col)}»` : ''}${x.left ? `: ${t('осталось пунктов')} — ${x.left}` : ''}`),
     ),
     ...(checkLines.length ? part('Проверки между карточками', checkLines) : []),
   ]
