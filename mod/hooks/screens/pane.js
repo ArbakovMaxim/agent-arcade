@@ -37,7 +37,7 @@ import { todayScreen } from './today.js'
 import { calendarScreen } from './calendar.js'
 
 export async function drawPane($, e) {
-  const { Box, Text, Raster, Image, Button: makeButton, Client, Svg, Input, Markdown, Select } = $.ui.resolve(e)
+  const { Box, Text, Raster, Image, Button: makeButton, Svg, Input, Markdown, Select } = $.ui.resolve(e)
   // Готовая кнопка заморожена и свой onPress не отдаёт, а плитка Desktop пересобирает её с переносом названия:
   // пропсы каждой кнопки запоминаются здесь
   const buttonProps = new WeakMap()
@@ -499,5 +499,5 @@ export async function drawPane($, e) {
     else ({ items, headerExtra } = mainScreen($, e, kit))
     return Box({ flexDirection: 'column', children: [headerExtra.length ? headerOf(headerExtra) : header, gap, ...items] })
   }
-  return gameScreen($, e, { Box, Button, Client, Image, Raster, Svg, Text, eventLines, game, header, terminal })
+  return gameScreen($, e, { Box, Button, Image, Raster, Svg, Text, eventLines, game, header, terminal })
 }

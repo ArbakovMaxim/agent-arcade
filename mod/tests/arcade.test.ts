@@ -2,7 +2,7 @@ import { expect } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
-import { clip, ownDesktopCall, paneClosedBy, workedText } from '../hooks/register.js'
+import { arcadeUrl, clip, paneClosedBy, workedText } from '../hooks/register.js'
 import { detectLang, tr, fromEnglish, resetLocaleCache } from '../hooks/i18n.js'
 import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
@@ -1364,26 +1364,18 @@ test('Desktop: вкладка Arcade уже открыта — игра откр
   await ui.unmount()
 })
 
-test('Desktop: свои вызовы браузера Arcade разрешает только на своём сайте и только инструментам браузера', () => {
-  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: `${SITE}/?game=miniplanets` })).toBe(true)
-  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: `${SITE}/`, tabId: 'tab-1' })).toBe(true)
-  expect(ownDesktopCall('mcp__Claude_Browser__tabs_context', {})).toBe(true)
-  expect(ownDesktopCall('mcp__Claude_Browser__tabs_select', { tabId: 'tab-1' })).toBe(true)
-  expect(ownDesktopCall('mcp__ccd_view__show_pane', { pane: 'preview' })).toBe(true)
-  // TikTok и закрытие своей вкладки, когда агент закончил
-  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: 'https://www.tiktok.com/foryou' })).toBe(true)
-  expect(ownDesktopCall('mcp__Claude_Browser__tabs_close', { tabId: 'tab-1' })).toBe(true)
-  // Чужой сайт, сайт с похожим началом, другая панель, другой инструмент — нет
-  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: 'https://example.com/' })).toBe(false)
-  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: `${SITE}.example.com/` })).toBe(false)
-  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: 'https://www.tiktok.com.example.com/' })).toBe(false)
-  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', {})).toBe(false)
-  expect(ownDesktopCall('mcp__ccd_view__show_pane', { pane: 'terminal' })).toBe(false)
-  expect(ownDesktopCall('mcp__Claude_Browser__javascript_tool', { text: '1' })).toBe(false)
-  expect(ownDesktopCall('Bash', { command: 'ls' })).toBe(false)
+test('Desktop: свой сайт для встроенного браузера — только сайт Arcade и TikTok', () => {
+  expect(arcadeUrl(`${SITE}/?game=miniplanets`)).toBe(true)
+  expect(arcadeUrl(`${SITE}/`)).toBe(true)
+  expect(arcadeUrl('https://www.tiktok.com/foryou')).toBe(true)
+  // Чужой сайт, сайт с похожим началом, без адреса — нет
+  expect(arcadeUrl('https://example.com/')).toBe(false)
+  expect(arcadeUrl(`${SITE}.example.com/`)).toBe(false)
+  expect(arcadeUrl('https://www.tiktok.com.example.com/')).toBe(false)
+  expect(arcadeUrl(undefined)).toBe(false)
 })
 
-test('Desktop: те же инструменты браузера у Claude Arcade не разрешает — решение остаётся обычным', async ($, on) => {
+test('Desktop: инструменты браузера Arcade не разрешает ни себе, ни Claude — решение остаётся обычным', async ($, on) => {
   const { clock } = stubs(on)
   await start($)
   await clock.advance(200)
@@ -3327,8 +3319,8 @@ test('rss.js: список лент, разбор RSS и Atom, выпуски с
   expect(listenUrl({ feed: 'agents-pod', audio: 'https://cdn.example.net/a.mp3', title: 'A & B' }, 'en')).toBe(`${SITE}/listen?lang=en#f=agents-pod&u=https%3A%2F%2Fcdn.example.net%2Fa.mp3&t=A%20%26%20B`)
   expect(itemStats(episodes[0], 'en', at)).toMatch(/^\w+ \d+ · 1:02:05$/)
   // Страницы /read и /listen — на сайте Arcade: их Arcade открывает сам; сам сайт статьи — нет
-  expect(ownDesktopCall('mcp__Claude_Browser__preview_start', { url: readUrl(posts[2], 'en') })).toBe(true)
-  expect(ownDesktopCall('mcp__Claude_Browser__navigate', { url: 'https://ai.example.com/p/caching', tabId: 'tab-1' })).toBe(false)
+  expect(arcadeUrl(readUrl(posts[2], 'en'))).toBe(true)
+  expect(arcadeUrl('https://ai.example.com/p/caching')).toBe(false)
   // Новые строки интерфейса переведены
   expect(tr('Статьи', 'en')).toBe('Articles')
   expect(tr('Arcade · Подкасты', 'en')).toBe('Arcade · Podcasts')

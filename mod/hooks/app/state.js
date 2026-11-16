@@ -7,6 +7,12 @@ import { CALENDAR_TOOL } from '../calendar.js'
 
 export const S = {}
 export const PANE = 'arcade'
+// Имя плагина из .claude-plugin/plugin.json (не менять): по нему узнаём свои вызовы и нажатия. Постоянной, а не
+// $.plugin.name: проверка каталога плагинов Anthropic читает у $ только вызовы вида $.noun.method(...)
+export const PLUGIN_NAME = 'arcade'
+// Версия мода — менять вместе с version в .claude-plugin/plugin.json: уходит в отчёт об ошибке. Файл по
+// $.plugin.root не читаем по той же причине
+export const ARCADE_VERSION = '0.48.3'
 export const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
 export const ASK_AFTER_MS = 10_000 // через сколько работы агента показать вопрос «сыграть?», пока его не настроили; для быстрой проверки поставь 5_000
 // Строка «сыграть?» над полем ввода: через сколько секунд работы агента, на выбор в настройках; 0 — не показывать
@@ -283,7 +289,6 @@ S.chatLink = '' // код ссылки на страницу чатов: его 
 // listNote — заметка (listBad — не вышло); request — номер последнего вопроса про список: ответ старого не нужен
 export const NO_REPORTS = { list: null, open: 0, loading: false, busy: 0, listNote: '', listBad: false }
 S.rp = { field: 0, sending: false, note: '', bad: false, ...NO_REPORTS, request: 0 }
-S.modVersion = null // версия мода из его plugin.json: читается один раз; не прочли — ''
 S.stamps = {} // когда человек менял синхронизируемые настройки: ключ → время; в $.store — syncAt
 // Какие из SYNC_KEYS сохранены на этом компьютере: чего человек здесь не менял, то берём с сайта, а не отправляем туда
 export const savedKeys = new Set()

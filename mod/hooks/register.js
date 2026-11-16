@@ -11,12 +11,12 @@ import { SYNC_KEYS, restoreAccount, restoreStamps } from './account.js'
 import { NOTES_TOOL } from './notes.js'
 import { CALENDAR_TOOL } from './calendar.js'
 import { bookLang } from './books.js'
-import { CALENDAR_TOOL_NAME, DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, PANE, S, savedKeys } from './app/state.js'
+import { CALENDAR_TOOL_NAME, DEBUG, GRAPHICS, INPUT, LAUNCH_TIMEOUT_MS, NOTES_TOOL_NAME, PANE, PLUGIN_NAME, S, savedKeys } from './app/state.js'
 import { addMine, gameById, games } from './app/library.js'
 import { LOBBIES_EVERY_MS, log, waitingFrom, waitingText, windowNotice, workedSeconds, workedText } from './app/status.js'
 import { followPane, nesView, openPane, paneClosedBy, pressStart, readInput, releaseAll, runGameLoop, toLibrary, typedFrom } from './app/play.js'
 import { builtinBrowser, launchNotice, mouseGame, webGame, windowCommand } from './app/window.js'
-import { BROWSER, DESKTOP_TOOLS, arcadeUrl, askClaude, desktopNotice, desktopWindow, openPending, openedForArcade, ownDesktopCall, pressed } from './app/desktop.js'
+import { BROWSER, arcadeUrl, askClaude, desktopNotice, desktopWindow, openPending, openedForArcade, pressed } from './app/desktop.js'
 import { SYNC_EVERY_MS, applySetting, saveSetting, syncAccount } from './app/profile.js'
 import { CHATS_POLL_MS, CHAT_POLL_MS, POPUP_POLL_MS, PULSE_SOON_MS, loadChats, pollChat, pulse, watchMessages } from './app/talk.js'
 import { BOARDS_POLL_MS, BOARD_POLL_MS, NOTES_POLL_MS, loadBoards, loadNotes, notesShown, notesTool, pushBoards, refreshNotes, shownShares, syncBoard } from './app/work.js'
@@ -28,12 +28,12 @@ import { usageNow } from './app/usage.js'
 import { AGENT_TICK_MS, agentsTick, hiddenOf, leaveAgents, startAgents } from './app/agents.js'
 import { changesPoll } from './app/changes.js'
 import { laterOn, laterSet, startLater } from './app/later.js'
-import { asksReset, callsOver, checkObserved, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
+import { asksReset, callsOver, checkSeen, classicAsk, classicDone, questionCall, settle, toolDecided } from './app/asks.js'
 import { bgCheck, bgClear, bgCount, bgHold, bgResume, turnDone, wakeText } from './app/background.js'
 import { drawPane } from './screens/pane.js'
 // для тестов (tests/arcade.test.ts)
 export { clip, workedText } from './app/status.js'
-export { ownDesktopCall } from './app/desktop.js'
+export { arcadeUrl } from './app/desktop.js'
 export { paneClosedBy } from './app/play.js'
 
 export function register(on) {
@@ -316,7 +316,11 @@ export function register(on) {
   })
 
   // Без отбора: вердикт — как есть, мод только смотрит, не спросят ли человека
-  on('tool.check', async ($, e, next) => checkObserved($, e, next))
+  on('tool.check', async ($, e, next) => {
+    const verdict = await next(e)
+    checkSeen($, e, verdict, next.origin?.plugin)
+    return verdict
+  })
 
   // Телеметрия — только смотрим: решение о вызове (tool_decision) закрывает запрос разрешения
   on('telemetry.log', { to: 'collector' }, async ($, e, next) => {
@@ -329,7 +333,7 @@ export function register(on) {
   })
 
   // Вопрос Claude (AskUserQuestion): человеку — как обычно, а ответить можно и из «Агентов» другой сессии
-  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => (next.origin?.plugin === $.plugin.name ? next(e) : questionCall($, e, next)))
+  on('tool.call', { tool: 'AskUserQuestion' }, async ($, e, next) => (next.origin?.plugin === PLUGIN_NAME ? next(e) : questionCall($, e, next)))
 
   on('turn.complete', async ($, e, next) => {
     // Субагент закончил — агент ещё нет: «агент закончил» не про него. Но если главный ход уже кончился и ждал фона —
@@ -394,22 +398,10 @@ export function register(on) {
     return next(e)
   })
 
-  // Встроенный браузер Desktop по нажатию в панели: свои вызовы Arcade разрешает сам, иначе авто-режим отдаёт их
-  // классификатору, и тот отказывает — просил не человек словами. Только вызовы самого Arcade и только то, что
-  // пропускает ownDesktopCall; эти же инструменты у Claude решаются как обычно. Разрешаем только то, о чём спросили бы
-  // человека: правило в настройках (разрешить или запретить) отдаём как есть — встроенная защита Claude Code
-  // (cc-plugin-sec-default, на Team и Enterprise) переписанное модом правило считает обходом и пишет об этом в чат
-  on('tool.check', { tool: DESKTOP_TOOLS }, async ($, e, next) => {
-    if (next.origin.plugin !== $.plugin.name || !ownDesktopCall(e.tool, e.input)) return next(e)
-    const decided = await next(e)
-    if (decided?.decision !== 'ask') return decided
-    return { decision: 'allow', reason: 'Arcade открывает игру во встроенном браузере по нажатию в своей панели' }
-  })
-
   // Нажатие в Arcade — кнопка или Enter в поле: встроенный браузер открываем в теле хука, когда обработчик отработал, —
-  // вызов из самого обработчика с движка 2.1.308 идёт мимо tool.check выше (pressed, desktop.js)
-  on('ui.press', async ($, e, next) => (e.plugin === $.plugin.name ? pressed($, e, next) : next(e)))
-  on('ui.input', async ($, e, next) => (e.plugin === $.plugin.name && e.kind === 'submit' ? pressed($, e, next) : next(e)))
+  // так вызов идёт через обычную проверку разрешений, как и раньше (pressed, desktop.js)
+  on('ui.press', async ($, e, next) => (e.plugin === PLUGIN_NAME ? pressed($, e, next) : next(e)))
+  on('ui.input', async ($, e, next) => (e.plugin === PLUGIN_NAME && e.kind === 'submit' ? pressed($, e, next) : next(e)))
 
   // Инструмент блокнота меняет только блокнот Arcade и ничего не удаляет: разрешаем сам, если Claude Code спросил бы
   // человека. Правило в настройках (разрешить или запретить) отдаём как есть
@@ -442,7 +434,7 @@ export function register(on) {
   // CUT_TOOL_MS не ждём: обрываем (cutPending). Вызов кончился — его запрос разрешения (и у субагента) закрыт, а когда
   // не идёт ни одного — и классический
   on('tool.call', async ($, e, next) => {
-    if (next.origin?.plugin === $.plugin.name) return next(e)
+    if (next.origin?.plugin === PLUGIN_NAME) return next(e)
     if (e.agentId !== undefined) {
       try {
         return await next(e)

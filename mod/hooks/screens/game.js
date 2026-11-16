@@ -8,7 +8,7 @@ const ALERT_PAUSE = { permission: 'агент ждёт разрешения', qu
 const ALERT_BAR = { permission: ' Агент ждёт разрешения ', question: ' Агент задал вопрос ' }
 
 export function gameScreen($, e, kit) {
-  const { Box, Button, Client, Image, Raster, Svg, Text, eventLines, game, header, terminal } = kit
+  const { Box, Button, Image, Raster, Svg, Text, eventLines, game, header, terminal } = kit
   const libraryButton = Button({
     key: 'arcade-library',
     label: 'Библиотека',
@@ -93,7 +93,7 @@ export function gameScreen($, e, kit) {
                 position: 'absolute',
                 top: 0,
                 left: 0,
-                children: [Client({ key: INPUT, module: '../input.js', props: { focused: e.props.isFocused }, width: '100%', height: '100%' })],
+                children: [h('Client', { key: INPUT, module: '../input.js', props: { focused: e.props.isFocused }, width: '100%', height: '100%' })],
               }),
             ],
           }),
@@ -156,7 +156,7 @@ export function gameScreen($, e, kit) {
           position: 'absolute',
           top: 0,
           left: 0,
-          children: [Client({ key: INPUT, module: '../input.js', props: { focused: e.props.isFocused }, width: columns, height: rows })],
+          children: [h('Client', { key: INPUT, module: '../input.js', props: { focused: e.props.isFocused }, width: columns, height: rows })],
         }),
       ],
     })

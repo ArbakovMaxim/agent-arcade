@@ -122,13 +122,13 @@ export function whatOf(input) {
   return ''
 }
 
-// tool.check без отбора: вердикт — как есть. «Спросить» у вызова Claude там, где есть кого спросить, — запрос
-// разрешения, если за GRACE решение не пришло
-export async function checkObserved($, e, next) {
-  const verdict = await next(e)
+// Вердикт tool.check без отбора (verdict; from — чей он, next.origin.plugin): хук в register.js отдаёт его как есть, здесь
+// только смотрим. «Спросить» у вызова Claude там, где есть кого спросить, — запрос разрешения, если за GRACE решение
+// не пришло
+export function checkSeen($, e, verdict, from) {
   try {
     const id = e.tool_use_id
-    if (verdict?.decision === 'ask' && id && e.approver && next.origin?.plugin === 'engine' && !NOT_ASKS.has(e.tool) && !decided.has(id)) {
+    if (verdict?.decision === 'ask' && id && e.approver && from === 'engine' && !NOT_ASKS.has(e.tool) && !decided.has(id)) {
       waiting.set(id, { kind: 'permission', tool: e.tool, what: whatOf(e.input) })
       const grace = S.permMode === 'auto' ? GRACE_AUTO_MS : S.permMode ? GRACE_MS : GRACE_UNKNOWN_MS
       $.clock.after(grace, async () => {
@@ -142,7 +142,6 @@ export async function checkObserved($, e, next) {
   } catch (err) {
     log(`ошибка мода: ${err?.message ?? err}`)
   }
-  return verdict
 }
 
 // Телеметрия: из решения о вызове берём только режим и id вызова

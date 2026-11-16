@@ -6,8 +6,8 @@ import { restoreTwitch } from '../twitch.js'
 import { HANDLE, accountUrl, normalHandle, parseAvatar, parseDone, parseHandle, parseMe, parsePoll, parseSettings, parseStart, parseWeb, syncPlan } from '../account.js'
 import { validPic } from '../avatars.js'
 import { restoreFavorites, toggleIn } from '../find.js'
-import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../reports.js'
-import { ASK_AFTER_CHOICES, FAV_LIMIT, HIDEABLE, LAUNCH_TIMEOUT_MS, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_REPORTS, S, SECTIONS, SIGNAL_MODES, noOnline, restoreKeymap, savedKeys } from './state.js'
+import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody } from '../reports.js'
+import { ARCADE_VERSION, ASK_AFTER_CHOICES, FAV_LIMIT, HIDEABLE, LAUNCH_TIMEOUT_MS, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_REPORTS, S, SECTIONS, SIGNAL_MODES, noOnline, restoreKeymap, savedKeys } from './state.js'
 import { log, windowNotice } from './status.js'
 import { fetchWithin } from './watch.js'
 import { withoutPics } from './talk.js'
@@ -417,17 +417,11 @@ export function reportNote(error) {
   return accountNote(error)
 }
 
-// Версия мода — из его plugin.json, один раз
-async function arcadeVersion($) {
-  if (S.modVersion === null) S.modVersion = versionFrom(await $.fs.read(`${$.plugin.root}/.claude-plugin/plugin.json`).catch(() => ''))
-  return S.modVersion
-}
-
 // «Отправить»: со входом — подписан аккаунтом, без входа — без подписи. К тексту — версия Arcade, где он открыт
 // (surface), язык и система; больше ничего. Пустой или слишком длинный — сразу здесь, на сайт не уходит
 export async function sendReport($, text, surface) {
   if (S.rp.sending) return
-  const body = reportBody(text, { version: await arcadeVersion($), surface, lang: S.lang, os: S.platform })
+  const body = reportBody(text, { version: ARCADE_VERSION, surface, lang: S.lang, os: S.platform })
   const problem = !body.text ? 'empty' : body.text.length > MAX_REPORT ? 'long' : ''
   if (problem) {
     S.rp.note = reportNote(problem)
