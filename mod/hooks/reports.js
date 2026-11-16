@@ -17,12 +17,6 @@ const ACCOUNT_ID = /^\d{1,20}$/
 // Первые n знаков (не половинки суррогатных пар)
 const cut = (text, n) => [...text].slice(0, n).join('')
 
-// Версия мода из текста его plugin.json; не та — ''
-export function versionFrom(text) {
-  const version = jsonFrom(text)?.version
-  return typeof version === 'string' && VERSION.test(version) ? version : ''
-}
-
 // Приметы отчёта: версия Arcade, где он открыт (surface), язык интерфейса и система — только знакомого вида
 function details({ version, surface, lang, os } = {}) {
   const fields = {

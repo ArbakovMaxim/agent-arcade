@@ -292,9 +292,14 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Решение по разрешениям без плагинов: спросить человека. Вызов самого Claude (из теста он идёт от движка) человек
   // разрешил: тест говорит «Claude открыл игру». Вопрос без вызова ($.tool.check) и вызовы мода — «спросить»; вызовы
-  // Claude, которые выбрал тест (ask), — тоже. В вызовах, которые тест выбрал в deny, человек отказал
+  // Claude, которые выбрал тест (ask), — тоже. В вызовах, которые тест выбрал в deny, человек отказал.
+  // Вызовы Arcade к встроенному браузеру Desktop сам Arcade не разрешает — их пропускает правило человека (инструменты
+  // браузера разрешены в настройках) или авто-режим; его отказ (browser: 'deny') приходит из самого вызова, выше
   on('tool.check', ($: any, e: any, next: any) => {
     if (deny?.(e)) return { decision: 'deny' }
+    if (next?.origin?.plugin === 'arcade' && /^mcp__(Claude_Browser|ccd_view)__/.test(e.tool)) {
+      return { decision: 'allow' }
+    }
     return { decision: ask?.(e) || !(e.tool_use_id && next?.origin?.plugin === 'engine') ? 'ask' : 'allow' }
   })
   // Просьба от мода Claude: принята (submit: true) или нет — тогда, как и без отказа в разрешении, поле ввода

@@ -6,7 +6,7 @@ import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, clock
 import { AVATAR_COUNT, avatarName, avatarSvg, initial, letterColor, letterSvg, picSvg, validPic } from '../hooks/avatars.js'
 import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, svgToXaml } from '../hooks/popup.js'
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
-import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody, versionFrom } from '../hooks/reports.js'
+import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../hooks/notes.js'
 import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanGive, cleanTime, dayKey, dueReminders, dueTasks, fireAt, giveTargets, markAlerted, markTask, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
@@ -14,8 +14,8 @@ import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/app/agents.js'
-import { ANSWER_POLL_MS, asksReset, checkObserved, toolDecided } from '../hooks/app/asks.js'
-import { S } from '../hooks/app/state.js'
+import { ANSWER_POLL_MS, asksReset, checkSeen, toolDecided } from '../hooks/app/asks.js'
+import { ARCADE_VERSION, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test, BASH_MS } from './kit.ts'
 
@@ -2642,18 +2642,15 @@ test('избранное пустое — подсказка; поиск и из
 
 // --- 0.25: отчёты об ошибках ---
 
-test('reports.js: тело отчёта, версия из plugin.json, роль в /api/me, ответы сайта про отчёты и список', () => {
+test('reports.js: тело отчёта, роль в /api/me, ответы сайта про отчёты и список', () => {
   const reply = (status: number, data: any) => ({ status, ok: status < 400, headers: {}, text: typeof data === 'string' ? data : JSON.stringify(data) })
   expect([accountUrl('report'), accountUrl('myReport'), accountUrl('reports'), accountUrl('closeReport')]).toEqual([`${SITE}/api/report`, `${SITE}/api/me/report`, `${SITE}/api/me/reports`, `${SITE}/api/me/reports/close`])
   // Роль — только admin; остальное и ошибки — ''
   expect(parseMe(reply(200, { user: OCTO, role: 'admin' }))).toMatchObject({ role: 'admin', error: '' })
   expect(parseMe(reply(200, { user: OCTO, role: 'root' })).role).toBe('')
   expect(parseMe(reply(401, { error: 'auth' })).role).toBe('')
-  // Версия мода — из его plugin.json, только вида 0.25.0
-  expect(versionFrom('{"name":"arcade","version":"0.25.0"}')).toBe('0.25.0')
-  expect(['{"version":"0.25"}', '{"version":25}', 'not json', undefined].map(versionFrom)).toEqual(['', '', '', ''])
   // Тело: без управляющих знаков и пробелов по краям; приметы — только знакомого вида
-  expect(reportBody('  Шашки\r\nзависли ‮ ', { version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })).toEqual({ text: 'Шашки\nзависли', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })
+  expect(reportBody('  Шашки\r\nзависли \u202e ', { version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })).toEqual({ text: 'Шашки\nзависли', version: '0.25.0', surface: 'desktop', lang: 'ru', os: 'windows' })
   expect(reportBody('x', { version: '1.2', surface: 'web', lang: 'rus', os: null })).toEqual({ text: 'x' })
   expect(reportBody(undefined, {})).toEqual({ text: '' })
   // Отправка: номер отчёта; пустой, длинный, часто, у всех слишком много, выключено, ключ не действует
@@ -2693,7 +2690,7 @@ test('reports.js: тело отчёта, версия из plugin.json, роль
 test('отчёт об ошибке без входа: плитка в «Ещё» у всех, списка нет; пустой и длинный — сразу здесь; ушёл без подписи с версией, языком и системой', HEAVY, async ($, on) => {
   let answer: any = { json: { ok: true, id: 7 } }
   const { api } = accountSite({}, { 'POST api/report': () => answer })
-  const { clock, requests } = stubs(on, { env: WINDOWS, api, disk: { '.claude-plugin/plugin.json': '{"name":"arcade","version":"0.25.0"}' } })
+  const { clock, requests } = stubs(on, { env: WINDOWS, api })
   await start($)
   await clock.advance(3_200)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
@@ -2716,10 +2713,10 @@ test('отчёт об ошибке без входа: плитка в «Ещё»
   await report('arcade-report-text-0', 'я'.repeat(MAX_REPORT + 1))
   expect(await text('Отчёт длиннее 2000 знаков — сократи его.')).toBeDefined()
   expect(sent(requests, 'api/report', 'POST')).toEqual([])
-  // Ушёл: без ключа, с версией из plugin.json, языком и системой; поле — новое, пустое
-  await report('arcade-report-text-0', '  Шашки зависают после хода дамкой‮ ')
+  // Ушёл: без ключа, с версией мода, языком и системой; поле — новое, пустое
+  await report('arcade-report-text-0', '  Шашки зависают после хода дамкой\u202e ')
   const [first] = sent(requests, 'api/report', 'POST')
-  expect(first.body).toEqual({ text: 'Шашки зависают после хода дамкой', version: '0.25.0', surface: 'terminal', lang: 'ru', os: 'windows' })
+  expect(first.body).toEqual({ text: 'Шашки зависают после хода дамкой', version: ARCADE_VERSION, surface: 'terminal', lang: 'ru', os: 'windows' })
   expect(first.headers.Authorization).toBeUndefined()
   expect(await text('Спасибо! Отчёт отправлен.')).toBeDefined()
   expect(await ui.find({ key: 'arcade-report-text-0' })).toBeUndefined()
@@ -2760,7 +2757,7 @@ test('отчёт об ошибке со входом: подписан акка�
   await report('arcade-report-text-0', 'Чат не открывается')
   const [mine] = sent(requests, 'api/me/report', 'POST')
   expect(mine.headers.Authorization).toBe(`Bearer ${TOKEN}`)
-  expect(mine.body).toEqual({ text: 'Чат не открывается', surface: 'terminal', lang: 'ru', os: 'windows' })
+  expect(mine.body).toEqual({ text: 'Чат не открывается', version: ARCADE_VERSION, surface: 'terminal', lang: 'ru', os: 'windows' })
   expect(await text('Спасибо! Отчёт отправлен.')).toBeDefined()
   // Ключ на сайте больше не действует: вход забыт, отчёт — ещё раз, теперь без подписи
   signed = { status: 401, json: { error: 'auth' } }
@@ -5912,9 +5909,8 @@ test('запрос разрешения без классического хук
       await t.fn()
     }
   }
-  const engine = (verdict: any, plugin = 'engine') => Object.assign(async () => verdict, { origin: { plugin, tier: 'core' } })
   const call = (id: string, more: any = {}) => ({ tool: 'Bash', input: { command: 'npm test\nnpm run lint' }, tool_use_id: id, approver: 'person', ...more })
-  const check = (id: string, more: any = {}) => checkObserved($, call(id, more), engine({ decision: 'ask' }))
+  const check = (id: string, more: any = {}) => checkSeen($, call(id, more), { decision: 'ask' }, 'engine')
   // Решение по вызову — в телеметрии; из неё берём только id вызова и режим
   const decided = (id: string, mode = 'default') =>
     toolDecided($, { to: 'collector', event: 'claude_code.tool_decision', attributes: { tool_use_id: id, permission_mode: mode, decision: 'accept', source: 'user_temporary' } })
@@ -5923,9 +5919,8 @@ test('запрос разрешения без классического хук
   S.status = 'working'
   S.permMode = ''
 
-  // Вердикт уходит тем же объектом. Режим ещё неизвестен — ждём 3 с: вдруг решит классификатор
-  const verdict = { decision: 'ask' }
-  expect(await checkObserved($, call('toolu_1'), engine(verdict))).toBe(verdict)
+  // Режим ещё неизвестен — ждём 3 с: вдруг решит классификатор
+  check('toolu_1')
   await advance(2_900)
   expect(waits()).toBe(false)
   await advance(200)
@@ -5966,8 +5961,8 @@ test('запрос разрешения без классического хук
   await check('toolu_5', { approver: undefined })
   await check('')
   await check('toolu_6', { tool: 'AskUserQuestion' })
-  await checkObserved($, call('toolu_7'), engine({ decision: 'ask' }, 'arcade'))
-  await checkObserved($, call('toolu_8'), engine({ decision: 'allow' }))
+  checkSeen($, call('toolu_7'), { decision: 'ask' }, 'arcade')
+  checkSeen($, call('toolu_8'), { decision: 'allow' }, 'engine')
   await advance(21_000)
   expect(waits()).toBe(false)
   expect(timers).toEqual([])
