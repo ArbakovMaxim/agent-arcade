@@ -10,11 +10,11 @@ import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody } fr
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../hooks/notes.js'
 import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanGive, cleanTime, dayKey, dueReminders, dueTasks, fireAt, giveTargets, markAlerted, markTask, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
-import { nextRemind, remindChoices } from '../hooks/app/calendar.js'
+import { nextRemind, remindChoices } from '../hooks/register.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
-import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/app/work.js'
-import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/app/agents.js'
-import { ANSWER_POLL_MS, asksReset, checkSeen, toolDecided } from '../hooks/app/asks.js'
+import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
+import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/register.js'
+import { ANSWER_POLL_MS, asksReset, callSeen, toolDecided } from '../hooks/register.js'
 import { ARCADE_VERSION, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test, BASH_MS } from './kit.ts'
@@ -2385,6 +2385,26 @@ test('настройки: браузер не открыл политику ко
   await ui.unmount()
 })
 
+// Блокнот и календарь Arcade сам не разрешает: в настройках только подсказка, как не спрашивать; settings.json не пишет
+test('настройки: подсказка про permissions.allow для блокнота и календаря — только текст, по-английски тоже; settings.json Arcade не трогает', async ($, on) => {
+  const { clock, disk } = stubs(on, { env: { LANG: 'en_US.UTF-8' } })
+  await $.session.start({ surface: 'terminal', isInteractive: true, cwd: '/work' })
+  await clock.advance(300)
+  await $.command.run({ command: 'arcade', args: '' })
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  expect(await ui.find({ type: 'Text', text: 'Claude Code permissions' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Claude Code may ask you before Claude uses the Arcade notebook or calendar.' })).toBeDefined()
+  expect(
+    await ui.find({
+      type: 'Text',
+      text: 'To skip the question, add mcp__arcade__notes and mcp__arcade__calendar to permissions.allow in ~/.claude/settings.json. Arcade never writes that setting itself.',
+    }),
+  ).toBeDefined()
+  await ui.unmount()
+  expect([...disk.keys()].filter((path) => /settings(\.local)?\.json$/.test(path))).toEqual([])
+})
+
 test('первый запуск: приветствие с разделами вместо меню; убранное и «Готово» помнятся', async ($, on) => {
   const { saved } = stubs(on, { stored: { welcomed: undefined } })
   await start($)
@@ -4136,12 +4156,13 @@ test('блокнот: «Отправить в чат» — страница те
   await ui.unmount()
 })
 
-test('блокнот: Claude ведёт его инструментом mcp__arcade__notes — без вопроса человеку, правка ложится поверх набранного', async ($, on) => {
+test('блокнот: Claude ведёт его инструментом mcp__arcade__notes — разрешение решает Claude Code, правка ложится поверх набранного', async ($, on) => {
   const { clock, saved, registered } = stubs(on)
   await start($)
   await clock.advance(200)
   expect(registered.map((t) => [t.name, t.isDeferred])).toEqual([['notes', true], ['calendar', true]])
-  expect(await $.tool.check({ tool: NOTES, input: { action: 'list' } })).toMatchObject({ decision: 'allow' })
+  // Своих решений о разрешениях у Arcade нет: без правила в настройках Claude Code спросит человека
+  expect(await $.tool.check({ tool: NOTES, input: { action: 'list' } })).toMatchObject({ decision: 'ask' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'arcade-menu-notes' })
   const made: any = await $.tool.call({ tool: NOTES, action: 'create', title: 'План', text: '- [ ] тесты\n- [ ] ревью' })
@@ -5892,15 +5913,23 @@ test('агенты: вопрос другой сессии — ответить 
   await ui.unmount()
 })
 
-// Свой $ и свои часы: проверка tool.check в тесте не знает, кого спросить (approver), — через движок её не вызвать.
-// Модули теста — отдельная от мода копия: состояние S здесь своё
-test('запрос разрешения без классического хука (Team): «спросить» у вызова Claude — через паузу «ждёт разрешения», решение из телеметрии — снова работает; вердикт не меняется', async () => {
+// Свой $ и свои часы: вердикт движка ($.tool.check) задаёт тест. Модули теста — отдельная от мода копия: состояние S здесь своё
+test('запрос разрешения без классического хука (Team): движок спросит человека о вызове Claude — через паузу «ждёт разрешения», решение из телеметрии — снова работает', async () => {
   let now = 0
   const timers: { at: number; fn: () => any }[] = []
+  let verdict = 'ask'
+  const asked: any[] = []
   const $: any = {
     clock: { now: async () => now, after: (ms: number, fn: () => any) => void timers.push({ at: now + ms, fn }) },
     ui: { invalidate: () => {}, close: async () => {} },
     process: { run: async () => ({}) },
+    tool: {
+      check: async (q: any) => {
+        asked.push(q)
+        if (verdict === 'fail') throw new Error('no verdict')
+        return { decision: verdict }
+      },
+    },
   }
   const advance = async (ms: number) => {
     now += ms
@@ -5909,18 +5938,21 @@ test('запрос разрешения без классического хук
       await t.fn()
     }
   }
-  const call = (id: string, more: any = {}) => ({ tool: 'Bash', input: { command: 'npm test\nnpm run lint' }, tool_use_id: id, approver: 'person', ...more })
-  const check = (id: string, more: any = {}) => checkSeen($, call(id, more), { decision: 'ask' }, 'engine')
+  // Вход tool.call: аргументы инструмента рядом с ключами вызова
+  const BASH = { tool: 'Bash', command: 'npm test\nnpm run lint' }
+  const check = (id: string, args: any = BASH) => callSeen($, { ...args, tool_use_id: id })
   // Решение по вызову — в телеметрии; из неё берём только id вызова и режим
   const decided = (id: string, mode = 'default') =>
     toolDecided($, { to: 'collector', event: 'claude_code.tool_decision', attributes: { tool_use_id: id, permission_mode: mode, decision: 'accept', source: 'user_temporary' } })
   const waits = () => S.status === 'permission'
+  const FILE = 'D:\\work\\web\\notes.txt'
   asksReset()
   S.status = 'working'
   S.permMode = ''
 
-  // Режим ещё неизвестен — ждём 3 с: вдруг решит классификатор
-  check('toolu_1')
+  // Режим ещё неизвестен — ждём 3 с: вдруг решит классификатор. Движок спрашивают только об инструменте и его аргументах
+  await check('toolu_1')
+  expect(asked).toEqual([{ tool: 'Bash', input: { command: 'npm test\nnpm run lint' } }])
   await advance(2_900)
   expect(waits()).toBe(false)
   await advance(200)
@@ -5946,23 +5978,30 @@ test('запрос разрешения без классического хук
   await advance(2_000)
   expect(waits()).toBe(false)
   // Два запроса сразу (субагенты): виден последний; ответили на него — виден первый, на оба — снова работает
-  await check('toolu_10')
-  await check('toolu_11', { tool: 'Write', input: { file_path: 'D:\work\web\notes.txt' } })
+  await check('toolu_10', { ...BASH, agentId: 'a1' })
+  await check('toolu_11', { tool: 'Write', file_path: FILE, content: 'x', agentId: 'a2' })
+  expect(asked.at(-1)).toEqual({ tool: 'Write', input: { file_path: FILE, content: 'x' } })
   await advance(20_000)
-  expect(S.ask).toEqual({ kind: 'permission', tool: 'Write', what: 'D:\work\web\notes.txt' })
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Write', what: FILE })
   decided('toolu_11', 'auto')
   expect([S.status, S.ask?.tool]).toEqual(['permission', 'Bash'])
   decided('toolu_10', 'auto')
   expect([S.status, S.ask]).toEqual(['working', null])
-  // Телеметрия обогнала вердикт — запроса нет
+  // Телеметрия обогнала вердикт — движок не спрашиваем, запроса нет
   decided('toolu_4', 'auto')
+  const before = asked.length
   await check('toolu_4')
-  // Спросить некого, вызов без id, вопрос, вызов мода, «можно» — тоже нет
-  await check('toolu_5', { approver: undefined })
+  expect(asked.length).toBe(before)
+  // Вызов без id, вопрос Claude — не спрашиваем; «можно» и вердикт, которого нет, — запроса тоже нет
   await check('')
-  await check('toolu_6', { tool: 'AskUserQuestion' })
-  checkSeen($, call('toolu_7'), { decision: 'ask' }, 'arcade')
-  checkSeen($, call('toolu_8'), { decision: 'allow' }, 'engine')
+  await check('toolu_6', { tool: 'AskUserQuestion', questions: [] })
+  expect(asked.length).toBe(before)
+  verdict = 'allow'
+  await check('toolu_8')
+  verdict = 'fail'
+  await check('toolu_9')
+  verdict = 'ask'
+  expect(asked.length).toBe(before + 2)
   await advance(21_000)
   expect(waits()).toBe(false)
   expect(timers).toEqual([])
@@ -5989,6 +6028,24 @@ test('в разрешении отказали — статус «ждёт ра�
   expect(await ui.find({ type: 'Text', text: /ждёт разрешения/ })).toBeUndefined()
   await clock.advance(AGENT_TICK_MS)
   expect(ownRecord(disk)).toMatchObject({ status: 'working', ask: null })
+  await ui.unmount()
+})
+
+// То же через движок: тест — Claude Code, который о вызове Bash спросил бы человека (вопрос без вызова — «спросить»)
+test('запрос разрешения без классического хука: Claude вызвал инструмент, движок спросил бы человека — «ждёт разрешения», вызов кончился — снова работает', async ($, on) => {
+  const { clock } = stubs(on, { bashMs: 10_000, ask: (e: any) => e.tool === 'Bash' && !e.tool_use_id })
+  await start($)
+  await clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const call = $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await clock.advance(2_900)
+  expect(await ui.find({ type: 'Text', text: /запрос разрешения: Bash/ })).toBeUndefined()
+  await clock.advance(200)
+  expect(await ui.find({ type: 'Text', text: /запрос разрешения: Bash/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ждёт разрешения/ })).toBeDefined()
+  await clock.advance(10_000)
+  await call
+  expect(await ui.find({ type: 'Text', text: /ждёт разрешения/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -6352,13 +6409,13 @@ test('календарь: повторяющиеся события — прав
   expect([bad.isError, bad.text.split('\n')[1]]).toEqual([true, 'repeat is one of daily, weekdays, weekly, monthly, yearly, or "" to stop repeating.'])
 })
 
-test('календарь: Claude ведёт его инструментом mcp__arcade__calendar без вопроса человеку, экран идёт следом', async ($, on) => {
+test('календарь: Claude ведёт его инструментом mcp__arcade__calendar — разрешение решает Claude Code, экран идёт следом', async ($, on) => {
   const { clock, saved, registered } = stubs(on)
   await clock.advance(T0)
   await start($)
   await clock.advance(200)
   expect(registered.find((t: any) => t.name === 'calendar')).toMatchObject({ isDeferred: true })
-  expect(await $.tool.check({ tool: CAL, input: { action: 'list' } })).toMatchObject({ decision: 'allow' })
+  expect(await $.tool.check({ tool: CAL, input: { action: 'list' } })).toMatchObject({ decision: 'ask' })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'arcade-menu-calendar' })
   expect(await ui.find({ type: 'Text', text: 'Календарь пуст — запиши первое событие.' })).toBeDefined()

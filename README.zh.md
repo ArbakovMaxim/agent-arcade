@@ -305,7 +305,7 @@ PowerShell 中：`$env:CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS=600000; claude plugin m
 
 Arcade 在 Claude Code 内部运行，拥有 Claude Code 给插件的权限。它的全部代码都在这个仓库里，`claude plugin validate ./mod` 会列出它挂接的每个事件和发出的每个调用。简单来说：
 
-- **智能体的工具。** Arcade 能看到工具何时开始和结束、智能体何时请求授权 — 这样它才知道什么时候显示横幅。它从不修改或拦截智能体的工具调用。它自己只批准两类调用，而且只在 Claude Code 本来会询问你的时候：只修改笔记本、不删除任何内容的 `mcp__arcade__notes`，以及只修改日历的 `mcp__arcade__calendar`。在 Desktop 的内置浏览器中打开游戏，会经过 Claude Code 的常规权限检查。你的允许和拒绝规则照常生效。
+- **智能体的工具。** Arcade 能看到工具何时开始和结束、智能体何时请求授权 — 这样它才知道什么时候显示横幅。为了发现授权请求，它会询问 Claude Code 将如何判定智能体的调用：这种检查不执行任何操作，也不打开对话框。它从不修改或拦截智能体的工具调用，自己也不批准任何调用。它自己的工具 — 只修改笔记本、不删除任何内容的 `mcp__arcade__notes`，以及只修改日历的 `mcp__arcade__calendar` — 和在 Desktop 内置浏览器中打开游戏，都和其他调用一样经过 Claude Code 的常规权限检查，因此在 Claude 使用它们之前，Claude Code 可能会询问你。你的允许和拒绝规则照常生效。如果希望 Claude 无需询问就能使用笔记本和日历，请把 `mcp__arcade__notes` 和 `mcp__arcade__calendar` 加入 `~/.claude/settings.json` 的 `permissions.allow`；Arcade 自己从不写入这项设置。
 - **中断智能体。** 仅在 Claude Desktop 中、智能体工作时你在内置浏览器里打开内容才会发生：Desktop 不允许插件自己打开浏览器。Arcade 会等当前工具结束（10 秒后会中断它，但只要屏幕上有授权请求就一直等），然后中断智能体，请 Claude 打开页面后继续工作。如果想避免这种情况，请在 *设置 → 游戏打开方式* 中选择浏览器窗口。
 - **你的对话。** 为了推荐主题，你自己会话中的 Haiku 会收到对话的最后几千个字符；这会计入你的 Claude 用量。Arcade 的网站永远看不到对话。只有在你要求时（例如笔记本中的 *交给 Claude*、你启动的 *排队交给 Claude* 中的下一张卡片，或设置了 *交给 Claude* 的日程到点时交出的任务），或者如上所述为了打开页面，Arcade 才会在输入框中写入或提交内容。
 - **用量。** 每一轮结束后以及每隔半分钟，Arcade 会向 Claude Code 询问它自己对限额、上下文和费用的读数 — 也就是状态栏显示的内容。这不产生任何费用，也不计入你的 Claude 用量。

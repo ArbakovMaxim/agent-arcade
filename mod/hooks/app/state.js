@@ -12,7 +12,7 @@ export const PANE = 'arcade'
 export const PLUGIN_NAME = 'arcade'
 // Версия мода — менять вместе с version в .claude-plugin/plugin.json: уходит в отчёт об ошибке. Файл по
 // $.plugin.root не читаем по той же причине
-export const ARCADE_VERSION = '0.48.3'
+export const ARCADE_VERSION = '0.48.4'
 export const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
 export const ASK_AFTER_MS = 10_000 // через сколько работы агента показать вопрос «сыграть?», пока его не настроили; для быстрой проверки поставь 5_000
 // Строка «сыграть?» над полем ввода: через сколько секунд работы агента, на выбор в настройках; 0 — не показывать
@@ -82,7 +82,7 @@ export const IME_CHARS = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
 
 // Состояние живёт в модуле и сбрасывается при перезагрузке кода; клавиши и последняя игра хранятся в $.store
 S.status = 'idle' // idle | working | permission | done | background — главный ход кончился, агенты ещё работают в фоне
-// Фон (app/background.js): n — сколько агентов работает; end — отложенный конец хода { turnId, e }, пока ждём фон
+// Фон (app/background в register.js): n — сколько агентов работает; end — отложенный конец хода { turnId, e }, пока ждём фон
 S.bg = { n: 0, zeroAt: 0, checking: false, end: null }
 S.wake = false // идёт ход по уведомлению о фоновой задаче (prompt.submit) — не просьба человека
 S.turnStartedAt = 0
@@ -93,7 +93,7 @@ S.sep = '/'
 S.osNotify = true // системные уведомления «агент закончил» и «ждёт разрешения», пока играешь в окне
 S.asked = false // в этом ходе на вопрос уже ответили
 S.askVisible = false
-S.askStep = 'ask' // 'later' — после «Не сейчас»: на сколько отложить строку (app/later.js)
+S.askStep = 'ask' // 'later' — после «Не сейчас»: на сколько отложить строку (app/later в register.js)
 S.paneOpen = false
 S.paneSeen = false // панель в этой сессии уже открывали: сама (followPane) она здесь больше не откроется
 S.netWaiting = [] // кто ждёт в сети: [{ id, title, count }] — из /api/lobbies сайта, раз в минуту
