@@ -6,10 +6,9 @@ import { log, windowNotice } from './status.js'
 import { TIKTOK, windowUrl, withName } from './window.js'
 
 // В Desktop окно — встроенный браузер приложения, его MCP-сервер. Его инструменты Arcade зовёт тем же путём, что
-// и Claude ($.tool.call, через проверку разрешений), и свои вызовы разрешает сам — хук tool.check в register:
-// прямой $.mcp.call авто-режим не пропускал, просил ведь не человек. В авто-режиме не выходит и так: вызовы мода
-// классификатор не судит, а разрешение мода движок там не слушает (как и субагента мода) — тогда игру открывает Claude
-// по просьбе Arcade: его вызовы классификатор оценит. Просьба мода ждёт, пока Claude освободится, поэтому работающего
+// и Claude ($.tool.call, через обычную проверку разрешений), и сам их не разрешает: решают правила человека. Не
+// пропустили (в авто-режиме вызовы мода классификатор не судит) — игру открывает Claude по просьбе Arcade: его
+// вызовы проверят как обычно. Просьба мода ждёт, пока Claude освободится, поэтому работающего
 // агента Arcade прерывает: дожидается конца текущего инструмента (не дольше CUT_TOOL_MS — потом обрывает и его, и
 // просит Claude проверить, что тот успел), обрывает ход ($.turn.abort) и сразу просит открыть игру и вернуться к
 // работе. Не прервался — просьба ждёт конца хода. Не приняли просьбу или браузер ответил ошибкой —
@@ -19,20 +18,10 @@ import { TIKTOK, windowUrl, withName } from './window.js'
 export const BROWSER = 'mcp__Claude_Browser__'
 // Боковые панели приложения: скрытую панель браузера показывает он
 const SHOW_PANE = 'mcp__ccd_view__show_pane'
-// Инструменты приложения, которые Arcade зовёт сам
-export const DESKTOP_TOOLS = [`${BROWSER}tabs_context`, `${BROWSER}navigate`, `${BROWSER}tabs_select`, `${BROWSER}preview_start`, `${BROWSER}tabs_close`, SHOW_PANE]
 
 // Адрес, который открывает Arcade: страницы его сайта и TikTok
 export function arcadeUrl(url) {
   return typeof url === 'string' && (url.startsWith(`${SITE}/`) || url.startsWith(`${TIKTOK}/`))
-}
-
-// Вызов, который Arcade разрешает себе без вопроса: вкладки браузера, адрес только на сайте Arcade или TikTok, панель
-// браузера. Закрывает Arcade только вкладку, которую открыл сам (watchTab)
-export function ownDesktopCall(tool, input) {
-  if (tool === `${BROWSER}tabs_context` || tool === `${BROWSER}tabs_select` || tool === `${BROWSER}tabs_close`) return true
-  if (tool === `${BROWSER}navigate` || tool === `${BROWSER}preview_start`) return arcadeUrl(input?.url)
-  return tool === SHOW_PANE && input?.pane === 'preview'
 }
 
 // Вызов инструмента приложения. Отказ — исключение с пометкой denied, неизвестный инструмент — исключение без неё.
@@ -274,8 +263,8 @@ export function desktopNotice($, outcome, opened, url) {
 
 // Открыть во встроенном браузере и сказать, что вышло; opened — что сказать, если он открылся сразу, toast — сказать
 // ещё и всплывашкой (панель Arcade может быть закрыта). Из обработчика нажатия с движка 2.1.308 вызов инструмента
-// идёт мимо tool.check самого Arcade, и свой вызов он уже не разрешит: пока идёт нажатие, открытие только встаёт в
-// очередь, а открывает хук нажатия (pressed) — в своём теле, когда обработчик отработал
+// идёт мимо tool.check: пока идёт нажатие, открытие только встаёт в очередь, а открывает хук нажатия (pressed) — в
+// своём теле, когда обработчик отработал, через обычную проверку разрешений
 export async function desktopWindow($, id, opened, toast = false) {
   if (S.pressing) {
     S.pressOpens.push({ id, opened, toast })
