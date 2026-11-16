@@ -1,5 +1,9 @@
 # Changelog · Список изменений
 
+## 0.48.7 — Свои имена для функций · Distinct names for functions
+
+- Nothing changes for you. Inside, five functions that take Claude Code's interface got names used nowhere else in the module: the review of the Anthropic plugin directory couldn't tell such a function from a data field or a setting of the same name. `fresh`, `give`, `osNotify`, `pressed` and `run` are now `withNotes`, `giveTask`, `notifyOs`, `handlePress` and `runCheck`; the data fields keep their names. The timers' error handler is now the same one the rest of the module uses · больше для тебя ничего не меняется. Внутри пять функций, которые получают интерфейс Claude Code, получили имена, которые больше нигде в модуле не встречаются: проверка каталога плагинов Anthropic не отличала такую функцию от поля данных или настройки с тем же именем. `fresh`, `give`, `osNotify`, `pressed` и `run` теперь называются `withNotes`, `giveTask`, `notifyOs`, `handlePress` и `runCheck`; поля данных сохранили имена. У таймеров теперь тот же обработчик ошибок, что и у остального модуля
+
 ## 0.48.6 — Ещё одна простая форма для каталога · One more plain form for the directory
 
 - Nothing changes for you. Inside, the branch of a repository with no commits yet is read from git's status line without a regular expression: the review of the Anthropic plugin directory read the preposition before the branch name in it as the function that registers hooks · больше для тебя ничего не меняется. Внутри ветка репозитория без коммитов берётся из строки статуса git без регулярного выражения: проверка каталога плагинов Anthropic читала предлог перед именем ветки в нём как функцию регистрации хуков

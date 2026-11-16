@@ -1024,7 +1024,7 @@ export function desktopNotice($, outcome, opened, url) {
 
 // Открыть во встроенном браузере и сказать, что вышло; opened — что сказать, если он открылся сразу, toast — сказать
 // ещё и всплывашкой (панель Arcade может быть закрыта). Из обработчика нажатия с движка 2.1.308 вызов инструмента
-// идёт мимо tool.check: пока идёт нажатие, открытие только встаёт в очередь, а открывает хук нажатия (pressed) — в
+// идёт мимо tool.check: пока идёт нажатие, открытие только встаёт в очередь, а открывает хук нажатия (handlePress) — в
 // своём теле, когда обработчик отработал, через обычную проверку разрешений
 export async function desktopWindow($, id, opened, toast = false) {
   if (S.pressing) {
@@ -1036,7 +1036,7 @@ export async function desktopWindow($, id, opened, toast = false) {
 
 // Хук нажатия (ui.press, ui.input по Enter): next ждёт обработчик до конца, потом открываем то, что он поставил в
 // очередь, — по одному, как нажимали
-export async function pressed($, e, next) {
+export async function handlePress($, e, next) {
   S.pressing++
   try {
     return await next(e)
@@ -3493,7 +3493,7 @@ export const NOTES_CHECK_MS = 2_000
 
 // Работа с блокнотом: в очередь, сначала — свежий блокнот (work получает ответ readNotes). Изнутри work снова в очередь
 // не вставать — очередь ждала бы сама себя
-function fresh($, work) {
+function withNotes($, work) {
   const chained = queue.then(async () => work(await readNotes($)))
   queue = chained.catch(() => {})
   return chained
@@ -3548,13 +3548,13 @@ function takeDesks(raw) {
 // Перечитать блокнот, пока он на экране: поменялся — экран перерисуется. По таймеру — раз в NOTES_POLL_MS
 export const NOTES_POLL_MS = 3_000
 export function refreshNotes($) {
-  return fresh($, (moved) => moved)
+  return withNotes($, (moved) => moved)
 }
 export const notesShown = () => /^(notes|boards|prompts)$|^(note|board):/.test(S.menu)
 
 // Записать правку блокнота: base — блокнот до неё, S.notes — после. Другая сессия, пока эта правила, записала свой —
 // правка ложится поверх него (rebaseNotes). check — через NOTES_CHECK_MS проверить, что правка на месте. Только в
-// очереди (fresh)
+// очереди (withNotes)
 async function saveNotes($, base, check = true) {
   const mine = S.notes
   try {
@@ -3590,7 +3590,7 @@ function checkLater($) {
   })
 }
 export function checkNotes($) {
-  return fresh($, async () => {
+  return withNotes($, async () => {
     const now = await $.clock.now()
     let list = S.notes
     const lost = []
@@ -3688,7 +3688,7 @@ async function notesChanged($, list, entries = []) {
   await logDay($, entries)
 }
 
-// Итоги дня: записи — в журнал в $.store (daylog.js), один на все сессии, поверх свежего. Только в очереди (fresh)
+// Итоги дня: записи — в журнал в $.store (daylog.js), один на все сессии, поверх свежего. Только в очереди (withNotes)
 async function logDay($, entries) {
   if (!entries.length) return
   const raw = await $.store.get('daylog').catch(() => null)
@@ -3720,7 +3720,7 @@ function withDraft(list, at) {
 // свежего блокнота. true — правка сделана, false — нет (заметка скажет почему), null — страницу или доску на экране
 // удалили в другой сессии: правку не делаем, экран уже ушёл назад
 export function editNotes($, change, saved = '') {
-  return fresh($, async (moved) => {
+  return withNotes($, async (moved) => {
     if (moved === 'gone') return null
     const at = await $.clock.now()
     const { list: base, clash } = withDraft(S.notes, at)
@@ -3741,7 +3741,7 @@ export function editNotes($, change, saved = '') {
 // Инструмент блокнота у Claude — тоже поверх свежего блокнота: и list, и read видят правки других сессий. Набранное в поле
 // «Текст» сначала уходит в страницу — правка Claude ложится поверх
 export function notesTool($, input) {
-  return fresh($, async () => {
+  return withNotes($, async () => {
     const at = await $.clock.now()
     const draft = withDraft(S.notes, at)
     clashNote(draft.clash)
@@ -3862,12 +3862,12 @@ export async function trackerComment($, id) {
 // Страницу отдали Claude — в итоги дня; не вышло отдать — нет
 async function logGave($, page, board) {
   if (nb.bad) return
-  await fresh($, async () => logDay($, [{ at: await $.clock.now(), kind: 'gave', id: page.id, title: page.title, ...(board ? { board: board.title } : {}) }]))
+  await withNotes($, async () => logDay($, [{ at: await $.clock.now(), kind: 'gave', id: page.id, title: page.title, ...(board ? { board: board.title } : {}) }]))
 }
 
 // Проверка между карточками (app/check) — в итоги дня
 export async function logCheck($, entry) {
-  await fresh($, async () => logDay($, [entry])).catch(modError)
+  await withNotes($, async () => logDay($, [entry])).catch(modError)
 }
 
 // «Итоги дня»: страница «Итоги ДД.ММ» — что сегодня ушло Claude, что сделано и что ещё в работе (daylog.js). Сегодняшняя
@@ -4069,7 +4069,7 @@ function boardNote(error, made = false) {
   return accountNote(error)
 }
 
-// Общие доски — в хранилище; только в очереди (fresh) и после блокнота
+// Общие доски — в хранилище; только в очереди (withNotes) и после блокнота
 async function saveDesks($) {
   desksJson = JSON.stringify(S.desks)
   deskJsons = Object.fromEntries(Object.entries(S.desks).map(([share, base]) => [share, JSON.stringify(base)]))
@@ -4078,7 +4078,7 @@ async function saveDesks($) {
 
 // Доску удалили из блокнота: у общей забыть и связь с сайтом
 export function forgetDesk($, share) {
-  return fresh($, () => {
+  return withNotes($, () => {
     delete S.desks[share]
     return saveDesks($)
   })
@@ -4102,7 +4102,7 @@ export function shownBoard() {
   return isBoard(parent) ? parent : null
 }
 
-// Блокнот поменялся сверкой с сайтом: экран идёт за ним (follow), блокнот — в хранилище. Только в очереди (fresh)
+// Блокнот поменялся сверкой с сайтом: экран идёт за ним (follow), блокнот — в хранилище. Только в очереди (withNotes)
 async function boardChanged($, list) {
   const base = S.notes
   follow($, list, true)
@@ -4124,12 +4124,12 @@ export async function syncBoard($, share, { names = false } = {}, round = 0) {
   S.dk.again.delete(share)
   let more = false
   try {
-    const plan = await fresh($, () => S.desks[share] && { base: S.desks[share], ...planSync(S.notes, S.desks[share]) })
+    const plan = await withNotes($, () => S.desks[share] && { base: S.desks[share], ...planSync(S.notes, S.desks[share]) })
     if (!plan) return
     const { base, ops, sent } = plan
     const answer = await chatFetch($, 'boardsync', parseBoard, { body: { board: share, since: base.rev, ops, ...(names || base.rev === 0 ? { names: true } : {}) } })
     if (!answer) return
-    more = await fresh($, async () => {
+    more = await withNotes($, async () => {
       if (S.desks[share] !== base) return false
       if (answer.error === 'gone') {
         await dropDesk($, share, boardNote('gone'), true)
@@ -4172,10 +4172,10 @@ export async function syncBoard($, share, { names = false } = {}, round = 0) {
 
 // Общей доски у человека больше нет (удалили, убрали его или вышел сам): в блокноте она остаётся своей
 function loseBoard($, share, note, bad = false) {
-  return fresh($, () => dropDesk($, share, note, bad))
+  return withNotes($, () => dropDesk($, share, note, bad))
 }
 
-// То же — уже в очереди (fresh)
+// То же — уже в очереди (withNotes)
 async function dropDesk($, share, note, bad) {
   delete S.desks[share]
   if (S.dk.list) S.dk.list = S.dk.list.filter((b) => b.id !== share)
@@ -4209,7 +4209,7 @@ export async function loadBoards($, quiet = false) {
   let known, answer
   try {
     // Доски, которые были общими до вопроса: общую, которой поделились, пока ждали ответа, не трогаем
-    known = await fresh($, () => new Set([...Object.keys(S.desks), ...S.notes.filter((p) => isBoard(p) && p.board.share).map((p) => p.board.share)]))
+    known = await withNotes($, () => new Set([...Object.keys(S.desks), ...S.notes.filter((p) => isBoard(p) && p.board.share).map((p) => p.board.share)]))
     answer = await chatFetch($, 'boards', parseBoards)
   } finally {
     S.dk.loading = false
@@ -4226,7 +4226,7 @@ export async function loadBoards($, quiet = false) {
   S.dk.names = { ...S.dk.names, ...answer.names }
   S.dk.list = answer.boards
   // Новые доски — в свежий блокнот: другая сессия могла их уже завести
-  const stale = await fresh($, async () => {
+  const stale = await withNotes($, async () => {
     const at = await $.clock.now()
     let list = S.notes
     let full = false
@@ -4310,7 +4310,7 @@ export async function shareBoard($, pageId) {
     return $.ui.invalidate('ui.render')
   }
   const share = answer.board.id
-  const shared = await fresh($, async () => {
+  const shared = await withNotes($, async () => {
     const at = await $.clock.now()
     const top = S.notes.find((p) => p.id === pageId)
     if (!isBoard(top) || top.board.share) return false
@@ -4348,7 +4348,7 @@ export async function boardMembers($, share, body, done) {
   }
   if (answer.left) return loseBoard($, share, 'Ты больше не на этой доске — у тебя осталась своя копия.')
   // Участники — в свежую доску: другая сессия могла её уже сверить
-  await fresh($, async () => {
+  await withNotes($, async () => {
     const now = S.desks[share]
     if (!now) return
     Object.assign(now, { owner: answer.board.owner, members: answer.board.members, names: { ...now.names, ...answer.names } })
@@ -5033,11 +5033,11 @@ async function showReminders($, events, now) {
   const lines = events.slice(0, SHOW_MAX).map(line)
   if (events.length > SHOW_MAX) lines.push(`${tr('и ещё', S.lang)} ${events.length - SHOW_MAX}`)
   await $.ui.toast(`${tr('Календарь', S.lang)}: ${lines.join('; ')}`)
-  osNotify($, lines.join('\n'))
+  notifyOs($, lines.join('\n'))
 }
 
 // Системное уведомление «Календарь Arcade» — и при закрытой панели, и когда Claude Code свёрнут
-export function osNotify($, text) {
+export function notifyOs($, text) {
   const command = notifyCommand(S.platform, tr('Календарь Arcade', S.lang), text)
   if (!command) return
   $.clock.after(0, async () => {
@@ -5265,7 +5265,7 @@ export function tailOf(out) {
 
 // Запустить команду в папке сессии: без оболочки команды не разобрать, а саму команду — переменной окружения, чтобы её
 // кавычки не ломали строку запуска cmd.exe. { ok, code, tail }; code: число, 'time' — время вышло, 'start' — не запустилась
-async function run($, cmd) {
+async function runCheck($, cmd) {
   const windows = S.platform ? S.platform === 'windows' : (await $.env.get('OS').catch(() => '')) === 'Windows_NT'
   const argv = windows ? ['cmd.exe', '/d', '/c', '%ARCADE_CHECK%'] : ['sh', '-c', 'eval "$ARCADE_CHECK"']
   try {
@@ -5304,7 +5304,7 @@ export async function checkCard($, id) {
   S.qc.running = { board: board.id, card: id, title: card.title, cmd }
   $.ui.invalidate('ui.render')
   log(`проверка между карточками: «${card.title}» — ${cmd}`)
-  const res = await run($, cmd)
+  const res = await runCheck($, cmd)
   S.qc.running = null
   const at = await $.clock.now()
   S.qc.last[board.id] = { card: id, title: card.title, cmd, ...res, at }
@@ -5931,7 +5931,7 @@ export async function scheduleTick($) {
       $.ui.toast(text)
       if (!S.calendar.some((e) => e.id === x.id && e.warned === x.at)) loud.push(text)
     }
-    if (loud.length) osNotify($, loud.join('\n'))
+    if (loud.length) notifyOs($, loud.join('\n'))
     if (!toRun) return
     // Пока брали, Claude мог занять ход — тогда задание снова ждёт его конца
     if (scheduleBusy(await $.clock.now())) {
@@ -5968,13 +5968,13 @@ async function warnLost($, now) {
     log(`по расписанию: ${text}`)
     $.ui.toast(text)
   }
-  osNotify($, lines.join('\n'))
+  notifyOs($, lines.join('\n'))
 }
 
 // Отдать задание Claude и сказать, как вышло: '' — ушло, иначе — почему нет
 async function runTask($, ev) {
   S.sc.gap = (await $.clock.now()) + GAP_MS
-  const why = await give($, ev.give).catch((err) => {
+  const why = await giveTask($, ev.give).catch((err) => {
     log(`по расписанию: ${err?.message ?? err}`)
     return t('ошибка мода')
   })
@@ -5985,7 +5985,7 @@ async function runTask($, ev) {
   return !why
 }
 
-async function give($, g) {
+async function giveTask($, g) {
   // Цель смотрим в свежем блокноте: её могли поправить или удалить в другой сессии
   await editNotes($, (list) => list)
   if (g.kind === 'queue') {
@@ -6084,7 +6084,6 @@ const key = (p) => slashes(p).toLowerCase()
 // без коммитов — «## No commits yet …ветка» (у старого git — «## Initial commit …ветка»). Эти строки git не переводит
 const UNBORN_HEADS = ['No commits yet ', 'Initial commit ']
 export function branchOf(head) {
-  // Без регулярки: предлог перед именем ветки в ней каталог плагинов читал как функцию регистрации хуков.
   // За началом строки — предлог и имя ветки: берём второе слово
   const lead = UNBORN_HEADS.find((start) => head.startsWith(start))
   if (lead) return { branch: head.slice(lead.length).split(' ')[1] ?? '', ahead: 0, fresh: true }
@@ -12408,38 +12407,37 @@ export function register(on) {
       // Чаты — пока панель открыта на библиотеке и человек вошёл: открытый чат спрашиваем часто, список — реже;
       // сколько непрочитанных для плитки «Чаты» приносит отметка «в сети»
       const chatsOn = () => S.paneOpen && S.acct.session && S.view === 'library'
-      const chatError = (err) => log(`ошибка мода: ${err?.message ?? err}`)
       $.clock.every(CHAT_POLL_MS, () => {
-        if (chatsOn() && S.menu === 'chats:talk') pollChat($).catch(chatError)
+        if (chatsOn() && S.menu === 'chats:talk') pollChat($).catch(modError)
       })
       $.clock.every(CHATS_POLL_MS, () => {
         // Список — на всех экранах чатов: в широкой панели Desktop он слева от переписки, нового чата и участников
-        if (chatsOn() && (S.menu === 'chats' || S.menu.startsWith('chats:') || S.menu === 'today')) loadChats($, true).catch(chatError)
+        if (chatsOn() && (S.menu === 'chats' || S.menu.startsWith('chats:') || S.menu === 'today')) loadChats($, true).catch(modError)
       })
       // «В сети» — пока панель открыта на библиотеке: отметка раз в PULSE_MS, а когда просили — сразу
       $.clock.every(PULSE_SOON_MS, () => {
-        if (chatsOn()) pulse($).catch(chatError)
+        if (chatsOn()) pulse($).catch(modError)
       })
       // Всплывающие уведомления о сообщениях — и при закрытой панели, пока они включены и человек вошёл
-      $.clock.every(POPUP_POLL_MS, () => watchMessages($).catch(chatError))
+      $.clock.every(POPUP_POLL_MS, () => watchMessages($).catch(modError))
       // Доска проектов: открытую общую доску (на экране «Промпты» — общие наборы) сверяем с сайтом, список общих досок
       // на её экране — обновляем; свои правки, не ушедшие в прошлый раз, — на сайт вскоре после старта
       $.clock.every(BOARD_POLL_MS, () => {
         if (!chatsOn()) return
         const shares = shownShares()
-        if (shares.some((share) => !S.desks[share]) || (shares.length && !S.dk.me)) loadBoards($, true).catch(chatError)
-        else for (const share of shares) syncBoard($, share).catch(chatError)
+        if (shares.some((share) => !S.desks[share]) || (shares.length && !S.dk.me)) loadBoards($, true).catch(modError)
+        else for (const share of shares) syncBoard($, share).catch(modError)
       })
       $.clock.every(BOARDS_POLL_MS, () => {
-        if (chatsOn() && /^(boards|prompts)$/.test(S.menu)) loadBoards($, true).catch(chatError)
+        if (chatsOn() && /^(boards|prompts)$/.test(S.menu)) loadBoards($, true).catch(modError)
       })
       $.clock.after(4_000, () => pushBoards($))
       // Блокнот на экране — перечитываем: его могли поправить в другой сессии Claude Code
       $.clock.every(NOTES_POLL_MS, () => {
         // «Сегодня» показывает и сроки карточек, и события — перечитываем оба
         const today = S.menu === 'today'
-        if (S.paneOpen && S.view === 'library' && (notesShown() || today)) refreshNotes($).catch(chatError)
-        if (S.paneOpen && S.view === 'library' && (calendarShown() || today)) refreshCalendar($).catch(chatError)
+        if (S.paneOpen && S.view === 'library' && (notesShown() || today)) refreshNotes($).catch(modError)
+        if (S.paneOpen && S.view === 'library' && (calendarShown() || today)) refreshCalendar($).catch(modError)
       })
       // Отметка сессии — маленькая запись раз в несколько секунд; чужие читаем, только когда они нужны. Очередь, которую
       // остановили во всех сессиях, — тут же
@@ -12447,17 +12445,17 @@ export function register(on) {
         // Главный ход кончился, а агенты в фоне — сколько их ещё и не пора ли сказать «закончил»
         await bgCheck($)
         await agentsTick($)
-        if (S.queue) await queueStopCheck($).catch(chatError)
+        if (S.queue) await queueStopCheck($).catch(modError)
         await resumeTick($)
         // Задания по расписанию — тем же шагом: «на ногах ли сессия» считает resumeTick
-        await scheduleTick($).catch(chatError)
+        await scheduleTick($).catch(modError)
       })
       // Лимиты и контекст — что Claude Code знает уже сейчас (контекст, расходы; окна лимитов — после первого ответа);
       // дальше — раз в полминуты и после каждого хода
       $.clock.after(1_000, () => usageNow($))
-      $.clock.every(USAGE_POLL_MS, () => usagePoll($).catch(chatError))
+      $.clock.every(USAGE_POLL_MS, () => usagePoll($).catch(modError))
       // Напоминания календаря: пропущенные, пока Claude Code был закрыт, — чуть погодя после старта; дальше таймер сам
-      $.clock.after(5_000, () => remindNow($).catch(chatError))
+      $.clock.after(5_000, () => remindNow($).catch(modError))
       // Каталог с сайта и ОС — в фоне, чтобы не держать старт сессии
       $.clock.after(150, async () => {
         try {
@@ -12687,9 +12685,9 @@ export function register(on) {
   })
 
   // Нажатие в Arcade — кнопка или Enter в поле: встроенный браузер открываем в теле хука, когда обработчик отработал, —
-  // так вызов идёт через обычную проверку разрешений, как и раньше (pressed, app/desktop)
-  on('ui.press', async ($, e, next) => (e.plugin === PLUGIN_NAME ? pressed($, e, next) : next(e)))
-  on('ui.input', async ($, e, next) => (e.plugin === PLUGIN_NAME && e.kind === 'submit' ? pressed($, e, next) : next(e)))
+  // так вызов идёт через обычную проверку разрешений, как и раньше (handlePress, app/desktop)
+  on('ui.press', async ($, e, next) => (e.plugin === PLUGIN_NAME ? handlePress($, e, next) : next(e)))
+  on('ui.input', async ($, e, next) => (e.plugin === PLUGIN_NAME && e.kind === 'submit' ? handlePress($, e, next) : next(e)))
 
   // Инструменты блокнота и календаря разрешает, как любые другие, сам Claude Code — правилом в настройках или вопросом
   // человеку; своих решений о разрешениях у Arcade нет.
