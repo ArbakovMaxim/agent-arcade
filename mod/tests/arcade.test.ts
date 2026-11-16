@@ -326,7 +326,7 @@ test('пока в полосе вопрос Claude Code, «сыграть?» у�
 // в вопросе «Играть» (1) и «Не сейчас» (2)
 const LATER_ENV = { USERPROFILE: 'C:\\Users\\max' }
 const LATER_FILE = '.claude/arcade/ask-later.json'
-const LAUNCH_FILE = '.claude/arcade/launch.json'
+const LAUNCH_FILE = '.claude/arcade/ask-later-run.json'
 const askShown = async ($: any) => {
   const band = await $.ui.mount({ ...BAND, surface: 'terminal' })
   const shown = Boolean(await band.find({ type: 'Text', text: /сыграть\?/ }))
@@ -468,7 +468,7 @@ for (const [title, others, shown] of [
   test(`«До перезапуска Claude» и новая сессия: ${title}`, HEAVY, async ($, on) => {
     const disk: Record<string, string> = {
       [`C:\\Users\\max\\.claude\\arcade\\ask-later.json`]: JSON.stringify({ v: 1, launch: 'old1' }),
-      [`C:\\Users\\max\\.claude\\arcade\\launch.json`]: JSON.stringify({ v: 1, id: 'old1', at: 0 }),
+      [`C:\\Users\\max\\.claude\\arcade\\ask-later-run.json`]: JSON.stringify({ v: 1, id: 'old1', at: 0 }),
     }
     if (others)
       disk['C:\\Users\\max\\.claude\\arcade\\agents\\s5.json'] = JSON.stringify({ v: 1, sid: 'sess-x', name: 'api', path: 'D:\\work\\api', status: 'idle', since: 0, card: null, queue: null, claim: null, at: 0 })

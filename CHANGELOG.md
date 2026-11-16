@@ -1,5 +1,22 @@
 # Changelog · Список изменений
 
+## 0.48.8 — Пояснения для каталога плагинов · Notes for the plugin directory
+
+- README has a new section, *Notes for the plugin directory review*: what files Arcade writes, which tools it calls itself and why, which prompts it submits, which programs it starts and with what, where it goes on the network, what its hooks do with permission requests, telemetry, prompts and commands, and where the bundled JSNES, the ROMs and the archives come from · в README новый раздел *Notes for the plugin directory review*: какие файлы Arcade пишет, какие инструменты вызывает сам и зачем, какие промпты отправляет, какие программы запускает и с чем, куда ходит по сети, что его хуки делают с запросами разрешений, телеметрией, промптами и командами, откуда взялись встроенный JSNES, ROM и архивы
+- README fixes: *Programs* now also names the usual browser for links, the chat-message card and the clipboard for *Copy* in Desktop; *Files* lists every file in `~/.claude/arcade`; *Network* says the list of feeds comes from Arcade's site, with a copy in the plugin; *Install* has a one-step line that adds the marketplace along the way · правки README: в *Programs* добавлены обычный браузер для ссылок, карточка сообщения чата и буфер обмена для «Копировать» в Desktop; в *Files* — все файлы в `~/.claude/arcade`; в *Network* — что список лент приходит с сайта Arcade, а копия лежит в плагине; в *Install* — установка одной строкой, которая заодно добавляет маркетплейс
+- The Russian and Ukrainian READMEs address you without gendered verb forms in the few places that still had them · в русском и украинском README обращение к тебе без форм рода и там, где они ещё оставались
+- Nothing else changes for you. Inside:
+  - Flappy Arcade gives out the game object itself, with no getters;
+  - the bundled JSNES starts with its license line, and the byte in the ROM header check is written as `\x1a`;
+  - the file that marks a Claude launch for *Not now* is now `ask-later-run.json` instead of `launch.json`, so its name can't be mistaken for Desktop's `.claude/launch.json`. If *play?* was put off until Claude restarts, the update counts as that restart;
+  - the workflow that fills the `plugin` branch stops if the version in `plugin.json` and the one in the code differ.
+  
+  · больше для тебя ничего не меняется. Внутри:
+  - Flappy Arcade отдаёт сам объект игры, без геттеров;
+  - встроенный JSNES начинается со строки лицензии, а байт в проверке заголовка ROM записан как `\x1a`;
+  - файл, которым «Не сейчас» отмечает запуск Claude, теперь `ask-later-run.json`, а не `launch.json` — чтобы имя не путалось с `.claude/launch.json` Desktop. Если «сыграть?» было отложено до перезапуска Claude, обновление и есть этот перезапуск;
+  - workflow, который наполняет ветку `plugin`, останавливается, если версия в `plugin.json` и в коде разошлись
+
 ## 0.48.7 — Свои имена для функций · Distinct names for functions
 
 - Nothing changes for you. Inside, five functions that take Claude Code's interface got names used nowhere else in the module: the review of the Anthropic plugin directory couldn't tell such a function from a data field or a setting of the same name. `fresh`, `give`, `osNotify`, `pressed` and `run` are now `withNotes`, `giveTask`, `notifyOs`, `handlePress` and `runCheck`; the data fields keep their names. The timers' error handler is now the same one the rest of the module uses · больше для тебя ничего не меняется. Внутри пять функций, которые получают интерфейс Claude Code, получили имена, которые больше нигде в модуле не встречаются: проверка каталога плагинов Anthropic не отличала такую функцию от поля данных или настройки с тем же именем. `fresh`, `give`, `osNotify`, `pressed` и `run` теперь называются `withNotes`, `giveTask`, `notifyOs`, `handlePress` и `runCheck`; поля данных сохранили имена. У таймеров теперь тот же обработчик ошибок, что и у остального модуля

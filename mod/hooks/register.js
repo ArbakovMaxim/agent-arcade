@@ -147,20 +147,20 @@ export function plural(n, one, few, many) {
 // Arcade: «Не сейчас» у строки «сыграть?» — отложить её на 5 или 10 минут или до перезапуска Claude. Отсрочка общая для
 // всех сессий этого компьютера и на сайт не уходит: файл ~/.claude/arcade/ask-later.json — { v: 1, until } (до какого
 // времени) или { v: 1, launch } (до перезапуска: id запуска Claude, в котором отложили); { v: 1 } — не отложено
-// (удалять файлы мод не умеет). Запуск Claude — файл ~/.claude/arcade/launch.json { v: 1, id, at }: его переписывает
+// (удалять файлы мод не умеет). Запуск Claude — файл ~/.claude/arcade/ask-later-run.json { v: 1, id, at }: его переписывает
 // сессия, которая стартовала, когда других открытых сессий нет (по отметкам app/agents). Перезагрузка мода — не запуск
 
 export const LATER_READ_MS = 5_000 // файлы отсрочки и запуска перечитываем не чаще — их могли поменять другие сессии
 export const LATER_MINUTES = [5, 10] // на сколько минут отложить — кнопки второго шага
 
 // dir — папка ~/.claude/arcade (null — домашней папки нет: отсрочка только в памяти этой сессии); until — до какого
-// времени отложено; launch — id запуска, до конца которого отложено; current — id нынешнего запуска (из launch.json);
+// времени отложено; launch — id запуска, до конца которого отложено; current — id нынешнего запуска (из ask-later-run.json);
 // readAt — когда перечитывали; reading — чтение, которое идёт сейчас; writes — растёт с каждой записью: чтение, начатое
 // до записи, её не откатит
 S.later = { dir: null, until: 0, launch: '', current: '', readAt: -Infinity, reading: null, writes: 0 }
 
 const laterPath = () => `${S.later.dir}${S.sep}ask-later.json`
-const launchPath = () => `${S.later.dir}${S.sep}launch.json`
+const launchPath = () => `${S.later.dir}${S.sep}ask-later-run.json`
 const newId = (now) => `${Math.floor(now).toString(36)}${Math.random().toString(36).slice(2, 8)}`
 
 // Прочитать файл: null — его нет, undefined — битый (его как раз пишут) — прежнее не забываем

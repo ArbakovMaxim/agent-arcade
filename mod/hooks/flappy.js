@@ -217,7 +217,8 @@ function createFlappy(onFrame, options = {}) {
   }
 
   draw()
-  return {
+  // Наружу — сам объект игры: state, score, best, birdY и seed читаются обычными свойствами, без геттеров
+  return Object.assign(game, {
     // Шаг на 1/60 секунды и кадр — как nes.frame()
     frame() {
       step()
@@ -232,22 +233,7 @@ function createFlappy(onFrame, options = {}) {
     buttonUp(player, button) {
       held.delete(button)
     },
-    get state() {
-      return game.state
-    },
-    get score() {
-      return game.score
-    },
-    get best() {
-      return game.best
-    },
-    get birdY() {
-      return game.birdY
-    },
-    get seed() {
-      return game.seed
-    },
-  }
+  })
 }
 
 export { createFlappy, daySeed }

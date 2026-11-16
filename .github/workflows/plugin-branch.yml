@@ -39,6 +39,17 @@ jobs:
             !/site/
           sparse-checkout-cone-mode: false
 
+      # Версия в plugin.json и ARCADE_VERSION (её шлёт отчёт об ошибке) меняются руками вместе: разошлись — ветку не трогаем
+      - name: Версия плагина совпадает с ARCADE_VERSION
+        run: |
+          manifest=$(jq -r .version mod/.claude-plugin/plugin.json)
+          code=$(sed -nE "s/^export const ARCADE_VERSION = '([^']+)'.*/\1/p" mod/hooks/app/state.js)
+          echo "plugin.json: $manifest, ARCADE_VERSION: $code"
+          if [ -z "$code" ] || [ "$manifest" != "$code" ]; then
+            echo "::error file=mod/hooks/app/state.js::ARCADE_VERSION ($code) не совпадает с version в mod/.claude-plugin/plugin.json ($manifest)"
+            exit 1
+          fi
+
       - name: Дерево main без site/ — в ветку plugin
         run: |
           # Отдельный индекс: рабочая папка и индекс checkout остаются как есть

@@ -69,6 +69,16 @@ Albo w sesji Claude Code:
 /plugin install arcade@agent-arcade
 ```
 
+Albo jednym krokiem, który przy okazji dodaje marketplace — w terminalu lub w sesji:
+
+```
+claude plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
+```
+/plugin install arcade --marketplace ArbakovMaxim/agent-arcade
+```
+
 Wtyczka instaluje się dla wszystkich sesji i aplikacji. Rozszerzenie VS Code nie ma polecenia `/plugin` — zainstaluj ją z terminala, a rozszerzenie podchwyci ją w nowej rozmowie.
 
 **Aktualizacja:**
@@ -309,10 +319,10 @@ Arcade działa wewnątrz Claude Code z takim dostępem, jaki Claude Code daje wt
 - **Przerwanie agenta.** Tylko w Claude Desktop, gdy otwierasz coś we wbudowanej przeglądarce, kiedy agent pracuje: Desktop nie pozwala wtyczce samej otworzyć przeglądarki. Arcade czeka, aż skończy się bieżące narzędzie (po 10 sekundach je przerywa, ale czeka, dopóki na ekranie jest pytanie o zgodę), przerywa agenta i prosi Claude, żeby otworzył stronę i wrócił do pracy. Żeby tego uniknąć, wybierz okno przeglądarki w *Ustawienia → Otwieranie gier*.
 - **Twoja rozmowa.** Do tematów Haiku w twojej własnej sesji dostaje końcówkę rozmowy, kilka tysięcy znaków; to wlicza się do twojego użycia Claude. Strona Arcade nigdy nie widzi rozmowy. Arcade pisze w polu wpisywania Claude lub je wysyła tylko na twoją prośbę — na przykład *Wyślij do Claude* w notatniku, następną kartę z kolejki uruchomionej przez ciebie przyciskiem *Kolejka dla Claude* albo zadanie wydarzenia z *Wyślij do Claude* o jego porze — albo żeby otworzyć stronę, jak opisano wyżej.
 - **Limity.** Po każdej odpowiedzi Claude i co pół minuty Arcade pyta Claude Code o jego własny pomiar limitów, kontekstu i kosztu — to, co pokazuje linia statusu. To nic nie kosztuje i nie wlicza się do twojego użycia Claude.
-- **Programy.** Twoja przeglądarka dla okna Arcade (w Windows z osobnym profilem w `%LOCALAPPDATA%\claude-arcade`); powiadomienia, w tym przypomnienia kalendarza — PowerShell w Windows, `osascript` w macOS, `notify-send` w Linuksie; sprawdzenie, jakie przeglądarki są zainstalowane (Windows) albo jaki to system (`uname`). Do tego `git` tylko do odczytu (`rev-parse`, `status` i `diff --numstat`) w folderze każdej sesji, przy jej starcie i po każdej odpowiedzi Claude, dla *Agentów*. Także polecenie z pola *Sprawdzenie między kartami* tablicy, jeśli jest, w folderze sesji, gdy karta z kolejki dojdzie do ostatniej kolumny.
-- **Pliki.** Zapisuje tylko ROM-y, które dodajesz przez `/arcade-add`, w `~/.claude/arcade/roms`, oraz mały znacznik każdej sesji dla *Agentów* i *Limitów* z odpowiedziami wysłanymi stamtąd, w `~/.claude/arcade/agents`; czyta tylko wskazany przez ciebie plik, te kopie, te znaczniki i własne pliki. Ustawienia, notatnik, kalendarz i ulubione są w magazynie wtyczek Claude Code.
+- **Programy.** Twoja przeglądarka dla okna Arcade (w Windows z osobnym profilem w `%LOCALAPPDATA%\claude-arcade`); twoja zwykła przeglądarka dla linku — TikTok poza Desktop, logowanie przez GitHub, strona aplikacji podlinkowana z notatnika, *Wesprzyj projekt*, *Warunki i prywatność* (PowerShell `Start-Process` w Windows, `open` w macOS, `xdg-open` w Linuksie, tylko dla adresów internetowych na https); powiadomienia, w tym przypomnienia kalendarza i karta nowej wiadomości na czacie — PowerShell w Windows, `osascript` w macOS, `notify-send` w Linuksie; schowek systemowy dla *Kopiuj* w Desktop — PowerShell `Set-Clipboard` w Windows, `pbcopy` w macOS, `wl-copy`, `xclip` lub `xsel` w Linuksie, z tekstem na standardowym wejściu; sprawdzenie, jakie przeglądarki są zainstalowane (Windows) albo jaki to system (`uname`). Do tego `git` tylko do odczytu (`rev-parse`, `status` i `diff --numstat`) w folderze każdej sesji, przy jej starcie i po każdej odpowiedzi Claude, dla *Agentów*. Także polecenie z pola *Sprawdzenie między kartami* tablicy, jeśli jest, w folderze sesji, gdy karta z kolejki dojdzie do ostatniej kolumny.
+- **Pliki.** Zapisuje tylko w `~/.claude/arcade`: ROM-y, które dodajesz przez `/arcade-add`, jako `roms/<sha256>.b64`; mały znacznik każdej sesji dla *Agentów* i *Limitów*, `agents/s<N>.json`, oraz odpowiedzi wysłane z *Agentów*, `agents/a<N>.json`; odroczenie *Nie teraz* wiersza „zagrasz?”, `ask-later.json`, oraz to, które uruchomienie Claude Code jest bieżące, `ask-later-run.json`. Żaden z nich nie jest plikiem budowania, startowym, ustawień ani instrukcji i nic ich nie uruchamia. Czyta tylko plik wskazany w `/arcade-add`, te pliki i własne. Ustawienia, notatnik, kalendarz i ulubione są w magazynie wtyczek Claude Code.
 - **Zmienne środowiskowe.** Czyta `HOME` lub `USERPROFILE`, `LANG`, `LC_ALL`, `LC_MESSAGES`, `LOCALAPPDATA` i `OS`; żadnej nie zmienia.
-- **Sieć.** Sama wtyczka łączy się tylko ze stroną Arcade (`agent-arcade.fefaodessa.workers.dev`), z feedami RSS kanałów YouTube oraz blogów i podcastów, które pokazuje. Obrazki w panelu Desktop, na przykład awatary Twitcha, ładują się prosto z tych serwisów. Gry, książki i filmy ładuje strona otwarta w przeglądarce.
+- **Sieć.** Sama wtyczka łączy się tylko ze stroną Arcade (`agent-arcade.fefaodessa.workers.dev`), z feedami RSS kanałów YouTube oraz blogów i podcastów, które pokazuje — listę tych blogów i podcastów dostarcza strona Arcade, a jej kopia jest we wtyczce. Obrazki w panelu Desktop, na przykład awatary Twitcha, ładują się prosto z tych serwisów. Gry, książki i filmy ładuje strona otwarta w przeglądarce.
 
 ## Prywatność
 
