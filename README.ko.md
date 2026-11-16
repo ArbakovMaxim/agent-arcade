@@ -1,18 +1,27 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade 로고" align="right">
 
-# Arcade — Claude Code 안의 작업 보드, 노트, 팀 채팅, 그리고 게임
+# Arcade for Claude Code — Claude가 카드를 하나씩 처리하는 보드
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · **한국어**
 
-> **베타 버전(0.39).** 여기에 설명된 모든 기능이 작동하고 매일 사용되고 있습니다. 앞으로는 주로 세부 사항이 바뀝니다. 오류 신고는 언제든 환영합니다 — [피드백](#피드백)을 참고하세요.
+> **베타 버전.** 여기에 설명된 모든 기능이 작동하고 매일 사용되고 있습니다. 오류 신고는 언제든 환영합니다 — [피드백](#피드백)을 참고하세요.
 
-Arcade는 [Claude Code](https://claude.com/claude-code)를 작은 작업 공간으로 바꿔 주는 플러그인입니다. Claude가 카드를 하나씩, 여러 세션에서 동시에도 처리해 나가는 프로젝트 보드, Claude가 함께 쓰고 열려 있는 모든 세션이 공유하는 노트, 캘린더, 그리고 팀을 위한 공유 보드와 채팅. 기다리는 동안에는, 에이전트가 10초 넘게 작업하면 프롬프트 위에 작은 *「플레이할까요?」* 가 나타납니다. NES, Sega, PlayStation, Doom, 체스 등으로 게임을 하거나, 책을 읽거나, 오디오북이나 팟캐스트를 듣거나, 에이전트가 작업 중인 주제의 영상을 볼 수 있습니다. 에이전트가 작업을 마치거나 권한을 요청하면 Arcade가 바로 알려 주므로 놓칠 일이 없습니다.
+할 일을 보드에 올리고 *대기열로 Claude에게 넘기기*를 누르면, Claude가 카드를 하나씩 가져가 체크리스트를 표시하고 결과를 카드에 적습니다. 한 세션에서도, 여러 세션에서 동시에도 처리하며, 두 세션이 같은 카드를 가져가는 일은 없습니다. *에이전트*는 내 컴퓨터에서 Arcade를 쓰는 모든 Claude Code 세션을 작업 중, 권한 대기 중, 완료 상태로 보여 줍니다. 이 밖에도 Claude가 함께 쓰는 노트와 캘린더, 팀을 위한 공유 보드와 채팅, 기다리는 동안 즐길 게임·책·영상이 있습니다. 무료이며 오픈 소스입니다.
 
 카탈로그의 모든 것은 무료입니다. 게임은 오픈 라이선스이고, 책과 오디오북은 퍼블릭 도메인입니다. 마찬가지로 에이전트를 기다리는 다른 사람들과 온라인으로 플레이하고, 친구와 채팅할 수도 있습니다.
 
 ![데모: Claude Desktop의 프로젝트 보드. 카드를 열면 체크리스트가 있는 페이지가 되고, 「Claude에게 넘기기」로 넘기면 Claude가 항목을 하나씩 체크하고 결과를 카드에 적은 뒤 「완료」로 옮깁니다](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
 *내 보드: 버튼 하나로 카드를 Claude에게 넘깁니다. 인터페이스는 영어입니다. [31초 영상 보기](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
+**설치** — 터미널에서:
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+또는 Claude Code 안에서 `/plugin marketplace add ArbakovMaxim/agent-arcade`를 실행한 다음 `/plugin install arcade@agent-arcade`를 실행합니다. Claude Code 2.1.275 이상이 필요합니다. [설치와 업데이트 자세히 보기](#설치)
 
 ![데모: Claude Code에 작업을 맡기면 프롬프트 위에 「플레이할까요?」가 나타나고, 채팅 옆에서 NES 게임이 실행되며, 에이전트가 끝나면 Arcade가 다시 불러 줍니다. 책, 오디오북, 기사도 있습니다](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 

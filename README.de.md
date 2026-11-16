@@ -1,18 +1,27 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade-Logo" align="right">
 
-# Arcade — Aufgabenboards, Notizen, Team-Chats und Spiele direkt in Claude Code
+# Arcade for Claude Code — Boards, die Claude Karte für Karte abarbeitet
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · **Deutsch** · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.39).** Alles, was hier beschrieben ist, funktioniert und ist täglich im Einsatz; was sich jetzt noch ändert, sind vor allem Details. Fehlerberichte sind sehr willkommen — siehe [Feedback](#feedback).
+> **Beta.** Alles, was hier beschrieben ist, funktioniert und ist täglich im Einsatz. Fehlerberichte sind sehr willkommen — siehe [Feedback](#feedback).
 
-Arcade ist ein Plugin für [Claude Code](https://claude.com/claude-code), das daraus einen kleinen Arbeitsplatz macht: Projektboards, deren Karten Claude eine nach der anderen abarbeitet, sogar in mehreren Sitzungen gleichzeitig; ein Notizbuch, das Claude mit dir führt und das alle offenen Sitzungen teilen; einen Kalender; und geteilte Boards und Chats für dein Team. Und für die Wartezeit: Ist der Agent länger als 10 Sekunden beschäftigt, erscheint über dem Prompt ein kleines *„spielen?“*. Spiel etwas — NES, Sega, PlayStation, Doom, Schach und mehr —, lies ein Buch, hör ein Hörbuch oder einen Podcast oder schau ein Video zum Thema, an dem der Agent arbeitet. Arcade sagt dir sofort Bescheid, wenn der Agent fertig ist oder deine Erlaubnis braucht — du verpasst nichts.
+Leg deine Aufgaben auf ein Board und drück *Warteschlange für Claude*: Claude nimmt sich die Karten nacheinander vor, hakt die Checkliste ab und schreibt das Ergebnis auf die Karte — in einer Sitzung oder in mehreren gleichzeitig, und zwei Sitzungen nehmen nie dieselbe Karte. *Agenten* zeigt jede Claude-Code-Sitzung mit Arcade auf deinem Computer: ob sie arbeitet, auf Erlaubnis wartet oder fertig ist. Dazu kommen ein Notizbuch und ein Kalender, die Claude mit dir führt, geteilte Boards und Chats für dein Team und für die Wartezeit Spiele, Bücher und Videos. Kostenlos und Open Source.
 
 Alles im Katalog ist kostenlos: Die Spiele stehen unter offenen Lizenzen, die Bücher und Hörbücher sind gemeinfrei. Du kannst auch online mit anderen spielen, die ebenfalls auf ihre Agenten warten, und mit deinen Freunden chatten.
 
 ![Demo: ein Projektboard in Claude Desktop; eine Karte öffnet sich als Seite mit Checkliste, „An Claude geben“ übergibt sie, und Claude hakt jeden Punkt ab, schreibt das Ergebnis auf die Karte und schiebt sie nach „Erledigt“](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
 *Dein Board: Eine Karte geht mit einem Knopf an Claude, Oberfläche auf Englisch. [31-Sekunden-Video ansehen](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
+**Installation** — im Terminal:
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+Oder in Claude Code: `/plugin marketplace add ArbakovMaxim/agent-arcade`, dann `/plugin install arcade@agent-arcade`. Erfordert Claude Code 2.1.275 oder neuer. [Mehr zu Installation und Updates](#installation)
 
 ![Demo: Claude Code bekommt eine Aufgabe, über dem Prompt erscheint „spielen?“, neben dem Chat läuft ein NES-Spiel, und wenn der Agent fertig ist, holt Arcade dich zurück; Bücher, Hörbücher und Artikel gibt es auch](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 

@@ -1,18 +1,27 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade 标志" align="right">
 
-# Arcade — Claude Code 里的任务看板、笔记、团队聊天和游戏
+# Arcade for Claude Code — Claude 一张接一张处理卡片的看板
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · **中文** · [한국어](README.ko.md)
 
-> **Beta 版（0.39）。** 这里介绍的一切都能正常使用，每天都有人在用；之后的变化主要在细节上。非常欢迎报告错误 — 见[反馈](#反馈)。
+> **Beta 版。** 这里介绍的一切都能正常使用，每天都有人在用。非常欢迎报告错误 — 见[反馈](#反馈)。
 
-Arcade 是一个 [Claude Code](https://claude.com/claude-code) 插件，把它变成一个小小的工作台：项目看板上的卡片由 Claude 一张接一张地处理，甚至可以在多个会话里同时进行；Claude 和你一起记的笔记本，所有打开的会话共用；日历；还有给团队用的共享看板和聊天。等待的时候也有事做：当智能体忙碌超过 10 秒，提示符上方会出现一行小字 *“玩一会儿吗？”*。你可以玩游戏 — NES、Sega、PlayStation、Doom、国际象棋等等 — 读一本书，听有声书或播客，或者观看与智能体当前工作主题相关的视频。智能体一完成工作或需要你授权，Arcade 就会立刻告诉你，什么都不会错过。
+把任务放到看板上，按下 *排队交给 Claude*：Claude 会一张接一张地领取卡片，勾掉清单上的项目，并把结果写在卡片上 — 可以在一个会话里，也可以在多个会话里同时进行，两个会话永远不会领到同一张卡片。*智能体* 会列出你电脑上所有使用 Arcade 的 Claude Code 会话：工作中、等待授权还是已完成。此外还有 Claude 和你一起记的笔记本和日历、给团队用的共享看板和聊天，以及等待时的游戏、书籍和视频。免费且开源。
 
 目录中的一切都是免费的：游戏采用开放许可，书籍和有声书属于公有领域。你还可以和同样在等待智能体的其他人联网对战，并和好友聊天。
 
 ![演示：Claude Desktop 中的项目看板；卡片打开后是一个带清单的页面，按“交给 Claude”把它交出去，Claude 逐项勾选，把结果写在卡片上，再把卡片移到“已完成”](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
 *你的看板：一键就能把卡片交给 Claude，界面为英文。[观看 31 秒视频](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a)。*
+
+**安装** — 在终端中：
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+或者在 Claude Code 中：先运行 `/plugin marketplace add ArbakovMaxim/agent-arcade`，再运行 `/plugin install arcade@agent-arcade`。需要 Claude Code 2.1.275 或更高版本。[详细了解安装和更新](#安装)
 
 ![演示：给 Claude Code 一个任务，提示符上方出现“玩一会儿吗？”，聊天旁边运行着一款 NES 游戏，智能体完成后 Arcade 叫你回来；还有书籍、有声书和文章](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 

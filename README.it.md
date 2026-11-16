@@ -1,18 +1,27 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Logo di Arcade" align="right">
 
-# Arcade — bacheche di attività, note, chat di squadra e giochi dentro Claude Code
+# Arcade for Claude Code — bacheche che Claude porta avanti scheda dopo scheda
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · **Italiano** · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.39).** Tutto ciò che è descritto qui funziona e si usa ogni giorno; d’ora in poi cambiano soprattutto i dettagli. Le segnalazioni di errori sono benvenute — vedi [Feedback](#feedback).
+> **Beta.** Tutto ciò che è descritto qui funziona e si usa ogni giorno. Le segnalazioni di errori sono benvenute — vedi [Feedback](#feedback).
 
-Arcade è un plugin per [Claude Code](https://claude.com/claude-code) che lo trasforma in un piccolo spazio di lavoro: bacheche dei progetti dove Claude prende le schede una dopo l’altra, anche in più sessioni contemporaneamente; un quaderno che Claude tiene insieme a te e che tutte le sessioni aperte condividono; un calendario; e bacheche e chat condivise per la tua squadra. E per l’attesa: quando l’agente è occupato per più di 10 secondi, sopra il prompt compare un piccolo *«vuoi giocare?»*. Gioca a qualcosa — NES, Sega, PlayStation, Doom, scacchi e altro —, leggi un libro, ascolta un audiolibro o un podcast, oppure guarda un video sull’argomento su cui lavora l’agente. Arcade ti avvisa appena l’agente ha finito o ha bisogno del tuo permesso — non ti perdi niente.
+Metti le tue attività su una bacheca e premi *Coda per Claude*: Claude prende le schede una dopo l’altra, spunta la checklist e scrive il risultato sulla scheda — in una sessione o in più sessioni contemporaneamente, e due sessioni non prendono mai la stessa scheda. *Agenti* mostra tutte le sessioni di Claude Code con Arcade sul tuo computer: al lavoro, in attesa di permesso o finite. Ci sono anche un quaderno e un calendario che Claude tiene insieme a te, bacheche e chat condivise per la tua squadra, e giochi, libri e video per l’attesa. Gratuito e open source.
 
 Tutto il catalogo è gratuito: i giochi hanno licenze aperte, i libri e gli audiolibri sono di pubblico dominio. Puoi anche giocare online con altre persone che aspettano i loro agenti e chattare con i tuoi amici.
 
 ![Demo: una bacheca dei progetti in Claude Desktop; una scheda si apre come pagina con una checklist, Dai a Claude la passa a Claude, che spunta ogni voce, scrive il risultato sulla scheda e la sposta in Fatto](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
 *La tua bacheca: una scheda passa a Claude con un pulsante, interfaccia in inglese. [Guarda il video di 31 secondi](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
+**Installazione** — nel terminale:
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+Oppure dentro Claude Code: `/plugin marketplace add ArbakovMaxim/agent-arcade`, poi `/plugin install arcade@agent-arcade`. Richiede Claude Code 2.1.275 o successivo. [Di più su installazione e aggiornamenti](#installazione)
 
 ![Demo: Claude Code riceve un compito, sopra il prompt compare «vuoi giocare?», accanto alla chat gira un gioco NES e Arcade ti richiama quando l’agente ha finito; ci sono anche libri, audiolibri e articoli](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 

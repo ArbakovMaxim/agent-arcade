@@ -1,18 +1,27 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade logo" align="right">
 
-# Arcade — task boards, notes, team chats and games inside Claude Code
+# Arcade for Claude Code — boards Claude works through, card by card
 
 **English** · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · [Türkçe](README.tr.md) · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.39).** Everything described here works and is used every day; what changes from now on is mostly the details. Bug reports are very welcome — see [Feedback](#feedback).
+> **Beta.** Everything described here works and is used every day. Bug reports are very welcome — see [Feedback](#feedback).
 
-Arcade is a plugin for [Claude Code](https://claude.com/claude-code) that turns it into a small workspace: project boards where Claude works through the cards one by one, even in several sessions at once; a notebook Claude keeps with you, shared by all your open sessions; a calendar; and shared boards and chats for your team. And for the wait: when the agent has been busy for more than 10 seconds, a small *“play?”* appears above the prompt. Play a game — NES, Sega, PlayStation, Doom, chess and more — read a book, listen to an audiobook or a podcast, or watch a video on the topic of the agent's work. Arcade tells you the moment the agent finishes or needs your permission, so you never miss it.
+Put your tasks on a board and press *Queue for Claude*: Claude takes the cards one by one, ticks off the checklist and writes the result on the card — in one session or in several at once, and two sessions never take the same card. *Agents* shows every Claude Code session with Arcade on your computer: working, waiting for permission or finished. There's also a notebook and a calendar Claude keeps with you, shared boards and chats for your team, and games, books and videos for the wait. Free and open source.
 
 Everything in the catalog is free: the games are openly licensed, the books and audiobooks are in the public domain. You can also play online with other people who are waiting for their agents too, and chat with your friends.
 
 ![Demo: a project board in Claude Desktop; a card opens as a page with a checklist, Give to Claude hands it over, and Claude ticks off each item, writes the result on the card and moves it to Done](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
 *Your board: a card goes to Claude with one button. [Watch the 31-second video](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
+**Install** — in a terminal:
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+Or inside Claude Code: `/plugin marketplace add ArbakovMaxim/agent-arcade`, then `/plugin install arcade@agent-arcade`. Requires Claude Code 2.1.275 or newer. [More about installing and updating](#install)
 
 ![Demo: Claude Code gets a task, “play?” appears above the prompt, an NES game runs next to the chat, and Arcade calls you back when the agent finishes; books, audiobooks and articles are there too](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
