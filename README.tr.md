@@ -1,18 +1,27 @@
 <img src="docs/brand/arcade-logo-2-512.png" width="96" alt="Arcade logosu" align="right">
 
-# Arcade — Claude Code içinde görev panoları, notlar, ekip sohbetleri ve oyunlar
+# Arcade for Claude Code — Claude’un kart kart ilerlediği panolar
 
 [English](README.md) · [Русский](README.ru.md) · [Українська](README.uk.md) · [Español](README.es.md) · [Français](README.fr.md) · [Deutsch](README.de.md) · [Português](README.pt.md) · [Italiano](README.it.md) · [Polski](README.pl.md) · **Türkçe** · [日本語](README.ja.md) · [中文](README.zh.md) · [한국어](README.ko.md)
 
-> **Beta (0.39).** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor; bundan sonra değişenler çoğunlukla ayrıntılar. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
+> **Beta.** Burada anlatılan her şey çalışıyor ve her gün kullanılıyor. Hata bildirimlerine çok seviniriz — bkz. [Geri bildirim](#geri-bildirim).
 
-Arcade, [Claude Code](https://claude.com/claude-code) için bir eklentidir ve onu küçük bir çalışma alanına dönüştürür: Claude’un kartları birer birer, hatta aynı anda birkaç oturumda işlediği proje panoları; Claude’un seninle birlikte tuttuğu ve açık tüm oturumlarının paylaştığı bir defter; bir takvim; ekibin için ortak panolar ve sohbetler. Bekleme için de: ajan 10 saniyeden uzun süre meşgul olduğunda, istemin üstünde küçük bir *«oynamak ister misin?»* belirir. Bir şeyler oyna — NES, Sega, PlayStation, Doom, satranç ve daha fazlası —, bir kitap oku, bir sesli kitap ya da podcast dinle veya ajanın üzerinde çalıştığı konuyla ilgili bir video izle. Ajan işini bitirdiği ya da iznine ihtiyaç duyduğu anda Arcade sana haber verir — hiçbir şeyi kaçırmazsın.
+Görevlerini bir panoya koy ve *Claude için kuyruk* düğmesine bas: Claude kartları birer birer alır, kontrol listesini işaretler ve sonucu karta yazar — tek bir oturumda ya da aynı anda birkaçında; iki oturum asla aynı kartı almaz. *Ajanlar*, bilgisayarındaki Arcade açık tüm Claude Code oturumlarını gösterir: çalışıyor, izin bekliyor ya da bitti. Ayrıca Claude’un seninle birlikte tuttuğu bir defter ve takvim, ekibin için ortak panolar ve sohbetler, bekleme için de oyunlar, kitaplar ve videolar var. Ücretsiz ve açık kaynak.
 
 Katalogdaki her şey ücretsiz: oyunlar açık lisanslı, kitaplar ve sesli kitaplar kamu malı. Ajanlarını bekleyen başka kişilerle çevrim içi oynayabilir ve arkadaşlarınla sohbet edebilirsin.
 
 ![Demo: Claude Desktop’ta bir proje panosu; bir kart kontrol listeli bir sayfa olarak açılır, «Claude’a ver» onu Claude’a iletir, Claude her maddeyi işaretler, sonucu karta yazar ve kartı «Bitti» sütununa taşır](https://github.com/user-attachments/assets/c6519d8f-2bb5-4af2-9ebf-c4bfa5c144c6)
 
 *Panon: bir kart tek tuşla Claude’a gider, arayüz İngilizce. [31 saniyelik videoyu izle](https://github.com/user-attachments/assets/c9076e68-2db6-4f68-9d88-8a132ce96f6a).*
+
+**Kurulum** — terminalde:
+
+```
+claude plugin marketplace add ArbakovMaxim/agent-arcade
+claude plugin install arcade@agent-arcade
+```
+
+Ya da Claude Code içinde: `/plugin marketplace add ArbakovMaxim/agent-arcade`, ardından `/plugin install arcade@agent-arcade`. Claude Code 2.1.275 veya daha yenisi gerekir. [Kurulum ve güncelleme hakkında daha fazlası](#kurulum)
 
 ![Demo: Claude Code’a bir görev verilir, istemin üstünde «oynamak ister misin?» belirir, sohbetin yanında bir NES oyunu çalışır ve ajan bitirince Arcade seni geri çağırır; kitaplar, sesli kitaplar ve makaleler de var](https://github.com/user-attachments/assets/3d8f79ac-966f-4872-84d5-7aa91534330d)
 
