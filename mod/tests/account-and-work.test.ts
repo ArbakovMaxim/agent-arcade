@@ -10,7 +10,7 @@ import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody } fr
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
 import { COL_NAMES, DEFAULT_COLS, MAX_APP, MAX_BODY, MAX_PAGES, MAX_TOTAL, MAX_URL, PROMPTS_COL, addColumn, addPage, appendText, applyNotesTool, checkStats, cleanCols, cleanLink, columnCards, columnOf, findPage, fits, isBoard, isProjectBoard, isPrompts, latestEdits, mergeText, moveCard, noteLines, notesOrder, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from '../hooks/notes.js'
 import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cleanDay, cleanGive, cleanTime, dayKey, dueReminders, dueTasks, fireAt, giveTargets, markAlerted, markTask, monthGrid, nextReminder, parseRemind, quickParse, remindAt, restoreCalendar, updateEvent, weekday } from '../hooks/calendar.js'
-import { nextRemind, remindChoices } from '../hooks/register.js'
+import { branchOf, nextRemind, remindChoices } from '../hooks/register.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/register.js'
@@ -7684,4 +7684,12 @@ test('промпты по-английски: экран без русского
 test('подписки на вызовы блокнота и календаря — по тем же именам, что у зарегистрированных инструментов', async () => {
   // В register.js имена в подписках записаны готовыми строками (каталог читает подписку как есть) — сверяем с регистрацией
   expect([NOTES_TOOL_NAME, CALENDAR_TOOL_NAME]).toEqual(['mcp__arcade__notes', 'mcp__arcade__calendar'])
+})
+
+test('ветка из первой строки git status: обычная, без коммитов, у старого git и без ветки', async () => {
+  expect(branchOf('main...origin/main [ahead 2, behind 1]')).toEqual({ branch: 'main', ahead: 2, fresh: false })
+  expect(branchOf('feature/x')).toEqual({ branch: 'feature/x', ahead: 0, fresh: false })
+  expect(branchOf('No commits yet on main')).toEqual({ branch: 'main', ahead: 0, fresh: true })
+  expect(branchOf('Initial commit on master')).toEqual({ branch: 'master', ahead: 0, fresh: true })
+  expect(branchOf('HEAD (no branch)')).toEqual({ branch: '', ahead: 0, fresh: false })
 })
