@@ -2,9 +2,9 @@
 import { expect } from 'claude-code/testing'
 import { isBoard } from '../hooks/notes.js'
 import { S } from '../hooks/app/state.js'
-import { AGENT_TICK_MS } from '../hooks/app/agents.js'
-import { ORPHANS_AFTER_MS, RESUME_AFTER_MS, USAGE_POLL_MS } from '../hooks/app/queue.js'
-import { clockText, freshLimits, limitsOf, pctText, resetText, spentWindow, usdText } from '../hooks/app/usage.js'
+import { AGENT_TICK_MS } from '../hooks/register.js'
+import { ORPHANS_AFTER_MS, RESUME_AFTER_MS, USAGE_POLL_MS } from '../hooks/register.js'
+import { clockText, freshLimits, limitsOf, pctText, resetText, spentWindow, usdText } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, start, stubs, test } from './kit.ts'
 
 const NOTES = 'mcp__arcade__notes'

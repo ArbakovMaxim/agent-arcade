@@ -1,7 +1,7 @@
 // Тесты Arcade: агенты в фоне — главный ход Claude кончился, а субагенты и напарники, запущенные из него, ещё работают
 import { expect } from 'claude-code/testing'
-import { AGENT_TICK_MS } from '../hooks/app/agents.js'
-import { BG_GRACE_MS } from '../hooks/app/background.js'
+import { AGENT_TICK_MS } from '../hooks/register.js'
+import { BG_GRACE_MS } from '../hooks/register.js'
 import { columnOf, isBoard } from '../hooks/notes.js'
 import { PANE, WINDOWS, stubs, start, test } from './kit.ts'
 

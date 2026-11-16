@@ -1,7 +1,7 @@
 // Календарь Arcade: события с днём, временем (или на весь день), заметкой и напоминанием. Хранится в $.store мода
 // (ключ calendar) — один на все сессии Claude Code, как блокнот. Claude записывает и читает события инструментом
 // mcp__arcade__calendar — его ответы для модели, поэтому по-английски. Здесь нет вызовов Claude Code: хранилище и
-// напоминания — в hooks/app/calendar.js, экран — в hooks/screens/calendar.js, инструмент — в hooks/register.js.
+// напоминания — в hooks/register.js (app/calendar), экран — в hooks/register.js (screens/calendar), инструмент — в hooks/register.js.
 // Время — по часам компьютера: день — «ГГГГ-ММ-ДД», время — «ЧЧ:ММ». У события на весь день времени нет, и напоминание
 // о нём считается от 9:00 этого дня
 import { MAX_TITLE, cleanBody, cleanDay, cleanTitle, columnOf, isBoard, isPrompts, isProjectBoard } from './notes.js'
