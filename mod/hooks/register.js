@@ -15,6 +15,7 @@ import { clipboardCommand, DETECT_ARGV, launchCommand, notifyCommand, openUrlCom
 import { addDays, addEvent, addMonths, ALL_DAY_HOUR, applyCalendarTool, between, CALENDAR_TOOL, cardDues, colorOf, COLORS, compareEvents, dayKey, DEFAULT_COLOR as CAL_COLOR, dueReminders, dueTasks, GIVE_KEY, GIVE_KINDS, giveTargets, markAlerted, markTask, MISSED_MS, monthGrid, nextReminder, parseRemind, quickParse, REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, remindAt, removeEvent, REPEATS, restoreCalendar, startOf, updateEvent, weekday } from './calendar.js'
 import { bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, SITE, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { cleanText, clock, day, describe, fill, MAX_NAME, MAX_TEXT, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
+import { approveCtx, bindCtx, CTX_KEY, CTX_MAX, CTX_SECTION, ctxDir, ctxFor, ctxKey, ctxSection, ctxText, dirName, keepSnaps, markForeign, pageDirs, restoreCtx, restoreSnaps, SNAP_KEY, unbindCtx } from './context.js'
 import { addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from './daylog.js'
 import { adoptBoard, applySync, cardId, colId, detachBoard, freshBase, MAX_MEMBERS, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from './desks.js'
 import { find, FIND_LIMIT, MIN_QUERY, restoreFavorites, toggleIn } from './find.js'
@@ -386,6 +387,7 @@ function recordOf(at) {
     changes: ag.changes ?? null,
     look: ag.look || 0,
     last: ag.last ?? null,
+    ctx: ctxTitle(),
   }
 }
 // Замер лимитов и контекста этой сессии (app/usage) — для чужих «Агентов» и «Лимитов»
@@ -564,7 +566,7 @@ export async function agentsTick($) {
       notify($, all, now)
       alertsTick($, all, now)
       againTick($, all, now)
-      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at, r.last?.at, r.last?.files, r.look]).sort())
+      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at, r.last?.at, r.last?.files, r.look, r.ctx]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
         if (shown) $.ui.invalidate('ui.render')
@@ -764,7 +766,7 @@ export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, last: ag.last ?? null, me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, last: ag.last ?? null, ctx: ctxTitle(), me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }
@@ -3966,6 +3968,8 @@ export function refreshNotes($) {
   return withNotes($, (moved) => {
     // Итоги ревью по карточкам (app/review) пишут и другие сессии — перечитать заодно
     rvLoad($).catch(() => {})
+    // Привязки «папка → страница» меняют и другие сессии (app/context)
+    ctxLoad($).catch(() => {})
     return moved
   })
 }
@@ -4586,6 +4590,7 @@ export async function syncBoard($, share, { names = false } = {}, round = 0) {
         S.dk.bad = true
       }
       const shown = shownShares().includes(share)
+      await ctxForeign($, S.notes, done).catch(modError)
       if (done.notes !== S.notes) await boardChanged($, done.notes)
       else if (shown && before !== JSON.stringify([done.base.owner, done.base.members, done.base.names, S.dk.trouble, S.dk.note])) $.ui.invalidate('ui.render')
       await saveDesks($)
@@ -4855,6 +4860,150 @@ export function deskPerson(id, base) {
   if (handle) return `@${handle}`
   if (id && id === (S.dk.me || S.ch.me) && S.acct.handle) return `@${S.acct.handle}`
   return tr('удалённый аккаунт', S.lang)
+}
+
+// Заметки проекта из блокнота (п. 38, ./context.js). Страница, отмеченная «Контекст для папки», идёт Claude разделом
+// системного промпта в начале каждой новой сессии этой папки. dir — папка этой сессии (у worktree — папка репозитория),
+// map — привязки из $.store (общие для сессий этого компьютера), snap — раздел этой сессии: снят один раз, при первой
+// сборке промпта, и посреди сессии не меняется; sid — чьей сессии снимок (после /clear id новый — и снимок новый)
+S.ctx = { dir: '', name: '', map: { dirs: {} }, json: '', sid: '', snap: null, building: null }
+const ctxTitle = () => (S.ctx?.snap && !S.ctx.snap.none ? S.ctx.snap.title : null)
+
+// Из session.start: папка сессии и привязки. Папки нет (нет id сессии и т. п.) — переключателя нет
+export async function ctxStart($) {
+  const root = (await $.session.root().catch(() => '')) || (await $.session.cwd().catch(() => ''))
+  const repo = await $.session.repo().catch(() => null)
+  const dir = ctxDir(root || '', repo?.root || '')
+  S.ctx.dir = dir
+  S.ctx.name = dirName(dir) || dir
+  await ctxLoad($)
+}
+
+// Перечитать привязки: их меняют и другие сессии (переключатель, чужая правка общей доски)
+export async function ctxLoad($) {
+  const raw = await $.store.get(CTX_KEY)
+  const json = JSON.stringify(raw ?? null)
+  if (json === S.ctx.json) return false
+  S.ctx.json = json
+  S.ctx.map = restoreCtx(raw)
+  if (notesShown()) $.ui.invalidate('ui.render')
+  return true
+}
+
+async function ctxSave($, map) {
+  await $.store.set(CTX_KEY, map)
+  S.ctx.json = JSON.stringify(map)
+  S.ctx.map = map
+}
+
+// Раздел этой сессии: снимок из $.store (после /reload-plugins — тот же) или новый — со страницы, привязанной к папке
+// сейчас. Страницы нет — снимок «без раздела»: отметка, поставленная посреди сессии, пойдёт со следующей
+export async function ctxSnap($) {
+  const sid = await $.session.id().catch(() => '')
+  if (!sid) return null
+  if (S.ctx.sid === sid && S.ctx.snap) return S.ctx.snap
+  if (S.ctx.building?.sid === sid) return S.ctx.building.promise
+  const promise = (async () => {
+    let snap = restoreSnaps(await $.store.get(SNAP_KEY))[sid]
+    if (!snap) {
+      if (!S.ctx.dir) await ctxStart($)
+      const at = await $.clock.now()
+      const map = restoreCtx(await $.store.get(CTX_KEY))
+      const entry = ctxFor(map, S.ctx.dir)
+      const page = entry ? restoreNotes(await $.store.get('notes')).find((p) => p.id === entry.page) : null
+      if (page) {
+        const t = ctxText(entry, page)
+        snap = { dir: S.ctx.dir, page: page.id, title: t.title, text: t.text, cut: t.cut, at }
+      } else snap = { none: true, at }
+      // Хранилище общее: перечитать перед записью, чтобы не затереть снимки других сессий
+      const fresh = restoreSnaps(await $.store.get(SNAP_KEY))
+      if (fresh[sid]) snap = fresh[sid]
+      else await $.store.set(SNAP_KEY, keepSnaps(fresh, sid, snap))
+    }
+    S.ctx.sid = sid
+    S.ctx.snap = snap
+    return snap
+  })()
+  S.ctx.building = { sid, promise }
+  try {
+    return await promise
+  } finally {
+    if (S.ctx.building?.promise === promise) S.ctx.building = null
+  }
+}
+
+// Сверка общей доски принесла чужую правку карточки, которая у кого-то из папок — контекст: в контекст пока идёт
+// прежняя версия, пока человек не возьмёт новую кнопкой. Своя правка (с другого компьютера) — не чужая
+async function ctxForeign($, before, done) {
+  if (!done.changed.length) return
+  const map = restoreCtx(await $.store.get(CTX_KEY))
+  const me = S.dk.me || S.ch.me || ''
+  let next = map
+  for (const cid of done.changed) {
+    if (!pageDirs(next, cid).length) continue
+    const old = before.find((p) => p.id === cid)
+    const now = done.notes.find((p) => p.id === cid)
+    if (!old || !now || (now.title === old.title && now.body === old.body)) continue
+    const by = done.editors?.[cid] ?? ''
+    if (by && me && by === me) continue
+    next = markForeign(next, cid, old, by)
+  }
+  if (next !== map) await ctxSave($, next)
+}
+
+// Переключатель «Контекст для папки»: отметить страницу для папки этой сессии (прежняя отметка папки уходит) или снять
+export async function ctxToggle($, pageId) {
+  if (!S.ctx.dir) return
+  try {
+    const map = restoreCtx(await $.store.get(CTX_KEY))
+    const on = ctxFor(map, S.ctx.dir)?.page === pageId
+    await ctxSave($, on ? unbindCtx(map, S.ctx.dir) : bindCtx(map, S.ctx.dir, pageId, await $.clock.now()))
+  } catch (err) {
+    modError(err)
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// «Взять эту версию в контекст»: чужая правка общей доски пойдёт в новые сессии
+export async function ctxTake($, pageId) {
+  try {
+    await ctxSave($, approveCtx(restoreCtx(await $.store.get(CTX_KEY)), pageId))
+  } catch (err) {
+    modError(err)
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Строки страницы блокнота или карточки доски: переключатель, к каким ещё папкам она привязана, обрезка, чужая правка
+export function ctxItems($, kit, page, parent) {
+  const { Button, Text, dim } = kit
+  if (!S.ctx.dir || isBoard(page) || isPrompts(page) || (parent && isPrompts(parent))) return []
+  const map = S.ctx.map
+  const here = ctxFor(map, S.ctx.dir)
+  const on = here?.page === page.id
+  const bound = pageDirs(map, page.id)
+  const warn = (text) => keep(Text({ color: 'warning', wrap: 'wrap', children: [text] }))
+  const items = [
+    keep(Button({ key: 'arcade-note-ctx', label: `${on ? '☑' : '☐'} ${fill(tr('Контекст для папки: {0}', S.lang), [S.ctx.name])}`, onPress: () => ctxToggle($, page.id) })),
+    dim('  Новые сессии в этой папке получат текст страницы в начале. Правка — со следующей сессии или после /clear.'),
+  ]
+  if (here && !on) {
+    const other = S.notes.find((p) => p.id === here.page)
+    if (other) items.push(keep(dim(`  ${fill(tr('Сейчас у папки другая страница: «{0}» — отметка заменит её.', S.lang), [other.title])}`)))
+  }
+  const elsewhere = bound.filter((d) => ctxKey(d.path) !== ctxKey(S.ctx.dir)).map((d) => dirName(d.path) || d.path)
+  if (elsewhere.length) items.push(keep(dim(`  ${fill(tr('Контекст и для папок: {0}', S.lang), [elsewhere.join(', ')])}`)))
+  if (bound.length && page.body.length > CTX_MAX) items.push(warn(fill(tr('Страница длиннее {0} знаков: в контекст пойдёт только начало.', S.lang), [CTX_MAX])))
+  const held = bound.find((d) => d.ok)
+  if (held) {
+    const board = parent?.board?.share ? S.desks[parent.board.share] : null
+    const who = held.by ? deskPerson(held.by, board) : tr('другим участником', S.lang)
+    items.push(
+      warn(fill(tr('Изменено {0} — в контекст пока идёт прежняя версия.', S.lang), [who])),
+      Button({ key: 'arcade-note-ctx-take', label: 'Взять эту версию в контекст', onPress: () => ctxTake($, page.id) }),
+    )
+  }
+  return items
 }
 
 // Доску — Claude: колонки и карточки с id, чтобы он правил и переносил их инструментом блокнота
@@ -10856,6 +11005,7 @@ export function notesScreen($, e, kit) {
       gap,
       Button({ key: 'arcade-note-send', label: 'Отдать Claude', onPress: () => sendNote($, id) }),
       dim('  Claude получит страницу и сможет отмечать пункты и дописывать её.'),
+      ...ctxItems($, kit, page, parent),
       ...(task
         ? [
             keep(Button({ key: 'arcade-note-tracker', label: `${tr('Итог — в', S.lang)} ${task.app}`, onPress: () => trackerComment($, id) })),
@@ -12046,6 +12196,8 @@ export function agentsScreen($, e, kit) {
   const queueOf = (r) => (r.queue?.of ? fill(tr('Очередь: карточка {0} из {1}', S.lang), [r.queue.n, r.queue.of]) : '')
   // Контекст и расходы — по последнему ответу Claude в той сессии (цифры Claude Code)
   const usageOf = (r) => [r.usage?.ctx != null ? fill(tr('Контекст: {0}', S.lang), [pctText(r.usage.ctx)]) : '', r.usage?.usd != null ? usdText(r.usage.usd) : ''].filter(Boolean).join(' · ')
+  // Заметки проекта: какая страница блокнота пришла этой сессии в начале (app/context)
+  const ctxOf = (r) => (typeof r.ctx === 'string' && r.ctx ? fill(tr('Контекст из блокнота: «{0}»', S.lang), [r.ctx.slice(0, 80)]) : '')
   const status = (r) => {
     const color = STATUS_COLOR[r.status]
     return keep(Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] }))
@@ -12066,7 +12218,7 @@ export function agentsScreen($, e, kit) {
   }
   const card = (r) => {
     const hex = STATUS_HEX[r.status] ?? STATUS_HEX.idle
-    const lines = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean)
+    const lines = [cardOf(r), queueOf(r), usageOf(r), ctxOf(r)].filter(Boolean)
     return Box({
       key: `agents-card-${r.sid || 'me'}`,
       flexDirection: 'row',
@@ -12085,7 +12237,7 @@ export function agentsScreen($, e, kit) {
   }
   const line = (r) => {
     const color = STATUS_COLOR[r.status]
-    const rest = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean).join(' · ')
+    const rest = [cardOf(r), queueOf(r), usageOf(r), ctxOf(r)].filter(Boolean).join(' · ')
     const head = keep(Text({ children: [Text({ bold: true, children: [nameOf(r)] }), ' — ', Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] })] }))
     return Box({
       key: `agents-line-${r.sid || 'me'}`,
@@ -13658,6 +13810,8 @@ export function register(on) {
       startLater(home)
       // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
       await startAgents($, home)
+      // Заметки проекта из блокнота: папка этой сессии и привязки «папка → страница» (app/context)
+      await ctxStart($).catch(modError)
       // «Что поменялось» в «Агентах»: ветка и незакоммиченные файлы — git читает сейчас и в конце каждого хода, не по таймеру
       $.clock.after(0, () => changesPoll($).catch((err) => log(`что поменялось: ${err?.message ?? err}`)))
       // Очередь, которая ждала сброса лимита Claude до перезапуска, — ждёт дальше; доски «продолжать после сброса»
@@ -13828,6 +13982,21 @@ export function register(on) {
     // Панель оставили открытой в другой сессии — открываем и здесь. Desktop и VS Code рисуют не со старта, а с session.attach
     if (e.surface && e.surface !== 'mobile') await followPane($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
     return started
+  })
+
+  // Заметки проекта из блокнота (п. 38): страница, отмеченная для папки этой сессии, — разделом в конце системного
+  // промпта. Раздел снят в начале сессии и не меняется до её конца или /clear: иначе сбросился бы кеш промпта
+  on('prompt.compose', async ($, e, next) => {
+    const out = await next(e)
+    if (e.traits?.includes('bare')) return out
+    try {
+      const snap = await ctxSnap($)
+      if (!snap || snap.none) return out
+      return { ...out, sections: [...out.sections.filter((x) => x.id !== CTX_SECTION), { id: CTX_SECTION, text: ctxSection(snap), scope: 'session' }] }
+    } catch (err) {
+      modError(err)
+      return out
+    }
   })
 
   // Сессия закрывается: место её отметки — свободно (после /clear сессия та же, место остаётся за ней)
