@@ -70,7 +70,7 @@ export async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', agents, ask, deny, questionMs = 0, subagents = [] }: any = {}) {
+export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', popupMs = 0, agents, ask, deny, questionMs = 0, subagents = [] }: any = {}) {
   // Субагенты и напарники сессии ($.agent.list): массив — тест меняет его по ходу; по умолчанию — никого
   on('agent.list', () => ({ value: subagents.map((a: any) => ({ type: 'general-purpose', description: '', ...a })) }))
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
@@ -108,14 +108,20 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     on('session.root', () => ({ value: agents.root }))
     on('session.cwd', () => ({ value: agents.root }))
     on('session.repo', () => ({ value: agents.repo ?? null }))
-    on('fs.list', ($: any, e: any) => {
-      const dir = norm(e.path).replace(/\/$/, '')
-      const value = [...disk.entries()]
-        .filter(([k]) => norm(k).startsWith(`${dir}/`) && !norm(k).slice(dir.length + 1).includes('/'))
-        .map(([k, v]) => ({ name: norm(k).slice(dir.length + 1), kind: 'file', size: typeof v === 'string' ? v.length : (v?.length ?? v?.size ?? 0), mtimeMs: mtimes.get(k) ?? 0, isLink: false }))
-      return { value }
-    })
   }
+  // Папка на диске: файлы прямо в ней (отметки сессий, свои звуки, C:\Windows\Media)
+  on('fs.list', ($: any, e: any) => {
+    const dir = norm(e.path).replace(/\/$/, '')
+    const value = [...disk.entries()]
+      .filter(([k]) => norm(k).startsWith(`${dir}/`) && !norm(k).slice(dir.length + 1).includes('/'))
+      .map(([k, v]) => ({ name: norm(k).slice(dir.length + 1), kind: 'file', size: typeof v === 'string' ? v.length : (v?.length ?? v?.size ?? 0), mtimeMs: mtimes.get(k) ?? 0, isLink: false }))
+    return { value }
+  })
+  // Есть ли файл или папка: папка есть, если в ней что-то лежит
+  on('fs.exists', ($: any, e: any) => {
+    const path = norm(e.path).replace(/\/$/, '')
+    return { value: lookup(e.path) !== undefined || [...disk.keys()].some((k) => norm(k).startsWith(`${path}/`)) }
+  })
   // Положить файл на диск «другой программой» (другой сессией Claude Code): со временем записи, как от fs.write
   const putFile = (path: string, text: string) => {
     disk.set(path, text)
@@ -127,6 +133,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   const requests: any[] = []
   const notifies: any[] = []
   const popups: any[] = [] // карточки о сообщениях
+  const sounds: any[] = [] // звуки без карточки: «Прослушать», на Mac и Linux — и звук к уведомлению
   const widths: any[] = []
   const closed: any[] = []
   const opened: string[] = []
@@ -162,19 +169,27 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
       clipboard.calls.push({ argv: e.argv, env: e.init.env ?? {}, stdin: e.init.stdin })
       return { value: { exitCode: clipboard.exit, stdout: '', stderr: '' } }
     }
+    // Звук без карточки: «Прослушать» на Windows — PowerShell с ARCADE_POPUP_VOLUME без ARCADE_POPUP_TITLE; на Mac и
+    // Linux — sh -c с afplay или paplay
+    if ((e.init?.env?.ARCADE_POPUP_VOLUME !== undefined && e.init?.env?.ARCADE_POPUP_TITLE === undefined) || (e.argv[0] === 'sh' && /afplay|paplay/.test(e.argv[2] ?? ''))) {
+      sounds.push({ argv: e.argv, env: e.init?.env ?? {}, timeoutMs: e.init?.timeoutMs })
+      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+    }
     // Карточка о сообщении: Windows — PowerShell с ARCADE_POPUP_*, Linux и macOS — уведомление от имени Arcade.
-    // Ответ — что напечатала карточка: 'open' — по ней кликнули
+    // Ответ — что напечатала карточка: 'open' — по ней кликнули. popupMs — сколько карточка висит по часам теста
     if (e.init?.env?.ARCADE_POPUP_TITLE !== undefined || e.argv.includes('--app-name=Arcade') || e.argv.some((a: string) => a.includes('subtitle "Arcade"'))) {
       popups.push({ argv: e.argv, env: e.init?.env ?? {} })
-      return { value: { exitCode: 0, stdout: typeof popupAnswer === 'function' ? popupAnswer() : popupAnswer, stderr: '' } }
+      const shown = () => ({ value: { exitCode: 0, stdout: typeof popupAnswer === 'function' ? popupAnswer() : popupAnswer, stderr: '' } })
+      return popupMs ? clock.sleep(popupMs).then(shown) : shown()
     }
     if (e.init?.env?.ARCADE_TEXT || e.argv[0] === 'notify-send' || e.argv[0] === 'osascript') {
       notifies.push({ argv: e.argv, env: e.init?.env ?? {} })
       return { value: { exitCode: 0, stdout: '', stderr: '' } }
     }
-    if (e.argv[0] === 'open' || e.argv[0] === 'xdg-open') {
+    // Папка или ссылка — в Finder, файловом менеджере, проводнике (explorer.exe отвечает 1 и тогда, когда открыл)
+    if (e.argv[0] === 'open' || e.argv[0] === 'xdg-open' || e.argv[0] === 'explorer.exe') {
       launches.push({ argv: e.argv, env: e.init?.env ?? {} })
-      return { value: { exitCode: 0, stdout: '', stderr: '' } }
+      return { value: { exitCode: e.argv[0] === 'explorer.exe' ? 1 : 0, stdout: '', stderr: '' } }
     }
     if (e.init?.env?.ARCADE_URL) {
       launches.push({ argv: e.argv, env: e.init.env })
@@ -320,7 +335,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits, checks }
+  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, sounds, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits, checks }
 }
 
 export const BASH_MS = 2_000

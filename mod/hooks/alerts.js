@@ -9,6 +9,10 @@ export const ALERT_GAP_MS = 30_000 // уведомления о сессиях �
 export const ALERT_KEEP_MS = 3_600_000 // столько помнить, о чём уже объявляли
 export const ALERT_HOLD_S = 15 // «ждёт тебя» держится дольше обычной карточки: человек мог отойти
 export const ALERTS_KEY = 'agentAlerts'
+// Чей повтор «ждёт тебя» звучит: { by, evs } — id повтора и о каких событиях он. Повтор начала другая сессия — мой смолкает,
+// а его события она берёт к себе: на компьютере звенит одна
+export const AGAIN_KEY = 'agentAlertsAgain'
+const AGAIN_EVS_MAX = 20
 const TOLD_MAX = 200 // столько последних объявленных помнить
 const NAMES_MAX = 3 // в заголовке — столько имён сессий, остальные — числом
 
@@ -30,6 +34,18 @@ export function restoreAlerts(raw, now) {
     for (const [key, at] of Object.entries(raw.told)) if (key.length <= 300 && Number.isFinite(at) && now - at < ALERT_KEEP_MS) told[key] = at
   }
   return { by: ok && typeof raw.by === 'string' ? raw.by : '', last: ok && Number.isFinite(raw.last) && raw.last <= now ? raw.last : 0, told: keepTold(told) }
+}
+
+// { by, evs } повтора из $.store: события { key, sid, seen, name, what } — только «ждёт тебя»; странное — забыть
+export function restoreAgain(raw) {
+  const ok = raw && typeof raw === 'object' && !Array.isArray(raw)
+  const evs = []
+  for (const ev of ok && Array.isArray(raw.evs) ? raw.evs : []) {
+    if (!ev || typeof ev !== 'object' || (ev.what !== 'permission' && ev.what !== 'question')) continue
+    if (!['key', 'sid', 'seen', 'name'].every((k) => typeof ev[k] === 'string' && ev[k].length <= 300)) continue
+    evs.push({ key: ev.key, sid: ev.sid, seen: ev.seen, name: ev.name, what: ev.what })
+  }
+  return { by: ok && typeof raw.by === 'string' ? raw.by : '', evs: evs.slice(0, AGAIN_EVS_MAX) }
 }
 
 // Не больше TOLD_MAX — самые свежие

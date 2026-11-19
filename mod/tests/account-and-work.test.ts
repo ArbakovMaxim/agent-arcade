@@ -4,7 +4,8 @@ import { SITE } from '../hooks/catalog.js'
 import { tr } from '../hooks/i18n.js'
 import { CHAT_ID, MAX_MEMBERS, MAX_NAME, MAX_TEXT, chatFailure, cleanText, clock as chatClock, day, describe, fill, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, picsFrom, when } from '../hooks/chats.js'
 import { AVATAR_COUNT, avatarName, avatarSvg, initial, letterColor, letterSvg, picSvg, validPic } from '../hooks/avatars.js'
-import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, svgToXaml } from '../hooks/popup.js'
+import { POPPED_KEPT, POPUP_SCRIPT_TEXT, POPUP_TEXT_MAX, POPUP_TITLE_MAX, SOUND_SCRIPT_TEXT, avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand, svgToXaml } from '../hooks/popup.js'
+import { ARCADE_SOUNDS, SOUND_CUT_S, SOUND_EVERY, SOUND_EVERY_STD, SOUND_MAX_BYTES, SOUND_REPEAT_MAX, SOUND_STD, SOUND_VOLUMES, ownSoundFiles, ownSoundName, soundEveryOf, soundIdOf, soundLabelOf, soundSource, soundVolumeOf, systemSoundList } from '../hooks/sounds.js'
 import { FIND_LIMIT, MIN_QUERY, find, fold, queryWords, rank, restoreFavorites, toggleIn } from '../hooks/find.js'
 import { MAX_REPORT, parseClosed, parseReportSent, parseReports, reportBody } from '../hooks/reports.js'
 import { HANDLE, ROOM, SYNC_KEYS, accountUrl, normalHandle, parseDone, parseFriends, parseHandle, parseAvatar, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, personFrom, restoreAccount, restoreStamps, suggestHandle, syncPlan } from '../hooks/account.js'
@@ -5896,6 +5897,362 @@ test('alerts.js: текст уведомления о сессиях, что у�
   // Linux: звук — подсказкой уведомлению
   const linux = (sound: string) => popupCommand('linux', { title: 'T', text: 'x', sound })!.argv.slice(2, -2)
   expect([linux('wait'), linux('done'), linux('none')]).toEqual([['--hint=string:sound-name:message-new-instant'], ['--hint=string:sound-name:complete'], ['--hint=boolean:suppress-sound:true']])
+})
+
+// --- Звук уведомлений о сессиях: громкость, свой звук «ждёт тебя» и «закончил ход», свои файлы, повтор ---
+
+const NUDGE = 'Windows Message Nudge.wav'
+const GENERIC = 'Windows Notify System Generic.wav'
+const SND_DIR = 'C:\\Users\\max\\.claude\\arcade\\sounds'
+
+test('звук: что играть — сохранённый выбор, свои файлы из папки, звуки системы; частота повтора; команды карточки и «Прослушать» — громкость и файл только через env', () => {
+  // Сохранённый выбор: чужое и битое — стандартный
+  expect(['arcade:bell', 'sys:tada', 'file:my song (1).mp3', 'file:../x.mp3', 'sys:a"b', 'arcade:nope', 5].map(soundIdOf)).toEqual(['arcade:bell', 'sys:tada', 'file:my song (1).mp3', SOUND_STD, SOUND_STD, SOUND_STD, SOUND_STD])
+  expect([20, 25, '50', undefined].map(soundVolumeOf)).toEqual([20, 100, 100, 100])
+  expect(SOUND_VOLUMES).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
+  // Повтор «ждёт тебя»: каждые 5, 10, 30 или 60 с, не больше 10 раз с первым; чужое — 10 с
+  expect(SOUND_EVERY).toEqual([5, 10, 30, 60])
+  expect(SOUND_REPEAT_MAX).toBe(10)
+  expect([5, 60, 7, '10', undefined].map(soundEveryOf)).toEqual([5, 60, SOUND_EVERY_STD, SOUND_EVERY_STD, SOUND_EVERY_STD])
+  expect([SOUND_STD, 'arcade:bell', 'sys:tada', 'file:my.mp3'].map(soundLabelOf)).toEqual(['Стандартный', 'Колокол', 'tada', 'my.mp3'])
+  expect(ARCADE_SOUNDS.map((s) => tr(s.label, 'en'))).toEqual(['Chime', 'Bell', 'Pulse', 'Rise', 'Alarm'])
+
+  // Свои файлы: только хорошее имя и разрешённое расширение; на Mac — ещё .aiff и .m4a
+  const names = ['a.mp3', 'B.WAV', 'a.m4a', '.hidden.mp3', 'noext', 'a"b.mp3', 'a#b.mp3', 'dir/a.mp3', '..\\a.wav', '%TEMP%.wav']
+  expect(names.filter((n) => ownSoundName(n, 'windows'))).toEqual(['a.mp3', 'B.WAV'])
+  expect(names.filter((n) => ownSoundName(n, 'mac'))).toEqual(['a.mp3', 'B.WAV', 'a.m4a'])
+  // Из папки — обычные файлы не пустые и не больше 5 МБ, по алфавиту
+  const entries = [
+    { name: 'b.mp3', kind: 'file', size: 10 },
+    { name: 'a.wav', kind: 'file', size: SOUND_MAX_BYTES },
+    { name: 'big.mp3', kind: 'file', size: SOUND_MAX_BYTES + 1 },
+    { name: 'empty.wav', kind: 'file', size: 0 },
+    { name: 'dir.mp3', kind: 'dir', size: 10 },
+    { name: 'other.mp3', kind: 'link', size: 10 },
+    { name: 'README.txt', kind: 'file', size: 10 },
+  ]
+  expect(ownSoundFiles(entries, 'windows')).toEqual(['a.wav', 'b.mp3'])
+  expect(ownSoundFiles(null, 'windows')).toEqual([])
+
+  // Звуки системы: на Windows — только те, что лежат в C:\Windows\Media; не прочли — весь список
+  const media = ['tada.wav', 'Windows Ding.wav', 'other.wav'].map((name) => ({ name, kind: 'file', size: 9 }))
+  expect(systemSoundList('windows', media)).toEqual(['Windows Ding', 'tada'])
+  expect(systemSoundList('windows', null).length).toBe(20)
+  expect(systemSoundList('mac', null)).toContain('Glass')
+
+  // Что играть: файл — только звук Arcade из папки плагина или свой из папки звуков; иначе — звук системы или стандартный
+  const P = { root: 'C:\\plug\\', dir: SND_DIR, sep: '\\' }
+  expect(soundSource('windows', SOUND_STD, 'wait', P)).toEqual({ std: NUDGE, name: NUDGE, file: null })
+  expect(soundSource('windows', 'arcade:bell', 'done', P)).toEqual({ std: GENERIC, name: GENERIC, file: 'C:\\plug\\sounds\\bell.wav' })
+  expect(soundSource('windows', 'sys:tada', 'wait', P)).toEqual({ std: NUDGE, name: 'tada.wav', file: null })
+  expect(soundSource('windows', 'sys:Purr', 'wait', P)).toEqual({ std: NUDGE, name: NUDGE, file: null })
+  expect(soundSource('windows', 'file:ring.mp3', 'wait', P)).toEqual({ std: NUDGE, name: NUDGE, file: `${SND_DIR}\\ring.mp3` })
+  expect(soundSource('windows', 'file:ring.m4a', 'wait', P).file).toBeNull()
+  expect(soundSource('mac', 'sys:Hero', 'done', P)).toEqual({ std: 'Glass', name: 'Hero', file: null })
+  expect(soundSource('linux', 'file:a.wav', 'wait', { dir: '/home/max/.claude/arcade/sounds/' }).file).toBe('/home/max/.claude/arcade/sounds/a.wav')
+
+  // «Прослушать» на Windows: имя, громкость и путь к файлу — в env, не в тексте команды
+  const ring = soundSource('windows', 'file:ring.mp3', 'wait', P)
+  const preview = soundPreviewCommand('windows', ring, 20)
+  expect(preview.env).toEqual({ ARCADE_POPUP_SOUND: NUDGE, ARCADE_POPUP_VOLUME: '20', ARCADE_POPUP_SOUND_FILE: `${SND_DIR}\\ring.mp3` })
+  expect(JSON.stringify(preview.argv)).not.toContain('ring.mp3')
+  expect(SOUND_SCRIPT_TEXT).toContain('$env:ARCADE_POPUP_SOUND_FILE')
+  expect(SOUND_SCRIPT_TEXT).toContain('$env:ARCADE_POPUP_VOLUME')
+  for (const name of ['ARCADE_POPUP_VOLUME', 'ARCADE_POPUP_FG_SOUND_FILE']) expect(POPUP_SCRIPT_TEXT).toContain(name)
+  // Повторяет звук мод, не карточка: карточка только говорит, что её закрыли крестиком
+  expect(POPUP_SCRIPT_TEXT).not.toContain('ARCADE_POPUP_REPEAT')
+  expect(POPUP_SCRIPT_TEXT).toContain("$script:answer = 'shut'")
+  // Mac и Linux: файл — аргументом, не дольше 10 с; не играет — стандартный
+  const mac = soundPreviewCommand('mac', soundSource('mac', 'file:a.m4a', 'wait', { dir: '/Users/max/.claude/arcade/sounds' }), 20)
+  expect(mac.argv.slice(0, 2)).toEqual(['sh', '-c'])
+  expect(mac.argv[2]).toContain(`afplay -v "$1" -t ${SOUND_CUT_S} "$2"`)
+  expect(mac.argv.slice(3)).toEqual(['sh', '0.2', '/Users/max/.claude/arcade/sounds/a.m4a', '/System/Library/Sounds/Ping.aiff'])
+  const linux = soundPreviewCommand('linux', soundSource('linux', 'sys:bell', 'done'), 50)
+  expect(linux.argv[2]).toContain(`timeout ${SOUND_CUT_S} paplay --volume="$1" "$2"`)
+  expect(linux.argv.slice(3)).toEqual(['sh', '32768', '/usr/share/sounds/freedesktop/stereo/bell.oga', '/usr/share/sounds/freedesktop/stereo/complete.oga'])
+  expect(soundPreviewCommand('freebsd', soundSource('freebsd', SOUND_STD, 'wait'), 50)).toBeNull()
+
+  // Карточка Windows: громкость и свой файл «ждёт тебя»; у окна Claude Code впереди — свои
+  const voice = { volume: 30, wait: ring, done: soundSource('windows', 'sys:tada', 'done', P) }
+  const wait = popupCommand('windows', { title: 'Ждёт тебя: docs', text: 'docs — ждёт разрешения', sound: 'wait', hold: 15, voice })
+  expect(wait.env).toMatchObject({ ARCADE_POPUP_SOUND: NUDGE, ARCADE_POPUP_VOLUME: '30', ARCADE_POPUP_SOUND_FILE: `${SND_DIR}\\ring.mp3`, ARCADE_POPUP_HOLD: '15' })
+  expect(JSON.stringify(wait.argv)).not.toContain('ring.mp3')
+  expect(wait.env.ARCADE_POPUP_REPEAT).toBeUndefined()
+  const done = popupCommand('windows', { title: 'Закончил', text: 'docs — закончил ход', sound: 'done', fg: { title: 'Ждёт', text: 'api', kind: 'wait' }, voice })
+  expect(done.env).toMatchObject({ ARCADE_POPUP_SOUND: 'tada.wav', ARCADE_POPUP_VOLUME: '30', ARCADE_POPUP_FG_SOUND: NUDGE, ARCADE_POPUP_FG_SOUND_FILE: `${SND_DIR}\\ring.mp3` })
+  expect(done.env.ARCADE_POPUP_SOUND_FILE).toBeUndefined()
+  const none = popupCommand('windows', { title: 'Ждёт тебя: docs', text: 'docs', sound: 'none', voice })
+  expect(none.env.ARCADE_POPUP_SOUND).toBe('none')
+  expect(none.env.ARCADE_POPUP_VOLUME).toBeUndefined()
+
+  // Mac: звук системы на полной громкости играет само уведомление, тише — отдельная команда, уведомление молчит
+  const std = (platform: string, kind: string) => soundSource(platform, SOUND_STD, kind)
+  const loud = popupCommand('mac', { title: 'T', text: 'x', sound: 'done', voice: { volume: 100, wait: std('mac', 'wait'), done: soundSource('mac', 'sys:Hero', 'done') } })
+  expect(loud.argv[4]).toBe('display notification (item 2 of argv) with title (item 1 of argv) subtitle "Arcade" sound name "Hero"')
+  expect(loud.play).toBeUndefined()
+  const soft = popupCommand('mac', { title: 'T', text: 'x', sound: 'done', voice: { volume: 30, wait: std('mac', 'wait'), done: soundSource('mac', 'sys:Hero', 'done') } })
+  expect(soft.argv[4]).toBe('display notification (item 2 of argv) with title (item 1 of argv) subtitle "Arcade"')
+  expect(soft.play.argv.slice(3)).toEqual(['sh', '0.3', '/System/Library/Sounds/Hero.aiff', '/System/Library/Sounds/Glass.aiff'])
+  // Linux: свой файл — отдельной командой, уведомление без звука
+  const own = popupCommand('linux', { title: 'T', text: 'x', sound: 'wait', voice: { volume: 100, wait: soundSource('linux', 'file:a.wav', 'wait', { dir: '/home/max/s' }), done: std('linux', 'done') } })
+  expect(own.argv.slice(2, -2)).toEqual(['--hint=boolean:suppress-sound:true'])
+  expect(own.play.argv.slice(3)).toEqual(['sh', '65536', '/home/max/s/a.wav', '/usr/share/sounds/freedesktop/stereo/message-new-instant.oga'])
+})
+
+test('звук: экран «Громкость и звуки» на Windows — громкость тише и громче, выбор звука играет его, звуки системы из C:\\Windows\\Media, свои файлы, повтор, «Звук: нет» и «Прослушать», папка; другая сессия видит настройки', HEAVY, async ($, on) => {
+  const MEDIA = { 'C:\\Windows\\Media\\tada.wav': { size: 9 }, 'C:\\Windows\\Media\\Windows Ding.wav': { size: 9 } }
+  const { clock, saved, sounds, launches, putFile } = stubs(on, { env: AG_ENV, disk: MEDIA })
+  putFile(`${SND_DIR}\\ring.mp3`, 'x'.repeat(10))
+  putFile(`${SND_DIR}\\notes.txt`, 'x')
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-sounds' })
+  const label = async (key: string) => (await ui.find({ key }))?.props.label
+  expect(await label('arcade-snd-switch')).toBe('Звук уведомления о сессиях: да')
+  let texts = await drawnTexts(ui)
+  expect(texts).toContain('Громкость: 100%')
+  expect(await label('arcade-snd-edit-wait')).toBe('Звук «ждёт тебя» ✓')
+  expect(await label('arcade-snd-edit-done')).toBe('Звук «закончил ход»')
+  expect(texts.filter((s) => s === '  сейчас: Стандартный').length).toBe(2)
+  expect(await label('arcade-snd-std')).toBe('✓ Стандартный')
+  expect(await label('arcade-snd-arcade-bell')).toBe('Колокол')
+  expect(await labels(ui, 'arcade-snd-sys-', 3)).toEqual(['Windows Ding', 'tada', undefined])
+  expect(await labels(ui, 'arcade-snd-file-', 2)).toEqual(['ring.mp3', undefined])
+
+  // Громче 100% некуда — тишина; тише — каждый шаг играет звук с новой громкостью
+  await ui.press({ key: 'arcade-snd-louder' })
+  expect(sounds.length).toBe(0)
+  for (let i = 0; i < 8; i++) {
+    await ui.press({ key: 'arcade-snd-quieter' })
+    await clock.advance(50)
+  }
+  expect(saved.get('soundVolume')).toBe(20)
+  expect(await drawnTexts(ui)).toContain('Громкость: 20%')
+  expect(sounds.length).toBe(8)
+  expect(sounds.at(-1).env).toEqual({ ARCADE_POPUP_SOUND: NUDGE, ARCADE_POPUP_VOLUME: '20' })
+  await ui.press({ key: 'arcade-snd-play' })
+  await clock.advance(50)
+  expect(sounds.length).toBe(9)
+
+  // Свой файл для «ждёт тебя»: путь — в env
+  await ui.press({ key: 'arcade-snd-file-0' })
+  await clock.advance(50)
+  expect(saved.get('soundWait')).toBe('file:ring.mp3')
+  expect(sounds.at(-1).env).toEqual({ ARCADE_POPUP_SOUND: NUDGE, ARCADE_POPUP_VOLUME: '20', ARCADE_POPUP_SOUND_FILE: `${SND_DIR}\\ring.mp3` })
+  expect(await label('arcade-snd-file-0')).toBe('✓ ring.mp3')
+  expect(await drawnTexts(ui)).toContain('  сейчас: ring.mp3')
+
+  // «Закончил ход»: звук Arcade, потом звук системы
+  await ui.press({ key: 'arcade-snd-edit-done' })
+  expect(await label('arcade-snd-edit-done')).toBe('Звук «закончил ход» ✓')
+  expect(await label('arcade-snd-edit-wait')).toBe('Звук «ждёт тебя»')
+  expect(await label('arcade-snd-std')).toBe('✓ Стандартный')
+  expect(await label('arcade-snd-file-0')).toBe('ring.mp3')
+  await ui.press({ key: 'arcade-snd-arcade-bell' })
+  await clock.advance(50)
+  expect(saved.get('soundDone')).toBe('arcade:bell')
+  const bell = sounds.at(-1).env
+  expect(bell).toMatchObject({ ARCADE_POPUP_SOUND: GENERIC, ARCADE_POPUP_VOLUME: '20' })
+  if (bell.ARCADE_POPUP_SOUND_FILE !== undefined) expect(bell.ARCADE_POPUP_SOUND_FILE).toMatch(/sounds[\\/]bell\.wav$/)
+  expect(await label('arcade-snd-arcade-bell')).toBe('✓ Колокол')
+  await ui.press({ key: 'arcade-snd-sys-1' })
+  await clock.advance(50)
+  expect(saved.get('soundDone')).toBe('sys:tada')
+  expect(sounds.at(-1).env).toEqual({ ARCADE_POPUP_SOUND: 'tada.wav', ARCADE_POPUP_VOLUME: '20' })
+
+  // Повтор «ждёт тебя»: по умолчанию нет; включили — каждые 10 с, нажатия меняют частоту по кругу
+  expect(await label('arcade-snd-repeat')).toBe('Повторять «ждёт тебя»: нет')
+  expect(await ui.find({ key: 'arcade-snd-every' })).toBeUndefined()
+  await ui.press({ key: 'arcade-snd-repeat' })
+  expect(await label('arcade-snd-repeat')).toBe('Повторять «ждёт тебя»: да')
+  expect(saved.get('soundRepeat')).toBe(true)
+  expect(await label('arcade-snd-every')).toBe('Как часто: каждые 10 с')
+  expect(await drawnTexts(ui)).toContain('  пока сессия ждёт, не больше 10 раз; смолкает, когда ответишь, скроешь сессию или закроешь карточку')
+  const everies: any[] = []
+  for (let i = 0; i < 4; i++) {
+    await ui.press({ key: 'arcade-snd-every' })
+    everies.push(saved.get('soundEvery'))
+  }
+  expect(everies).toEqual([30, 60, 5, 10])
+  expect(await label('arcade-snd-every')).toBe('Как часто: каждые 10 с')
+
+  // «Звук: нет» — уведомления молчат, а «Прослушать» играет: нажал человек
+  await ui.press({ key: 'arcade-snd-switch' })
+  expect(await label('arcade-snd-switch')).toBe('Звук уведомления о сессиях: нет')
+  expect(saved.get('agentsSound')).toBe(false)
+  const before = sounds.length
+  await ui.press({ key: 'arcade-snd-play' })
+  await clock.advance(50)
+  expect(sounds.length).toBe(before + 1)
+
+  // Папка звуков — в проводнике; новый файл — после «Обновить список»
+  await ui.press({ key: 'arcade-snd-folder' })
+  expect(launches.at(-1).argv).toEqual(['explorer.exe', SND_DIR])
+  expect(await drawnTexts(ui)).toContain('Папка открыта: положи туда .wav или .mp3 и нажми «Обновить список».')
+  putFile(`${SND_DIR}\\zzz.wav`, 'x'.repeat(10))
+  await ui.press({ key: 'arcade-snd-reload' })
+  expect(await labels(ui, 'arcade-snd-file-', 2)).toEqual(['ring.mp3', 'zzz.wav'])
+
+  // Громкость поменяли в другой сессии — экран перечитывает настройки
+  saved.set('soundVolume', 70)
+  await clock.advance(4_000)
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-sounds' })
+  expect(await drawnTexts(ui)).toContain('Громкость: 70%')
+  await ui.unmount()
+})
+
+test('звук: экран на Linux — повтор без карточки, звуки темы freedesktop играет paplay с громкостью, папка — в файловом менеджере с README.txt', HEAVY, async ($, on) => {
+  const { clock, sounds, launches, diskFile } = stubs(on, { env: { HOME: '/home/max' }, uname: 'Linux', stored: { soundVolume: 50 } })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-sounds' })
+  expect((await ui.find({ key: 'arcade-snd-repeat' }))?.props.label).toBe('Повторять «ждёт тебя»: нет')
+  await ui.press({ key: 'arcade-snd-repeat' })
+  expect(await drawnTexts(ui)).toContain('  пока сессия ждёт, не больше 10 раз; смолкает, когда ответишь или скроешь сессию')
+  expect(await ui.find({ key: 'arcade-snd-file-0' })).toBeUndefined()
+  expect((await ui.find({ key: 'arcade-snd-sys-2' }))?.props.label).toBe('bell')
+  expect(await drawnTexts(ui)).toContain('  .wav или .mp3 до 5 МБ; играет не дольше 10 с')
+  await ui.press({ key: 'arcade-snd-sys-2' })
+  await clock.advance(50)
+  expect(sounds.at(-1).argv.slice(3)).toEqual(['sh', '32768', '/usr/share/sounds/freedesktop/stereo/bell.oga', '/usr/share/sounds/freedesktop/stereo/message-new-instant.oga'])
+  await ui.press({ key: 'arcade-snd-folder' })
+  expect(launches.at(-1).argv[0]).toBe('xdg-open')
+  expect(launches.at(-1).argv[1]).toMatch(/[\\/]home[\\/]max[\\/]\.claude[\\/]arcade[\\/]sounds$/)
+  expect(String(diskFile('/home/max/.claude/arcade/sounds/README.txt'))).toContain('Put .wav or .mp3 files here')
+  await ui.unmount()
+})
+
+test('звук: карточка «ждёт тебя» — громкость и свой файл из настроек; повтора по умолчанию нет; «Звук: нет» — без звука и без проигрывателя', HEAVY, async ($, on) => {
+  const { clock, popups, sounds, saved, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { soundVolume: 30, soundWait: 'file:ring.mp3' } })
+  putFile(`${SND_DIR}\\ring.mp3`, 'x'.repeat(10))
+  const list: Record<string, any> = { docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' } }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  marks()
+  await start($)
+  await live(10_000)
+  set('docs', 'permission')
+  await live(20_000)
+  expect(popups.length).toBe(1)
+  expect(popups[0].env).toEqual({
+    ARCADE_POPUP_TITLE: 'Ждёт тебя: docs',
+    ARCADE_POPUP_TEXT: 'docs — ждёт разрешения',
+    ARCADE_POPUP_PIC: letterXaml('docs', 'sess-b'),
+    ARCADE_POPUP_SLOT: '0',
+    ARCADE_POPUP_SOUND: NUDGE,
+    ARCADE_POPUP_VOLUME: '30',
+    ARCADE_POPUP_SOUND_FILE: `${SND_DIR}\\ring.mp3`,
+    ARCADE_POPUP_HOLD: '15',
+  })
+  // Повтор выключен — сессия ждёт минуту, а звук был один
+  await live(60_000)
+  expect(popups.length).toBe(1)
+  expect(sounds).toEqual([])
+
+  // Звук выключили в другой сессии — карточка молчит, громкости и файла нет
+  saved.set('agentsSound', false)
+  set('docs', 'working')
+  await live(10_000)
+  set('docs', 'permission')
+  await live(40_000)
+  expect(popups.length).toBe(2)
+  expect(popups[1].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Ждёт тебя: docs', ARCADE_POPUP_SOUND: 'none' })
+  expect(popups[1].env.ARCADE_POPUP_VOLUME).toBeUndefined()
+  expect(popups[1].env.ARCADE_POPUP_SOUND_FILE).toBeUndefined()
+})
+
+// Шагать по часам теста, пока не выполнится ok (не дольше ms), обновляя отметки соперников
+const stepUntil = async (clock: any, marks: () => void, ok: () => boolean, ms: number) => {
+  for (let left = ms; left > 0 && !ok(); left -= 500) {
+    marks()
+    await clock.advance(500)
+  }
+  return ok()
+}
+
+test('звук: повтор «ждёт тебя» на Windows — каждые 10 с, пока сессия ждёт: карточка на экране — только звук, ушла — снова карточка; не больше 10 раз; смолкает, когда ответили или закрыли карточку крестиком; смолкшее другой повтор не подхватывает', HEAVY, async ($, on) => {
+  let answer = ''
+  const { clock, popups, sounds, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { soundRepeat: true, soundEvery: 10 }, popupMs: 15_000, popupAnswer: () => answer })
+  const list: Record<string, any> = {
+    api: { slot: 3, sid: 'sess-a', name: 'api', path: 'D:\\work\\api', status: 'working' },
+    docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' },
+  }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  const until = (ok: () => boolean, ms: number) => stepUntil(clock, marks, ok, ms)
+  const rung = () => popups.length + sounds.length
+  marks()
+  await start($)
+  await live(10_000)
+
+  // «docs» ждёт: карточка со звуком; через ~10 с она ещё на экране — повтор только звуком
+  set('docs', 'permission')
+  expect(await until(() => popups.length === 1, 30_000)).toBe(true)
+  expect(sounds).toEqual([])
+  expect(await until(() => sounds.length === 1, 12_000)).toBe(true)
+  expect(sounds[0].env).toEqual({ ARCADE_POPUP_SOUND: NUDGE, ARCADE_POPUP_VOLUME: '100' })
+  expect(popups.length).toBe(1)
+  // Ещё через ~10 с карточка уже ушла — повтор показывает её снова, со звуком
+  expect(await until(() => popups.length === 2, 12_000)).toBe(true)
+  expect(sounds.length).toBe(1)
+  expect(popups[1].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Ждёт тебя: docs', ARCADE_POPUP_SOUND: NUDGE, ARCADE_POPUP_HOLD: '15' })
+
+  // Всего — не больше 10 раз с первым, потом тишина, хотя «docs» всё ждёт
+  expect(await until(() => rung() >= SOUND_REPEAT_MAX, 150_000)).toBe(true)
+  await live(60_000)
+  expect(rung()).toBe(SOUND_REPEAT_MAX)
+
+  // «api» ждёт — новый повтор только о ней: смолкший «docs» не подхватывает. Ответили — тишина
+  set('api', 'permission', { ask: { kind: 'question', id: 'q1' } })
+  expect(await until(() => popups.length > 0 && popups.at(-1).env.ARCADE_POPUP_TITLE === 'Ждёт тебя: api', 40_000)).toBe(true)
+  expect(await until(() => rung() === SOUND_REPEAT_MAX + 2, 15_000)).toBe(true)
+  set('api', 'working')
+  const answered = rung()
+  await live(60_000)
+  expect(rung()).toBe(answered)
+
+  // Снова ждёт; карточку закрыли крестиком — повтор смолк
+  answer = 'shut'
+  set('api', 'permission', { ask: null })
+  const before = popups.length
+  expect(await until(() => popups.length === before + 1, 40_000)).toBe(true)
+  await live(20_000)
+  const shut = rung()
+  await live(60_000)
+  expect(rung()).toBe(shut)
+})
+
+test('звук: повтор «ждёт тебя» на Linux — только звук через paplay, раз в 30 с, карточку не показывает снова; скрыли сессию — смолк', HEAVY, async ($, on) => {
+  const LX_DIR = '/home/max/.claude/arcade/agents'
+  const { clock, popups, sounds, saved, disk, putFile } = stubs(on, { env: { HOME: '/home/max' }, uname: 'Linux', agents: { sid: 'sess-me', root: '/home/max/work/web' }, stored: { soundRepeat: true, soundEvery: 30 } })
+  let docs: any = { sid: 'sess-b', name: 'docs', path: '/home/max/work/docs', status: 'working', since: 0 }
+  // Отметка «docs» на месте 9 (занято этой сессией — на 32)
+  const marks = () => {
+    const mine = agentSlots(disk).find((x) => x.rec.sid === 'sess-me')?.slot
+    putFile(`${LX_DIR}/s${mine === 9 ? 32 : 9}.json`, JSON.stringify({ v: 1, card: null, queue: null, claim: null, ...docs, at: clock.now() }))
+  }
+  const live = (ms: number) => stepUntil(clock, marks, () => false, ms)
+  const until = (ok: () => boolean, ms: number) => stepUntil(clock, marks, ok, ms)
+  marks()
+  await start($)
+  await live(10_000)
+  docs = { ...docs, status: 'permission', since: clock.now() }
+  expect(await until(() => popups.length === 1, 30_000)).toBe(true)
+  expect(popups[0].argv).toContain('--app-name=Arcade')
+  // Через 20 с — ещё тихо, к 30 с — звук, без новой карточки
+  await live(20_000)
+  expect(sounds).toEqual([])
+  expect(await until(() => sounds.length === 1, 15_000)).toBe(true)
+  expect(sounds[0].argv[0]).toBe('sh')
+  expect(sounds[0].argv.join(' ')).toContain('message-new-instant.oga')
+  expect(popups.length).toBe(1)
+  // Скрыли «docs» в другой сессии — смолк
+  saved.set('agentsHidden', ['sess-b'])
+  await live(90_000)
+  expect(sounds.length).toBe(1)
+  expect(popups.length).toBe(1)
 })
 
 test('агенты: крестик скрывает другую сессию — её нет в списке и всплывашек о ней нет; «Скрытые» возвращают; помнится в хранилище, скрытое в другой сессии видно сразу', async ($, on) => {
