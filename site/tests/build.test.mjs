@@ -87,13 +87,35 @@ for (const f of ['index.html', 'boot.js', 'library.js', 'game.js', 'stats.js', '
   const about = fs.readFileSync(path.join(out, 'about.html'), 'utf8')
   // Без внешних скриптов, шрифтов, рамок и счётчиков: в privacy.html — «no analytics»
   for (const [, attr, value] of about.matchAll(/\b(src|poster|href)="([^"]*)"/g)) {
-    if (attr === 'href' && /^https:\/\/(github\.com|www\.youtube\.com|agent-arcade\.fefaodessa\.workers\.dev)\//.test(value)) continue // ссылки, не загрузки
+    if (attr === 'href' && /^https:\/\/(github\.com|www\.youtube\.com|ko-fi\.com|agent-arcade\.fefaodessa\.workers\.dev)\//.test(value)) continue // ссылки, не загрузки
     assert.ok(!value.includes('//'), `${attr}="${value}" — с того же адреса`)
   }
   assert.ok(!/rel="stylesheet"|<iframe|@import|@font-face/i.test(about), 'без внешних стилей, шрифтов и рамок')
   // Старые версии мода открывают голый корень — ссылка в окно и переход по хешу окна (#mine=…)
   assert.match(about, /href="\/\?library"/)
   assert.match(about, /location\.replace\('\/\?library' \+ location\.hash\)/)
+}
+// Уведомления на телефон: страница /push, её service worker, манифест для экрана «Домой» и значки — с того же адреса
+{
+  for (const f of ['push.html', 'push.js', 'sw.js', 'manifest.webmanifest', 'arcade-180.png', 'arcade-192.png', 'arcade-512.png']) assert.ok(fs.existsSync(path.join(out, f)), f)
+  const manifest = JSON.parse(fs.readFileSync(path.join(out, 'manifest.webmanifest'), 'utf8'))
+  assert.equal(manifest.start_url, '/push')
+  assert.equal(manifest.scope, '/push')
+  assert.equal(manifest.display, 'standalone')
+  for (const icon of manifest.icons) assert.ok(fs.existsSync(path.join(out, icon.src.slice(1))), icon.src)
+  // PNG нужного размера: ширина и высота — в заголовке IHDR
+  for (const [f, size] of [['arcade-180.png', 180], ['arcade-192.png', 192], ['arcade-512.png', 512]]) {
+    const png = fs.readFileSync(path.join(out, f))
+    assert.equal(png.readUInt32BE(16), size, f)
+    assert.equal(png.readUInt32BE(20), size, f)
+  }
+  const push = fs.readFileSync(path.join(out, 'push.html'), 'utf8')
+  for (const [, attr, value] of push.matchAll(/\b(src|href)="([^"]*)"/g)) assert.ok(!value.includes('//'), `${attr}="${value}" — с того же адреса`)
+  assert.match(push, /rel="manifest" href="\/manifest\.webmanifest"/)
+  assert.match(push, /rel="apple-touch-icon" href="\/arcade-180\.png"/)
+  // Service worker ничего не кеширует и запросов не перехватывает
+  const sw = fs.readFileSync(path.join(out, 'sw.js'), 'utf8')
+  assert.ok(!/addEventListener\('fetch'|caches\./.test(sw), 'sw.js без fetch и кеша')
 }
 const headers = fs.readFileSync(path.join(out, '_headers'), 'utf8')
 assert.match(headers, /\/files\/\*\n  Cache-Control: public, max-age=31536000, immutable/)

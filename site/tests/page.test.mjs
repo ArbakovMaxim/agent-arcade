@@ -2145,4 +2145,297 @@ const segaBytes = new Uint8Array(fs.readFileSync(path.join(ROOT, 'content', 'gam
   assert.match((await chatPage({ search: '?lang=en' })).root.textContent, /^Chats open from Arcade/)
 }
 
+// Страница /push: телефон подключается по коду из Arcade, ключ телефона — в localStorage, подписка — у браузера
+{
+  const KEY = Buffer.from([4, ...Array(64).fill(7)]).toString('base64url')
+  const PHONE = `12345.${'a'.repeat(43)}`
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Mobile Safari/537.36'
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+  const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/abc'
+  // sub: null — браузер не подписан; 'same' — подписан под ключ сайта; 'old' — под прежний ключ
+  async function pushPage({ store = new Map(), search = '', ua = ANDROID, platform = 'Linux armv8l', touch = 5, standalone = false, support = true, permission = 'default', answer = 'granted', server = {}, sub = null } = {}) {
+    const page = { store, server, fetched: [], registered: [], subscribed: [], asked: 0, hasReg: sub !== null }
+    const node = (tag) => ({
+      tagName: tag, className: '', children: [], listeners: {}, own: '', value: '', disabled: false,
+      get textContent() { return this.own + this.children.map((c) => (typeof c === 'string' ? c : c.textContent)).join('') },
+      set textContent(v) { this.own = String(v); this.children = [] },
+      append(...kids) { this.children.push(...kids) },
+      addEventListener(t, f) { (this.listeners[t] ??= []).push(f) },
+      fire(t, event = {}) { for (const f of this.listeners[t] ?? []) f({ preventDefault() {}, ...event }) },
+    })
+    const all = (x, test, out = []) => {
+      for (const c of x.children) if (typeof c !== 'string') (test(c) && out.push(c), all(c, test, out))
+      return out
+    }
+    page.root = node('div')
+    page.button = (text) => all(page.root, (n) => n.tagName === 'button' && n.textContent === text)[0]
+    page.input = () => all(page.root, (n) => n.tagName === 'input')[0]
+    page.notes = () => all(page.root, (n) => n.className === 'note').map((n) => n.textContent)
+    page.bad = () => all(page.root, (n) => n.className === 'note bad').map((n) => n.textContent)
+    page.wait = () => new Promise((r) => setTimeout(r, 5))
+    const makeSub = (key, endpoint = ENDPOINT) => ({
+      endpoint,
+      options: { applicationServerKey: new Uint8Array(key).buffer },
+      unsubscribed: false,
+      async unsubscribe() {
+        this.unsubscribed = true
+        if (page.reg.sub === this) page.reg.sub = null
+        return true
+      },
+      toJSON() { return { endpoint: this.endpoint, expirationTime: null, keys: { p256dh: 'P256', auth: 'AUTH' } } },
+    })
+    page.reg = {
+      sub: sub === 'same' ? makeSub(Buffer.from(KEY, 'base64url')) : sub === 'old' ? makeSub(Buffer.from([4, ...Array(64).fill(9)]), `${ENDPOINT}-old`) : null,
+      pushManager: {
+        getSubscription: async () => page.reg.sub,
+        subscribe: async (options) => {
+          page.subscribed.push(options)
+          page.reg.sub = makeSub(options.applicationServerKey)
+          return page.reg.sub
+        },
+      },
+    }
+    page.first = page.reg.sub
+    function Notification() {}
+    Notification.permission = permission
+    Notification.requestPermission = async () => {
+      page.asked++
+      Notification.permission = answer
+      return answer
+    }
+    const serviceWorker = {
+      register: async (url, options) => {
+        page.registered.push([url, options])
+        page.hasReg = true
+        return page.reg
+      },
+      ready: Promise.resolve(page.reg),
+      getRegistration: async (scope) => (page.hasReg && scope === '/push' ? page.reg : undefined),
+    }
+    const reply = (status, body) => ({ ok: status < 400, status, json: async () => body })
+    const ctx = {
+      location: { search, pathname: '/push' }, URLSearchParams, console, atob,
+      navigator: { language: 'ru-RU', userAgent: ua, platform, maxTouchPoints: touch, ...(support ? { serviceWorker } : {}), ...(standalone ? { standalone: true } : {}) },
+      ...(support ? { PushManager: function PushManager() {}, Notification } : {}),
+      matchMedia: () => ({ matches: false }),
+      localStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) },
+      document: { title: '', createElement: node, getElementById: () => page.root },
+      fetch: async (url, init = {}) => {
+        page.fetched.push({ url, method: init.method ?? 'GET', auth: init.headers?.Authorization, body: init.body ? JSON.parse(init.body) : undefined })
+        const s = page.server
+        if (url === '/api/push/key') return reply(200, { key: s.key ?? KEY })
+        if (url === '/api/push/pair') return (s.pair ?? 200) === 200 ? reply(200, { key: PHONE, sent: s.sent ?? true }) : reply(s.pair, { error: 'x' })
+        if (url === '/api/push/status') return reply(s.status ?? 200, { on: true, phones: 1 })
+        if (url === '/api/push/off') return reply(s.off ?? 200, { ok: true })
+        return reply(404, { error: 'not found' })
+      },
+    }
+    ctx.window = ctx
+    vm.createContext(ctx)
+    for (const file of ['i18n.js', 'push.js']) vm.runInContext(fs.readFileSync(path.join(DIST, file), 'utf8'), ctx, { filename: file })
+    page.ctx = ctx
+    page.type = (text) => {
+      page.input().value = text
+      page.input().fire('input', { target: page.input() })
+    }
+    await page.wait()
+    return page
+  }
+  const tryCode = async (options, code = 'K7QM-2XPA') => {
+    const p = await pushPage(options)
+    p.type(code)
+    p.button(p.ctx.ArcadeI18n.t('Подключить')).fire('click')
+    await p.wait()
+    return p
+  }
+  const GONE = 'Этот телефон отключён — подключи его заново по новому коду.'
+  const NO_SITE = 'Сайт Arcade не ответил — попробуй ещё раз.'
+
+  // Браузер без уведомлений сайтов — подсказка, к сайту не ходим
+  const plain = await pushPage({ support: false })
+  assert.deepEqual(plain.bad(), ['Этот браузер не показывает уведомления сайтов. На Android открой страницу в Chrome.'])
+  assert.equal(plain.input(), undefined)
+  assert.equal(plain.fetched.length, 0)
+  assert.equal(plain.ctx.document.title, 'Уведомления на телефон · Arcade')
+  // iPhone в Safari — сначала на экран «Домой»; iPad называет себя Mac, выдают касания
+  for (const [ua, platform] of [[IPHONE, 'iPhone'], ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', 'MacIntel']]) {
+    const safari = await pushPage({ ua, platform, support: false })
+    assert.match(safari.root.textContent, /только приложению с экрана «Домой»:Нажми «Поделиться» в Safari\.Выбери «На экран „Домой“»\.Открой Arcade с экрана «Домой» и введи код там\.Нужен iOS 16\.4 или новее\./, platform)
+    assert.equal(safari.input(), undefined)
+  }
+  // С экрана «Домой», но iOS старше 16.4 — Web Push нет
+  const oldIos = await pushPage({ ua: IPHONE, platform: 'iPhone', standalone: true, support: false })
+  assert.deepEqual(oldIos.bad(), ['Уведомления сайтов на iPhone и iPad — с iOS 16.4. Обнови систему и снова открой Arcade с экрана «Домой».'])
+  // С экрана «Домой» на iOS 16.4+ — форма кода
+  assert.ok((await pushPage({ ua: IPHONE, platform: 'iPhone', standalone: true })).input())
+
+  // Неверный код — без разрешения и сети
+  const phone = await pushPage()
+  assert.ok(phone.input() && phone.button('Подключить'))
+  assert.equal(phone.fetched.length, 0, 'без ключа телефона к сайту не ходим')
+  for (const code of ['K7QM-2XP', 'K7QM-2XP0', 'IIII-OOOO']) {
+    phone.type(code)
+    phone.button('Подключить').fire('click')
+    await phone.wait()
+    assert.deepEqual(phone.bad(), ['Код — 8 знаков, например K7QM-2XPA.'], code)
+  }
+  assert.equal(phone.asked, 0)
+  assert.equal(phone.fetched.length, 0)
+  // Код с пробелами и строчными буквами, по Enter: разрешение, service worker на /push, подписка под ключ сайта, код
+  phone.type(' k7qm 2xpa ')
+  phone.input().fire('keydown', { key: 'Enter' })
+  await phone.wait()
+  assert.equal(phone.asked, 1)
+  assert.equal(phone.registered.length, 1)
+  assert.equal(phone.registered[0][0], '/sw.js')
+  assert.equal(phone.registered[0][1].scope, '/push')
+  assert.equal(phone.subscribed.length, 1)
+  assert.equal(phone.subscribed[0].userVisibleOnly, true)
+  assert.equal(Buffer.from(phone.subscribed[0].applicationServerKey).toString('base64url'), KEY)
+  assert.deepEqual(phone.fetched.map((f) => f.url), ['/api/push/key', '/api/push/pair'])
+  const pair = phone.fetched[1]
+  assert.equal(pair.method, 'POST')
+  assert.equal(pair.auth, undefined, 'без ключа сессии — только код')
+  assert.equal(pair.body.code, 'K7QM2XPA')
+  assert.deepEqual(pair.body.subscription, { endpoint: ENDPOINT, expirationTime: null, keys: { p256dh: 'P256', auth: 'AUTH' } })
+  assert.equal(pair.body.test, 'Телефон подключён — уведомления Arcade будут приходить сюда.')
+  assert.equal(phone.store.get('arcade:phone'), PHONE)
+  assert.deepEqual(phone.notes(), ['Телефон подключён — уведомления Arcade будут приходить сюда.'])
+  assert.match(phone.root.textContent, /Уведомления приходят на этот телефон\./)
+  assert.ok(phone.button('Выключить на этом телефоне'))
+  assert.equal(phone.input(), undefined)
+  const paired = () => new Map(phone.store)
+
+  // Снова открыли: сайт знает телефон — остаётся подключённым
+  const back = await pushPage({ store: paired(), sub: 'same' })
+  assert.deepEqual(back.fetched.map((f) => [f.url, f.auth]), [['/api/push/status', `Phone ${PHONE}`]])
+  assert.ok(back.button('Выключить на этом телефоне'))
+  assert.deepEqual(back.bad(), [])
+  // Выключить: сайту — ключом телефона, подписку браузера — тоже
+  back.button('Выключить на этом телефоне').fire('click')
+  await back.wait()
+  assert.deepEqual(back.fetched.map((f) => [f.url, f.auth]), [['/api/push/status', `Phone ${PHONE}`], ['/api/push/off', `Phone ${PHONE}`]])
+  assert.equal(back.store.has('arcade:phone'), false)
+  assert.equal(back.first.unsubscribed, true)
+  assert.deepEqual(back.notes(), ['Уведомления на этом телефоне выключены.'])
+  assert.ok(back.input(), 'снова форма кода')
+  // Сайт не ответил на выключение — телефон остаётся подключённым
+  const stuck = await pushPage({ store: paired(), sub: 'same', server: { off: 503 } })
+  stuck.button('Выключить на этом телефоне').fire('click')
+  await stuck.wait()
+  assert.deepEqual(stuck.bad(), [NO_SITE])
+  assert.equal(stuck.store.get('arcade:phone'), PHONE)
+  assert.equal(stuck.first.unsubscribed, false)
+  // Сайт телефон забыл (выключили в Arcade) — ключ и подписка уходят
+  const forgotten = await pushPage({ store: paired(), sub: 'same', server: { status: 401 } })
+  assert.equal(forgotten.store.has('arcade:phone'), false)
+  assert.equal(forgotten.first.unsubscribed, true)
+  assert.deepEqual(forgotten.bad(), [GONE])
+  assert.ok(forgotten.input())
+  // Браузер подписку потерял (почистили данные сайта) — сайту тоже говорим выключить
+  const lost = await pushPage({ store: paired() })
+  assert.deepEqual(lost.fetched.map((f) => [f.url, f.auth]), [['/api/push/off', `Phone ${PHONE}`]])
+  assert.equal(lost.store.has('arcade:phone'), false)
+  assert.deepEqual(lost.bad(), [GONE])
+  // Сайт не ответил при открытии — показываем, что знаем
+  const offline = await pushPage({ store: paired(), sub: 'same', server: { status: 503 } })
+  assert.ok(offline.button('Выключить на этом телефоне'))
+  assert.equal(offline.store.get('arcade:phone'), PHONE)
+  // Испорченный ключ в хранилище — как не подключён, к сайту не ходим
+  const junk = await pushPage({ store: new Map([['arcade:phone', 'nope']]), sub: 'same' })
+  assert.ok(junk.input())
+  assert.equal(junk.fetched.length, 0)
+
+  // Не разрешили уведомления — ни service worker, ни сети; запретили — одна строка про настройки браузера
+  const BLOCKED = 'Уведомления для этого сайта запрещены в настройках браузера — разреши их, иначе ничего не придёт.'
+  const refused = await tryCode({ answer: 'denied' })
+  assert.deepEqual(refused.bad(), [BLOCKED])
+  assert.equal(refused.fetched.length, 0)
+  assert.equal(refused.registered.length, 0)
+  const closedAsk = await tryCode({ answer: 'default' })
+  assert.deepEqual(closedAsk.bad(), ['Без разрешения на уведомления подключить телефон нельзя.'])
+  assert.equal(closedAsk.fetched.length, 0)
+  // Уже запрещено в браузере — предупреждение сразу
+  const blocked = await pushPage({ permission: 'denied' })
+  assert.deepEqual(blocked.bad(), [BLOCKED])
+  // Ответы сайта на код
+  for (const [status, text] of [
+    [404, 'Код не подошёл или истёк — возьми новый в Arcade.'],
+    [400, 'Этот браузер шлёт уведомления через службу, которую Arcade не знает. Открой страницу в Chrome, Safari, Firefox или Edge.'],
+    [429, 'Слишком много попыток — попробуй завтра.'],
+    [500, NO_SITE],
+  ]) {
+    const p = await tryCode({ server: { pair: status } })
+    assert.deepEqual(p.bad(), [text], String(status))
+    assert.equal(p.store.has('arcade:phone'), false)
+    assert.ok(p.input() && !p.button('Подключить').disabled, 'можно ещё раз')
+  }
+  // Пробное уведомление не дошло — подключён, но с предупреждением
+  const quiet = await tryCode({ server: { sent: false } })
+  assert.equal(quiet.store.get('arcade:phone'), PHONE)
+  assert.deepEqual(quiet.bad(), ['Телефон подключён, но пробное уведомление не дошло. Проверь, что уведомления для этого сайта разрешены.'])
+  // Ключ сайта не того вида — не подписываемся
+  const badKey = await tryCode({ server: { key: 'AAAA' } })
+  assert.deepEqual(badKey.bad(), [NO_SITE])
+  assert.equal(badKey.subscribed.length, 0)
+  // Подписка под прежний ключ сайта — отписаться и подписаться заново; под тот же — та же
+  const stale = await tryCode({ sub: 'old' })
+  assert.equal(stale.first.unsubscribed, true)
+  assert.equal(stale.subscribed.length, 1)
+  assert.equal(stale.fetched.at(-1).body.subscription.endpoint, ENDPOINT)
+  const same = await tryCode({ sub: 'same' })
+  assert.equal(same.first.unsubscribed, false)
+  assert.equal(same.subscribed.length, 0)
+  assert.equal(same.store.get('arcade:phone'), PHONE)
+
+  // По-английски и на других языках: и страница, и пробное уведомление
+  const en = await tryCode({ search: '?lang=en' })
+  assert.equal(en.ctx.document.title, 'Phone notifications · Arcade')
+  assert.equal(en.fetched.at(-1).body.test, 'Phone connected — Arcade notifications will come here.')
+  assert.ok(en.button('Turn off on this phone'))
+  assert.match((await pushPage({ search: '?lang=en' })).root.textContent, /^Phone notificationsWhen a Claude Code session waits/)
+  const de = await tryCode({ search: '?lang=de' })
+  assert.equal(de.fetched.at(-1).body.test, 'Handy verbunden — Arcade-Benachrichtigungen kommen jetzt hierher.')
+  assert.ok(de.button('Auf diesem Handy ausschalten'))
+
+  // Service worker: уведомление — только текст сайта, до 140 знаков; нажатие — к открытой /push или новое окно
+  {
+    const shown = []
+    const opened = []
+    const windows = []
+    const handlers = {}
+    const waits = []
+    const self = {
+      addEventListener: (t, f) => (handlers[t] = f),
+      skipWaiting() {},
+      registration: { showNotification: async (title, options) => shown.push({ title, options }) },
+      clients: { claim: async () => {}, matchAll: async () => windows, openWindow: async (url) => opened.push(url) },
+    }
+    const swCtx = { self, URL }
+    vm.createContext(swCtx)
+    vm.runInContext(fs.readFileSync(path.join(DIST, 'sw.js'), 'utf8'), swCtx, { filename: 'sw.js' })
+    const event = (extra) => ({ waitUntil: (p) => waits.push(p), ...extra })
+    handlers.push(event({ data: { json: () => ({ text: 'x'.repeat(200) }) } }))
+    handlers.push(event({ data: { json: () => { throw new Error('not json') } } }))
+    await Promise.all(waits)
+    assert.equal(shown[0].title, 'Arcade')
+    assert.equal(shown[0].options.body, 'x'.repeat(140))
+    assert.equal(shown[0].options.tag, 'arcade-waiting')
+    assert.equal(shown[0].options.data.url, '/push')
+    assert.equal(shown[1].options.body, '')
+    let closed = 0
+    let focused = 0
+    handlers.notificationclick(event({ notification: { close: () => closed++ } }))
+    await Promise.all(waits)
+    assert.deepEqual(opened, ['/push'])
+    windows.push({ url: 'https://agent-arcade.test/chat', focus: () => assert.fail('не та страница') })
+    windows.push({ url: 'https://agent-arcade.test/push', focus: () => focused++ })
+    handlers.notificationclick(event({ notification: { close: () => closed++ } }))
+    await Promise.all(waits)
+    assert.equal(focused, 1)
+    assert.equal(closed, 2)
+    assert.deepEqual(opened, ['/push'])
+  }
+}
+
 console.log('окно: все проверки прошли')

@@ -13,9 +13,11 @@
 // коду. Почты и доступа к репозиториям Arcade не просит: scope пустой.
 // Durable Object Account: экземпляр 'auth' — вход, лимиты адресов и реестр @ников, экземпляр gh:<номер GitHub> —
 // аккаунт человека, его друзья, список его чатов и живые соединения его страниц чата (сами чаты — в worker/chat.js),
-// список его общих досок проектов (сами доски — в worker/desk.js) и приглашения в игру от друзей; экземпляр 'online' —
-// кто сейчас в сети.
+// список его общих досок проектов (сами доски — в worker/desk.js), приглашения в игру от друзей и его телефоны для
+// уведомлений; экземпляр 'online' — кто сейчас в сети; экземпляр 'push' — ключ VAPID сайта и коды подключения телефонов
+// (само шифрование и отправка — в worker/push.js).
 import { sign, signed } from './discover.js'
+import { cleanSubscription, makeVapid, pushText, sendPush } from './push.js'
 import { CHAT_ID, MAX_MEMBERS, MAX_TEXT, cleanText, dmId, groupName, validPic } from './chat.js'
 import { addReport, admins, askReports, cleanReport } from './reports.js'
 import { BOARD_ID, MAX_MEMBERS as BOARD_MEMBERS, MAX_OPS, cleanCols, cleanTitle } from './desk.js'
@@ -29,8 +31,17 @@ export const MAX_KEYS = 50
 const MAX_BODY = 32 * 1024
 const SYNC_BODY = 512 * 1024 // сверка доски везёт карточки: мод шлёт их пачками до 100 000 знаков
 // С одного адреса в сутки: кодов и вопросов «вошёл ли». Код живёт 15 минут, вопрос — раз в 5 секунд: 180 на код.
-// Счётчики — в памяти объекта 'auth', адрес — только меткой
-export const PER_IP_DAILY = { starts: 30, polls: 1500 }
+// Счётчики — в памяти объекта 'auth', адрес — только меткой. pairs — попыток подключить телефон по коду (в объекте 'push')
+export const PER_IP_DAILY = { starts: 30, polls: 1500, pairs: 30 }
+// Уведомления на телефон: код подключения — 8 знаков без похожих, живёт PAIR_MS, кодов в сутки на аккаунт —
+// PAIR_CODES_DAILY; телефонов — не больше MAX_PHONES (новый вытесняет самый старый); уведомлений — не чаще раза в
+// PUSH_GAP_MS и не больше PUSH_DAILY в сутки
+export const PAIR_MS = 10 * MINUTE
+export const PAIR_CODES_DAILY = 20
+export const MAX_PHONES = 5
+export const PUSH_GAP_MS = 5 * MINUTE
+export const PUSH_DAILY = 30
+const PAIR_CODE = /^[A-HJ-NP-Z2-9]{8}$/
 // Вход кнопкой: сколько он ждёт человека и через сколько секунд мод спрашивает снова. Код для сверки — 4 знака без
 // похожих друг на друга (0 и O, 1 и I)
 export const WEB_MS = 10 * MINUTE
@@ -139,6 +150,14 @@ const ROUTES = {
   'POST /api/me/pulse': ['user', '/pulse'],
   'POST /api/me/invite': ['user', '/invite'],
   'POST /api/me/invites/answer': ['user', '/answer'],
+  'POST /api/me/push/code': ['user', '/pushcode'],
+  'GET /api/me/push': ['user', '/pushstate'],
+  'DELETE /api/me/push': ['user', '/pushoff'],
+  'POST /api/me/push/send': ['user', '/pushsend'],
+  'GET /api/push/key': ['push', '/vapidkey'],
+  'POST /api/push/pair': ['push', '/pair'],
+  'POST /api/push/status': ['phone', '/phonestate'],
+  'POST /api/push/off': ['phone', '/phoneoff'],
 }
 const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 
@@ -147,6 +166,12 @@ const PATHS = new Set(Object.keys(ROUTES).map((r) => r.split(' ')[1]))
 export function sessionId(header) {
   const m = /^(Bearer|Chat|Link) (\S+)$/.exec(header ?? '')
   return m ? ((m[1] === 'Bearer' ? TOKEN : CHAT_TICKET).exec(m[2])?.[1] ?? null) : null
+}
+
+// Номер GitHub из заголовка Authorization: Phone <ключ телефона> — того же вида, что ключ сессии; не того — null
+export function phoneId(header) {
+  const m = /^Phone (\S+)$/.exec(header ?? '')
+  return m ? (TOKEN.exec(m[1])?.[1] ?? null) : null
 }
 
 // Тело запроса — не больше limit; больше — null
@@ -218,17 +243,27 @@ async function readBody(request, limit) {
 // { to, game, room? } → { ok } — позвать друга в сетевую игру (room — код комнаты настольной игры; у Doom лобби общее);
 // POST /api/me/invites/answer { from } → { ok } — приглашение принято или отклонено, оно уходит. 403 — не друг
 // ('friend'), 409 — нет своего ника ('nohandle'), 429 — слишком часто ('often')
+// Уведомления на телефон (Web Push, шифрование — worker/push.js). Плагин с ключом сессии: POST /api/me/push/code →
+// { code, url, expires } — код подключения (XXXX-XXXX, живёт PAIR_MS) и страница, где его ввести; GET /api/me/push →
+// { phones, last } — сколько телефонов подключено и когда подключили последний (0 — ни одного); DELETE /api/me/push → { ok } — отключить все; POST /api/me/push/send
+// { text } → { ok, delivered, phones } — короткое уведомление (до MAX_PUSH_TEXT знаков, без текста вопроса и кода).
+// Страница /push на телефоне — без входа в GitHub: GET /api/push/key → { key } — открытый ключ VAPID сайта для
+// подписки; POST /api/push/pair { code, subscription, test? } → { key, sent } — подключиться по коду: key — ключ
+// телефона, с ним Authorization: Phone <key> — POST /api/push/status → { on, phones } и POST /api/push/off → { ok }
+// (отключить этот телефон); test — текст пробного уведомления. 400 — код или подписка не того вида, текст не тот
+// ('bad request'), 401 — ключа телефона нет или он не подходит ('auth'), 404 — кода нет или он истёк ('code'),
+// телефонов нет ('nophone'), 429 — слишком часто ('often') или лимит адреса
 export async function account(request, env, url) {
   const route = ROUTES[`${request.method} ${url.pathname}`]
   if (!route) return Response.json({ error: PATHS.has(url.pathname) ? 'method' : 'not found' }, { status: PATHS.has(url.pathname) ? 405 : 404 })
   if (!env.ACCOUNT || !env.GITHUB_CLIENT_ID) return Response.json({ error: 'off' }, { status: 503 })
   const [who, path] = route
   let name = 'auth'
-  if (who === 'user') {
-    const id = sessionId(request.headers.get('Authorization'))
+  if (who === 'user' || who === 'phone') {
+    const id = (who === 'user' ? sessionId : phoneId)(request.headers.get('Authorization'))
     if (!id) return Response.json({ error: 'auth' }, { status: 401 })
     name = `gh:${id}`
-  }
+  } else if (who === 'push') name = 'push'
   const body = request.method === 'POST' || request.method === 'PUT' ? await readBody(request, path === '/boardsync' ? SYNC_BODY : MAX_BODY) : ''
   if (body === null) return Response.json({ error: 'too big' }, { status: 413 })
   const forward = new Request(`https://account${path}${url.search}`, {
@@ -359,9 +394,9 @@ function randomKey() {
   return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-// Код для сверки: тот же, что мод показывает в Claude Code
-function markCode() {
-  return [...crypto.getRandomValues(new Uint8Array(4))].map((b) => MARK_CHARS[b % MARK_CHARS.length]).join('')
+// Код для сверки: тот же, что мод показывает в Claude Code; из 8 знаков — код подключения телефона
+function markCode(length = 4) {
+  return [...crypto.getRandomValues(new Uint8Array(length))].map((b) => MARK_CHARS[b % MARK_CHARS.length]).join('')
 }
 
 // --- Страницы входа кнопкой ----------------------------------------------------------------------------------
@@ -428,7 +463,10 @@ const note = (t, text, status) => page(t, `<h1>Arcade</h1><p>${escapeHtml(text)}
 // GitHub — её другим не показываем), sessions (хеши ключей сессии), settings, handle, pic (номер аватарки), seen —
 // когда человек последний раз заходил, circle — его друзей и заявки, chats — его чаты и made — когда он создавал группы
 // за последние сутки, boards — его общие доски и boardsMade — когда он их заводил, invites — приглашения в игру от
-// друзей. Экземпляр 'online' помнит отметки «в сети» только в памяти.
+// друзей, phones — подключённые телефоны ({ endpoint, p256dh, auth } подписки, когда подключён, хеш ключа телефона),
+// pushSent — сколько уведомлений ушло сегодня и когда последнее, pairCodes — сколько кодов подключения выдано сегодня
+// и последний. Экземпляр 'online' помнит отметки «в сети» только в памяти. Экземпляр 'push' хранит vapid — ключ VAPID
+// сайта (заводит сам при первом вопросе) — и pair:<код> → { id, until } — чей код подключения и до какого времени.
 // Отчёты об ошибках — в своём объекте (worker/reports.js)
 export class Account {
   constructor(ctx, env) {
@@ -476,6 +514,14 @@ export class Account {
       // Отметка «в сети» (в экземпляре 'online') и приглашение в игру от друга
       if (path === '/online') return this.online(await request.json())
       if (path === '/invited') return await this.invited(await request.json())
+      // Уведомления на телефон: в экземпляре 'push' — ключ VAPID и коды подключения; телефон спрашивает о себе своим
+      // ключом, без ключа сессии
+      if (path === '/vapidkey') return Response.json({ key: (await this.vapid()).key })
+      if (path === '/vapid') return Response.json(await this.vapid())
+      if (path === '/pair') return await this.pair(await request.text(), ip, request.headers.get('X-Origin') || '')
+      if (path === '/pairput') return await this.pairPut(await request.json())
+      if (path === '/phoneadd') return await this.phoneAdd(await request.json())
+      if (path === '/phonestate' || path === '/phoneoff') return await this.phoneSelf(request.headers.get('Authorization'), path === '/phoneoff')
       // С билетом чата — только чаты и список друзей, с кодом ссылки — только обменять его на билет
       const who = await this.session(request.headers.get('Authorization'))
       if (!who || (who.ticket && !TICKET_PATHS.has(path)) || (who.link && path !== '/chatticket')) return Response.json({ error: 'auth' }, { status: 401 })
@@ -513,6 +559,10 @@ export class Account {
       if (path === '/pulse') return await this.pulse(await request.text())
       if (path === '/invite') return await this.invite(await request.text())
       if (path === '/answer') return await this.answer(await request.text())
+      if (path === '/pushcode') return await this.pushCode(request.headers.get('X-Origin') || '')
+      if (path === '/pushstate') return await this.phoneState()
+      if (path === '/pushoff') return await this.keepPhones([])
+      if (path === '/pushsend') return await this.phoneSend(await request.text(), request.headers.get('X-Origin') || '')
       return Response.json({ error: 'not found' }, { status: 404 })
     } catch (error) {
       if (error instanceof LimitError) return Response.json({ error: 'limit' }, { status: 429 })
@@ -527,9 +577,10 @@ export class Account {
     if (this.ips.size && ![...this.ips.keys()][0].startsWith(day)) this.ips.clear()
     const digest = await sha256(`account|${ip}`)
     const key = `${day}:${digest.slice(0, 16)}`
-    const seen = this.ips.get(key) ?? { starts: 0, polls: 0 }
-    if (seen[kind] >= PER_IP_DAILY[kind]) throw new LimitError()
-    this.ips.set(key, { ...seen, [kind]: seen[kind] + 1 })
+    const seen = this.ips.get(key) ?? {}
+    const used = seen[kind] ?? 0
+    if (used >= PER_IP_DAILY[kind]) throw new LimitError()
+    this.ips.set(key, { ...seen, [kind]: used + 1 })
   }
 
   // Вопрос к github.com: форма в теле, ответ — JSON (с ошибкой — тоже)
@@ -1680,6 +1731,152 @@ export class Account {
     const invites = await this.invites(Date.now())
     if (invites[from]) await this.ctx.storage.put('invites', without(invites, from))
     return Response.json({ ok: true })
+  }
+
+  // --- Уведомления на телефон --------------------------------------------------------------------------------
+  // Экземпляр 'push': ключ VAPID сайта — один на всех, заводится при первом вопросе и больше не меняется (подписки
+  // телефонов сделаны под него)
+  vapid() {
+    this.made ??= (async () => {
+      const saved = await this.ctx.storage.get('vapid')
+      if (saved) return saved
+      const fresh = await makeVapid()
+      await this.ctx.storage.put('vapid', fresh)
+      return fresh
+    })()
+    this.made.catch(() => (this.made = null))
+    return this.made
+  }
+
+  // Телефон подключается по коду: код одноразовый — после первой попытки его нет, даже если подписка не подошла
+  // аккаунту. Попытки считаются по адресу — код не подобрать
+  async pair(text, ip, origin) {
+    await this.count(ip, 'pairs')
+    const body = parsed(text)
+    const code = typeof body.code === 'string' ? body.code.toUpperCase().replace(/[\s-]/g, '') : ''
+    const sub = PAIR_CODE.test(code) ? await cleanSubscription(body.subscription) : null
+    if (!sub) return refuse('bad request', 400)
+    const entry = await this.ctx.storage.get(`pair:${code}`)
+    if (entry) await this.ctx.storage.delete(`pair:${code}`)
+    if (!(entry?.until > Date.now())) return refuse('code', 404)
+    return this.person(entry.id, '/phoneadd', { id: entry.id, sub, test: body.test, origin })
+  }
+
+  // Новый код подключения от экземпляра человека: прежний его код уходит, истёкшие чужие — тоже. Занят живым чужим
+  // кодом — 409, экземпляр человека возьмёт другой
+  async pairPut({ id, code, old, until }) {
+    const now = Date.now()
+    const stale = [...(await this.ctx.storage.list({ prefix: 'pair:', limit: 500 }))].filter(([, v]) => !(v?.until > now)).map(([k]) => k)
+    if (stale.length) await this.ctx.storage.delete(stale.slice(0, 128))
+    if (old && old !== code && (await this.ctx.storage.get(`pair:${old}`))?.id === id) await this.ctx.storage.delete(`pair:${old}`)
+    const taken = await this.ctx.storage.get(`pair:${code}`)
+    if (taken?.until > now && taken.id !== id) return refuse('taken', 409)
+    await this.ctx.storage.put(`pair:${code}`, { id, until })
+    return Response.json({ ok: true })
+  }
+
+  // Вопрос к экземпляру 'push'
+  pushHub(path, body) {
+    const space = this.env.ACCOUNT
+    return space.get(space.idFromName('push')).fetch(new Request(`https://account${path}`, { method: 'POST', body: JSON.stringify(body) }))
+  }
+
+  // Ключ VAPID для отправки — у экземпляра 'push', в памяти до перезапуска
+  pushKeys() {
+    this.keys ??= this.pushHub('/vapid', {}).then((answer) => {
+      if (!answer.ok) throw new Error(`push: ${answer.status}`)
+      return answer.json()
+    })
+    this.keys.catch(() => (this.keys = null))
+    return this.keys
+  }
+
+  // Код подключения телефона: живёт PAIR_MS, новый заменяет прежний, в сутки — не больше PAIR_CODES_DAILY
+  async pushCode(origin) {
+    const now = Date.now()
+    const day = today(now)
+    const was = (await this.ctx.storage.get('pairCodes')) ?? {}
+    const count = was.day === day ? was.count : 0
+    if (count >= PAIR_CODES_DAILY) return refuse('often', 429)
+    const id = await this.myId()
+    for (let tries = 0; tries < 3; tries++) {
+      const code = markCode(8)
+      const answer = await this.pushHub('/pairput', { id, code, old: was.code, until: now + PAIR_MS })
+      if (answer.status === 409) continue
+      if (!answer.ok) throw new Error(`push: ${answer.status}`)
+      await this.ctx.storage.put('pairCodes', { day, count: count + 1, code })
+      return Response.json({ code: `${code.slice(0, 4)}-${code.slice(4)}`, url: `${origin}/push`, expires: PAIR_MS / 1000 })
+    }
+    throw new Error('push: no free code')
+  }
+
+  // Телефон подключён по коду этого человека: ключ телефона — ему, в аккаунте — только хеш. Тот же адрес подписки
+  // заменяет прежний, телефонов больше MAX_PHONES — уходит самый старый. С test — пробное уведомление (в лимит не
+  // входит: код подключения и так редкий)
+  async phoneAdd({ id, sub, test, origin }) {
+    if (!id || id !== (await this.myId())) return refuse('gone', 404)
+    const key = `${id}.${randomKey()}`
+    const phone = { ...sub, at: Date.now(), key: await sha256(key) }
+    const phones = ((await this.ctx.storage.get('phones')) ?? []).filter((p) => p.endpoint !== sub.endpoint)
+    await this.ctx.storage.put('phones', [...phones.slice(-(MAX_PHONES - 1)), phone])
+    const text = pushText(test)
+    const sent = text ? (await this.deliver([phone], text, origin)).delivered > 0 : false
+    return Response.json({ key, sent })
+  }
+
+  // Сколько телефонов и когда подключили последний: мод так видит, что телефон подключился по его коду, — и новый, и
+  // тот же заново
+  async phoneState() {
+    const phones = (await this.ctx.storage.get('phones')) ?? []
+    return Response.json({ phones: phones.length, last: Math.max(0, ...phones.map((p) => p.at ?? 0)) })
+  }
+
+  // Оставить только эти телефоны; пусто — уведомления выключены
+  async keepPhones(phones) {
+    if (phones.length) await this.ctx.storage.put('phones', phones)
+    else await this.ctx.storage.delete('phones')
+    return Response.json({ ok: true })
+  }
+
+  // Разослать текст телефонам из list. Подписки, которых у службы доставки больше нет (404, 410), уходят из аккаунта
+  // → { delivered — сколько приняла служба, phones — сколько телефонов осталось }
+  async deliver(list, text, origin) {
+    const vapid = await this.pushKeys()
+    const now = Date.now()
+    const codes = await Promise.all(list.map((phone) => sendPush(phone, text, vapid, origin, now).catch(() => 0)))
+    const dead = new Set(list.filter((_, i) => codes[i] === 404 || codes[i] === 410).map((p) => p.endpoint))
+    let phones = (await this.ctx.storage.get('phones')) ?? []
+    if (dead.size) {
+      phones = phones.filter((p) => !dead.has(p.endpoint))
+      await this.keepPhones(phones)
+    }
+    return { delivered: codes.filter((c) => c >= 200 && c < 300).length, phones: phones.length }
+  }
+
+  // Уведомление от мода: «сессия ждёт тебя» — не чаще раза в PUSH_GAP_MS и не больше PUSH_DAILY в сутки
+  async phoneSend(text, origin) {
+    const clean = pushText(parsed(text).text)
+    if (!clean) return refuse('bad request', 400)
+    const phones = (await this.ctx.storage.get('phones')) ?? []
+    if (!phones.length) return refuse('nophone', 404)
+    const now = Date.now()
+    const day = today(now)
+    const was = (await this.ctx.storage.get('pushSent')) ?? {}
+    const count = was.day === day ? was.count : 0
+    if (now - (was.last ?? 0) < PUSH_GAP_MS || count >= PUSH_DAILY) return refuse('often', 429)
+    await this.ctx.storage.put('pushSent', { day, count: count + 1, last: now })
+    return Response.json({ ok: true, ...(await this.deliver(phones, clean, origin)) })
+  }
+
+  // Телефон о себе — своим ключом: подключён ли он (и сколько всего телефонов) или отключить его
+  async phoneSelf(header, off) {
+    const m = /^Phone (\S+)$/.exec(header ?? '')
+    if (!m || !TOKEN.test(m[1])) return refuse('auth', 401)
+    const hash = await sha256(m[1])
+    const phones = (await this.ctx.storage.get('phones')) ?? []
+    if (!phones.some((p) => p.key === hash)) return refuse('auth', 401)
+    if (off) return await this.keepPhones(phones.filter((p) => p.key !== hash))
+    return Response.json({ on: true, phones: phones.length })
   }
 
   // Билет для страницы чата: мод открывает её, не отдавая браузеру ключ сессии. С ключом сессии и { link: true } —
