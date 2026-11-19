@@ -70,7 +70,7 @@ export async function probeRom() {
   return { sha, base64: bytes.toBase64() }
 }
 
-export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', agents, ask, deny, questionMs = 0, subagents = [] }: any = {}) {
+export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchExit = 0, site = siteCatalog(), files = {}, stored = {}, uname = '', disk: onDisk = {}, browser = 'deny', tabs = [], abort = false, submit = false, fill = true, draft = '', bashMs = BASH_MS, panes, placed = () => true, web = {}, api, popupAnswer = '', popupMs = 0, agents, ask, deny, questionMs = 0, subagents = [] }: any = {}) {
   // Субагенты и напарники сессии ($.agent.list): массив — тест меняет его по ходу; по умолчанию — никого
   on('agent.list', () => ({ value: subagents.map((a: any) => ({ type: 'general-purpose', description: '', ...a })) }))
   // Диск человека: путь → байты (Uint8Array), текст или { size } для файла, который не читаем
@@ -176,10 +176,11 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
       return { value: { exitCode: 0, stdout: '', stderr: '' } }
     }
     // Карточка о сообщении: Windows — PowerShell с ARCADE_POPUP_*, Linux и macOS — уведомление от имени Arcade.
-    // Ответ — что напечатала карточка: 'open' — по ней кликнули
+    // Ответ — что напечатала карточка: 'open' — по ней кликнули. popupMs — сколько карточка висит по часам теста
     if (e.init?.env?.ARCADE_POPUP_TITLE !== undefined || e.argv.includes('--app-name=Arcade') || e.argv.some((a: string) => a.includes('subtitle "Arcade"'))) {
       popups.push({ argv: e.argv, env: e.init?.env ?? {} })
-      return { value: { exitCode: 0, stdout: typeof popupAnswer === 'function' ? popupAnswer() : popupAnswer, stderr: '' } }
+      const shown = () => ({ value: { exitCode: 0, stdout: typeof popupAnswer === 'function' ? popupAnswer() : popupAnswer, stderr: '' } })
+      return popupMs ? clock.sleep(popupMs).then(shown) : shown()
     }
     if (e.init?.env?.ARCADE_TEXT || e.argv[0] === 'notify-send' || e.argv[0] === 'osascript') {
       notifies.push({ argv: e.argv, env: e.init?.env ?? {} })

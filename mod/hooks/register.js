@@ -4,7 +4,7 @@
 // Каталог плагинов Anthropic разрешает передавать $ только функции, объявленной на верхнем уровне того же файла, поэтому
 // весь код, который зовёт Claude Code, — в этом файле, разделами: помощники (app/…), экраны панели (screens/…) и в конце
 // подписки на события. Состояние и значки — в hooks/app/, чистые модули без $ (каталог, переводы, ленты и т. п.) — рядом, в hooks/.
-import { ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERTS_KEY, alertKey, alertText, alertWhat, keepTold, restoreAlerts, seenOf } from './alerts.js'
+import { AGAIN_KEY, ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERTS_KEY, alertKey, alertText, alertWhat, keepTold, restoreAgain, restoreAlerts, seenOf } from './alerts.js'
 import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, restoreAccount, restoreStamps, suggestHandle, SYNC_KEYS, syncPlan } from './account.js'
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
@@ -27,7 +27,7 @@ import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screen
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
-import { ARCADE_SOUNDS, ownSoundFiles, SOUND_CUT_S, SOUND_REPEAT_S, SOUND_STD, SOUND_VOLUMES, soundIdOf, soundLabelOf, soundSource, soundVolumeOf, systemSoundList } from './sounds.js'
+import { ARCADE_SOUNDS, ownSoundFiles, SOUND_CUT_S, SOUND_EVERY, SOUND_EVERY_STD, SOUND_REPEAT_MAX, SOUND_STD, SOUND_VOLUMES, soundEveryOf, soundIdOf, soundLabelOf, soundSource, soundVolumeOf, systemSoundList } from './sounds.js'
 import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readsPrompt, readUrl } from './rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, SEARCH_SHOWS, searchUrl, showFeed } from './search.js'
 import { liveFirst, liveStatus, liveUrl, MY_CHANNELS, parseTwitch, rememberChannel, restoreTwitch, TOPIC_TITLES, twitchLogin, twitchUrl } from './twitch.js'
@@ -302,14 +302,16 @@ S.agDone = false // всплывашка «В сессии «…» Claude зак
 S.agOs = true // о том же — системное уведомление поверх всех окон (alerts.js) — настройка agentsOs
 S.agSound = true // у него звук: «ждёт тебя» и «закончил» — разные — настройка agentsSound
 // Звук уведомлений о сессиях (экран «Arcade · звук», sounds.js): громкость, звук «ждёт тебя» и «закончил ход», повтор
-// «ждёт тебя», пока висит карточка — soundVolume, soundWait, soundDone, soundRepeat в $.store, общие для сессий
-S.sound = { volume: 100, wait: SOUND_STD, done: SOUND_STD, repeat: false }
+// «ждёт тебя», пока сессия ждёт, и как часто — soundVolume, soundWait, soundDone, soundRepeat, soundEvery в $.store,
+// общие для сессий
+S.sound = { volume: 100, wait: SOUND_STD, done: SOUND_STD, repeat: false, every: SOUND_EVERY_STD }
 // Экран звука: edit — чей звук выбираем; own — свои файлы из папки dir (~/.claude/arcade/sounds); sys — звуки системы
 // (null — ещё не читали); root — папка плагина (там mod/sounds); readAt — когда перечитывали; playing — «Прослушать»
 // играет, again — что сыграть, когда он кончится
 S.snd = { edit: 'wait', own: [], sys: null, sysOf: '', root: '', dir: '', readAt: 0, playing: false, again: null }
-// pending — события для уведомления: ключ → { key, sid, seen, name, what, at }; busy — объявление в пути
-S.al = { pending: new Map(), busy: false }
+// pending — события для уведомления: ключ → { key, sid, seen, name, what, at }; busy — объявление в пути; again — повтор
+// «ждёт тебя» (againStart) или null
+S.al = { pending: new Map(), busy: false, again: null }
 S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
 // «Пока тебя не было» (away.js): agSeen — чьи концы ходов человек уже видел ({ id: время }, agentsSeen в $.store);
 // away — какой экран открыт сейчас ('agents', 'today' или '') и что было увидено до его открытия; ready — прочитано из
@@ -552,13 +554,15 @@ export async function agentsTick($) {
     holdCheck(now)
     if (ag.ready && (bodyOf(recordOf(0)) !== ag.sent || now - ag.wrote >= AGENT_WRITE_MS)) await put($)
     const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'usage' || S.menu === 'today' || /^(boards|board:|note:)/.test(S.menu))
-    if (shown || ((S.agNotify || S.agDone) && now - ag.read >= AGENT_READ_MS)) {
+    // Пока звучит повтор «ждёт тебя» — читать каждый шаг: ответили — смолкнуть сразу
+    if (shown || S.al.again || ((S.agNotify || S.agDone) && now - ag.read >= AGENT_READ_MS)) {
       await readSlots($, now)
       if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
       const all = ag.ready ? [...others, { ...recordOf(now), slot: ag.slot }] : others
       notify($, all, now)
       alertsTick($, all, now)
+      againTick($, all, now)
       const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at, r.last?.at, r.last?.files, r.look]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
@@ -615,6 +619,7 @@ export async function leaveAgents($, reason) {
   // Записи, что ещё в очереди, уже ничего не напишут (on — false); пометка «ушла» — после них
   ag.on = false
   ag.ready = false
+  S.al.again = null
   if (slot) await enqueue(async () => $.fs.write(slotPath(slot), JSON.stringify({ v: 1, left: true, at: await $.clock.now() })))
 }
 
@@ -2897,12 +2902,7 @@ function alertsTick($, all, now) {
 // Заявка: записать в $.store, выждать CAL_CLAIM_MS, перечитать — осталась моя, значит объявляю я
 async function announce($, watched) {
   const al = S.al
-  // Плитки могли переключить в другой сессии — объявить по тому, что выбрано сейчас
-  S.agNotify = (await $.store.get('agentsNotify')) !== false
-  S.agDone = (await $.store.get('agentsDone')) === true
-  S.agOs = (await $.store.get('agentsOs')) !== false
-  S.agSound = (await $.store.get('agentsSound')) !== false
-  await loadSound($)
+  await loadAlertPrefs($)
   for (const [key, ev] of al.pending) if (!alertOn(ev.what)) al.pending.delete(key)
   const now = await $.clock.now()
   const was = restoreAlerts(await $.store.get(ALERTS_KEY), now)
@@ -2920,12 +2920,108 @@ async function announce($, watched) {
     return
   }
   for (const ev of batch) al.pending.delete(ev.key)
-  showAlert($, batch, watched)
+  showAlert($, batch, watched, await againStart($, batch, now))
+}
+
+// Плитки уведомлений и звук могли переключить в другой сессии — объявлять и повторять по тому, что выбрано сейчас
+async function loadAlertPrefs($) {
+  S.agNotify = (await $.store.get('agentsNotify')) !== false
+  S.agDone = (await $.store.get('agentsDone')) === true
+  S.agOs = (await $.store.get('agentsOs')) !== false
+  S.agSound = (await $.store.get('agentsSound')) !== false
+  await loadSound($)
+}
+
+// Повтор «ждёт тебя» (п. 36): включён — звук повторяется каждые S.sound.every секунд, пока сессия ждёт, не больше
+// SOUND_REPEAT_MAX раз с первым. Смолкает, когда ответили (состояние сессии сменилось), скрыли сессию, закрыли карточку
+// крестиком или щёлкнули по ней (Windows), выключили звук или повтор, начала свой повтор другая сессия. Звенит одна
+// сессия на компьютере: чей повтор — в $.store под AGAIN_KEY; новая берёт к себе события прежней, что ещё звенят.
+// again: { id, evs, n — сколько уже прозвучало, next — когда следующий, card — карточка Windows на экране, busy }
+async function againStart($, batch, now) {
+  const waits = batch.filter((ev) => ev.what !== 'done')
+  if (!waits.length || !S.agSound || !S.sound.repeat) return null
+  const evs = waits.map(({ key, sid, seen, name, what }) => ({ key, sid, seen, name, what }))
+  const had = [...(S.al.again?.evs ?? []), ...restoreAgain(await $.store.get(AGAIN_KEY)).evs]
+  for (const ev of had) if (!evs.some((it) => it.key === ev.key)) evs.push(ev)
+  const again = { id: `${me}|${now}`, evs, n: 1, next: now + S.sound.every * 1000, card: false, busy: false }
+  S.al.again = again
+  await $.store.set(AGAIN_KEY, { by: again.id, evs })
+  return again
+}
+
+// Шаг повтора — из agentsTick: забыть, на что уже ответили и что скрыли; ничего не осталось или прозвучал
+// SOUND_REPEAT_MAX раз — смолкнуть; пора — сыграть ещё раз
+function againTick($, all, now) {
+  const again = S.al.again
+  if (!again || again.busy) return
+  const by = new Map(all.map((r) => [r.sid, r]))
+  again.evs = again.evs.filter((ev) => {
+    const r = by.get(ev.sid)
+    return r && !S.agHidden.includes(ev.sid) && seenOf(r) === ev.seen
+  })
+  if (!again.evs.length || again.n >= SOUND_REPEAT_MAX) {
+    againStop($, again)
+    return
+  }
+  if (now < again.next) return
+  again.busy = true
+  const watched = watchedOf(all)
+  $.clock.after(0, async () => {
+    try {
+      await againPlay($, again, watched)
+    } catch (err) {
+      log(`повтор «ждёт тебя» не сыграл: ${err?.message ?? err}`)
+    } finally {
+      again.busy = false
+    }
+  })
+}
+
+// Повтор смолк — забыть его и в $.store, если он ещё мой: новый повтор другой сессии не подхватит то, что уже смолкло
+// (прозвучало SOUND_REPEAT_MAX раз или карточку закрыли)
+function againStop($, again) {
+  if (S.al.again === again) S.al.again = null
+  $.clock.after(0, async () => {
+    try {
+      if (restoreAgain(await $.store.get(AGAIN_KEY)).by === again.id) await $.store.set(AGAIN_KEY, { by: again.id, evs: [] })
+    } catch (err) {
+      log(`повтор «ждёт тебя»: ${err?.message ?? err}`)
+    }
+  })
+}
+
+// Сыграть повтор. Windows: карточки уже нет — показать её снова, со звуком (окно Claude Code впереди и одна сессия,
+// которую смотрят, — карточка промолчит, как в первый раз); карточка висит — только звук. Mac и Linux — только звук:
+// уведомлений в системе не копим
+async function againPlay($, again, watched) {
+  await loadAlertPrefs($)
+  const owner = restoreAgain(await $.store.get(AGAIN_KEY)).by
+  const on = S.agSound && S.sound.repeat && again.evs.some((ev) => alertOn(ev.what))
+  if (owner !== again.id) {
+    if (S.al.again === again) S.al.again = null
+    return
+  }
+  if (S.al.again !== again || !on) {
+    againStop($, again)
+    return
+  }
+  again.n += 1
+  if (S.platform === 'windows' && !again.card) {
+    again.next = (await $.clock.now()) + S.sound.every * 1000
+    showAlert($, again.evs, watched, again)
+    return
+  }
+  const command = soundPreviewCommand(S.platform, soundSource(S.platform, S.sound.wait, 'wait', soundPlaces()), S.sound.volume)
+  if (command) await playSound($, command)
+  // Следующий — через столько секунд после конца этого: долгий свой звук не наложится на следующий
+  again.next = (await $.clock.now()) + S.sound.every * 1000
 }
 
 // Карточка о пачке. Впереди окно Claude Code — без сессии, которую человек смотрит (одна она — карточки нет); это
-// узнаёт сама карточка, только на Windows. Клик — окно Claude Code впереди, в панели Arcade — «Агенты»
-function showAlert($, batch, watched) {
+// узнаёт сама карточка, только на Windows. Клик — окно Claude Code впереди, в панели Arcade — «Агенты».
+// again — повтор «ждёт тебя» этой карточки (againStart): пока она на экране, повтор играет только звук; щелчок по ней
+// или крестик — повтор смолкает
+function showAlert($, batch, watched, again = null) {
   const t = (text) => tr(text, S.lang)
   const said = alertText(batch, t)
   if (!said) return
@@ -2946,15 +3042,19 @@ function showAlert($, batch, watched) {
   })
   if (!command) return
   if (free !== undefined) popSlots.add(slot)
+  const card = S.platform === 'windows' ? again : null
+  if (card) card.card = true
   // Mac и Linux: свой звук или тише 100% — играет afplay или paplay, уведомление системы тогда без звука
   if (command.play) $.clock.after(0, () => playSound($, command.play))
   $.clock.after(0, async () => {
     try {
       const result = await $.process.run(command.argv, { env: command.env, timeoutMs: POPUP_RUN_MS })
+      if (card && S.al.again === card && /\b(open|shut)\b/.test(result.stdout)) againStop($, card)
       if (result.stdout.includes('open')) await openAgents($)
     } catch (err) {
       log(`уведомление о сессиях не показалось: ${err?.message ?? err}`)
     } finally {
+      if (card) card.card = false
       if (free !== undefined) popSlots.delete(slot)
       if (S.pop.waiting) watchMessages($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
     }
@@ -2965,8 +3065,8 @@ const SOUND_RUN_MS = (SOUND_CUT_S + 15) * 1000 // звук обрезается 
 
 // Настройки звука — из $.store: их могли поменять в другой сессии
 async function loadSound($) {
-  const [volume, wait, done, repeat] = await Promise.all(['soundVolume', 'soundWait', 'soundDone', 'soundRepeat'].map((key) => $.store.get(key)))
-  S.sound = { volume: soundVolumeOf(volume), wait: soundIdOf(wait), done: soundIdOf(done), repeat: repeat === true }
+  const [volume, wait, done, repeat, every] = await Promise.all(['soundVolume', 'soundWait', 'soundDone', 'soundRepeat', 'soundEvery'].map((key) => $.store.get(key)))
+  S.sound = { volume: soundVolumeOf(volume), wait: soundIdOf(wait), done: soundIdOf(done), repeat: repeat === true, every: soundEveryOf(every) }
 }
 
 // Где лежат звуки: Arcade — в папке плагина, свои — в ~/.claude/arcade/sounds
@@ -2977,12 +3077,11 @@ function soundPlaces() {
 // Звук для карточки и уведомления по настройкам. Всё стандартное — undefined: звучит, как раньше
 function voiceOf() {
   const s = S.sound
-  if (s.volume === 100 && s.wait === SOUND_STD && s.done === SOUND_STD && !s.repeat) return undefined
+  if (s.volume === 100 && s.wait === SOUND_STD && s.done === SOUND_STD) return undefined
   return {
     volume: s.volume,
     wait: soundSource(S.platform, s.wait, 'wait', soundPlaces()),
     done: soundSource(S.platform, s.done, 'done', soundPlaces()),
-    repeat: s.repeat ? SOUND_REPEAT_S : 0,
   }
 }
 
@@ -7886,7 +7985,7 @@ export function langScreen($, e, kit) {
 }
 
 // Экран «Arcade · звук»: громкость, звук «ждёт тебя» и «закончил ход» — стандартный, Arcade, системы или свой файл из
-// ~/.claude/arcade/sounds — и повтор «ждёт тебя», пока висит карточка. Выбор звука и громкости сразу играет его,
+// ~/.claude/arcade/sounds — и повтор «ждёт тебя», пока сессия ждёт. Выбор звука и громкости сразу играет его,
 // «Прослушать» — тоже, и при выключенном звуке: нажал человек. Настройки — в $.store, общие для сессий
 export function soundsScreen($, e, kit) {
   const { Button, dim, gap, hint, noticeLines, open, section, tiles } = kit
@@ -7967,18 +8066,40 @@ export function soundsScreen($, e, kit) {
       [
         ...kindTiles('wait', 'Звук «ждёт тебя»'),
         ...kindTiles('done', 'Звук «закончил ход»'),
-        // Повтор — у карточки Windows: она висит 15 с. Уведомление Mac и Linux звучит один раз
-        ...(S.platform === 'windows'
+        // Повтор «ждёт тебя» — да или нет и, когда да, как часто: 5 → 10 → 30 → 60 с по кругу
+        Button({
+          key: 'arcade-snd-repeat',
+          label: `Повторять «ждёт тебя»: ${S.sound.repeat ? 'да' : 'нет'}`,
+          onPress: async () => {
+            S.sound = { ...S.sound, repeat: !S.sound.repeat }
+            await save('soundRepeat', S.sound.repeat)
+          },
+        }),
+        ...(S.sound.repeat
           ? [
-              Button({
-                key: 'arcade-snd-repeat',
-                label: S.sound.repeat ? 'Повтор «ждёт тебя»: каждые 5 с, пока висит карточка' : 'Повтор «ждёт тебя»: один раз',
-                onPress: async () => {
-                  S.sound = { ...S.sound, repeat: !S.sound.repeat }
-                  await save('soundRepeat', S.sound.repeat)
-                },
-              }),
-              dim('  повтор замолкает, когда наведёшь мышь, ответишь или закроешь карточку'),
+              keep(
+                Button({
+                  key: 'arcade-snd-every',
+                  label: fill(t('Как часто: каждые {0} с'), [S.sound.every]),
+                  onPress: async () => {
+                    const every = SOUND_EVERY[(SOUND_EVERY.indexOf(S.sound.every) + 1) % SOUND_EVERY.length]
+                    S.sound = { ...S.sound, every }
+                    await save('soundEvery', every)
+                  },
+                }),
+              ),
+              keep(
+                dim(
+                  fill(
+                    t(
+                      S.platform === 'windows'
+                        ? '  пока сессия ждёт, не больше {0} раз; смолкает, когда ответишь, скроешь сессию или закроешь карточку'
+                        : '  пока сессия ждёт, не больше {0} раз; смолкает, когда ответишь или скроешь сессию',
+                    ),
+                    [SOUND_REPEAT_MAX],
+                  ),
+                ),
+              ),
             ]
           : []),
       ],
@@ -12713,7 +12834,7 @@ export async function drawPane($, e) {
         .replace(/^snd-(switch|quieter|louder|std|arcade-.+|sys-.+|file-.+)$/, 'sounds')
         .replace(/^snd-edit-wait$/, 'agents-notify')
         .replace(/^snd-edit-done$/, 'agents-done')
-        .replace(/^snd-repeat$/, 'ask-after')
+        .replace(/^snd-(repeat|every)$/, 'ask-after')
         .replace(/^snd-folder$/, 'mine')
         .replace(/^snd-reload$/, 'account-sync')
         .replace(/^open-library$/, 'library')
@@ -12956,6 +13077,7 @@ export function register(on) {
       // Громкость и свои звуки «ждёт тебя» и «закончил ход»; звуки Arcade лежат в папке плагина
       await loadSound($)
       Object.assign(S.snd, { edit: 'wait', own: [], sys: null, sysOf: '', root: $.plugin.root ?? '', dir: '', readAt: 0, playing: false, again: null })
+      S.al.again = null
       S.agHidden = hiddenOf(await $.store.get('agentsHidden'))
       S.agSeen = restoreSeen(await $.store.get(SEEN_KEY))
       S.us.warn = (await $.store.get('usageWarn')) !== false

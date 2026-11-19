@@ -1,11 +1,13 @@
 // Звуки уведомлений о сессиях: громкость, свой звук для «ждёт тебя» и «закончил ход», свои файлы из
-// ~/.claude/arcade/sounds и повтор «ждёт тебя», пока висит карточка. Здесь — без $: списки звуков, проверка имён
+// ~/.claude/arcade/sounds и повтор «ждёт тебя», пока сессия ждёт. Здесь — без $: списки звуков, проверка имён
 // файлов и что играть. Встроенные звуки Arcade (mod/sounds/*.wav) синтезированы tools/sounds/make-sounds.py —
 // своя запись, лицензия та же, что у Arcade
 
 export const SOUND_VOLUMES = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 export const SOUND_CUT_S = 10 // звук играет не дольше; карточка «ждёт тебя» висит 15 с
-export const SOUND_REPEAT_S = 5 // повтор «ждёт тебя» — через столько секунд после конца звука
+export const SOUND_EVERY = [5, 10, 30, 60] // повтор «ждёт тебя» — каждые столько секунд, пока сессия ждёт
+export const SOUND_EVERY_STD = 10
+export const SOUND_REPEAT_MAX = 10 // всего звуков «ждёт тебя» подряд — не больше стольких, с первым
 export const SOUND_MAX_BYTES = 5 * 1024 * 1024
 export const SOUND_FILES_MAX = 60 // столько своих файлов в списке, дальше — по алфавиту не попадают
 export const SOUND_STD = 'std'
@@ -99,6 +101,11 @@ export function soundIdOf(raw) {
 
 export function soundVolumeOf(raw) {
   return SOUND_VOLUMES.includes(raw) ? raw : 100
+}
+
+// Частота повтора «ждёт тебя» из $.store: только из списка, иначе — стандартная
+export function soundEveryOf(raw) {
+  return SOUND_EVERY.includes(raw) ? raw : SOUND_EVERY_STD
 }
 
 // Подпись звука: стандартный и звуки Arcade — по-русски (их переводит словарь), остальное — имя как есть

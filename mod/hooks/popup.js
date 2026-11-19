@@ -212,8 +212,9 @@ function Start-ArcadeSound {
 // не попадает. Слот — место в стопке снизу вверх, если карточек сразу несколько.
 // Для уведомлений о сессиях ещё: SOUND — свой звук из C:\Windows\Media или none; HOLD — сколько секунд держать;
 // FG=1 — сначала посмотреть, не впереди ли окно Claude Code: впереди — показать FG_TITLE и FG_TEXT (со звуком FG_SOUND),
-// а их нет — молчать. VOLUME — играть проигрывателем PLAYER_PS: громкость, SOUND_FILE и REPEAT — через сколько секунд
-// после конца звука повторить его, пока карточка висит и на неё не навели мышь (у FG — свои FG_SOUND_FILE и FG_REPEAT)
+// а их нет — молчать. VOLUME — играть проигрывателем PLAYER_PS: громкость и SOUND_FILE (у FG — свой FG_SOUND_FILE).
+// Ответ карточки в выводе: open — по ней щёлкнули, shut — закрыли крестиком; повтор «ждёт тебя» по нему смолкает
+// (повторяет звук сам мод: register.js, againTick)
 const POPUP_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 # Без строк о ходе загрузки модулей: в выводе должен остаться только ответ карточки
@@ -247,7 +248,6 @@ if ($env:ARCADE_POPUP_FG -eq '1') {
       if ($env:ARCADE_POPUP_FG_SOUND) {
         $env:ARCADE_POPUP_SOUND = $env:ARCADE_POPUP_FG_SOUND
         $env:ARCADE_POPUP_SOUND_FILE = $env:ARCADE_POPUP_FG_SOUND_FILE
-        $env:ARCADE_POPUP_REPEAT = $env:ARCADE_POPUP_FG_REPEAT
       }
     }
   } catch { }
@@ -293,17 +293,12 @@ if ($hold -lt 3) { $hold = 6 }
 $timer = New-Object System.Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds($hold)
 $timer.Add_Tick({ $timer.Stop(); $w.Close() })
-# Повтор звука: hush — карточку заметили (навели мышь) или она закрылась; answered — закрыли сами: звук — сразу стоп;
-# closing — закрылась сама, пока звук играет: доиграть и выйти
-$script:hush = $false
+# answered — закрыли сами: звук — сразу стоп; closing — закрылась сама, пока звук играет: доиграть и выйти
 $script:answered = $false
 $script:closing = $false
-$script:repeat = 0
-$again = New-Object System.Windows.Threading.DispatcherTimer
-$again.Add_Tick({ $again.Stop(); if (-not $script:hush) { Start-ArcadeSound } })
-$w.Add_MouseEnter({ $timer.Stop(); $script:hush = $true; $again.Stop() })
+$w.Add_MouseEnter({ $timer.Stop() })
 $w.Add_MouseLeave({ $timer.Interval = [TimeSpan]::FromSeconds(3); $timer.Start() })
-$w.FindName('Shut').Add_MouseLeftButtonUp({ param($s, $e) $e.Handled = $true; $script:answered = $true; $w.Close() })
+$w.FindName('Shut').Add_MouseLeftButtonUp({ param($s, $e) $e.Handled = $true; $script:answer = 'shut'; $script:answered = $true; $w.Close() })
 $w.FindName('Card').Add_MouseLeftButtonUp({
   $script:answer = 'open'
   $script:answered = $true
@@ -319,8 +314,6 @@ $w.FindName('Card').Add_MouseLeftButtonUp({
   $w.Close()
 })
 $w.Add_Closed({
-  $script:hush = $true
-  $again.Stop()
   if ($script:player -and -not $script:answered) { $script:closing = $true }
   else {
     Close-ArcadePlayer
@@ -328,19 +321,10 @@ $w.Add_Closed({
   }
 })
 # Звук: none — без звука; своё имя — только из C:\\Windows\\Media; без него — как у сообщений.
-# С VOLUME — проигрыватель: громкость, свой файл, повтор
+# С VOLUME — проигрыватель: громкость, свой файл
 $sound = $env:ARCADE_POPUP_SOUND
 if ($env:ARCADE_POPUP_VOLUME -and $sound -ne 'none') {
-  $gap = 0
-  [void][int]::TryParse($env:ARCADE_POPUP_REPEAT, [ref]$gap)
-  if ($gap -ge 1) {
-    $script:repeat = $gap
-    $again.Interval = [TimeSpan]::FromSeconds($gap)
-  }
-  $script:onEnd = {
-    if ($script:closing) { $w.Dispatcher.InvokeShutdown(); return }
-    if ($script:repeat -gt 0 -and -not $script:hush) { $again.Start() }
-  }
+  $script:onEnd = { if ($script:closing) { $w.Dispatcher.InvokeShutdown() } }
   $script:soundPath = Get-ArcadeSoundPath
   Start-ArcadeSound
 } elseif ($sound -ne 'none') {
@@ -409,8 +393,8 @@ export function soundPreviewCommand(platform, src, volume) {
 // Для уведомлений о сессиях: sound — 'wait', 'done' или 'none' (без звука); hold — сколько секунд держать карточку;
 // fg — что показать, если впереди окно Claude Code ({ title, text, kind }; null — тогда ничего). Только Windows: на Mac и
 // Linux уведомление показывает система, какое окно впереди — не узнать. Без них — как у сообщений из чатов.
-// voice — настройки звука: { volume, wait, done, repeat } (wait и done — soundSource, repeat — секунды повтора «ждёт
-// тебя» или 0). На Mac и Linux звук не системы или тише 100% играет отдельная команда play: { argv, env }
+// voice — настройки звука: { volume, wait, done } (wait и done — soundSource). На Mac и Linux звук не системы или тише
+// 100% играет отдельная команда play: { argv, env }
 export function popupCommand(platform, { title, text, pic = '', slot = 0, sound, hold, fg, voice }) {
   const head = cut(title, POPUP_TITLE_MAX)
   const body = cut(text, POPUP_TEXT_MAX)
@@ -421,7 +405,6 @@ export function popupCommand(platform, { title, text, pic = '', slot = 0, sound,
     if (src) {
       env.ARCADE_POPUP_VOLUME = String(voice.volume)
       if (src.file) env.ARCADE_POPUP_SOUND_FILE = src.file
-      if (sound === 'wait' && voice.repeat) env.ARCADE_POPUP_REPEAT = String(voice.repeat)
     }
     if (hold !== undefined) env.ARCADE_POPUP_HOLD = String(hold)
     if (fg !== undefined) {
@@ -431,7 +414,6 @@ export function popupCommand(platform, { title, text, pic = '', slot = 0, sound,
         const other = src ? voice[fg.kind] : null
         env.ARCADE_POPUP_FG_SOUND = sound === 'none' ? 'none' : (other?.name ?? ALERT_SOUNDS.windows[fg.kind] ?? 'none')
         if (other?.file) env.ARCADE_POPUP_FG_SOUND_FILE = other.file
-        if (other && fg.kind === 'wait' && voice.repeat) env.ARCADE_POPUP_FG_REPEAT = String(voice.repeat)
       }
     }
     return { argv: powershell(POPUP_SCRIPT), env }
