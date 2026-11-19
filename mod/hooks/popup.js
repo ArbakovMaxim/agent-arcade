@@ -131,16 +131,44 @@ function rotation(transform, left, top) {
 }
 
 // Карточка. Текст и картинка — через переменные окружения: кириллица и кавычки не ломают команду, а в разметку текст
-// не попадает. Слот — место в стопке снизу вверх, если карточек сразу несколько
+// не попадает. Слот — место в стопке снизу вверх, если карточек сразу несколько.
+// Для уведомлений о сессиях ещё: SOUND — свой звук из C:\Windows\Media или none; HOLD — сколько секунд держать;
+// FG=1 — сначала посмотреть, не впереди ли окно Claude Code: впереди — показать FG_TITLE и FG_TEXT (со звуком FG_SOUND),
+// а их нет — молчать
 const POPUP_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 # Без строк о ходе загрузки модулей: в выводе должен остаться только ответ карточки
 $ProgressPreference = 'SilentlyContinue'
-# Чёткий текст на экранах с масштабом: powershell.exe сам о масштабе не знает, без этого Windows растянет карточку
+# Чёткий текст на экранах с масштабом: powershell.exe сам о масштабе не знает, без этого Windows растянет карточку.
+# Там же — какое окно впереди и как развернуть свёрнутое
 try {
-  Add-Type -Namespace Arcade -Name Dpi -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware();'
-  [void][Arcade.Dpi]::SetProcessDPIAware()
+  Add-Type -Namespace Arcade -Name Win -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid); [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd); [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int cmd);'
+  [void][Arcade.Win]::SetProcessDPIAware()
 } catch { }
+# Окно, откуда запущен Claude Code: первое вверх по родителям, у которого есть видимое окно
+function Find-ArcadeHost {
+  $id = $PID
+  for ($i = 0; $i -lt 10; $i++) {
+    $id = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$id").ParentProcessId
+    $p = Get-Process -Id $id -ErrorAction SilentlyContinue
+    if (-not $p) { return $null }
+    if ($p.MainWindowHandle -ne [IntPtr]::Zero) { return $p }
+  }
+  return $null
+}
+if ($env:ARCADE_POPUP_FG -eq '1') {
+  try {
+    $front = [uint32]0
+    [void][Arcade.Win]::GetWindowThreadProcessId([Arcade.Win]::GetForegroundWindow(), [ref]$front)
+    $owner = Find-ArcadeHost
+    if ($owner -and $front -eq $owner.Id) {
+      if (-not $env:ARCADE_POPUP_FG_TITLE) { exit 0 }
+      $env:ARCADE_POPUP_TITLE = $env:ARCADE_POPUP_FG_TITLE
+      $env:ARCADE_POPUP_TEXT = $env:ARCADE_POPUP_FG_TEXT
+      if ($env:ARCADE_POPUP_FG_SOUND) { $env:ARCADE_POPUP_SOUND = $env:ARCADE_POPUP_FG_SOUND }
+    }
+  } catch { }
+}
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
@@ -175,32 +203,38 @@ $w.Add_Loaded({
   $w.Top = $area.Bottom - $w.ActualHeight - $slot * ($w.ActualHeight - 16)
   $w.BeginAnimation([System.Windows.Window]::OpacityProperty, (New-Object System.Windows.Media.Animation.DoubleAnimation(0, 1, [TimeSpan]::FromMilliseconds(180))))
 })
+$hold = 0
+[void][int]::TryParse($env:ARCADE_POPUP_HOLD, [ref]$hold)
+if ($hold -lt 3) { $hold = 6 }
 $timer = New-Object System.Windows.Threading.DispatcherTimer
-$timer.Interval = [TimeSpan]::FromSeconds(6)
+$timer.Interval = [TimeSpan]::FromSeconds($hold)
 $timer.Add_Tick({ $timer.Stop(); $w.Close() })
 $w.Add_MouseEnter({ $timer.Stop() })
 $w.Add_MouseLeave({ $timer.Interval = [TimeSpan]::FromSeconds(3); $timer.Start() })
 $w.FindName('Shut').Add_MouseLeftButtonUp({ param($s, $e) $e.Handled = $true; $w.Close() })
 $w.FindName('Card').Add_MouseLeftButtonUp({
   $script:answer = 'open'
-  # Поднять окно, откуда запущен Claude Code: первое вверх по родителям, у которого есть видимое окно
+  # Поднять окно, откуда запущен Claude Code; свёрнутое — сначала развернуть
   try {
     Add-Type -AssemblyName Microsoft.VisualBasic
-    $id = $PID
-    for ($i = 0; $i -lt 10; $i++) {
-      $id = [int](Get-CimInstance Win32_Process -Filter "ProcessId=$id").ParentProcessId
-      $p = Get-Process -Id $id -ErrorAction SilentlyContinue
-      if (-not $p) { break }
-      if ($p.MainWindowHandle -ne [IntPtr]::Zero) { [Microsoft.VisualBasic.Interaction]::AppActivate($id); break }
+    $p = Find-ArcadeHost
+    if ($p) {
+      try { if ([Arcade.Win]::IsIconic($p.MainWindowHandle)) { [void][Arcade.Win]::ShowWindowAsync($p.MainWindowHandle, 9) } } catch { }
+      [Microsoft.VisualBasic.Interaction]::AppActivate($p.Id)
     }
   } catch { }
   $w.Close()
 })
 $w.Add_Closed({ $w.Dispatcher.InvokeShutdown() })
-try {
-  $wav = Join-Path $env:WINDIR 'Media\\Windows Notify Messaging.wav'
-  if (Test-Path $wav) { (New-Object System.Media.SoundPlayer $wav).Play() } else { [System.Media.SystemSounds]::Asterisk.Play() }
-} catch { }
+# Звук: none — без звука; своё имя — только из C:\\Windows\\Media; без него — как у сообщений
+$sound = $env:ARCADE_POPUP_SOUND
+if ($sound -ne 'none') {
+  try {
+    if (-not ($sound -match '^[A-Za-z0-9 ]+\\.wav$')) { $sound = 'Windows Notify Messaging.wav' }
+    $wav = Join-Path $env:WINDIR ('Media\\' + $sound)
+    if (Test-Path $wav) { (New-Object System.Media.SoundPlayer $wav).Play() } else { [System.Media.SystemSounds]::Asterisk.Play() }
+  } catch { }
+}
 $w.Show()
 $timer.Start()
 [System.Windows.Threading.Dispatcher]::Run()
@@ -214,20 +248,42 @@ const cut = (text, max) => {
   return chars.length > max ? `${chars.slice(0, max - 1).join('')}…` : chars.join('')
 }
 
-// Команда карточки: { argv, env } или null, если на этой системе показать нечем. pic — avatarXaml, slot — 0, 1, 2…
-export function popupCommand(platform, { title, text, pic = '', slot = 0 }) {
+// Звуки уведомлений о сессиях: wait — сессия ждёт тебя, done — закончила ход. У сообщений из чатов свой, прежний
+export const ALERT_SOUNDS = {
+  windows: { wait: 'Windows Message Nudge.wav', done: 'Windows Notify System Generic.wav' },
+  mac: { wait: 'Ping', done: 'Glass' },
+  linux: { wait: 'message-new-instant', done: 'complete' },
+}
+
+// Команда карточки: { argv, env } или null, если на этой системе показать нечем. pic — avatarXaml, slot — 0, 1, 2….
+// Для уведомлений о сессиях: sound — 'wait', 'done' или 'none' (без звука); hold — сколько секунд держать карточку;
+// fg — что показать, если впереди окно Claude Code ({ title, text, kind }; null — тогда ничего). Только Windows: на Mac и
+// Linux уведомление показывает система, какое окно впереди — не узнать. Без них — как у сообщений из чатов
+export function popupCommand(platform, { title, text, pic = '', slot = 0, sound, hold, fg }) {
   const head = cut(title, POPUP_TITLE_MAX)
   const body = cut(text, POPUP_TEXT_MAX)
   if (platform === 'windows') {
-    return { argv: powershell(POPUP_SCRIPT), env: { ARCADE_POPUP_TITLE: head, ARCADE_POPUP_TEXT: body, ARCADE_POPUP_PIC: pic, ARCADE_POPUP_SLOT: String(slot) } }
+    const env = { ARCADE_POPUP_TITLE: head, ARCADE_POPUP_TEXT: body, ARCADE_POPUP_PIC: pic, ARCADE_POPUP_SLOT: String(slot) }
+    if (sound !== undefined) env.ARCADE_POPUP_SOUND = ALERT_SOUNDS.windows[sound] ?? 'none'
+    if (hold !== undefined) env.ARCADE_POPUP_HOLD = String(hold)
+    if (fg !== undefined) {
+      env.ARCADE_POPUP_FG = '1'
+      if (fg?.title) Object.assign(env, { ARCADE_POPUP_FG_TITLE: cut(fg.title, POPUP_TITLE_MAX), ARCADE_POPUP_FG_TEXT: cut(fg.text, POPUP_TEXT_MAX) })
+      if (fg?.title && sound !== undefined) env.ARCADE_POPUP_FG_SOUND = sound === 'none' ? 'none' : (ALERT_SOUNDS.windows[fg.kind] ?? 'none')
+    }
+    return { argv: powershell(POPUP_SCRIPT), env }
   }
   if (platform === 'mac') {
+    const name = sound === undefined ? 'Glass' : ALERT_SOUNDS.mac[sound]
     return {
-      argv: ['osascript', '-e', 'on run argv', '-e', 'display notification (item 2 of argv) with title (item 1 of argv) subtitle "Arcade" sound name "Glass"', '-e', 'end run', head, body],
+      argv: ['osascript', '-e', 'on run argv', '-e', `display notification (item 2 of argv) with title (item 1 of argv) subtitle "Arcade"${name ? ` sound name "${name}"` : ''}`, '-e', 'end run', head, body],
       env: {},
     }
   }
-  if (platform === 'linux') return { argv: ['notify-send', '--app-name=Arcade', head, body], env: {} }
+  if (platform === 'linux') {
+    const hint = sound === undefined ? [] : ALERT_SOUNDS.linux[sound] ? [`--hint=string:sound-name:${ALERT_SOUNDS.linux[sound]}`] : ['--hint=boolean:suppress-sound:true']
+    return { argv: ['notify-send', '--app-name=Arcade', ...hint, head, body], env: {} }
+  }
   return null
 }
 
