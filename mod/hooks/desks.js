@@ -55,15 +55,16 @@ function boardFrom(b) {
   return { id: b.id, name, owner, members: people(b.members), cols, rev: b.rev }
 }
 
-// Карточка из ответа: { id, title, body, col, pos, due?, taken? } или след удаления { id, gone: true }; не сходится —
-// null. Срок и «кто взял» не сходятся — карточка без них
+// Карточка из ответа: { id, title, body, col, pos, due?, taken?, by? } или след удаления { id, gone: true }; не сходится —
+// null. Срок и «кто взял» не сходятся — карточка без них; by — кто правил её последним (номер аккаунта)
 function cardFrom(c) {
   if (!c || typeof c !== 'object' || typeof c.id !== 'string' || !CARD_ID.test(c.id)) return null
   if (c.gone === true) return { id: c.id, gone: true }
   const title = cleanTitle(c.title)
   if (!title || typeof c.body !== 'string' || !Number.isFinite(c.pos)) return null
   const col = typeof c.col === 'string' && COL_ID.test(c.col) ? c.col : ''
-  return { id: c.id, title, body: cleanBody(c.body), col, pos: c.pos, ...cardExtra({ due: c.due, taken: accountId(c.taken) }) }
+  const by = accountId(c.by)
+  return { id: c.id, title, body: cleanBody(c.body), col, pos: c.pos, ...cardExtra({ due: c.due, taken: accountId(c.taken) }), ...(by ? { by } : {}) }
 }
 
 // Доска из списка: { id, name, owner, rev, at }
@@ -182,7 +183,8 @@ export function planSync(notes, base) {
 // Ответ сверки — в блокнот: → { notes, base, refused, missed, changed } или null (доски в блокноте уже нет). Правки,
 // что ушли (sent), становятся основой; поменявшееся на сайте ложится в блокнот, кроме карточек, которые здесь
 // поправили после того, как ушла сверка. missed — не всё поместилось в блокнот: номер правки остаётся прежним, чтобы
-// следующая сверка взяла пропущенное снова. changed — id карточек, которые поменял сайт
+// следующая сверка взяла пропущенное снова. changed — id карточек, которые поменял сайт; editors — кто их правил
+// последним (id карточки → номер аккаунта, '' — неизвестно)
 export function applySync(notes, base, answer, sent, now) {
   let list = notes
   const page = list.find((p) => p.id === base.page && isBoard(p))
@@ -201,6 +203,7 @@ export function applySync(notes, base, answer, sent, now) {
   }
   const dirty = (p) => p.at !== cards[p.id] && p.at !== held[p.id]
   const changed = new Set()
+  const editors = {}
   const seen = new Set()
   let missed = false
   for (const card of answer.cards) {
@@ -224,6 +227,7 @@ export function applySync(notes, base, answer, sent, now) {
         list = updatePage(list, card.id, { title: card.title, body: card.body, col: card.col, pos: card.pos }, now)
         list = updateCard(list, card.id, { due: card.due ?? '', taken: card.taken ?? '' }, now)
         changed.add(card.id)
+        editors[card.id] = card.by ?? ''
       }
       cards[card.id] = list.find((p) => p.id === card.id).at
       continue
@@ -236,6 +240,7 @@ export function applySync(notes, base, answer, sent, now) {
     list = made.notes
     cards[card.id] = made.page.at
     changed.add(card.id)
+    editors[card.id] = card.by ?? ''
   }
   // Доска целиком: сверенных карточек, которых на сайте больше нет, нет и здесь
   if (answer.full) {
@@ -271,7 +276,7 @@ export function applySync(notes, base, answer, sent, now) {
     cards,
     held,
   }
-  return { notes: list, base: next, refused: [...refused], missed, changed: [...changed] }
+  return { notes: list, base: next, refused: [...refused], missed, changed: [...changed], editors }
 }
 
 // Доска больше не общая (удалили, убрали или вышел): в блокноте остаётся своей

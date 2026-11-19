@@ -528,6 +528,7 @@ export const NOTES_TOOL = {
     'A board shared with friends syncs with them, so cards may change between calls. ' +
     'Prompt templates: a prompt set is a page whose subpages are templates (title is the name, text is the prompt); the user sends a template to Claude with one click in the Prompts tile of Arcade. ' +
     'When the user asks to save something as a prompt (template) in Arcade, use create with prompt: true, title and text: it goes into the prompt set given in parent, else into their own set. ' +
+    'A page the user marked as project context for a folder reaches Claude at the start of new sessions there: append important project decisions to it, never replace its text. ' +
     'Pages are found by id or exact title. Nothing is deleted here: the user deletes pages in Arcade.',
   inputSchema: {
     type: 'object',

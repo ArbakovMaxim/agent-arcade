@@ -1391,6 +1391,15 @@ const EXACT = {
   'Исправь по комментарию и снова перенеси карточку в последнюю колонку.': 'Fix it as the comment says and move the card to the last column again.',
   'Карточку вернули после ревью — исправь и снова перенеси её в последнюю колонку.': 'The card was returned after review — fix it and move it to the last column again.',
   'Ревью карточек': 'Card reviews',
+  'Контекст для папки: {0}': 'Context for folder: {0}',
+  'Новые сессии в этой папке получат текст страницы в начале. Правка — со следующей сессии или после /clear.': 'New sessions in this folder get the page text at the start. Edits apply from the next session or after /clear.',
+  'Сейчас у папки другая страница: «{0}» — отметка заменит её.': 'The folder has another page now: “{0}” — marking this one replaces it.',
+  'Контекст и для папок: {0}': 'Also context for folders: {0}',
+  'Страница длиннее {0} знаков: в контекст пойдёт только начало.': 'The page is longer than {0} characters: only its beginning goes into the context.',
+  'другим участником': 'another member',
+  'Изменено {0} — в контекст пока идёт прежняя версия.': 'Edited by {0} — the context still gets the previous version.',
+  'Взять эту версию в контекст': 'Use this version as context',
+  'Контекст из блокнота: «{0}»': 'Notebook context: “{0}”',
 }
 
 const SIGNAL = { 'плашка, игра идёт': 'banner, game keeps running', 'пауза и плашка': 'pause and banner', 'сразу к агенту': 'straight back to the agent' }
