@@ -9,6 +9,7 @@ import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends,
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
 import { AVATAR_COUNT, avatarName, avatarSvg, letterColor, picSvg, validPic } from './avatars.js'
+import { addSeen, changeBase, lastOf, replyLine, restoreSeen, SEEN_KEY, turnFiles } from './away.js'
 import { BOOK_LANGS, BOOK_SECTIONS, BOOK_SOURCES, bookLang, bookQuery, booksPath, MIN_BOOK_QUERY, parseBooks } from './books.js'
 import { clipboardCommand, DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { addDays, addEvent, addMonths, ALL_DAY_HOUR, applyCalendarTool, between, CALENDAR_TOOL, cardDues, colorOf, COLORS, compareEvents, dayKey, DEFAULT_COLOR as CAL_COLOR, dueReminders, dueTasks, GIVE_KEY, GIVE_KINDS, giveTargets, markAlerted, markTask, MISSED_MS, monthGrid, nextReminder, parseRemind, quickParse, REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, remindAt, removeEvent, REPEATS, restoreCalendar, startOf, updateEvent, weekday } from './calendar.js'
@@ -301,6 +302,13 @@ S.agSound = true // у него звук: «ждёт тебя» и «закон�
 // pending — события для уведомления: ключ → { key, sid, seen, name, what, at }; busy — объявление в пути
 S.al = { pending: new Map(), busy: false }
 S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
+// «Пока тебя не было» (away.js): agSeen — чьи концы ходов человек уже видел ({ id: время }, agentsSeen в $.store);
+// away — какой экран открыт сейчас ('agents', 'today' или '') и что было увидено до его открытия; ready — прочитано из
+// хранилища. lastReply — начало ответа Claude в последнем ходе, turnBase — «Что поменялось» в начале хода
+S.agSeen = {}
+S.away = { at: '', seen: {}, ready: true }
+S.lastReply = ''
+S.turnBase = null
 
 const STATUS_ORDER = { permission: 0, done: 1, working: 2, background: 2, idle: 3 }
 // background — главный ход кончился, а агенты, запущенные из него, ещё работают (app/background)
@@ -316,7 +324,7 @@ const slotPath = (slot) => `${S.ag.dir}${S.sep}s${slot}.json`
 // Запустить отметки — из session.start. Нет домашней папки или id сессии — их нет: очередь идёт по-старому, одна
 export async function startAgents($, home) {
   const old = S.ag
-  S.ag = { on: false, dir: '', sid: '', name: '', path: '', slot: 0, ready: false, status: S.status, since: 0, wrote: 0, sent: '', read: 0, sig: '', files: {}, seen: null, card: null, doneAt: 0, claim: null, joinWarn: '', chain: Promise.resolve(), taking: null, ticking: false, launched: false, look: old?.look ?? 0 }
+  S.ag = { on: false, dir: '', sid: '', name: '', path: '', slot: 0, ready: false, status: S.status, since: 0, wrote: 0, sent: '', read: 0, sig: '', files: {}, seen: null, card: null, doneAt: 0, claim: null, joinWarn: '', chain: Promise.resolve(), taking: null, ticking: false, launched: false, look: old?.look ?? 0, last: old?.last ?? null, lastBase: old?.lastBase ?? null }
   if (!home) return
   try {
     const ag = S.ag
@@ -365,6 +373,7 @@ function recordOf(at) {
     usage: usageOf(),
     changes: ag.changes ?? null,
     look: ag.look || 0,
+    last: ag.last ?? null,
   }
 }
 // Замер лимитов и контекста этой сессии (app/usage) — для чужих «Агентов» и «Лимитов»
@@ -541,11 +550,13 @@ export async function agentsTick($) {
       const all = ag.ready ? [...others, { ...recordOf(now), slot: ag.slot }] : others
       notify($, all, now)
       alertsTick($, all, now)
-      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at]).sort())
+      const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at, r.last?.at, r.last?.files, r.look]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
         if (shown) $.ui.invalidate('ui.render')
       }
+      // «Агенты» или «Сегодня» на экране — концы ходов, что там видны, человек видел (app/away)
+      if (shown && (S.menu === 'agents' || S.menu === 'today')) await awaySeen($, others)
     }
   } catch (err) {
     log(`отметка сессии: ${err?.message ?? err}`)
@@ -738,7 +749,7 @@ export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, last: ag.last ?? null, me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }
@@ -2770,6 +2781,58 @@ async function openFromPopup($, id) {
   await openPane($)
   await openChat($, id)
   loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+}
+
+// --- Пока тебя не было -------------------------------------------------------------------------------------------
+// Что сделала сессия за последний ход: начало ответа Claude, когда закончил и сколько файлов поменял (away.js). В
+// «Сегодня» — у сессий, закончивших, пока человек не смотрел: с тех пор, как он последний раз открывал «Сегодня» или
+// «Агентов». Строки — в отметках сессий на этом компьютере, что видено — в $.store; на сайт ничего не уходит
+
+// Экран «Агенты» или «Сегодня» открыли (menu) или ушли с него (''): уходя, всё, что там было видно, человек видел;
+// открывая — запомнить, что он видел до того: в «Пока тебя не было» на этот показ — остальное
+export async function awayOpen($, menu) {
+  if (S.away.at === menu) return
+  if (S.away.at && S.away.ready) await awaySeen($, othersNow())
+  if (S.away.at === menu) return // пока писали, экран уже сменили
+  const away = { at: menu, seen: { ...S.agSeen }, ready: !menu }
+  S.away = away
+  if (!menu) return
+  try {
+    // Что видели в других сессиях этого компьютера
+    const stored = Object.entries(restoreSeen(await $.store.get(SEEN_KEY))).map(([sid, at]) => ({ sid, at }))
+    const all = addSeen(S.agSeen, stored)
+    if (all) S.agSeen = all
+    const seen = addSeen(away.seen, stored)
+    if (seen) {
+      away.seen = seen
+      if (S.away === away) $.ui.invalidate('ui.render')
+    }
+  } catch (err) {
+    log(`пока тебя не было: ${err?.message ?? err}`)
+  } finally {
+    away.ready = true
+  }
+}
+
+// Отметить увиденными концы ходов других сессий (others — их отметки). Хранилище общее для сессий: перед записью —
+// перечитать, чтобы не затереть, что видели в другой. Скрытые — не видны, их не отмечаем
+export async function awaySeen($, others) {
+  if (!S.away.ready) return
+  const hidden = new Set(S.agHidden)
+  const list = others.filter((r) => !hidden.has(r.sid)).map((r) => ({ sid: r.sid, at: lastOf(r)?.at ?? 0 })).filter((x) => x.at > 0)
+  if (!addSeen(S.agSeen, list)) return
+  try {
+    const stored = restoreSeen(await $.store.get(SEEN_KEY))
+    const merged = addSeen(stored, [...Object.entries(S.agSeen).map(([sid, at]) => ({ sid, at })), ...list])
+    if (!merged) {
+      S.agSeen = stored
+      return
+    }
+    S.agSeen = merged
+    await $.store.set(SEEN_KEY, merged)
+  } catch (err) {
+    log(`пока тебя не было: ${err?.message ?? err}`)
+  }
 }
 
 // --- Уведомления о сессиях -----------------------------------------------------------------------------------------
@@ -6319,6 +6382,9 @@ export async function changesPoll($) {
       const same = (now && ag.changes ? JSON.stringify({ ...now, at: 0 }) === JSON.stringify({ ...ag.changes, at: 0 }) : now === ag.changes)
       if (!same) {
         ag.changes = now ? { ...now, at: await $.clock.now() } : null
+        // Ход уже кончился, а git дочитал только сейчас: файлы за ход — по свежему списку. Начался новый ход — у него
+        // своё начало, прошлый не трогаем
+        if (ag.last && ag.lastBase && ag.lastBase === S.turnBase) ag.last = { ...ag.last, files: turnFiles(ag.lastBase, ag.changes) }
         if (S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'today')) $.ui.invalidate('ui.render')
       }
     } while (S.chg.again)
@@ -6776,6 +6842,12 @@ export async function turnDone($, turnId, e) {
   S.bg = { n: 0, zeroAt: 0, checking: false, end: null }
   S.status = 'done'
   S.askVisible = false
+  // «Пока тебя не было»: начало ответа, когда закончил и сколько файлов поменял — в отметку для «Агентов» и «Сегодня».
+  // git дочитает конец хода чуть позже — число файлов уточнит changesPoll
+  if (S.ag) {
+    S.ag.last = { text: S.lastReply ?? '', at: await $.clock.now(), files: turnFiles(S.turnBase, S.ag.changes) }
+    S.ag.lastBase = S.turnBase
+  }
   // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
   if (e && S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch(modError))
   if (S.paneOpen && S.view !== 'library') {
@@ -11000,6 +11072,15 @@ export function agentsScreen($, e, kit) {
   const hideButton = (r) => (r.me ? [] : [keep(Button({ key: `agents-hide-${r.sid}`, label: '×', plain: true, dimColor: true, onPress: () => hideAgent($, r.sid, true) }))])
   const asks = (r) => askLines($, kit, r)
   const changes = (r) => changesLines($, kit, r, all)
+  // Пока тебя не было: начало последнего ответа Claude (без перевода), когда закончил и сколько файлов поменял за ход.
+  // Только у закончившей или свободной: работает — ответ будет новый
+  const reply = (text) => keep(Text(desktop ? { dimColor: true, wrap: 'wrap', children: [text] } : { dimColor: true, children: [text] }))
+  const lastLines = (r, pad = '') => {
+    const last = r.status === 'done' || r.status === 'idle' ? lastOf(r) : null
+    if (!last) return []
+    const when = [fill(tr('закончил {0}', S.lang), [clockText(last.at, now)]), last.files ? fill(tr('изменено файлов за ход: {0}', S.lang), [last.files]) : ''].filter(Boolean).join(' · ')
+    return [...(last.text ? [reply(`${pad}${last.text}`)] : []), keep(dim(`${pad}${when}`))]
+  }
   const card = (r) => {
     const hex = STATUS_HEX[r.status] ?? STATUS_HEX.idle
     const lines = [cardOf(r), queueOf(r), usageOf(r)].filter(Boolean)
@@ -11014,7 +11095,7 @@ export function agentsScreen($, e, kit) {
       paddingX: 'sm',
       paddingY: 'xs',
       children: [
-        Box({ flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(strong(nameOf(r))), status(r), ...lines.map((x) => keep(dim(x))), ...changes(r), ...asks(r)] }),
+        Box({ flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: [keep(strong(nameOf(r))), status(r), ...lastLines(r), ...lines.map((x) => keep(dim(x))), ...changes(r), ...asks(r)] }),
         ...hideButton(r),
       ],
     })
@@ -11028,6 +11109,7 @@ export function agentsScreen($, e, kit) {
       flexDirection: 'column',
       children: [
         r.me ? head : Box({ flexDirection: 'row', columnGap: 2, children: [head, ...hideButton(r)] }),
+        ...lastLines(r, '  '),
         ...(rest ? [keep(dim(`  ${rest}`))] : []),
         ...(changesOf(r) ? [Box({ key: `agents-chg-${r.sid || 'me'}`, flexDirection: 'column', paddingLeft: 2, children: changes(r) })] : []),
         ...(askOf(r) ? [Box({ key: `agents-ask-${r.sid || 'me'}`, flexDirection: 'column', paddingLeft: 2, children: asks(r) })] : []),
@@ -11314,6 +11396,31 @@ export function todayScreen($, e, kit) {
         : Box({ key: `today-ask-${id}`, flexDirection: 'column', children: body })
     }
     blocks.push(section('Ждут тебя'), ...stack('today-asks', waiting.map(one)))
+  }
+
+  // ——— 1а. Пока тебя не было: другие сессии, закончившие ход, пока человек не смотрел (app/away) ———
+  const waitingIds = new Set(waiting.map((r) => r.sid))
+  const finished = agentsList(now)
+    .filter((r) => !r.me && !hidden.has(r.sid) && !waitingIds.has(r.sid))
+    .map((r) => ({ r, last: lastOf(r) }))
+    // Написал в той сессии уже после её конца — видел
+    .filter(({ r, last }) => last && last.at > (S.away.seen[r.sid] ?? 0) && !(r.look >= last.at))
+    .sort((a, b) => b.last.at - a.last.at)
+  if (finished.length) {
+    const one = ({ r, last }) => {
+      const when = `${fill(t('закончил {0}'), [clockText(last.at, now)])} · ${fill(t('{0} назад'), [t(agoText(now - last.at))])}`
+      const body = [
+        keep(strong(r.name)),
+        keep(Text({ color: 'success', children: [when] })),
+        ...(last.text ? [keep(Text(desktop ? { dimColor: true, wrap: 'wrap', children: [last.text] } : { dimColor: true, children: [last.text] }))] : []),
+        ...(last.files ? [keep(dim(fill(t('изменено файлов за ход: {0}'), [last.files])))] : []),
+      ]
+      const hex = STATUS_HEX.done
+      return desktop
+        ? Box({ key: `today-away-${r.sid}`, flexDirection: 'column', alignItems: 'flex-start', rowGap: 'xs', borderStyle: 'round', borderColor: `${hex}80`, backgroundColor: `${hex}14`, paddingX: 'sm', paddingY: 'xs', children: body })
+        : Box({ key: `today-away-${r.sid}`, flexDirection: 'column', children: body })
+    }
+    blocks.push(section('Пока тебя не было'), ...stack('today-away', capped('today-away', finished.map(one), open('agents'))))
   }
 
   // ——— 2. В календаре: события на сегодня; прошедшие — бледнее ———
@@ -12047,6 +12154,8 @@ export async function drawPane($, e) {
   // Поле поиска рисуется заново, когда на экран поиска приходят с другого: запрос остаётся, а пока человек печатает,
   // поле то же — набранное не сбивается
   if (game || S.menu !== 'search') finder.shown = false
+  // «Пока тебя не было»: открыт ли экран, где видны концы ходов других сессий (app/away)
+  await awayOpen($, !game && S.view === 'library' && (S.menu === 'agents' || S.menu === 'today') ? S.menu : '')
 
   // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает (и в фоне) — жёлтый, ждёт
   // разрешения — красный, закончил — зелёный, свободен — серый. Цвета — ключи темы: читаются и на светлой, и на тёмной
@@ -12518,6 +12627,7 @@ export function register(on) {
       S.agOs = (await $.store.get('agentsOs')) !== false
       S.agSound = (await $.store.get('agentsSound')) !== false
       S.agHidden = hiddenOf(await $.store.get('agentsHidden'))
+      S.agSeen = restoreSeen(await $.store.get(SEEN_KEY))
       S.us.warn = (await $.store.get('usageWarn')) !== false
       S.acct.session = restoreAccount(await $.store.get('account'))
       S.mine = restoreMine(await $.store.get('mine'))
@@ -12747,6 +12857,8 @@ export function register(on) {
       if (!going) {
         S.turnStartedAt = await $.clock.now()
         S.asked = false
+        // «Что поменялось» в начале хода: в конце — сколько файлов поменялось за ход (app/away)
+        S.turnBase = changeBase(S.ag?.changes)
       }
       S.askVisible = false
       S.agentAlert = null
@@ -12811,6 +12923,8 @@ export function register(on) {
     // Ход с просьбой Arcade кончился: открыл Claude игру или нет, следующее нажатие просит заново
     S.asking = null
     try {
+      // Начало ответа Claude — строкой без Markdown для «Агентов» и «Сегодня»: модель для пересказа не зовём (app/away)
+      S.lastReply = replyLine(e.answer)
       // Игра ждала конца инструмента, а ход кончился сам — прерывать нечего, просим как обычно
       if (S.pendingOpen) {
         const url = S.pendingOpen
@@ -12851,6 +12965,7 @@ export function register(on) {
       S.paused = false // закрытая панель и так стоит на паузе
       releaseAll() // Денди стоит на паузе, пока панель закрыта
       await paneClosedBy($, e.origin).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+      await awayOpen($, '').catch((err) => log(`пока тебя не было: ${err?.message ?? err}`))
     }
     return next(e)
   })
