@@ -4,8 +4,8 @@
 // Каталог плагинов Anthropic разрешает передавать $ только функции, объявленной на верхнем уровне того же файла, поэтому
 // весь код, который зовёт Claude Code, — в этом файле, разделами: помощники (app/…), экраны панели (screens/…) и в конце
 // подписки на события. Состояние и значки — в hooks/app/, чистые модули без $ (каталог, переводы, ленты и т. п.) — рядом, в hooks/.
-import { AGAIN_KEY, ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERTS_KEY, alertKey, alertText, alertWhat, keepTold, restoreAgain, restoreAlerts, seenOf } from './alerts.js'
-import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, restoreAccount, restoreStamps, suggestHandle, SYNC_KEYS, syncPlan } from './account.js'
+import { AGAIN_KEY, ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERT_KEEP_MS, ALERTS_KEY, alertKey, alertText, alertWhat, keepTold, restoreAgain, restoreAlerts, seenOf } from './alerts.js'
+import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parsePushCode, parsePushSend, parsePushState, parseSettings, parseStart, parseWeb, restoreAccount, restoreStamps, suggestHandle, SYNC_KEYS, syncPlan } from './account.js'
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
 import { AVATAR_COUNT, avatarName, avatarSvg, letterColor, picSvg, validPic } from './avatars.js'
@@ -26,6 +26,7 @@ import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
+import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneText } from './phone.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
 import { COMMITS_MAX, cleanComment, cutDiff, lastComment, lineDiff, pickSlot, restoreDetail, restoreReviews, returnLine, REVIEW_FILES, REVIEW_KEY, reviewed, reviewMark, SNAP_FILE, SNAP_PATHS, SNAP_TOTAL, splitPatch, unreview } from './review.js'
@@ -315,6 +316,13 @@ S.snd = { edit: 'wait', own: [], sys: null, sysOf: '', root: '', dir: '', readAt
 // «ждёт тебя» (againStart) или null
 S.al = { pending: new Map(), busy: false, again: null }
 S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
+// Уведомления на телефон (п. 39, phone.js): on — отправлять с этого компьютера (phonePush в $.store; не общая настройка
+// аккаунта — у каждого компьютера своя); phones — сколько телефонов подключено к аккаунту (-1 — сайт ещё не спрашивали),
+// last — когда подключили последний (время сайта), askedAt — когда спрашивали; code — код подключения на экране, until —
+// до каких пор он живёт, base — last в момент выдачи кода: сменился — телефон подключили; busy — вопрос к сайту в пути;
+// note и bad — строка под кнопками; told — о каких ожиданиях телефону уже сообщили (alertKey → когда); wait — раньше
+// не отправлять; sending — отправка в пути; timer — опрос сайта, пока показан код
+S.phone = { on: false, phones: -1, last: 0, askedAt: 0, code: '', until: 0, base: 0, busy: false, note: '', bad: false, told: new Map(), wait: 0, sending: false, timer: null }
 // «Пока тебя не было» (away.js): agSeen — чьи концы ходов человек уже видел ({ id: время }, agentsSeen в $.store);
 // away — какой экран открыт сейчас ('agents', 'today' или '') и что было увидено до его открытия; ready — прочитано из
 // хранилища. lastReply — начало ответа Claude в последнем ходе, turnBase — «Что поменялось» в начале хода
@@ -558,7 +566,9 @@ export async function agentsTick($) {
     if (ag.ready && (bodyOf(recordOf(0)) !== ag.sent || now - ag.wrote >= AGENT_WRITE_MS)) await put($)
     const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'usage' || S.menu === 'today' || /^(boards|board:|note:)/.test(S.menu))
     // Пока звучит повтор «ждёт тебя» — читать каждый шаг: ответили — смолкнуть сразу
-    if (shown || S.al.again || ((S.agNotify || S.agDone) && now - ag.read >= AGENT_READ_MS)) {
+    // Уведомления на телефон тоже читают чужие отметки — кто ждёт дольше 2 минут
+    const phone = S.phone.on && Boolean(S.acct.session)
+    if (shown || S.al.again || ((S.agNotify || S.agDone || phone) && now - ag.read >= AGENT_READ_MS)) {
       await readSlots($, now)
       if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
@@ -566,6 +576,7 @@ export async function agentsTick($) {
       notify($, all, now)
       alertsTick($, all, now)
       againTick($, all, now)
+      phoneTick($, all, now)
       const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at, r.last?.at, r.last?.files, r.look, r.ctx]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
@@ -3584,12 +3595,277 @@ export async function forgetSession($, note) {
   S.chatLink = ''
   S.syncTimer?.cancel()
   S.syncTimer = null
+  // Телефоны — у аккаунта на сайте; без входа их не спросить. Отправлять ли с этого компьютера — остаётся как было
+  S.phone.timer?.cancel()
+  Object.assign(S.phone, { phones: -1, last: 0, askedAt: 0, code: '', until: 0, base: 0, note: '', bad: false, timer: null })
   $.ui.invalidate('ui.render')
   try {
     await $.store.delete('account')
   } catch (err) {
     log(`вход не забыт: ${String(err?.message ?? err).slice(0, 200)}`)
   }
+}
+
+// --- Уведомления на телефон ----------------------------------------------------------------------------------------
+// П. 39 (phone.js): сессия ждёт ответа дольше 2 минут — сайт Arcade шлёт на подключённые телефоны «сессия такая-то
+// ждёт тебя» (Web Push). Только имя сессии — без текста вопроса и кода; ответить с телефона нельзя. Телефон подключают
+// кодом: Arcade берёт его у сайта, человек вводит его на странице /push в браузере телефона. По умолчанию выключено;
+// нужен вход через GitHub на этом компьютере
+const PHONE_ASK_MS = 60_000 // пока экран открыт — спрашивать сайт, сколько телефонов, не чаще раза в столько
+const PHONE_AUTH_NOTE = 'Вход на этом компьютере больше не действует — войди через GitHub заново.'
+
+// Строка под кнопками экрана; bad — предупреждение
+function phoneSay($, note, bad = false) {
+  S.phone.note = note
+  S.phone.bad = bad
+  $.ui.invalidate('ui.render')
+}
+
+// Сколько телефонов подключено к аккаунту и когда подключили последний → в S.phone. Не вошли — null; вход больше не
+// действует — забыть его и тоже null. Телефонов не осталось (выключили на самом телефоне или на другом компьютере) —
+// и с этого компьютера не отправлять
+async function phoneState($) {
+  const ph = S.phone
+  const token = S.acct.session?.token
+  if (!token) return null
+  ph.askedAt = await $.clock.now()
+  const res = parsePushState(await accountFetch($, 'push', { token }))
+  if (res.error === 'auth') {
+    await forgetSession($, PHONE_AUTH_NOTE)
+    return null
+  }
+  if (res.error) return res
+  ph.phones = res.phones
+  ph.last = res.last
+  if (!res.phones && ph.on) {
+    ph.on = false
+    await $.store.set(PHONE_PREF, false)
+  }
+  return res
+}
+
+// Экран «Уведомления на телефон» открыт (из ui.render): показан код — ждать телефон дальше; иначе спросить сайт,
+// сколько телефонов, не чаще раза в PHONE_ASK_MS. Сам вопрос — вне рисования
+export function phoneOn($, now) {
+  const ph = S.phone
+  if (!S.acct.session) return
+  if (ph.code) {
+    if (!ph.timer) phonePoll($)
+    return
+  }
+  // askedAt 0 — ещё не спрашивали
+  if (ph.busy || (ph.askedAt > 0 && now - ph.askedAt < PHONE_ASK_MS)) return
+  ph.busy = true
+  ph.askedAt = now
+  $.clock.after(0, async () => {
+    try {
+      const res = await phoneState($)
+      if (res?.error) phoneSay($, accountNote(res.error), true)
+      else if (res && ph.bad) phoneSay($, '')
+    } catch (err) {
+      log(`уведомления на телефон: ${err?.message ?? err}`)
+    } finally {
+      ph.busy = false
+      $.ui.invalidate('ui.render')
+    }
+  })
+}
+
+// «Подключить телефон»: взять у сайта код и ждать, пока телефон его введёт. Подключили — когда сайт скажет, что
+// последний телефон подключён позже, чем был выдан код (так видно и тот же телефон, подключённый заново)
+export async function phoneCode($) {
+  const ph = S.phone
+  if (ph.busy || !S.acct.session) return
+  ph.busy = true
+  phoneSay($, '')
+  try {
+    const state = await phoneState($)
+    if (!state) return
+    if (state.error) return phoneSay($, accountNote(state.error), true)
+    const token = S.acct.session?.token
+    if (!token) return
+    const res = parsePushCode(await accountFetch($, 'pushcode', { method: 'POST', token }))
+    if (res.error === 'auth') return await forgetSession($, PHONE_AUTH_NOTE)
+    if (res.error === 'often' || res.error === 'limit') return phoneSay($, 'Кодов сегодня было слишком много — попробуй завтра.', true)
+    if (res.error) return phoneSay($, accountNote(res.error), true)
+    ph.base = state.last
+    ph.code = res.code
+    ph.until = (await $.clock.now()) + res.expires * 1000
+    phonePoll($)
+  } catch (err) {
+    log(`код для телефона: ${err?.message ?? err}`)
+    phoneSay($, accountNote('down'), true)
+  } finally {
+    ph.busy = false
+    $.ui.invalidate('ui.render')
+  }
+}
+
+// Пока показан код и экран открыт — раз в PHONE_POLL_MS спрашивать сайт, подключился ли телефон. Экран закрыли —
+// не спрашивать: откроют снова — phoneOn продолжит. Код истёк — убрать его
+function phonePoll($) {
+  const ph = S.phone
+  ph.timer?.cancel()
+  ph.timer = $.clock.after(PHONE_POLL_MS, async () => {
+    ph.timer = null
+    try {
+      if (!ph.code) return
+      const now = await $.clock.now()
+      if (now >= ph.until) {
+        ph.code = ''
+        return phoneSay($, 'Код истёк — возьми новый.', true)
+      }
+      if (!(S.paneOpen && S.view === 'library' && S.menu === 'phone')) return
+      const state = await phoneState($)
+      // Пока спрашивали, нажали «Отмена» или вход забыт
+      if (!ph.code || !state) return
+      if (!state.error && state.phones > 0 && state.last !== ph.base) {
+        ph.code = ''
+        ph.on = true
+        await $.store.set(PHONE_PREF, true)
+        return phoneSay($, 'Телефон подключён — уведомления пойдут на него.')
+      }
+      phonePoll($)
+    } catch (err) {
+      log(`ожидание телефона: ${err?.message ?? err}`)
+      if (ph.code) phonePoll($)
+    } finally {
+      $.ui.invalidate('ui.render')
+    }
+  })
+}
+
+// «Отмена»: убрать код с экрана. На сайте он сам истечёт через 10 минут
+export function phoneCancel($) {
+  const ph = S.phone
+  ph.timer?.cancel()
+  ph.timer = null
+  ph.code = ''
+  phoneSay($, '')
+}
+
+// «Отправлять с этого компьютера»: да или нет — только здесь; у других компьютеров аккаунта — своё
+export async function phoneToggle($) {
+  const ph = S.phone
+  ph.on = !ph.on
+  phoneSay($, '')
+  await $.store.set(PHONE_PREF, ph.on)
+}
+
+// «Выключить на всех телефонах»: сайт забывает все подключённые телефоны аккаунта
+export async function phoneAllOff($) {
+  const ph = S.phone
+  const token = S.acct.session?.token
+  if (ph.busy || !token) return
+  ph.busy = true
+  phoneSay($, '')
+  try {
+    const res = parsePushState(await accountFetch($, 'push', { method: 'DELETE', token }))
+    if (res.error === 'auth') return await forgetSession($, PHONE_AUTH_NOTE)
+    if (res.error) return phoneSay($, accountNote(res.error), true)
+    ph.phones = 0
+    ph.last = 0
+    ph.on = false
+    await $.store.set(PHONE_PREF, false)
+    phoneSay($, 'Уведомления выключены на всех телефонах.')
+  } catch (err) {
+    log(`выключить телефоны: ${err?.message ?? err}`)
+    phoneSay($, accountNote('down'), true)
+  } finally {
+    ph.busy = false
+    $.ui.invalidate('ui.render')
+  }
+}
+
+// Сайт сказал, что телефонов у аккаунта больше нет: не отправлять и сказать человеку
+async function phoneLost($) {
+  const ph = S.phone
+  const was = ph.on
+  ph.on = false
+  ph.phones = 0
+  $.ui.invalidate('ui.render')
+  await $.store.set(PHONE_PREF, false)
+  if (was) await $.ui.toast(tr('Телефонов для уведомлений Arcade больше нет — подключи телефон заново в настройках Arcade.', S.lang))
+}
+
+// Шаг уведомлений на телефон — из agentsTick: кто ждёт дольше PHONE_WAIT_MS и о ком телефону ещё не сообщали —
+// отправить. Сообщённое помнится ALERT_KEEP_MS: сессия ждёт дольше часа — напомнить ещё раз
+function phoneTick($, all, now) {
+  const ph = S.phone
+  if (!ph.on || ph.sending || !S.acct.session || now < ph.wait) return
+  for (const [key, at] of ph.told) if (now - at >= ALERT_KEEP_MS) ph.told.delete(key)
+  const due = phoneDue(all, now, S.agHidden).filter((r) => !ph.told.has(alertKey(r)))
+  if (!due.length) return
+  ph.sending = true
+  $.clock.after(0, async () => {
+    try {
+      await phoneSend($, due)
+    } catch (err) {
+      log(`уведомление на телефон: ${err?.message ?? err}`)
+      ph.wait = now + PHONE_RETRY_MS
+    } finally {
+      ph.sending = false
+    }
+  })
+}
+
+// Отправить: что уже отправила другая сессия — забыть; отправляли меньше PHONE_GAP_MS назад — подождать. Отправляет
+// одна сессия на компьютере: заявка в $.store, выждать CAL_CLAIM_MS, перечитать — осталась моя, значит отправляю я
+async function phoneSend($, due) {
+  const ph = S.phone
+  // Выключить могли в другой сессии этого компьютера
+  ph.on = (await $.store.get(PHONE_PREF)) === true
+  const token = S.acct.session?.token
+  if (!ph.on || !token) return
+  const now = await $.clock.now()
+  const was = restoreAlerts(await $.store.get(PHONE_KEY), now)
+  for (const [key, at] of Object.entries(was.told)) ph.told.set(key, at)
+  const fresh = due.filter((r) => !was.told[alertKey(r)])
+  if (!fresh.length) return
+  // last 0 — ещё не отправляли
+  if (was.last > 0 && now - was.last < PHONE_GAP_MS) {
+    ph.wait = was.last + PHONE_GAP_MS
+    return
+  }
+  const keys = fresh.map(alertKey)
+  const told = { ...was.told }
+  for (const key of keys) told[key] = now
+  await $.store.set(PHONE_KEY, { by: me, last: now, told: keepTold(told) })
+  await $.clock.sleep(CAL_CLAIM_MS)
+  const after = restoreAlerts(await $.store.get(PHONE_KEY), await $.clock.now())
+  if (after.by !== me) {
+    for (const [key, at] of Object.entries(after.told)) ph.told.set(key, at)
+    return
+  }
+  // Только имена сессий — без текста вопроса, кода и имён файлов
+  const text = phoneText(
+    fresh.map((r) => r.name),
+    (s) => tr(s, S.lang),
+  )
+  const res = parsePushSend(await accountFetch($, 'pushsend', { method: 'POST', body: { text }, token }))
+  if (!res.error || res.error === 'invalid') {
+    if (res.error) log('уведомление на телефон: сайт не принял текст')
+    for (const key of keys) ph.told.set(key, now)
+    if (!res.error) ph.phones = res.phones
+    if (!res.error && !res.phones) await phoneLost($)
+    return
+  }
+  if (res.error === 'auth') return forgetSession($, PHONE_AUTH_NOTE)
+  if (res.error === 'nophone') return phoneLost($)
+  // «Часто»: отправлял другой компьютер аккаунта меньше 5 минут назад или за сутки набралось 30 — эти ожидания
+  // вернуть и ждать 5 минут. Сайт не ответил — вернуть и время: через минуту ещё раз
+  const often = res.error === 'often' || res.error === 'limit'
+  await phoneUntell($, keys, often ? now : was.last)
+  ph.wait = now + (often ? PHONE_GAP_MS : PHONE_RETRY_MS)
+}
+
+// Не отправилось — убрать ожидания из отправленных, last — какое время отправки оставить
+async function phoneUntell($, keys, last) {
+  const cur = restoreAlerts(await $.store.get(PHONE_KEY), await $.clock.now())
+  if (cur.by !== me) return
+  const told = { ...cur.told }
+  for (const key of keys) delete told[key]
+  await $.store.set(PHONE_KEY, { by: me, last, told: keepTold(told) })
 }
 
 // «Войти через GitHub»: обычно — кнопкой через сайт: мод открывает страницу входа в браузере, человек пускает Arcade на
@@ -5273,6 +5549,7 @@ export function libraryTitle() {
   if (S.menu === 'settings') return 'Arcade · настройки'
   if (S.menu === 'lang') return 'Arcade · язык'
   if (S.menu === 'sounds') return 'Arcade · звук'
+  if (S.menu === 'phone') return 'Arcade · телефон'
   if (S.menu === 'account') return 'Arcade · аккаунт'
   if (S.menu === 'friends' || S.menu.startsWith('friends:')) return 'Arcade · друзья'
   if (S.menu === 'chats' || S.menu.startsWith('chats:')) return 'Arcade · чаты'
@@ -9091,6 +9368,9 @@ export function settingsScreen($, e, kit) {
           dim('  громкость, свой звук или файл для «ждёт тебя» и «закончил ход», повтор'),
         ]
       : []),
+    // Уведомления на телефон (п. 39) — отдельным экраном: подключить телефон, включить, выключить
+    Button({ key: 'arcade-phone', label: `Уведомления на телефон: ${S.phone.on ? 'да' : 'нет'}`, onPress: open('phone') }),
+    dim('  когда сессия ждёт тебя дольше 2 минут; только имя сессии, без вопроса и кода'),
     // Окно лимита Claude дошло до 80 и 90% (плитка «Лимиты»): о каждом пороге — раз во всех сессиях
     Button({
       key: 'arcade-usage-warn',
@@ -9153,6 +9433,91 @@ export function settingsScreen($, e, kit) {
 
 // Аккаунт: вошли — кто и что общее; идёт вход — код для сверки со страницей сайта или код для GitHub; иначе — зачем
 // вход и что Arcade узнает
+// Экран «Уведомления на телефон» (п. 39): без входа — зачем он нужен и кнопка входа; показан код — адрес страницы,
+// код и до каких пор он живёт; иначе — подключить телефон, отправлять ли с этого компьютера, выключить на всех
+export function phoneScreen($, e, kit) {
+  const { Button, Text, desktop, dim, gap, hint, noticeLines, open, tiles } = kit
+  const t = (text) => tr(text, S.lang)
+  const ph = S.phone
+  const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open('settings') })
+  const note = ph.note ? [Text({ ...(ph.bad ? { color: 'warning' } : {}), children: [ph.note] })] : []
+  const about = [
+    Text({ children: ['Когда сессия Claude Code ждёт твоего ответа больше 2 минут, Arcade пришлёт уведомление на телефон.'] }),
+    dim('В уведомлении только имя сессии — без текста вопроса и кода. Не чаще раза в 5 минут. Ответить с телефона нельзя.'),
+  ]
+  if (!S.acct.session) {
+    return [
+      back,
+      gap,
+      ...about,
+      gap,
+      dim('Уведомления на телефон идут через сайт Arcade — нужен вход через GitHub на этом компьютере. На телефоне входить не нужно.'),
+      ...note,
+      tiles([Button({ key: 'arcade-phone-login', label: 'Войти через GitHub', autoFocus: true, onPress: open('account') }), dim('  аккаунт Arcade: настройки, друзья и чаты')], 40),
+      ...noticeLines,
+      ...hint,
+    ]
+  }
+  if (ph.code) {
+    return [
+      back,
+      gap,
+      Text({ children: ['На телефоне открой адрес и введи там код:'] }),
+      keep(dim(`  ${siteUrl('push')}`)),
+      keep(desktop ? Text({ size: 'heading', weight: 'semibold', children: [ph.code] }) : Text({ bold: true, children: [`  ${ph.code}`] })),
+      keep(dim(fill(t('  код живёт до {0}'), [hhmm(ph.until)]))),
+      dim('  iPhone: сначала добавь страницу на экран «Домой» (Поделиться → На экран «Домой») и введи код там; нужен iOS 16.4 или новее'),
+      gap,
+      ...(note.length ? note : [dim('Жду, когда телефон подключится…')]),
+      Button({ key: 'arcade-phone-cancel', label: 'Отмена', autoFocus: true, onPress: () => phoneCancel($) }),
+      ...noticeLines,
+      ...hint,
+    ]
+  }
+  const paired = ph.phones > 0
+  const status = paired
+    ? [keep(Text({ children: [fill(t('Подключено телефонов: {0}'), [ph.phones])] }))]
+    : ph.phones === 0
+      ? [Text({ children: ['Телефон ещё не подключён.'] })]
+      : ph.busy
+        ? [dim('Спрашиваю сайт…')]
+        : []
+  return [
+    back,
+    gap,
+    ...about,
+    gap,
+    ...status,
+    tiles(
+      [
+        ...(paired
+          ? [
+              Button({ key: 'arcade-phone-on', label: `Отправлять с этого компьютера: ${ph.on ? 'да' : 'нет'}`, autoFocus: true, onPress: () => phoneToggle($) }),
+              dim('  на других компьютерах включают там же, в настройках Arcade'),
+            ]
+          : []),
+        Button({
+          key: 'arcade-phone-pair',
+          label: ph.busy ? 'Минутку…' : paired ? 'Подключить ещё телефон' : 'Подключить телефон',
+          ...(paired ? {} : { autoFocus: true }),
+          onPress: () => phoneCode($),
+        }),
+        dim('  Arcade покажет код; его вводят на странице Arcade в браузере телефона'),
+        ...(paired
+          ? [
+              Button({ key: 'arcade-phone-off', label: 'Выключить на всех телефонах', onPress: () => phoneAllOff($) }),
+              dim('  сайт забудет все подключённые телефоны'),
+            ]
+          : []),
+      ],
+      40,
+    ),
+    ...note,
+    ...noticeLines,
+    ...hint,
+  ]
+}
+
 export function accountScreen($, e, kit) {
   const { Box, Button, Input, Svg, Text, back, desktop, dim, gap, hint, noticeLines, picGrid, pictures, section, tiles } = kit
   let items
@@ -13547,6 +13912,11 @@ export async function drawPane($, e) {
         .replace(/^snd-(repeat|every)$/, 'ask-after')
         .replace(/^snd-folder$/, 'mine')
         .replace(/^snd-reload$/, 'account-sync')
+        .replace(/^phone$/, 'notify')
+        .replace(/^phone-on$/, 'agents-notify')
+        .replace(/^phone-pair$/, 'account-sync')
+        .replace(/^phone-(off|cancel)$/, 'account-logout')
+        .replace(/^phone-login$/, 'account')
         .replace(/^open-library$/, 'library')
         .replace(/^yt-.+$/, 'youtube')
         .replace(/^ar-.+$/, 'articles')
@@ -13727,7 +14097,11 @@ export async function drawPane($, e) {
       await soundsOn($, now)
       items = soundsScreen($, e, kit)
     } else if (S.menu === 'account') items = accountScreen($, e, kit)
-    else if (S.menu === 'report') items = reportScreen($, e, kit)
+    else if (S.menu === 'phone') {
+      // Сколько телефонов подключено — спросить сайт; показан код — ждать телефон дальше
+      phoneOn($, now)
+      items = phoneScreen($, e, kit)
+    } else if (S.menu === 'report') items = reportScreen($, e, kit)
     else if (S.menu === 'reports') items = reportsScreen($, e, kit)
     else if (S.menu === 'friends:invite' && S.ol.to && S.acct.handle) items = inviteScreen($, e, kit)
     else if (S.menu === 'friends' || S.menu === 'friends:remove' || S.menu === 'friends:invite') items = friendsScreen($, e, kit)
@@ -13784,6 +14158,7 @@ export function register(on) {
       S.agDone = (await $.store.get('agentsDone')) === true
       S.agOs = (await $.store.get('agentsOs')) !== false
       S.agSound = (await $.store.get('agentsSound')) !== false
+      S.phone.on = (await $.store.get(PHONE_PREF)) === true
       // Громкость и свои звуки «ждёт тебя» и «закончил ход»; звуки Arcade лежат в папке плагина
       await loadSound($)
       Object.assign(S.snd, { edit: 'wait', own: [], sys: null, sysOf: '', root: $.plugin.root ?? '', dir: '', readAt: 0, playing: false, again: null })

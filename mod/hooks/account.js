@@ -29,13 +29,13 @@ const AVATAR = /^https:\/\/avatars\.githubusercontent\.com\/[\w./?=&%-]+$/
 // @ник: латиница, цифры и _, 4–32 знака, первый — буква, строчными; подпись ника — <ник>.<до, секунды>.<HMAC сайта>
 export const HANDLE = /^[a-z][a-z0-9_]{3,31}$/
 const TICKET = /^([a-z][a-z0-9_]{3,31})\.\d{10}\.[A-Za-z0-9_-]{22}$/
-const PATHS = { web: 'api/auth/web', wait: 'api/auth/web/poll', start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', avatar: 'api/me/avatar', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', editmsg: 'api/me/chats/edit', delmsg: 'api/me/chats/delete', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer' }
+const PATHS = { web: 'api/auth/web', wait: 'api/auth/web/poll', start: 'api/auth/start', poll: 'api/auth/poll', logout: 'api/auth/logout', me: 'api/me', settings: 'api/me/settings', handle: 'api/me/handle', avatar: 'api/me/avatar', friends: 'api/me/friends', accept: 'api/me/friends/accept', unfriend: 'api/me/friends/remove', chats: 'api/me/chats', messages: 'api/me/chats/messages', unread: 'api/me/chats/unread', send: 'api/me/chats/send', editmsg: 'api/me/chats/edit', delmsg: 'api/me/chats/delete', opendm: 'api/me/chats/open', group: 'api/me/chats/group', members: 'api/me/chats/members', chatticket: 'api/me/chats/ticket', report: 'api/report', myReport: 'api/me/report', reports: 'api/me/reports', closeReport: 'api/me/reports/close', boards: 'api/me/boards', boardsync: 'api/me/boards/sync', boardnew: 'api/me/boards/new', boardmembers: 'api/me/boards/members', boarddelete: 'api/me/boards/delete', pulse: 'api/me/pulse', invite: 'api/me/invite', answer: 'api/me/invites/answer', pushcode: 'api/me/push/code', push: 'api/me/push', pushsend: 'api/me/push/send' }
 
 // Адрес сайта для шага входа, настроек, ника, аватарки, друзей, чатов или отчётов об ошибках: web, wait (вход кнопкой),
 // start, poll (вход по коду), logout, me, settings, handle, avatar, friends, accept, unfriend, chats, messages, unread,
 // send, opendm, group, members, chatticket, report (без входа), myReport (со входом), reports, closeReport (только
 // админу), общих досок: boards, boardsync, boardnew, boardmembers, boarddelete, «в сети» и приглашений в игру: pulse,
-// invite, answer
+// invite, answer, уведомлений на телефон: pushcode (код подключения), push (сколько телефонов, выключить все), pushsend
 export function accountUrl(name) {
   return siteUrl(PATHS[name])
 }
@@ -302,4 +302,43 @@ export function restoreStamps(saved) {
 // Ответ выхода или удаления аккаунта → '' (сделано) или ошибка, как у остальных ответов
 export function parseDone(response) {
   return trouble(response, jsonFrom(response?.text))
+}
+
+// Код подключения телефона: 8 знаков без похожих (0/O, 1/I), через дефис
+const PAIR_CODE = /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/
+
+// Ответ POST /api/me/push/code → { code, expires, error }: код для страницы /push на телефоне и сколько секунд он
+// живёт. error, кроме общих: 'often' — кодов сегодня слишком много
+export function parsePushCode(response) {
+  const data = jsonFrom(response?.text)
+  const none = (e) => ({ code: '', expires: 0, error: e })
+  if (response?.status === 429) return none(data?.error === 'often' ? 'often' : 'limit')
+  const error = trouble(response, data)
+  if (error) return none(error)
+  if (typeof data.code !== 'string' || !PAIR_CODE.test(data.code)) return none('down')
+  const expires = Number.isInteger(data.expires) && data.expires > 0 ? Math.min(data.expires, 3600) : 600
+  return { code: data.code, expires, error: '' }
+}
+
+// Ответ GET /api/me/push → { phones, last, error }: сколько телефонов подключено и когда подключили последний (время
+// сайта; 0 — ни одного). Ответ DELETE (выключить все) — тоже сюда: там телефонов уже 0
+export function parsePushState(response) {
+  const data = jsonFrom(response?.text)
+  const error = trouble(response, data)
+  if (error) return { phones: 0, last: 0, error }
+  return { phones: count(data.phones), last: Number.isSafeInteger(data.last) && data.last > 0 ? data.last : 0, error: '' }
+}
+
+// Ответ POST /api/me/push/send → { delivered, phones, error }: сколько телефонов приняли уведомление и сколько их
+// осталось. error, кроме общих: 'nophone' — телефонов нет, 'often' — рано (раз в 5 минут, 30 в сутки), 'invalid' —
+// текст не тот
+export function parsePushSend(response) {
+  const data = jsonFrom(response?.text)
+  const none = (e) => ({ delivered: 0, phones: 0, error: e })
+  if (response?.status === 400) return none('invalid')
+  if (response?.status === 404) return none(data?.error === 'nophone' ? 'nophone' : 'down')
+  if (response?.status === 429) return none(data?.error === 'often' ? 'often' : 'limit')
+  const error = trouble(response, data)
+  if (error) return none(error)
+  return { delivered: count(data.delivered), phones: count(data.phones), error: '' }
 }
