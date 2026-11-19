@@ -25,8 +25,9 @@ import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
-import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped } from './popup.js'
+import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
+import { ARCADE_SOUNDS, ownSoundFiles, SOUND_CUT_S, SOUND_REPEAT_S, SOUND_STD, SOUND_VOLUMES, soundIdOf, soundLabelOf, soundSource, soundVolumeOf, systemSoundList } from './sounds.js'
 import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readsPrompt, readUrl } from './rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, SEARCH_SHOWS, searchUrl, showFeed } from './search.js'
 import { liveFirst, liveStatus, liveUrl, MY_CHANNELS, parseTwitch, rememberChannel, restoreTwitch, TOPIC_TITLES, twitchLogin, twitchUrl } from './twitch.js'
@@ -300,6 +301,13 @@ S.agNotify = true // всплывашка «Сессия «…» ждёт раз
 S.agDone = false // всплывашка «В сессии «…» Claude закончил ход» — настройка agentsDone
 S.agOs = true // о том же — системное уведомление поверх всех окон (alerts.js) — настройка agentsOs
 S.agSound = true // у него звук: «ждёт тебя» и «закончил» — разные — настройка agentsSound
+// Звук уведомлений о сессиях (экран «Arcade · звук», sounds.js): громкость, звук «ждёт тебя» и «закончил ход», повтор
+// «ждёт тебя», пока висит карточка — soundVolume, soundWait, soundDone, soundRepeat в $.store, общие для сессий
+S.sound = { volume: 100, wait: SOUND_STD, done: SOUND_STD, repeat: false }
+// Экран звука: edit — чей звук выбираем; own — свои файлы из папки dir (~/.claude/arcade/sounds); sys — звуки системы
+// (null — ещё не читали); root — папка плагина (там mod/sounds); readAt — когда перечитывали; playing — «Прослушать»
+// играет, again — что сыграть, когда он кончится
+S.snd = { edit: 'wait', own: [], sys: null, sysOf: '', root: '', dir: '', readAt: 0, playing: false, again: null }
 // pending — события для уведомления: ключ → { key, sid, seen, name, what, at }; busy — объявление в пути
 S.al = { pending: new Map(), busy: false }
 S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
@@ -2894,6 +2902,7 @@ async function announce($, watched) {
   S.agDone = (await $.store.get('agentsDone')) === true
   S.agOs = (await $.store.get('agentsOs')) !== false
   S.agSound = (await $.store.get('agentsSound')) !== false
+  await loadSound($)
   for (const [key, ev] of al.pending) if (!alertOn(ev.what)) al.pending.delete(key)
   const now = await $.clock.now()
   const was = restoreAlerts(await $.store.get(ALERTS_KEY), now)
@@ -2933,9 +2942,12 @@ function showAlert($, batch, watched) {
     sound: S.agSound ? said.kind : 'none',
     hold: said.kind === 'wait' ? ALERT_HOLD_S : undefined,
     fg,
+    voice: S.agSound ? voiceOf() : undefined,
   })
   if (!command) return
   if (free !== undefined) popSlots.add(slot)
+  // Mac и Linux: свой звук или тише 100% — играет afplay или paplay, уведомление системы тогда без звука
+  if (command.play) $.clock.after(0, () => playSound($, command.play))
   $.clock.after(0, async () => {
     try {
       const result = await $.process.run(command.argv, { env: command.env, timeoutMs: POPUP_RUN_MS })
@@ -2947,6 +2959,105 @@ function showAlert($, batch, watched) {
       if (S.pop.waiting) watchMessages($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
     }
   })
+}
+
+const SOUND_RUN_MS = (SOUND_CUT_S + 15) * 1000 // звук обрезается сам; это — если проигрыватель повис
+
+// Настройки звука — из $.store: их могли поменять в другой сессии
+async function loadSound($) {
+  const [volume, wait, done, repeat] = await Promise.all(['soundVolume', 'soundWait', 'soundDone', 'soundRepeat'].map((key) => $.store.get(key)))
+  S.sound = { volume: soundVolumeOf(volume), wait: soundIdOf(wait), done: soundIdOf(done), repeat: repeat === true }
+}
+
+// Где лежат звуки: Arcade — в папке плагина, свои — в ~/.claude/arcade/sounds
+function soundPlaces() {
+  return { root: S.snd.root, dir: S.snd.dir, sep: S.sep || '/' }
+}
+
+// Звук для карточки и уведомления по настройкам. Всё стандартное — undefined: звучит, как раньше
+function voiceOf() {
+  const s = S.sound
+  if (s.volume === 100 && s.wait === SOUND_STD && s.done === SOUND_STD && !s.repeat) return undefined
+  return {
+    volume: s.volume,
+    wait: soundSource(S.platform, s.wait, 'wait', soundPlaces()),
+    done: soundSource(S.platform, s.done, 'done', soundPlaces()),
+    repeat: s.repeat ? SOUND_REPEAT_S : 0,
+  }
+}
+
+function playSound($, play) {
+  return $.process.run(play.argv, { env: play.env, timeoutMs: SOUND_RUN_MS }).catch((err) => log(`звук не сыграл: ${err?.message ?? err}`))
+}
+
+// «Прослушать» и выбор звука: сыграть звук события kind с текущей громкостью. Пока играет прежний — запомнить нажатие и
+// сыграть, когда тот кончится: два звука разом не играют
+async function previewSound($, kind) {
+  if (S.snd.playing) {
+    S.snd.again = kind
+    return
+  }
+  const command = soundPreviewCommand(S.platform, soundSource(S.platform, S.sound[kind], kind, soundPlaces()), S.sound.volume)
+  if (!command) return
+  S.snd.playing = true
+  try {
+    await playSound($, command)
+  } finally {
+    S.snd.playing = false
+  }
+  const again = S.snd.again
+  S.snd.again = null
+  if (again) await previewSound($, again)
+}
+
+// Свои файлы и звуки системы для экрана звука. На Windows в списке — только звуки, которые есть в C:\Windows\Media
+async function readSoundLists($) {
+  try {
+    S.snd.own = S.snd.dir && (await $.fs.exists(S.snd.dir)) ? ownSoundFiles(await $.fs.list(S.snd.dir), S.platform) : []
+  } catch {
+    S.snd.own = []
+  }
+  // Список системы — один раз на систему: на Mac и Linux она узнаётся не сразу (uname)
+  if (S.snd.sys !== null && S.snd.sysOf === S.platform) return
+  let media = null
+  if (S.platform === 'windows') {
+    try {
+      const win = (await $.env.get('WINDIR')) || 'C:\\Windows'
+      media = await $.fs.list(`${win.replace(/[\\/]+$/, '')}\\Media`)
+    } catch {
+      // не прочли — весь список; чего нет, то сыграет стандартным
+    }
+  }
+  S.snd.sys = systemSoundList(S.platform, media)
+  S.snd.sysOf = S.platform
+}
+
+// Экран звука перечитывает настройки и папку не чаще SOUND_READ_MS: их могли поменять в другой сессии или положить файл
+const SOUND_READ_MS = 3_000
+export async function soundsOn($, now) {
+  if (S.snd.readAt && now - S.snd.readAt < SOUND_READ_MS) return
+  S.snd.readAt = now
+  await loadSound($)
+  await readSoundLists($)
+}
+
+// Папка своих звуков — в проводнике (Finder, файловом менеджере). Нет её — создать с README.txt внутри
+const SOUND_README = 'Arcade for Claude Code: your own notification sounds.\n\nPut .wav or .mp3 files here (on a Mac also .aiff and .m4a), up to 5 MB each.\nThey appear in Arcade: Settings, Volume and sounds. A sound plays for at most 10 seconds.\n'
+async function openSoundFolder($) {
+  const dir = S.snd.dir
+  if (!dir) return
+  let opened = false
+  try {
+    if (!(await $.fs.exists(dir))) await $.fs.write([dir, 'README.txt'].join(S.sep || '/'), SOUND_README)
+    const argv = S.platform === 'windows' ? ['explorer.exe', dir] : S.platform === 'mac' ? ['open', dir] : ['xdg-open', dir]
+    const result = await $.process.run(argv, { timeoutMs: LAUNCH_TIMEOUT_MS })
+    // explorer.exe отвечает 1 и тогда, когда открыл
+    opened = S.platform === 'windows' || result?.exitCode === 0
+  } catch (err) {
+    log(`папка звуков не открылась: ${err?.message ?? err}`)
+  }
+  S.libraryNotice = opened ? 'Папка открыта: положи туда .wav или .mp3 и нажми «Обновить список».' : dir
+  $.ui.invalidate('ui.render')
 }
 
 // Клик по уведомлению о сессиях: панель Arcade на вкладке «Агенты»
@@ -4900,6 +5011,7 @@ export function favoritesScope(scope) {
 export function libraryTitle() {
   if (S.menu === 'settings') return 'Arcade · настройки'
   if (S.menu === 'lang') return 'Arcade · язык'
+  if (S.menu === 'sounds') return 'Arcade · звук'
   if (S.menu === 'account') return 'Arcade · аккаунт'
   if (S.menu === 'friends' || S.menu.startsWith('friends:')) return 'Arcade · друзья'
   if (S.menu === 'chats' || S.menu.startsWith('chats:')) return 'Arcade · чаты'
@@ -7773,6 +7885,132 @@ export function langScreen($, e, kit) {
   ]
 }
 
+// Экран «Arcade · звук»: громкость, звук «ждёт тебя» и «закончил ход» — стандартный, Arcade, системы или свой файл из
+// ~/.claude/arcade/sounds — и повтор «ждёт тебя», пока висит карточка. Выбор звука и громкости сразу играет его,
+// «Прослушать» — тоже, и при выключенном звуке: нажал человек. Настройки — в $.store, общие для сессий
+export function soundsScreen($, e, kit) {
+  const { Button, dim, gap, hint, noticeLines, open, section, tiles } = kit
+  const t = (text) => tr(text, S.lang)
+  const kind = S.snd.edit === 'done' ? 'done' : 'wait'
+  const play = (k) => previewSound($, k).catch((err) => log(`звук не сыграл: ${err?.message ?? err}`))
+  const save = async (key, value) => {
+    $.ui.invalidate('ui.render')
+    await $.store.set(key, value)
+  }
+  // Подпись звука: стандартный и звуки Arcade — переводом, звуки системы и свои файлы — именем как есть
+  const nameOf = (id) => (id === SOUND_STD || id.startsWith('arcade:') ? t(soundLabelOf(id)) : soundLabelOf(id))
+  const volumeBy = (step) => async () => {
+    const at = Math.max(0, SOUND_VOLUMES.indexOf(S.sound.volume))
+    const volume = SOUND_VOLUMES[Math.min(SOUND_VOLUMES.length - 1, Math.max(0, at + step))]
+    if (volume === S.sound.volume) return
+    S.sound = { ...S.sound, volume }
+    play(kind)
+    await save('soundVolume', volume)
+  }
+  // Плитка звука для выбранного события; выбранный — с галочкой
+  const pick = (id, key) =>
+    keep(
+      Button({
+        key: `arcade-snd-${key}`,
+        label: `${S.sound[kind] === id ? '✓ ' : ''}${nameOf(id)}`,
+        onPress: async () => {
+          S.sound = { ...S.sound, [kind]: id }
+          play(kind)
+          await save(kind === 'wait' ? 'soundWait' : 'soundDone', id)
+        },
+      }),
+    )
+  // Какой звук меняем: плитка события и под ней — его звук сейчас
+  const kindTiles = (k, title) => [
+    keep(
+      Button({
+        key: `arcade-snd-edit-${k}`,
+        label: `${t(title)}${kind === k ? ' ✓' : ''}`,
+        onPress: () => {
+          S.snd.edit = k
+          $.ui.invalidate('ui.render')
+        },
+      }),
+    ),
+    keep(dim(`  ${t('сейчас:')} ${nameOf(S.sound[k])}`)),
+  ]
+  const system = S.snd.sys ?? []
+  return [
+    Button({ key: 'arcade-back', label: '← Назад', onPress: open('settings') }),
+    gap,
+    tiles(
+      [
+        Button({
+          key: 'arcade-snd-switch',
+          label: `Звук уведомления о сессиях: ${S.agSound ? 'да' : 'нет'}`,
+          autoFocus: true,
+          onPress: async () => {
+            S.agSound = !S.agSound
+            await save('agentsSound', S.agSound)
+          },
+        }),
+        dim('  нет — уведомления о сессиях без звука; «Прослушать» играет всё равно'),
+      ],
+      40,
+    ),
+    keep(section(fill(t('Громкость: {0}%'), [S.sound.volume]))),
+    tiles(
+      [
+        Button({ key: 'arcade-snd-quieter', label: '− Тише', onPress: volumeBy(-1) }),
+        Button({ key: 'arcade-snd-louder', label: '+ Громче', onPress: volumeBy(1) }),
+        Button({ key: 'arcade-snd-play', label: '▶ Прослушать', onPress: () => play(kind) }),
+      ],
+      22,
+    ),
+    section('Какой звук меняем'),
+    tiles(
+      [
+        ...kindTiles('wait', 'Звук «ждёт тебя»'),
+        ...kindTiles('done', 'Звук «закончил ход»'),
+        // Повтор — у карточки Windows: она висит 15 с. Уведомление Mac и Linux звучит один раз
+        ...(S.platform === 'windows'
+          ? [
+              Button({
+                key: 'arcade-snd-repeat',
+                label: S.sound.repeat ? 'Повтор «ждёт тебя»: каждые 5 с, пока висит карточка' : 'Повтор «ждёт тебя»: один раз',
+                onPress: async () => {
+                  S.sound = { ...S.sound, repeat: !S.sound.repeat }
+                  await save('soundRepeat', S.sound.repeat)
+                },
+              }),
+              dim('  повтор замолкает, когда наведёшь мышь, ответишь или закроешь карточку'),
+            ]
+          : []),
+      ],
+      40,
+    ),
+    section('Звуки Arcade'),
+    tiles([pick(SOUND_STD, 'std'), ...ARCADE_SOUNDS.map((s) => pick(s.id, `arcade-${s.id.slice(7)}`))], 22),
+    ...(system.length ? [section('Звуки системы'), tiles(system.map((name, i) => pick(`sys:${name}`, `sys-${i}`)), 22)] : []),
+    section('Свои файлы'),
+    ...(S.snd.own.length ? [tiles(S.snd.own.map((name, i) => pick(`file:${name}`, `file-${i}`)), 22)] : []),
+    tiles(
+      [
+        Button({ key: 'arcade-snd-folder', label: 'Открыть папку', onPress: () => openSoundFolder($).catch((err) => log(`папка звуков не открылась: ${err?.message ?? err}`)) }),
+        dim(S.platform === 'mac' ? '  .wav, .mp3, .aiff или .m4a до 5 МБ; играет не дольше 10 с' : '  .wav или .mp3 до 5 МБ; играет не дольше 10 с'),
+        Button({
+          key: 'arcade-snd-reload',
+          label: 'Обновить список',
+          onPress: () => {
+            S.snd.readAt = 0
+            S.libraryNotice = ''
+            $.ui.invalidate('ui.render')
+          },
+        }),
+        dim('  перечитать папку: новый файл появится в списке'),
+      ],
+      40,
+    ),
+    ...noticeLines,
+    ...hint,
+  ]
+}
+
 // Условия использования и политика конфиденциальности — страницы сайта в браузере по умолчанию; браузер не открылся
 // (или его не открыть, как в VS Code без системы) — адрес строкой под настройками
 export async function openLegal($, page) {
@@ -8040,6 +8278,9 @@ export function settingsScreen($, e, kit) {
             },
           }),
           dim('  «ждёт тебя» и «закончил» звучат по-разному'),
+          // Громкость, свой звук или файл для каждого события и повтор «ждёт тебя» — отдельным экраном
+          Button({ key: 'arcade-sounds', label: 'Громкость и звуки', onPress: open('sounds') }),
+          dim('  громкость, свой звук или файл для «ждёт тебя» и «закончил ход», повтор'),
         ]
       : []),
     // Окно лимита Claude дошло до 80 и 90% (плитка «Лимиты»): о каждом пороге — раз во всех сессиях
@@ -12469,6 +12710,12 @@ export async function drawPane($, e) {
         .replace(/^bk-.+$/, 'books')
         .replace(/^ab-.+$/, 'audiobooks')
         .replace(/^lang-main$/, 'lang')
+        .replace(/^snd-(switch|quieter|louder|std|arcade-.+|sys-.+|file-.+)$/, 'sounds')
+        .replace(/^snd-edit-wait$/, 'agents-notify')
+        .replace(/^snd-edit-done$/, 'agents-done')
+        .replace(/^snd-repeat$/, 'ask-after')
+        .replace(/^snd-folder$/, 'mine')
+        .replace(/^snd-reload$/, 'account-sync')
         .replace(/^open-library$/, 'library')
         .replace(/^yt-.+$/, 'youtube')
         .replace(/^ar-.+$/, 'articles')
@@ -12644,7 +12891,11 @@ export async function drawPane($, e) {
     let items
     let headerExtra = []
     if (S.menu === 'lang') items = langScreen($, e, kit)
-    else if (S.menu === 'account') items = accountScreen($, e, kit)
+    else if (S.menu === 'sounds' && S.platform) {
+      // Свои файлы могли положить в папку, а настройки поменять в другой сессии — перечитать (не чаще раза в 3 с)
+      await soundsOn($, now)
+      items = soundsScreen($, e, kit)
+    } else if (S.menu === 'account') items = accountScreen($, e, kit)
     else if (S.menu === 'report') items = reportScreen($, e, kit)
     else if (S.menu === 'reports') items = reportsScreen($, e, kit)
     else if (S.menu === 'friends:invite' && S.ol.to && S.acct.handle) items = inviteScreen($, e, kit)
@@ -12702,6 +12953,9 @@ export function register(on) {
       S.agDone = (await $.store.get('agentsDone')) === true
       S.agOs = (await $.store.get('agentsOs')) !== false
       S.agSound = (await $.store.get('agentsSound')) !== false
+      // Громкость и свои звуки «ждёт тебя» и «закончил ход»; звуки Arcade лежат в папке плагина
+      await loadSound($)
+      Object.assign(S.snd, { edit: 'wait', own: [], sys: null, sysOf: '', root: $.plugin.root ?? '', dir: '', readAt: 0, playing: false, again: null })
       S.agHidden = hiddenOf(await $.store.get('agentsHidden'))
       S.agSeen = restoreSeen(await $.store.get(SEEN_KEY))
       S.us.warn = (await $.store.get('usageWarn')) !== false
@@ -12715,6 +12969,7 @@ export function register(on) {
       if (home) {
         S.sep = home.includes('\\') ? '\\' : '/'
         S.dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(S.sep)
+        S.snd.dir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'sounds'].join(S.sep)
       }
       // «Не сейчас» у строки «сыграть?» — отсрочка файлом в ~/.claude/arcade, общая для сессий этого компьютера
       startLater(home)
