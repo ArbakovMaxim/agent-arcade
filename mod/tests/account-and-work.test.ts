@@ -15,6 +15,7 @@ import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/register.js'
 import { ALERT_KEEP_MS, alertText, restoreAlerts } from '../hooks/alerts.js'
+import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, lastOf, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
 import { ANSWER_POLL_MS, asksReset, callSeen, toolDecided } from '../hooks/register.js'
 import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
@@ -7649,6 +7650,200 @@ test('сегодня по-английски: экран без русского
 })
 
 // --- Промпты: шаблоны в один клик ---
+
+test('пока тебя не было: строка ответа — начало ответа без Markdown, код пропущен, длинное обрезано; файлы за ход; что видено', async () => {
+  // Заголовок, выделение, код в строке, список — текстом; заголовок — с двоеточием, строки без точки — с точкой
+  expect(replyLine('## Итог\n\nПочинил вход: теперь **токен** обновляется сам, `npm test` проходит\n- 3 файла')).toBe('Итог: Починил вход: теперь токен обновляется сам, npm test проходит. 3 файла')
+  // Ответ начинается с кода — берём текст после него; ответ — один код — его первые строки
+  expect(replyLine('```bash\nnpm test\n```\nВсе тесты прошли.')).toBe('Все тесты прошли.')
+  expect(replyLine('```\nnpm test\n  ok 12\n```')).toBe('npm test. ok 12')
+  expect(replyLine('~~~\nкод\n~~~\n> Цитата и [ссылка](https://example.com), <b>жирный</b>')).toBe('Цитата и ссылка, жирный')
+  // Таблица — ячейки через «·», разделитель пропущен
+  expect(replyLine('| Файл | Строк |\n|---|---:|\n| app.js | 12 |')).toBe('Файл · Строк. app.js · 12')
+  // Длинное — по последнему пробелу и «…», не длиннее REPLY_MAX; слово без пробелов — по знакам
+  const long = replyLine('слово '.repeat(60))
+  expect(long.endsWith('слово…')).toBe(true)
+  expect(Array.from(long).length).toBeLessThanOrEqual(REPLY_MAX)
+  expect(replyLine('я'.repeat(300))).toBe(`${'я'.repeat(REPLY_MAX - 1)}…`)
+  for (const empty of [undefined, null, 7, '', '  \n ', '```\n```']) expect(replyLine(empty as any)).toBe('')
+
+  // Файлы за ход: новые в списке и с другими числами строк; не знаем — null
+  const base = changeBase({ files: [{ path: 'a.js', add: 1, del: 0, state: '' }, { path: 'b.js', add: 2, del: 2, state: '' }] })
+  expect(turnFiles(base, { files: [{ path: 'a.js', add: 3, del: 0, state: '' }, { path: 'b.js', add: 2, del: 2, state: '' }, { path: 'c.txt', add: null, del: null, state: 'new' }] })).toBe(2)
+  expect(turnFiles(base, { files: [{ path: 'b.js', add: 2, del: 2, state: '' }] })).toBe(0)
+  expect(turnFiles(null, { files: [] })).toBeNull()
+  expect(turnFiles(base, null)).toBeNull()
+  expect(changeBase(null)).toBeNull()
+  expect(changeBase({ files: 'a.js' })).toBeNull()
+
+  // Последний ход из чужой отметки: не похожее — не показываем
+  expect(lastOf({ last: { text: '  а\n б ', at: 5, files: 2.7 } })).toEqual({ text: 'а б', at: 5, files: 2 })
+  expect(lastOf({ last: { text: 7, at: 5, files: -1 } })).toEqual({ text: '', at: 5, files: 0 })
+  for (const r of [null, {}, { last: 'x' }, { last: { text: 'x', at: 0 } }, { last: { text: 'x', at: 'вчера' } }]) expect(lastOf(r)).toBeNull()
+
+  // Что видено: битое — пусто; новое — поверх, старое не затирает; больше SEEN_MAX — уходят самые старые
+  expect(restoreSeen([1])).toEqual({})
+  expect(restoreSeen({ a: 5, b: 'x', c: -1, '': 3 })).toEqual({ a: 5 })
+  expect(addSeen({ a: 5 }, [{ sid: 'a', at: 3 }])).toBeNull()
+  expect(addSeen({ a: 5 }, [{ sid: 'a', at: 7 }, { sid: 'b', at: 1 }, { sid: '', at: 9 }])).toEqual({ a: 7, b: 1 })
+  const many = addSeen({}, Array.from({ length: SEEN_MAX + 6 }, (_, i) => ({ sid: `s${i}`, at: i + 1 }))) as any
+  expect(Object.keys(many).length).toBe(SEEN_MAX)
+  expect(many.s0).toBeUndefined()
+  expect(many[`s${SEEN_MAX + 5}`]).toBe(SEEN_MAX + 6)
+})
+
+test('пока тебя не было: в «Агентах» — начало последнего ответа, когда закончил и сколько файлов поменял за ход; ответ с кода — читаемо; работает — строки нет', HEAVY, async ($, on) => {
+  // git этой сессии: до хода правка app.js
+  const git = { status: '## main\0 M app.js\0', numstat: '12\t3\tapp.js\0' }
+  const answer = (argv: string[]) => {
+    const cmd = argv[4]
+    if (cmd === 'rev-parse') return { exitCode: 0, stdout: 'D:/work/web\n.git\n', stderr: '' }
+    if (cmd === 'status') return { exitCode: 0, stdout: git.status, stderr: '' }
+    if (cmd === 'diff') return { exitCode: 0, stdout: git.numstat, stderr: '' }
+    return { exitCode: 1, stdout: '', stderr: 'unexpected' }
+  }
+  const { clock, disk, putFile } = stubs(on, { env: AG_ENV, agents: { ...AG_ME, git: answer } })
+  await clock.advance(TD)
+  const rival = agentFile(putFile, clock, disk)
+  // «api» закончила ход 8 минут назад; «docs» снова работает — её прошлый ответ не показываем
+  const marks = () => {
+    rival(3, { sid: 'sess-a', name: 'api', path: 'D:\\work\\api', status: 'done', since: TD - 8 * TD_MIN, last: { text: 'Тесты зелёные: 42 из 42.', at: TD - 8 * TD_MIN, files: 3 } })
+    rival(9, { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working', since: TD - 2 * TD_MIN, last: { text: 'Старый ответ', at: TD - 20 * TD_MIN, files: 1 } })
+  }
+  marks()
+  await start($)
+  await clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const text = (x: any) => ui.find({ type: 'Text', text: x })
+  await ui.press({ key: 'arcade-menu-agents' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(await text('Тесты зелёные: 42 из 42.')).toMatchObject({ props: { dimColor: true } })
+  expect(await text('закончил 13:02 · изменено файлов за ход: 3')).toBeDefined()
+  expect(await text('Старый ответ')).toBeUndefined()
+
+  // Эта сессия: за ход app.js поменялся ещё, появился new.txt — 2 файла; ответ — с заголовком, выделением и кодом
+  await $.turn.start({ turnId: 't1', text: 'почини вход' })
+  git.status = '## main\0 M app.js\0?? new.txt\0'
+  git.numstat = '14\t3\tapp.js\0'
+  await clock.advance(60_000)
+  marks()
+  await $.turn.complete({ turnId: 't1', answer: '## Итог\n\nПочинил вход: теперь **токен** обновляется сам.\n\n```ts\nrefresh()\n```\n', reason: 'answer' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(await text('Итог: Починил вход: теперь токен обновляется сам.')).toBeDefined()
+  expect(await text('закончил 13:11 · изменено файлов за ход: 2')).toBeDefined()
+  // Строка — в отметке этой сессии на этом компьютере
+  expect(ownRecord(disk).last).toMatchObject({ text: 'Итог: Починил вход: теперь токен обновляется сам.', files: 2 })
+  // Терминал — те же строки под строкой сессии
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ type: 'Text', text: '  Итог: Починил вход: теперь токен обновляется сам.' })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: '  закончил 13:11 · изменено файлов за ход: 2' })).toBeDefined()
+  await term.unmount()
+
+  // Ответ начинается с кода — читаемая строка, без «```» и «#»; за ход ничего не поменялось — числа файлов нет
+  await $.turn.start({ turnId: 't2', text: 'прогони тесты' })
+  await $.turn.complete({ turnId: 't2', answer: '```bash\nnpm test\n```\n# Все тесты прошли', reason: 'answer' })
+  marks()
+  await clock.advance(AGENT_TICK_MS)
+  expect(await text('Все тесты прошли')).toBeDefined()
+  expect(await text(/^закончил 13:1\d$/)).toBeDefined()
+  const drawn = JSON.stringify(await ui.drawn())
+  expect(drawn).not.toContain('```')
+  expect(drawn).not.toContain('# Все')
+  expect(ownRecord(disk).last).toMatchObject({ text: 'Все тесты прошли', files: 0 })
+
+  // Новый ход — строки прошлого ответа нет, пока он идёт
+  await $.turn.start({ turnId: 't3', text: 'дальше' })
+  marks()
+  await clock.advance(AGENT_TICK_MS)
+  expect(await text('Все тесты прошли')).toBeUndefined()
+  await ui.unmount()
+})
+
+test('пока тебя не было: в «Сегодня» — сессии, закончившие ход, пока человек не смотрел; открыл «Сегодня» или «Агентов» — в следующий раз их нет; скрытая и та, где он писал после, — нет', HEAVY, async ($, on) => {
+  const { clock, saved, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { agentsHidden: ['sess-d'] } })
+  todayUsage(on, [])
+  await clock.advance(TD)
+  const rival = agentFile(putFile, clock, disk)
+  const api: any = { sid: 'sess-a', name: 'api', path: 'D:\\work\\api', status: 'working', since: TD - 30 * TD_MIN }
+  const docs: any = { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working', since: TD - 10 * TD_MIN }
+  const site: any = { sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'idle', since: TD - 60 * TD_MIN }
+  const old: any = { sid: 'sess-d', name: 'old', path: 'D:\\work\\old', status: 'idle', since: TD - 60 * TD_MIN }
+  // Сессии обновляют свои отметки
+  const marks = () => {
+    rival(3, api)
+    rival(9, docs)
+    rival(12, site)
+    rival(14, old)
+  }
+  const finish = (r: any, at: number, text: string, files = 0) => Object.assign(r, { status: 'done', since: at, last: { text, at, files } })
+  marks()
+  await start($)
+  await clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const away = () => boxKeys(ui, 'today-away-')
+  const heading = () => ui.find({ type: 'Text', text: 'Пока тебя не было' })
+  const open = async (key: string) => {
+    marks()
+    await ui.press({ key })
+    await clock.advance(AGENT_TICK_MS)
+  }
+
+  // Человек в главном меню панели. api и docs закончили ход; site тоже, но потом он в ней писал; old скрыта
+  const t0 = clock.now()
+  finish(api, t0, 'Тесты зелёные.', 2)
+  finish(docs, t0 + TD_MIN, 'Обновил README.')
+  finish(site, t0, 'Готово.')
+  site.look = t0 + 30_000
+  finish(old, t0, 'Скрытая.')
+  for (let i = 0; i < 6; i++) {
+    marks()
+    await clock.advance(30_000)
+  }
+  await open('arcade-menu-today')
+  expect(await heading()).toBeDefined()
+  // Новые выше; у каждой — когда закончила, начало ответа и файлы за ход
+  expect(await away()).toEqual(['today-away-sess-b', 'today-away-sess-a'])
+  expect(await ui.find({ type: 'Text', text: 'закончил 13:10 · 3 мин назад' })).toMatchObject({ props: { color: 'success' } })
+  expect(await ui.find({ type: 'Text', text: 'закончил 13:11 · 2 мин назад' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Тесты зелёные.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'изменено файлов за ход: 2' })).toBeDefined()
+  for (const x of ['Готово.', 'Скрытая.']) expect(await ui.find({ type: 'Text', text: x })).toBeUndefined()
+  // Desktop — карточками цвета «закончил»
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await desk.find({ key: 'today-away-sess-a' })).toMatchObject({ props: { borderStyle: 'round', borderColor: '#30a46c80' } })
+  await desk.unmount()
+
+  // Ушёл и снова открыл «Сегодня» — их уже видел. Что видено — в хранилище, общем для сессий; скрытой там нет
+  await ui.press({ key: 'arcade-back' })
+  await open('arcade-menu-today')
+  expect(await away()).toEqual([])
+  expect(await heading()).toBeUndefined()
+  expect(Object.keys(saved.get('agentsSeen') as any).sort()).toEqual(['sess-a', 'sess-b', 'sess-c'])
+
+  // api закончила ещё раз, а человек открыл «Агентов» — там видно; в «Сегодня» её нет
+  await ui.press({ key: 'arcade-back' })
+  finish(api, clock.now(), 'Поправил миграции.')
+  await open('arcade-menu-agents')
+  expect(await ui.find({ type: 'Text', text: '  Поправил миграции.' })).toBeDefined()
+  await ui.press({ key: 'arcade-back' })
+  await open('arcade-menu-today')
+  expect(await away()).toEqual([])
+
+  // docs закончила снова — опять в «Сегодня»
+  await ui.press({ key: 'arcade-back' })
+  finish(docs, clock.now(), 'Добавил раздел.')
+  await clock.advance(AGENT_TICK_MS)
+  await open('arcade-menu-today')
+  expect(await away()).toEqual(['today-away-sess-b'])
+  // А то, что увидели в другой сессии этого компьютера, здесь уже не новое
+  await ui.press({ key: 'arcade-back' })
+  const t3 = clock.now()
+  finish(docs, t3, 'Ещё раз.')
+  saved.set('agentsSeen', { ...(saved.get('agentsSeen') as any), 'sess-b': t3 })
+  await open('arcade-menu-today')
+  expect(await away()).toEqual([])
+  await ui.unmount()
+})
 
 test('промпты: Claude сохраняет шаблон инструментом блокнота — в свой набор, а нет его — в новый; колонок и сроков у шаблонов нет', () => {
   const ids = ['c111111111111111', 'c222222222222222', 'c333333333333333']
