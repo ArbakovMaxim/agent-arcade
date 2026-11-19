@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0d0d0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Arcade">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/arcade-logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/arcade-180.png">
+<title>Arcade · Уведомления на телефон</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; min-height: 100%; background: #0d0d0f; color: #d8d8dc;
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  /* Страница телефона: одна карточка — код подключения или «уведомления приходят сюда» */
+  #push { padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
+  .card { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { flex: none; border-radius: 8px; }
+  h1 { margin: 0; font-size: 20px; color: #fff; }
+  p, ol { margin: 0; }
+  ol { padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+  label { color: #9a9aa3; font-size: 14px; }
+  .row { display: flex; gap: 8px; }
+  input[type=text] { flex: 1; min-width: 0; padding: 10px 12px; background: #17171b; border: 1px solid #2c2c32; border-radius: 8px;
+    font-size: 20px; letter-spacing: 2px; text-transform: uppercase; }
+  input[type=text]:focus { outline: none; border-color: #6441a5; }
+  .btn { background: #26262b; border: 1px solid #34343a; border-radius: 8px; padding: 10px 16px; white-space: nowrap; }
+  .btn:hover, .btn:focus { background: #303036; outline: none; border-color: #7d5bbe; }
+  .btn.main { background: #6441a5; border-color: #6441a5; color: #fff; }
+  .btn.main:hover, .btn.main:focus { background: #7552b8; }
+  .btn.warn { color: #f0a0a0; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .on { color: #3fb950; font-weight: 600; }
+  .note { padding: 8px 12px; border-radius: 8px; background: #17171b; border: 1px solid #26262c; }
+  .note.bad { background: #2b1d1f; border-color: #3d2629; color: #f0b0b0; }
+  .small { color: #8a8a93; font-size: 14px; }
+  a { color: #b9a2f0; }
+</style>
+</head>
+<body>
+<div id="push"></div>
+<script src="/i18n.js"></script>
+<script src="/push.js"></script>
+</body>
+</html>

@@ -26,7 +26,7 @@
 <body>
 <main>
 <h1>Privacy Policy</h1>
-<div class="updated">Last updated: October 26, 2026</div>
+<div class="updated">Last updated: November 19, 2026</div>
 
 <p>Arcade is a free, open-source plugin for Claude Code together with this website (agent-arcade.fefaodessa.workers.dev),
 which serves the game player, multiplayer rooms, optional accounts, chats and content search. The source code is public at
@@ -120,6 +120,29 @@ Claude Desktop), the interface language and the operating system. If you are sig
 and @handle. Only the maintainer can read reports. A closed report is deleted, and at most 1,000 open reports are kept.
 The sender's IP address is not stored with a report.</p>
 
+<h2>Phone notifications (optional)</h2>
+<p>If you are signed in, you can have Arcade notify your phone when a Claude Code session has been waiting for your answer
+for a while. It is off until you turn it on.</p>
+<ul>
+  <li><b>Connecting.</b> Arcade in Claude Code shows a one-time code. You enter it on the <a href="push">/push</a> page on
+    your phone, without signing in to GitHub there. The code is tied to your GitHub ID, works once and expires after 10
+    minutes; expired codes are deleted when new codes are made. Connection attempts are limited per network address in
+    the same way as other limits, see below.</li>
+  <li><b>What the website stores.</b> With your account, for at most 5 phones: the push subscription your phone's browser
+    created (the push service address and the encryption keys for it), when the phone was connected, and a hash of the
+    phone's key. The key itself stays in that browser and lets it only check its own connection or turn it off. The website
+    also keeps how many notifications were sent today and when the last one was, to apply the limits.</li>
+  <li><b>What a notification says.</b> Only that a session is waiting, with the session's name. Never the question text,
+    code or file names. You can't answer from the phone.</li>
+  <li><b>Delivery.</b> Notifications are encrypted end to end between the website and your phone's browser and are delivered
+    by your browser's push service: Google (Chrome and Android), Apple (Safari), Mozilla (Firefox) or Microsoft (Edge). That
+    service sees the subscription address, the time and the encrypted message, not its text. An undelivered notification
+    is dropped after 30 minutes.</li>
+  <li><b>Limits.</b> At most one notification every 5 minutes and 30 a day for an account.</li>
+  <li><b>How long.</b> Until you turn it off. A phone whose push service says the subscription is gone is removed
+    automatically.</li>
+</ul>
+
 <h2>Articles, podcasts, books and Twitch</h2>
 <ul>
   <li><b>Articles and podcasts.</b> Your own topic text is sent to Hacker News search (by Algolia), Medium tag feeds and
@@ -148,6 +171,7 @@ them.</p>
   <li><b>Cloudflare:</b> hosting and logs.</li>
   <li><b>GitHub:</b> sign-in.</li>
   <li><b>Google and YouTube:</b> video search and the player.</li>
+  <li><b>Google, Apple, Mozilla and Microsoft push services:</b> delivering phone notifications, if you turn them on.</li>
   <li><b>Twitch</b> and the content sources named above.</li>
 </ul>
 <p>Games and some links open other sites, such as a game's home page or TikTok's own site. Those sites are not covered by
@@ -156,7 +180,8 @@ this policy.</p>
 <h2>Your browser and your computer</h2>
 <p>Arcade sets no cookies. The website's pages keep your interface language in your browser's local storage. The game
 player also keeps your game progress, scores and the game files you open yourself ("My games") in the browser. This
-never leaves your browser. You can remove it by clearing this site's data in your browser. The YouTube player may store
+never leaves your browser. The <a href="push">/push</a> page keeps the phone's key there and sends it only to check or turn
+off that phone's notifications; the browser keeps its push subscription. You can remove it by clearing this site's data in your browser. The YouTube player may store
 data under Google's policy, as described above.</p>
 
 <h2>Deleting your data</h2>
@@ -166,6 +191,9 @@ data under Google's policy, as described above.</p>
     keys. It also takes you out of your groups and shared boards, and removes your signature from bug reports you sent.
     Your handle is released.</li>
   <li><b>Sign out.</b> Signing out forgets the sign-in on that computer.</li>
+  <li><b>Phone notifications.</b> Turn them off on the phone on the <a href="push">/push</a> page, or for all phones in
+    Arcade's settings, Notifications, then Phone notifications. The website deletes the phone's subscription right away.
+    Deleting your account deletes them too.</li>
   <li><b>Anything else.</b> For other deletion requests, such as an unsigned bug report or a cached search, or for any
     question about your data, use 🐞 Report a bug in Arcade's menu. Only the maintainer reads these reports. You can also
     open an issue at <a href="https://github.com/ArbakovMaxim/agent-arcade/issues">github.com/ArbakovMaxim/agent-arcade/issues</a>,

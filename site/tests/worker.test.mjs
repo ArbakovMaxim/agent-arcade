@@ -755,7 +755,7 @@ try {
 
 // --- Аккаунт: вход через GitHub по коду, ключи сессии и настройки (worker/account.js) -----------------------------
 {
-  const { sessionId, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE, PICKS_PER_MINUTE, WEB_MS, WEB_INTERVAL } = await import('../worker/account.js')
+  const { sessionId, phoneId, PAIR_MS, PAIR_CODES_DAILY, MAX_PHONES, PUSH_GAP_MS, PUSH_DAILY, mergeSettings, MAX_SESSIONS, MAX_KEYS, SETTINGS_MAX, PER_IP_DAILY, IDLE_MS, HANDLE_HOLD_MS, HANDLE_CHANGES, MAX_FRIENDS, MAX_INCOMING, REQUESTS_DAILY, DECLINE_HOLD_MS, normalHandle, handleProblem, ticketName, SENDS_PER_MINUTE, GROUPS_DAILY, MAX_CHATS, CHAT_TICKET_MS, CHAT_LINK_MS, MAX_OWNED, BOARDS_DAILY, SYNCS_PER_MINUTE, ONLINE_MS, PULSES_PER_MINUTE, INVITE_MS, INVITES_PER_MINUTE, PICKS_PER_MINUTE, WEB_MS, WEB_INTERVAL } = await import('../worker/account.js')
   const { Chat, KEEP, PAGE, MAX_TEXT, MAX_MEMBERS, MAX_NAME, AVATAR_COUNT, dmId, cleanText, groupName } = await import('../worker/chat.js')
   const { Reports, cleanReport, admins, MAX_REPORT, PER_SENDER_DAILY, DAILY, KEEP: REPORTS_KEEP } = await import('../worker/reports.js')
   const { Desk, DEFAULT_COLS, MAX_CARDS, MAX_TOTAL, MAX_TITLE, MAX_OPS, KEEP_GONE, MAX_MEMBERS: DESK_MEMBERS, cleanTitle, cleanCols } = await import('../worker/desk.js')
@@ -765,6 +765,9 @@ try {
   assert.equal(sessionId(`42.${KEY}`), null)
   assert.equal(sessionId(`Bearer x.${KEY}`), null)
   assert.equal(sessionId(null), null)
+  assert.equal(phoneId(`Phone 42.${KEY}`), '42')
+  assert.deepEqual([phoneId(`Bearer 42.${KEY}`), phoneId(`Phone 42.${KEY}x`), phoneId('Phone'), phoneId(null)], [null, null, null, null])
+  assert.equal(sessionId(`Phone 42.${KEY}`), null, 'ключ телефона — не ключ сессии')
 
   // Настройки: по каждому ключу побеждает более позднее
   const now0 = Date.UTC(2026, 9, 22)
@@ -794,9 +797,17 @@ try {
   // GitHub — подставной: коды, ответы на «вошёл ли» по очереди и профиль
   const asked = []
   const gh = { answers: [], user: { id: 42, login: 'octo-cat', avatar_url: 'https://avatars.githubusercontent.com/u/42?v=4', email: 'octo@example.com' }, disabled: false, down: false, revoked: [] }
+  // Службы доставки уведомлений — подставные: что им отправили и что они ответят ('down' — не ответили)
+  const pushCalls = []
+  const pushStatus = new Map()
   const realFetch = globalThis.fetch
   globalThis.fetch = async (input, init = {}) => {
     const url = String(input)
+    if (/^https:\/\/(fcm\.googleapis\.com|web\.push\.apple\.com)\//.test(url)) {
+      pushCalls.push({ url, init })
+      if (pushStatus.get(url) === 'down') throw new TypeError('network')
+      return new Response(null, { status: pushStatus.get(url) ?? 201 })
+    }
     asked.push(url)
     if (gh.down) return new Response('<html>нет</html>', { status: 502 })
     if (url === 'https://github.com/login/device/code') {
@@ -1862,6 +1873,217 @@ try {
     assert.deepEqual(webKeys(), [`web:${w7.state}`])
     assert.equal(objects.get('auth').storage.alarm, null)
     Date.now = realNow
+
+    // --- Уведомления на телефон: шифр и подпись (worker/push.js), подключение по коду и отправка ----------------
+    {
+    const { b64u, unb64u, encrypt, cleanSubscription, pushText, makeVapid, vapidAuth, MAX_PUSH_TEXT, VAPID_TTL } = await import('../worker/push.js')
+    const enc = new TextEncoder()
+    // Пример из RFC 8291 (§5): ключи браузера, ключи и соль сайта — шифр байт в байт
+    const uaPublic = 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4'
+    const uaSecret = 'BTBZMqHH6r4Tts7J_aSIgg'
+    const ecdh = { name: 'ECDH', namedCurve: 'P-256' }
+    const jwkOf = (point, d) => ({ kty: 'EC', crv: 'P-256', d, x: b64u(point.slice(1, 33)), y: b64u(point.slice(33)) })
+    const asPoint = unb64u('BP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A8')
+    const rfcLocal = {
+      privateKey: await crypto.subtle.importKey('jwk', jwkOf(asPoint, 'yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw'), ecdh, false, ['deriveBits']),
+      publicKey: await crypto.subtle.importKey('raw', asPoint, ecdh, true, []),
+    }
+    const rfcSealed = await encrypt(enc.encode('When I grow up, I want to be a watermelon'), uaPublic, uaSecret, { salt: unb64u('DGv6ra1nlYgDCS1FRnbzlw'), local: rfcLocal })
+    assert.equal(b64u(rfcSealed), 'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN')
+    // Браузер телефона: расшифровать своим закрытым ключом (тоже из RFC)
+    const uaPoint = unb64u(uaPublic)
+    const uaPrivate = await crypto.subtle.importKey('jwk', jwkOf(uaPoint, 'q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94'), ecdh, false, ['deriveBits'])
+    const hmac = async (key, data) => new Uint8Array(await crypto.subtle.sign('HMAC', await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']), data))
+    const openSealed = async (sealed) => {
+      sealed = new Uint8Array(sealed)
+      assert.equal(new DataView(sealed.buffer, sealed.byteOffset).getUint32(16), 4096, 'размер записи')
+      const asPub = sealed.slice(21, 21 + sealed[20])
+      const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: await crypto.subtle.importKey('raw', asPub, ecdh, false, []) }, uaPrivate, 256))
+      const ikm = await hmac(await hmac(unb64u(uaSecret), shared), new Uint8Array([...enc.encode('WebPush: info\0'), ...uaPoint, ...asPub, 1]))
+      const prk = await hmac(sealed.slice(0, 16), ikm)
+      const cek = (await hmac(prk, enc.encode('Content-Encoding: aes128gcm\0\x01'))).slice(0, 16)
+      const nonce = (await hmac(prk, enc.encode('Content-Encoding: nonce\0\x01'))).slice(0, 12)
+      const aes = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['decrypt'])
+      const plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce }, aes, sealed.slice(21 + sealed[20])))
+      assert.equal(plain.at(-1), 2, 'запись последняя')
+      return new TextDecoder().decode(plain.slice(0, -1))
+    }
+    assert.equal(await openSealed(rfcSealed), 'When I grow up, I want to be a watermelon')
+    const fresh = await encrypt(enc.encode('ещё'), uaPublic, uaSecret)
+    assert.equal(await openSealed(fresh), 'ещё', 'соль и ключи сайта — новые на каждое сообщение')
+    assert.notEqual(b64u(fresh.slice(0, 16)), b64u((await encrypt(enc.encode('ещё'), uaPublic, uaSecret)).slice(0, 16)))
+
+    // Подписка: только https у служб доставки браузеров, ключ — точка P-256, секрет — 16 байт
+    const subOf = (endpoint, keys = { p256dh: uaPublic, auth: uaSecret }) => ({ endpoint, keys, expirationTime: null })
+    assert.deepEqual(await cleanSubscription(subOf('https://fcm.googleapis.com/fcm/send/abc')), { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', p256dh: uaPublic, auth: uaSecret })
+    for (const good of ['https://web.push.apple.com/QGx', 'https://updates.push.services.mozilla.com/wpush/v2/x', 'https://wns2-par02p.notify.windows.com/w/?token=x']) assert.ok(await cleanSubscription(subOf(good)), good)
+    const badEndpoints = ['http://fcm.googleapis.com/x', 'https://evil.test/x', 'https://fcm.googleapis.com.evil.test/x', 'https://notpush.apple.com/x', 'https://fcm.googleapis.com:8443/x', 'https://u@fcm.googleapis.com/x', 'https://fcm.googleapis.com/x#a', `https://fcm.googleapis.com/${'x'.repeat(1024)}`, 'не адрес', 42]
+    for (const bad of badEndpoints) assert.equal(await cleanSubscription(subOf(bad)), null, String(bad))
+    const offCurve = uaPoint.slice()
+    offCurve[64] ^= 1
+    for (const keys of [{ p256dh: uaPublic, auth: 'xx' }, { p256dh: uaSecret, auth: uaSecret }, { p256dh: b64u(offCurve), auth: uaSecret }, { auth: uaSecret }, { p256dh: `${uaPublic}=`, auth: uaSecret }, null]) {
+      assert.equal(await cleanSubscription(subOf('https://fcm.googleapis.com/x', keys)), null, JSON.stringify(keys))
+    }
+    assert.deepEqual(await Promise.all([null, 'x', []].map(cleanSubscription)), [null, null, null])
+    // Текст уведомления: одна строка до MAX_PUSH_TEXT знаков, без управляющих и меняющих направление
+    assert.deepEqual([' Arcade: сессия api ждёт тебя ', '😀'.repeat(MAX_PUSH_TEXT)].map(pushText), ['Arcade: сессия api ждёт тебя', '😀'.repeat(MAX_PUSH_TEXT)])
+    const badTexts = ['', '  ', 'x'.repeat(MAX_PUSH_TEXT + 1), 'a\nb', `a${String.fromCharCode(0x202e)}b`, `a${String.fromCharCode(0x2028)}b`, `a${String.fromCharCode(0x7f)}b`, 42, null]
+    assert.deepEqual(badTexts.map(pushText), badTexts.map(() => null))
+    // Подпись VAPID: JWT ES256 — служба доставки, срок, адрес сайта (почты нет); проверяется открытым ключом
+    const vapidOf = (header) => {
+      const m = /^vapid t=([\w-]+)\.([\w-]+)\.([\w-]+), k=([\w-]+)$/.exec(header)
+      assert.ok(m, header)
+      const part = (text) => JSON.parse(new TextDecoder().decode(unb64u(text)))
+      return { head: part(m[1]), claims: part(m[2]), signed: `${m[1]}.${m[2]}`, signature: unb64u(m[3]), key: m[4] }
+    }
+    const testVapid = await makeVapid()
+    const vapidClock = Date.UTC(2026, 10, 19, 12)
+    const jwt = vapidOf(await vapidAuth('https://web.push.apple.com/QGx', testVapid, 'https://arcade.test', vapidClock))
+    assert.deepEqual([jwt.head, jwt.claims, jwt.key], [{ typ: 'JWT', alg: 'ES256' }, { aud: 'https://web.push.apple.com', exp: vapidClock / 1000 + VAPID_TTL, sub: 'https://arcade.test' }, testVapid.key])
+    assert.equal(jwt.signature.length, 64, 'подпись — r‖s, как в JWT')
+    const verifyKey = await crypto.subtle.importKey('raw', unb64u(testVapid.key), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify'])
+    assert.ok(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, verifyKey, jwt.signature, enc.encode(jwt.signed)))
+
+    // Маршруты: ключ VAPID сайта заводится сам и не меняется; закрытая часть наружу не выходит
+    const pushNoon = Math.floor(realNow() / 86_400_000) * 86_400_000 + 43_200_000
+    Date.now = () => pushNoon
+    const tp = signedIn.body.token
+    const account77 = objects.get('gh:77')
+    const siteKey = await go('GET', '/api/push/key')
+    assert.equal(siteKey.status, 200)
+    assert.deepEqual(Object.keys(siteKey.body), ['key'])
+    assert.equal(unb64u(siteKey.body.key).length, 65)
+    assert.deepEqual(await go('GET', '/api/push/key'), siteKey)
+    assert.deepEqual(await go('POST', '/api/push/key'), { status: 405, body: { error: 'method' } })
+    for (const inner of ['vapid', 'pairput', 'phoneadd', 'vapidkey']) assert.deepEqual(await go('POST', `/api/push/${inner}`), { status: 404, body: { error: 'not found' } }, inner)
+    assert.deepEqual([...objects.get('push').store.keys()], ['vapid'])
+    // Код подключения — только со входом: XXXX-XXXX, страница /push, живёт PAIR_MS; новый заменяет прежний
+    assert.deepEqual(await go('POST', '/api/me/push/code'), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('GET', '/api/me/push', { token: tp }), { status: 200, body: { phones: 0, last: 0 } })
+    const newCode = async () => {
+      const answer = await go('POST', '/api/me/push/code', { token: tp })
+      assert.equal(answer.status, 200)
+      return answer.body
+    }
+    const code1 = await newCode()
+    assert.match(code1.code, /^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/)
+    assert.deepEqual([code1.url, code1.expires], ['https://arcade.test/push', PAIR_MS / 1000])
+    const code2 = (await newCode()).code
+    const phoneSub = (n) => subOf(`https://fcm.googleapis.com/fcm/send/phone${n}`)
+    const pair = (code, { subscription = phoneSub(1), test, ip = '10.5.0.1' } = {}) => go('POST', '/api/push/pair', { body: { code, subscription, ...(test ? { test } : {}) }, ip })
+    assert.deepEqual(await pair(code1.code), { status: 404, body: { error: 'code' } }, 'прежний код больше не действует')
+    assert.deepEqual(await pair('ABCD'), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await pair(code2, { subscription: subOf('https://evil.test/x') }), { status: 400, body: { error: 'bad request' } }, 'чужой адрес — не служба доставки')
+    assert.deepEqual(await go('POST', '/api/push/pair', { body: 'не json' }), { status: 400, body: { error: 'bad request' } })
+    // Подключился (код строчными, с пробелом вместо дефиса): ключ телефона и пробное уведомление — шифром, с подписью
+    // VAPID сайта; в аккаунте — только хеш ключа
+    pushCalls.length = 0
+    const p1 = await pair(code2.toLowerCase().replace('-', ' '), { test: 'Arcade: телефон подключён' })
+    assert.equal(p1.status, 200)
+    assert.match(p1.body.key, /^77\.[A-Za-z0-9_-]{43}$/)
+    assert.equal(p1.body.sent, true)
+    assert.equal(pushCalls.length, 1)
+    const [{ url: pushUrl, init: pushInit }] = pushCalls
+    assert.equal(pushUrl, 'https://fcm.googleapis.com/fcm/send/phone1')
+    const { Authorization: pushAuth, ...pushHeaders } = pushInit.headers
+    assert.deepEqual([pushInit.method, pushHeaders], ['POST', { 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', TTL: '1800', Urgency: 'high', Topic: 'arcade-waiting' }])
+    const sentJwt = vapidOf(pushAuth)
+    assert.deepEqual([sentJwt.claims.aud, sentJwt.claims.sub, sentJwt.key], ['https://fcm.googleapis.com', 'https://arcade.test', siteKey.body.key])
+    assert.ok(await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, await crypto.subtle.importKey('raw', unb64u(siteKey.body.key), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']), sentJwt.signature, enc.encode(sentJwt.signed)))
+    assert.deepEqual(JSON.parse(await openSealed(pushInit.body)), { text: 'Arcade: телефон подключён' })
+    assert.ok(!saved().includes(p1.body.key.split('.')[1]), 'ключ телефона — только хешем')
+    assert.deepEqual(account77.store.get('phones').map((p) => [p.endpoint, p.p256dh, p.auth]), [['https://fcm.googleapis.com/fcm/send/phone1', uaPublic, uaSecret]])
+    assert.deepEqual(await pair(code2, { subscription: phoneSub(2) }), { status: 404, body: { error: 'code' } }, 'код одноразовый')
+    assert.deepEqual([...objects.get('push').store.keys()], ['vapid'], 'кодов не осталось')
+    // Телефон о себе — своим ключом; ключ сессии и чужой ключ не подходят
+    const phone = (path, key = p1.body.key) => go('POST', `/api/push/${path}`, { auth: `Phone ${key}` })
+    assert.deepEqual(await phone('status'), { status: 200, body: { on: true, phones: 1 } })
+    assert.deepEqual(await go('POST', '/api/push/status', { token: tp }), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await phone('status', `77.${'a'.repeat(43)}`), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await phone('status', 'x'), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('GET', '/api/push/status'), { status: 405, body: { error: 'method' } })
+    assert.deepEqual(await go('GET', '/api/me/push', { token: tp }), { status: 200, body: { phones: 1, last: pushNoon } })
+
+    // Уведомление от мода: текст проверяется; не чаще раза в PUSH_GAP_MS и не больше PUSH_DAILY в сутки
+    const send = (text = 'Arcade: сессия api ждёт тебя') => go('POST', '/api/me/push/send', { body: { text }, token: tp })
+    assert.deepEqual(await send('a\nb'), { status: 400, body: { error: 'bad request' } })
+    assert.deepEqual(await go('POST', '/api/me/push/send', { body: { text: 'x' } }), { status: 401, body: { error: 'auth' } })
+    pushCalls.length = 0
+    assert.deepEqual(await send(), { status: 200, body: { ok: true, delivered: 1, phones: 1 } })
+    assert.deepEqual(JSON.parse(await openSealed(pushCalls[0].init.body)), { text: 'Arcade: сессия api ждёт тебя' })
+    assert.deepEqual(await send(), { status: 429, body: { error: 'often' } })
+    Date.now = () => pushNoon + PUSH_GAP_MS
+    assert.equal((await send()).status, 200)
+    account77.store.set('pushSent', { ...account77.store.get('pushSent'), count: PUSH_DAILY, last: 0 })
+    assert.deepEqual(await send(), { status: 429, body: { error: 'often' } })
+    // Служба не ответила — телефон остаётся; подписки больше нет (410) — телефон уходит
+    account77.store.delete('pushSent')
+    pushStatus.set('https://fcm.googleapis.com/fcm/send/phone1', 'down')
+    assert.deepEqual(await send(), { status: 200, body: { ok: true, delivered: 0, phones: 1 } })
+    account77.store.delete('pushSent')
+    pushStatus.set('https://fcm.googleapis.com/fcm/send/phone1', 410)
+    assert.deepEqual(await send(), { status: 200, body: { ok: true, delivered: 0, phones: 0 } })
+    pushStatus.clear()
+    assert.equal(account77.store.has('phones'), false)
+    assert.deepEqual(await phone('status'), { status: 401, body: { error: 'auth' } })
+    account77.store.delete('pushSent')
+    assert.deepEqual(await send(), { status: 404, body: { error: 'nophone' } })
+
+    // Телефонов — не больше MAX_PHONES: новый вытесняет самый старый; та же подписка заменяет прежнюю
+    pushCalls.length = 0
+    const phoneKeys = []
+    for (let n = 1; n <= MAX_PHONES + 1; n++) {
+      const added = await pair((await newCode()).code, { subscription: phoneSub(n) })
+      assert.deepEqual([added.status, added.body.sent], [200, false], 'без test — без пробного')
+      phoneKeys.push(added.body.key)
+    }
+    assert.equal(pushCalls.length, 0)
+    const endpoints = () => (account77.store.get('phones') ?? []).map((p) => p.endpoint.slice(-1))
+    assert.deepEqual(endpoints(), ['2', '3', '4', '5', '6'])
+    assert.deepEqual(await phone('status', phoneKeys[0]), { status: 401, body: { error: 'auth' } }, 'самый старый вытеснен')
+    assert.deepEqual(await phone('status', phoneKeys[1]), { status: 200, body: { on: true, phones: MAX_PHONES } })
+    Date.now = () => pushNoon + 2 * PUSH_GAP_MS
+    const again = await pair((await newCode()).code, { subscription: phoneSub(3) })
+    assert.deepEqual(await go('GET', '/api/me/push', { token: tp }), { status: 200, body: { phones: MAX_PHONES, last: pushNoon + 2 * PUSH_GAP_MS } }, 'та же подписка заново — время новое')
+    Date.now = () => pushNoon + PUSH_GAP_MS
+    assert.deepEqual(endpoints(), ['2', '4', '5', '6', '3'])
+    assert.deepEqual(await phone('status', phoneKeys[2]), { status: 401, body: { error: 'auth' } }, 'прежний ключ той же подписки не действует')
+    // Телефон отключается сам — своим ключом; мод отключает все
+    assert.deepEqual(await phone('off', again.body.key), { status: 200, body: { ok: true } })
+    assert.deepEqual(endpoints(), ['2', '4', '5', '6'])
+    assert.deepEqual(await phone('off', again.body.key), { status: 401, body: { error: 'auth' } })
+    assert.deepEqual(await go('DELETE', '/api/me/push', { token: tp }), { status: 200, body: { ok: true } })
+    assert.deepEqual(await go('GET', '/api/me/push', { token: tp }), { status: 200, body: { phones: 0, last: 0 } })
+    assert.equal(account77.store.has('phones'), false)
+    // Кодов в сутки — не больше PAIR_CODES_DAILY; код живёт PAIR_MS
+    const late = await newCode()
+    account77.store.set('pairCodes', { ...account77.store.get('pairCodes'), count: PAIR_CODES_DAILY })
+    assert.deepEqual(await go('POST', '/api/me/push/code', { token: tp }), { status: 429, body: { error: 'often' } })
+    account77.store.set('pairCodes', { ...account77.store.get('pairCodes'), count: 0 })
+    Date.now = () => pushNoon + PUSH_GAP_MS + PAIR_MS
+    assert.deepEqual(await pair(late.code), { status: 404, body: { error: 'code' } })
+    // Истёкшие коды убирает следующий новый
+    const expired = await newCode()
+    Date.now = () => pushNoon + PUSH_GAP_MS + 2 * PAIR_MS + 1000
+    const otherCode = await newCode()
+    assert.deepEqual([...objects.get('push').store.keys()].sort(), ['vapid', `pair:${otherCode.code.replace('-', '')}`].sort())
+    assert.notEqual(expired.code, otherCode.code)
+    // С одного адреса — не больше PER_IP_DAILY.pairs попыток в сутки; адрес не хранится
+    for (let i = 0; i < PER_IP_DAILY.pairs; i++) assert.equal((await pair('ZZZZ-ZZZZ', { ip: '10.5.9.9' })).status, 404)
+    assert.deepEqual(await pair(otherCode.code, { ip: '10.5.9.9' }), { status: 429, body: { error: 'limit' } })
+    assert.ok([...objects.get('push').object.ips.keys()].every((k) => !k.includes('10.5.9.9')))
+    assert.ok(!saved().includes('10.5.9.9'))
+    // Аккаунт удалён — его телефоны тоже; оставшийся код его больше никуда не подключит
+    assert.equal((await pair(otherCode.code, { subscription: phoneSub(9) })).status, 200)
+    assert.deepEqual(await go('DELETE', '/api/me', { token: tp }), { status: 200, body: { ok: true } })
+    assert.equal(account77.store.size, 0)
+    const orphan = await newCode().catch(() => null)
+    assert.equal(orphan, null, 'без входа кода нет')
+    objects.get('push').store.set('pair:ZZZZZZZZ', { id: '77', until: Date.now() + PAIR_MS })
+    assert.deepEqual(await pair('ZZZZ-ZZZZ', { ip: '10.5.0.2' }), { status: 404, body: { error: 'gone' } })
+    assert.equal(account77.store.size, 0)
+    Date.now = realNow
+    }
   } finally {
     globalThis.fetch = realFetch
     Date.now = realNow
