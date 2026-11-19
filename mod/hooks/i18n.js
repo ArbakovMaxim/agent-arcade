@@ -1290,6 +1290,13 @@ const EXACT = {
   'закончил {0}': 'finished at {0}',
   '{0} назад': '{0} ago',
   'изменено файлов за ход: {0}': 'files changed this turn: {0}',
+  // Прогноз лимита: в нынешнем темпе окно кончится около … — на экране «Лимиты», всплывашкой и перед очередью доски
+  'Примерно: в этом темпе кончится около {0}': 'Roughly: at this pace it runs out around {0}',
+  'Примерно: в этом темпе до сброса хватит': 'Roughly: at this pace it lasts until the reset',
+  'Лимит Claude «{0}»: в этом темпе кончится примерно через {1}': 'Claude limit “{0}”: at this pace it runs out in about {1}',
+  'Лимит, скорее всего, кончится около {0}. Запустить всё равно?': 'The limit will likely run out around {0}. Start anyway?',
+  'После сброса очередь продолжится сама.': 'After the reset, the queue will continue by itself.',
+  'Запустить': 'Start',
   // Что поменялось: ветка git и незакоммиченные файлы сессии в «Агентах»
   'ветка {0}': 'branch {0}',
   'без ветки': 'no branch',

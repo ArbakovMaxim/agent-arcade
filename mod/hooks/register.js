@@ -19,6 +19,7 @@ import { addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } fr
 import { adoptBoard, applySync, cardId, colId, detachBoard, freshBase, MAX_MEMBERS, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from './desks.js'
 import { find, FIND_LIMIT, MIN_QUERY, restoreFavorites, toggleIn } from './find.js'
 import { createFlappy } from './flappy.js'
+import { addReading, FC_ASK, FC_SOON, forecast, mergeLimits, soonest } from './forecast.js'
 import { detectLang, isKept, keep, LANG_NAMES, LANGS, tr, translateTree } from './i18n.js'
 import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
@@ -5265,8 +5266,9 @@ export const LIMIT_LABEL = { five_hour: '5 часов', seven_day: 'Неделя
 const WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб']
 
 // me — последний замер этой сессии: { ctx, tokens, window, usd, limits: [{ kind, pct, reset }], at } или null; api —
-// у этого Claude Code есть $.session.usage; warn — всплывашки 80 и 90% (настройка usageWarn)
-S.us = { me: null, api: true, warn: true }
+// у этого Claude Code есть $.session.usage; warn — всплывашки 80 и 90% (настройка usageWarn); hist — замеры окон за
+// последний час для прогноза «в этом темпе кончится около …» (forecast.js), только в памяти этой сессии
+S.us = { me: null, api: true, warn: true, hist: {} }
 
 // Перевод строки на язык интерфейса — один на весь файл: им пользуются разделы лимитов, проверки, очереди и расписания
 const t = (text) => tr(text, S.lang)
@@ -5317,6 +5319,9 @@ export function freshLimits(others) {
   return all.sort((a, b) => b.at - a.at)[0] ?? null
 }
 
+// Окна лимитов для прогноза: из своего замера и замеров других сессий — по каждому окну самое полное (forecast.js)
+const limitsNow = (now) => mergeLimits([S.us.me, ...othersNow().map((r) => r.usage)].map((u) => u?.limits), now)
+
 // Окно, которое кончилось: 100% и больше, сброс ещё впереди; из нескольких — что сбросится позже: раньше Claude не ответит
 export function spentWindow(limits, now) {
   const out = (limits ?? []).filter((w) => w.pct >= 100 && (!w.reset || w.reset > now))
@@ -5346,6 +5351,16 @@ export const limitName = (kind) => (LIMIT_LABEL[kind] ? t(LIMIT_LABEL[kind]) : k
 export const pctText = (pct) => `${Math.floor(pct)}%`
 export const usdText = (usd) => `$${usd.toFixed(2)}`
 
+// О чём уже предупредили — из $.store: без окон, что уже сбросились, и без совсем старых записей
+function warnedOf(saved, now) {
+  const warned = {}
+  for (const [key, v] of Object.entries(saved && typeof saved === 'object' ? saved : {})) {
+    const reset = Number(key.split('|')[1])
+    if (Array.isArray(v) && !(reset && reset < now) && now - Number(v[1]) < WARNED_KEEP_MS) warned[key] = v
+  }
+  return warned
+}
+
 // Всплывашка: окно лимита дошло до 80 или 90% — о каждом пороге каждого окна один раз во всех сессиях
 export async function warnCheck($) {
   const me = S.us.me
@@ -5353,12 +5368,7 @@ export async function warnCheck($) {
   const hot = me.limits.map((w) => ({ w, p: WARN_AT.find((p) => w.pct >= p) })).filter((x) => x.p)
   if (!hot.length) return
   const now = await $.clock.now()
-  const saved = await $.store.get(WARNED_KEY).catch(() => null)
-  const warned = {}
-  for (const [key, v] of Object.entries(saved && typeof saved === 'object' ? saved : {})) {
-    const reset = Number(key.split('|')[1])
-    if (Array.isArray(v) && !(reset && reset < now) && now - Number(v[1]) < WARNED_KEEP_MS) warned[key] = v
-  }
+  const warned = warnedOf(await $.store.get(WARNED_KEY).catch(() => null), now)
   let warnedNow = false
   for (const { w, p } of hot) {
     const key = `${w.kind}|${w.reset}`
@@ -5369,6 +5379,20 @@ export async function warnCheck($) {
     $.ui.toast(`${fill(t('Лимит Claude «{0}»: {1}'), [limitName(w.kind), pctText(w.pct)])}${when ? ` — ${when}` : ''}`)
   }
   if (warnedNow) await $.store.set(WARNED_KEY, warned).catch((err) => log(`лимиты: ${err?.message ?? err}`))
+}
+
+// Всплывашка: в нынешнем темпе окно кончится раньше чем через 20 минут (прогноз, forecast.js) — один раз на окно во
+// всех сессиях, под тем же выключателем, что 80 и 90%. limits — окна сейчас (limitsNow)
+export async function soonCheck($, limits, now) {
+  const soon = S.us.warn ? soonest(S.us.hist, limits, now, FC_SOON) : null
+  if (!soon) return
+  const reset = limits.find((w) => w.kind === soon.kind)?.reset ?? 0
+  const key = `${soon.kind}|${reset}|soon`
+  const warned = warnedOf(await $.store.get(WARNED_KEY).catch(() => null), now)
+  if (warned[key]) return
+  warned[key] = [1, now]
+  $.ui.toast(fill(t('Лимит Claude «{0}»: в этом темпе кончится примерно через {1}'), [limitName(soon.kind), t(agoText(Math.max(soon.end - now, 60_000)))]))
+  await $.store.set(WARNED_KEY, warned).catch((err) => log(`лимиты: ${err?.message ?? err}`))
 }
 
 // ━━━━━━━━━━ app/check ━━━━━━━━━━
@@ -5583,8 +5607,9 @@ export const ORPHANS_AFTER_MS = AGENT_TTL_MS + 5_000 // после старта 
 export const USAGE_POLL_MS = 30_000 // замер Claude Code спрашиваем сами раз во столько — и после каждого хода
 // wait — очередь этой сессии ждёт сброса: { board, title, card, at } (at — когда продолжить); offer — то же, но пока
 // предложение кнопкой; armed — доски, где без кнопки; missed — очереди, что не запустились: [{ board, title }]; err —
-// последняя остановка с ошибкой (вдруг это лимит, а замер придёт чуть позже); sid — под каким id записано ожидание
-S.qr = { wait: null, offer: null, armed: [], missed: [], err: null, sid: '', going: false, tick: 0, awake: 0, orphansAt: 0 }
+// последняя остановка с ошибкой (вдруг это лимит, а замер придёт чуть позже); sid — под каким id записано ожидание;
+// ask — вопрос на доске перед запуском: по прогнозу лимит скоро кончится — { board, end }
+S.qr = { wait: null, offer: null, armed: [], missed: [], err: null, sid: '', going: false, tick: 0, awake: 0, orphansAt: 0, ask: null }
 
 // Свободные карточки — в первой колонке, которые очередь ещё не давала, которые не взял кто-то другой и которые не
 // делает и не заявила другая сессия (others — их отметки); первая из них — следующая
@@ -5680,8 +5705,9 @@ async function giveNext($) {
 }
 
 // Запустить очередь на доске id — кнопкой «Очередь для Claude» или сама после сброса лимита (auto): тогда retry —
-// карточка, которую Claude не доделал, а о той же папке уже предупреждали, когда очередь запускали
-export async function startQueue($, id, { retry = '', auto = false } = {}) {
+// карточка, которую Claude не доделал, а о той же папке уже предупреждали, когда очередь запускали; anyway — нажали
+// «Запустить» под вопросом, что лимит скоро кончится
+export async function startQueue($, id, { retry = '', auto = false, anyway = false } = {}) {
   const say = (text) => {
     S.dk.note = text
     S.dk.bad = true
@@ -5704,6 +5730,18 @@ export async function startQueue($, id, { retry = '', auto = false } = {}) {
     S.ag.joinWarn = id
     return say(`${fill(t('Эта сессия в той же папке, что «{0}»: две сессии могут править одни и те же файлы. Надёжнее — отдельная папка или git worktree.'), [same.name])} ${t('Нажми «Очередь для Claude» ещё раз, чтобы всё равно присоединиться.')}`)
   }
+  // Лимит, по прогнозу, кончится раньше чем через полчаса — спросить на доске: «Запустить» или «Отмена». Сама после
+  // сброса и по расписанию — не спрашивать
+  if (!auto && !anyway) {
+    const now = await $.clock.now()
+    const soon = soonest(S.us.hist, limitsNow(now), now, FC_ASK)
+    if (soon) {
+      S.qr.ask = { board: id, end: soon.end }
+      S.dk.note = ''
+      return $.ui.invalidate('ui.render')
+    }
+  }
+  S.qr.ask = null
   if (S.ag) S.ag.joinWarn = ''
   if (S.queue) return
   // Запустили сами — предложение продолжить после сброса уже ни к чему, а ожидание этой доски — тем более
@@ -5781,10 +5819,15 @@ export async function usagePoll($) {
   const before = JSON.stringify(S.us.me?.limits ?? [])
   const api = S.us.api
   const u = await usageNow($)
+  // Замер — в историю прогноза: свой и других сессий (окна общие на учётную запись)
+  const now = await $.clock.now()
+  const limits = limitsNow(now)
+  S.us.hist = addReading(S.us.hist, limits, now)
   if (u && JSON.stringify(u.limits) !== before) {
     await warnCheck($)
     await limitLate($)
   }
+  await soonCheck($, limits, now)
   // Перерисовать — и когда Claude Code перестал или снова начал отвечать: экран скажет, что лимитов он не сообщает
   if (!u && api === S.us.api) return
   if (S.paneOpen && S.view === 'library' && (S.menu === 'usage' || S.menu === 'agents' || S.menu === 'today')) $.ui.invalidate('ui.render')
@@ -10015,6 +10058,7 @@ export function boardsScreen($, e, kit) {
     S.dk.pick = ''
     S.dk.focus = ''
     S.dk.picked.clear()
+    S.qr.ask = null
     nb.note = ''
     nb.bad = false
     nb.focus = ''
@@ -10357,6 +10401,24 @@ export function boardsScreen($, e, kit) {
     const waitHere = S.qr.wait?.board === id ? S.qr.wait : null
     const offerHere = !waitHere && S.qr.offer?.board === id && now < S.qr.offer.at ? S.qr.offer : null
     const armed = S.qr.armed.includes(id)
+    // Лимит, по прогнозу, скоро кончится — вопрос перед запуском очереди (startQueue): «Запустить» или «Отмена»
+    const askHere = S.qr.ask?.board === id && !queued ? S.qr.ask : null
+    const askLines = askHere
+      ? [
+          keep(Text({ color: 'warning', children: [`  ${fill(tr('Лимит, скорее всего, кончится около {0}. Запустить всё равно?', S.lang), [clockText(askHere.end, now)])}${armed ? ` ${tr('После сброса очередь продолжится сама.', S.lang)}` : ''}`] })),
+          row([
+            Button({ key: 'arcade-board-queue-go', label: 'Запустить', onPress: () => startQueue($, id, { anyway: true }) }),
+            Button({
+              key: 'arcade-board-queue-no',
+              label: 'Отмена',
+              onPress: () => {
+                S.qr.ask = null
+                $.ui.invalidate('ui.render')
+              },
+            }),
+          ]),
+        ]
+      : []
     const resumeTiles = [
       ...(waitHere ? [Button({ key: 'arcade-board-resume-off', label: 'Не продолжать', onPress: () => cancelWait($) }), keep(dim(`  ${fill(tr('Очередь продолжится в {0}.', S.lang), [clockText(waitHere.at, now)])}`))] : []),
       ...(offerHere
@@ -10478,6 +10540,7 @@ export function boardsScreen($, e, kit) {
         ],
         40,
       ),
+      ...askLines,
       ...queueLine,
       ...matesLine,
       ...missedLines,
@@ -11249,9 +11312,18 @@ export function usageScreen($, e, kit) {
   const latest = freshLimits(others)
 
   // ——— Окна лимитов ———
+  // Прогноз окна в нынешнем темпе — «примерно»: Arcade токены не считает, смотрит только, как росли проценты
+  // (forecast.js); замеров мало — строки нет
+  const fcOf = (w) => {
+    const fc = forecast(S.us.hist?.[w.kind], now, w.reset)
+    if (!fc) return null
+    if (!fc.end) return { text: t('Примерно: в этом темпе до сброса хватит'), soon: false }
+    return { text: fill(t('Примерно: в этом темпе кончится около {0}'), [clockText(fc.end, now)]), soon: fc.end - now < FC_ASK }
+  }
   const windowRow = (w) => {
     const level = levelOf(w.pct)
     const when = resetText(w.reset, now)
+    const fc = fcOf(w)
     if (desktop) {
       return Box({
         key: `usage-win-${w.kind}`,
@@ -11261,22 +11333,26 @@ export function usageScreen($, e, kit) {
           Box({ flexDirection: 'row', columnGap: 'sm', children: [strong(limitName(w.kind)), keep(Text({ color: level, children: [pctText(w.pct)] }))] }),
           keep(Svg({ source: barSvg(w.pct, LEVEL_HEX[level]), alt: pctText(w.pct), width: 200, height: 8 })),
           ...(when ? [keep(dim(when))] : []),
+          ...(fc ? [keep(fc.soon ? Text({ color: 'warning', children: [fc.text] }) : dim(fc.text))] : []),
         ],
       })
     }
-    return keep(
-      Text({
-        key: `usage-win-${w.kind}`,
-        children: [Text({ bold: true, children: [limitName(w.kind)] }), '  ', Text({ color: level, children: [`${barCells(w.pct)} ${pctText(w.pct)}`] }), ...(when ? [Text({ dimColor: true, children: [` · ${when}`] })] : [])],
-      }),
-    )
+    return [
+      keep(
+        Text({
+          key: `usage-win-${w.kind}`,
+          children: [Text({ bold: true, children: [limitName(w.kind)] }), '  ', Text({ color: level, children: [`${barCells(w.pct)} ${pctText(w.pct)}`] }), ...(when ? [Text({ dimColor: true, children: [` · ${when}`] })] : [])],
+        }),
+      ),
+      ...(fc ? [keep(Text({ key: `usage-fc-${w.kind}`, ...(fc.soon ? { color: 'warning' } : { dimColor: true }), children: [`  ${fc.text}`] }))] : []),
+    ]
   }
   // Окна — и из замера другой сессии, если эта их не знает. Окон нет: до первого ответа Claude их не знает никто; после
   // ответа — значит, ключ API или шлюз
   let windows
   if (latest) {
     windows = [
-      desktop ? Box({ key: 'usage-wins', flexDirection: 'column', rowGap: 'md', children: latest.limits.map(windowRow) }) : Box({ key: 'usage-wins', flexDirection: 'column', children: latest.limits.map(windowRow) }),
+      desktop ? Box({ key: 'usage-wins', flexDirection: 'column', rowGap: 'md', children: latest.limits.map(windowRow) }) : Box({ key: 'usage-wins', flexDirection: 'column', children: latest.limits.flatMap(windowRow) }),
       keep(dim(fill(t('Замер — {0} назад.'), [t(agoText(now - latest.at))]))),
     ]
   } else if (!S.us.api) windows = [dim('Этот Claude Code лимитов не сообщает — нужен Claude Code новее.')]
