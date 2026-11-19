@@ -1,5 +1,13 @@
 # Changelog · Список изменений
 
+## 0.53.1 — Отступы в «Ревью» · Review spacing
+
+- In Desktop the card's *Review* no longer runs together: the summary with its notes, the file list (slightly indented), the buttons and the hint are separate groups with space between them, and the section ends with a gap before *Due* · в Desktop раздел «Ревью» карточки больше не слипается: итог с пометками, список файлов (чуть правее), кнопки и подсказка — отдельные группы с отступами между ними, а после раздела — отступ до «Срока»
+- A file's diff is its own block with a frame and inner padding · diff файла — отдельный блок в рамке с отступом внутри
+- *Accept* and *Return with a comment* sit in one row, like *← Left · ↑ Up · ↓ Down · Right →*, and wrap in a narrow panel; the comment field and *Cancel* are a group of their own · «Принять» и «Вернуть с комментарием» стоят в один ряд, как «← Влево · ↑ Выше · ↓ Ниже · Вправо →», и в узкой панели переносятся; поле комментария и «Отмена» — своей группой
+- The terminal shows the review line by line, as before · в терминале ревью — строками, как было
+- New test: the Desktop layout of the review (the groups, the indented file list, the diff block, the button row, the comment group), and the terminal without them · новый тест: раскладка ревью в Desktop (группы, список файлов правее, блок diff, ряд кнопок, группа комментария) и терминал без них
+
 ## 0.53.0 — Ревью по карточке · Card review
 
 - When Claude moves a card it was given — with *Give to Claude* or by the queue — to the last column, Arcade notes what changed in the session's git folder since the card went to Claude, and the board shows *files: 4 · +120 −15* under the card. Files that had already changed before that count only from where they were then · когда Claude переносит в последнюю колонку карточку, которую ему отдали, — кнопкой «Отдать Claude» или очередью, — Arcade запоминает, что с тех пор поменялось в git-папке сессии, и на доске под карточкой появляется «файлов: 4 · +120 −15». Файлы, изменённые ещё до этого, считаются от того, какими были тогда

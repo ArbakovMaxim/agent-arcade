@@ -7114,13 +7114,19 @@ export async function rvReturn($, id, text) {
 }
 
 // Раздел «Ревью» на сделанной карточке: файлы, diff, «Принять» и «Вернуть с комментарием». Файлов и diff нет —
-// карточку делали не здесь (или на другом компьютере общей доски): остаются кнопки и пометка
+// карточку делали не здесь (или на другом компьютере общей доски): остаются кнопки и пометка.
+// В Desktop — с отступами: итог с пометками, список файлов чуть правее, diff — отдельным блоком в рамке, «Принять» и
+// «Вернуть с комментарием» — в ряд, поле комментария с «Отменой» — своей группой, после подсказки — отступ до «Срока».
+// В терминале — строками, как было
 function rvItems($, kit, page) {
-  const { Button, Input, Text, dim, section } = kit
+  const { Box, Button, Input, Text, desktop, dim, section } = kit
   const id = page.id
   const sum = S.rv.sums[id]
   const mark = reviewMark(page.body)
-  const items = [section('Ревью')]
+  // items — итог и пометки под ним; files — кнопки файлов с их diff; after — «Ещё файлов» и коммиты
+  const items = []
+  const files = []
+  const after = []
   // Папка не в git — считать нечего: ни строки «файлов», ни списка
   if (sum && !sum.git) items.push(dim('Папка не в git — изменений не посчитать.'))
   else if (sum) {
@@ -7164,7 +7170,7 @@ function rvItems($, kit, page) {
                 : f.state === 'big'
                   ? tr('большой', S.lang)
                   : `+${f.add} −${f.del}`
-        items.push(
+        files.push(
           keep(
             Button({
               key: `arcade-review-file-${i}`,
@@ -7179,25 +7185,38 @@ function rvItems($, kit, page) {
         )
         if (!shown) return
         if (!f.diff) {
-          items.push(dim('Без diff: двоичный или большой файл.'))
+          files.push(dim('Без diff: двоичный или большой файл.'))
           return
         }
-        for (const line of f.diff.split('\n')) {
+        const lines = f.diff.split('\n').map((line) => {
           const look = line.startsWith('+') ? { color: 'success' } : line.startsWith('-') ? { color: 'error' } : line.startsWith('@@') ? { dimColor: true } : {}
-          items.push(keep(Text({ mono: true, wrap: 'wrap', ...look, children: [line || ' '] })))
-        }
-        if (f.cut) items.push(keep(dim(fill(tr('… обрезано, ещё строк: {0}', S.lang), [f.cut]))))
+          return keep(Text({ mono: true, wrap: 'wrap', ...look, children: [line || ' '] }))
+        })
+        if (f.cut) lines.push(keep(dim(fill(tr('… обрезано, ещё строк: {0}', S.lang), [f.cut]))))
+        // В Desktop diff файла — блоком в рамке с отступом внутри
+        if (desktop) files.push(Box({ key: `arcade-review-diff-${i}`, flexDirection: 'column', padding: 'sm', borderStyle: 'round', borderColor: 'subtle', children: lines }))
+        else files.push(...lines)
       })
-      if (detail.more) items.push(keep(dim(`${tr('Ещё файлов', S.lang)}: ${detail.more}`)))
-      if (detail.commits.length) items.push(dim('Коммиты:'), ...detail.commits.map((c) => keep(dim(`  ${c}`))))
+      if (detail.more) after.push(keep(dim(`${tr('Ещё файлов', S.lang)}: ${detail.more}`)))
+      if (detail.commits.length) after.push(dim('Коммиты:'), ...detail.commits.map((c) => keep(dim(`  ${c}`))))
     }
   }
-  if (mark === 'accepted') {
-    items.push(keep(Text({ color: 'success', children: [`✓ ${tr('принято', S.lang)}`] })))
-    return items
+  // Ответ раздела; tail — пометка, кнопки, поле комментария и подсказка
+  const done = (tail) => {
+    if (!desktop) return [section('Ревью'), ...items, ...files, ...after, ...tail]
+    const column = (rowGap, children, more = {}) => Box({ flexDirection: 'column', rowGap, ...more, children })
+    const groups = [
+      ...(items.length ? [column('xs', items)] : []),
+      ...(files.length ? [column('sm', files, { paddingLeft: 'md' })] : []),
+      ...(after.length ? [column('xs', after)] : []),
+      ...tail,
+    ]
+    return [section('Ревью'), column('md', groups, { key: 'arcade-review', marginBottom: 'lg' })]
   }
-  if (mark === 'returned') items.push(keep(Text({ color: 'warning', children: [`↩ ${tr('вернули', S.lang)}`] })))
-  items.push(
+  if (mark === 'accepted') return done([keep(Text({ color: 'success', children: [`✓ ${tr('принято', S.lang)}`] }))])
+  const tail = []
+  if (mark === 'returned') tail.push(keep(Text({ color: 'warning', children: [`↩ ${tr('вернули', S.lang)}`] })))
+  const buttons = [
     Button({ key: 'arcade-review-accept', label: 'Принять', onPress: () => rvAccept($, id) }),
     Button({
       key: 'arcade-review-return',
@@ -7208,9 +7227,12 @@ function rvItems($, kit, page) {
         $.ui.invalidate('ui.render')
       },
     }),
-  )
-  if (S.rv.asking === id)
-    items.push(
+  ]
+  // В Desktop — в ряд, как «← Влево · ↑ Выше · ↓ Ниже · Вправо →»; в узкой панели переносятся
+  if (desktop) tail.push(Box({ key: 'arcade-review-buttons', flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, rowGap: 'xs', children: buttons }))
+  else tail.push(...buttons)
+  if (S.rv.asking === id) {
+    const ask = [
       Input({
         key: `arcade-review-comment-${nb.field}`,
         label: 'Комментарий',
@@ -7227,9 +7249,12 @@ function rvItems($, kit, page) {
           $.ui.invalidate('ui.render')
         },
       }),
-    )
-  items.push(dim('«Принять» только помечает карточку — Arcade ничего не коммитит и не отправляет.'))
-  return items
+    ]
+    if (desktop) tail.push(Box({ key: 'arcade-review-ask', flexDirection: 'column', rowGap: 'sm', children: ask }))
+    else tail.push(...ask)
+  }
+  tail.push(dim('«Принять» только помечает карточку — Arcade ничего не коммитит и не отправляет.'))
+  return done(tail)
 }
 
 // ━━━━━━━━━━ app/asks ━━━━━━━━━━
