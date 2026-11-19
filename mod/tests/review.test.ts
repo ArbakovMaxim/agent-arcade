@@ -62,13 +62,13 @@ const APP_PATCH = 'diff --git a/src/app.js b/src/app.js\nindex 1111111..2222222 
 const LONG_PATCH = `diff --git a/src/long.js b/src/long.js\nnew file mode 100644\n--- /dev/null\n+++ b/src/long.js\n@@ -0,0 +1,160 @@\n${Array.from({ length: 160 }, (_, i) => `+line ${i + 1}`).join('\n')}\n`
 
 // Доска Sprint с карточками, сессия в D:\work\web с git; панель — на доске
-async function setup($: any, on: any, titles: string[], extra: any = {}) {
+async function setup($: any, on: any, titles: string[], extra: any = {}, surface = 'terminal') {
   const { g, answer } = gitRepo()
   const kit = stubs(on, { env: AG_ENV, agents: { ...AG_ME, git: answer }, submit: true, ...extra })
   const { clock, saved, submits } = kit
   await start($)
   await clock.advance(4_000)
-  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const ui = await $.ui.mount({ ...PANE, surface })
   const pages = () => saved.get('notes') as any[]
   const page = (title: string) => pages().find((p) => p.title === title)
   const board = () => pages().find(isBoard)
@@ -231,6 +231,73 @@ test('ревью: «Вернуть с комментарием» — без ко
   expect(submits[3].text).toContain(`(id ${A})`)
   expect(submits[3].text).toContain('Карточку вернули после ревью с комментарием: «Ещё раз».')
   await ui.unmount()
+})
+
+// п. 37.1: в Desktop всё слипалось — теперь группы с отступами; терминал — строками, как было
+test('ревью в Desktop: итог, файлы правее, diff блоком в рамке, кнопки в ряд, поле с «Отменой» вместе, отступ до «Срока»', async ($, on) => {
+  const { g, ui, done, turn, openCard } = await setup($, on, ['A'], {}, 'desktop')
+  await openCard('A')
+  await ui.press({ key: 'arcade-note-send' })
+  await turn('t1', 0, async () => {
+    g.status = ' M src/app.js\0'
+    g.numstat = '2\t1\tsrc/app.js\0'
+    g.patch = APP_PATCH
+    await done('A')
+  })
+  // Узел дерева по условию и его родитель
+  const at = async (hit: (n: any) => boolean) => {
+    let found: any
+    let parent: any
+    const walk = (n: any, up: any) => {
+      if (found || !n || typeof n !== 'object') return
+      if (hit(n)) {
+        found = n
+        parent = up
+        return
+      }
+      for (const c of n.children ?? []) walk(c, n)
+    }
+    walk(await ui.drawn(), null)
+    return { found, parent }
+  }
+  const byKey = (key: string) => at((n) => (n.props?.key ?? n.key) === key)
+  const byText = (text: string) => at((n) => n.children?.length === 1 && n.children[0] === text)
+  const keys = (n: any) => (n?.children ?? []).map((c: any) => c?.props?.key ?? c?.key)
+
+  // Раздел — колонкой с отступами между группами и отступом снизу до «Срока»; подсказка — последней
+  const review = (await byKey('arcade-review')).found
+  expect(review).toMatchObject({ props: { flexDirection: 'column', rowGap: 'md', marginBottom: 'lg' } })
+  expect((await byText('«Принять» только помечает карточку — Arcade ничего не коммитит и не отправляет.')).parent?.props?.key).toBe('arcade-review')
+  // Итог «файлов» — своей группой; «Принять» и «Вернуть с комментарием» — в ряд, как кнопки «Влево · Выше · Ниже · Вправо»
+  expect((await byKey('arcade-review-files')).parent).toMatchObject({ props: { flexDirection: 'column', rowGap: 'xs' } })
+  const buttons = (await byKey('arcade-review-buttons')).found
+  expect(buttons).toMatchObject({ props: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 2 } })
+  expect(keys(buttons)).toEqual(['arcade-review-accept', 'arcade-review-return'])
+
+  // Список файлов — чуть правее; diff — по нажатию, блоком в рамке с отступом внутри
+  await ui.press({ key: 'arcade-review-files' })
+  expect((await byKey('arcade-review-file-0')).parent).toMatchObject({ props: { flexDirection: 'column', rowGap: 'sm', paddingLeft: 'md' } })
+  expect(await ui.find({ key: 'arcade-review-diff-0' })).toBeUndefined()
+  await ui.press({ key: 'arcade-review-file-0' })
+  const diff = (await byKey('arcade-review-diff-0')).found
+  expect(diff).toMatchObject({ props: { flexDirection: 'column', padding: 'sm', borderStyle: 'round', borderColor: 'subtle' } })
+  expect((await byText('+const b = 3')).parent?.props?.key).toBe('arcade-review-diff-0')
+  expect((await byText('-const b = 2')).found).toMatchObject({ props: { color: 'error', mono: true } })
+
+  // «Вернуть с комментарием» — поле и «Отмена» своей группой с отступом
+  await ui.press({ key: 'arcade-review-return' })
+  const ask = (await byKey('arcade-review-ask')).found
+  expect(ask).toMatchObject({ props: { flexDirection: 'column', rowGap: 'sm' } })
+  expect(keys(ask)[0]).toMatch(/^arcade-review-comment-/)
+  expect(keys(ask)[1]).toBe('arcade-review-cancel')
+  await ui.unmount()
+
+  // Терминал — строками, как было: ни групп, ни рамки, кнопки друг под другом
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  for (const key of ['arcade-review', 'arcade-review-buttons', 'arcade-review-diff-0', 'arcade-review-ask']) expect(await term.find({ key })).toBeUndefined()
+  for (const key of ['arcade-review-files', 'arcade-review-file-0', 'arcade-review-accept', 'arcade-review-return', 'arcade-review-cancel']) expect(await term.find({ key })).toBeDefined()
+  expect(await term.find({ type: 'Text', text: '+const b = 3' })).toMatchObject({ props: { color: 'success' } })
+  await term.unmount()
 })
 
 test('ревью: в очереди вернутая карточка идёт первой, потом очередь дальше', async ($, on) => {

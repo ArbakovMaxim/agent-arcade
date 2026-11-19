@@ -1,5 +1,13 @@
 # Changelog · Список изменений
 
+## 0.54.1 — Отступы в «Ревью» · Review spacing
+
+- In Desktop the card's *Review* no longer runs together: the summary with its notes, the file list (slightly indented), the buttons and the hint are separate groups with space between them, and the section ends with a gap before *Due* · в Desktop раздел «Ревью» карточки больше не слипается: итог с пометками, список файлов (чуть правее), кнопки и подсказка — отдельные группы с отступами между ними, а после раздела — отступ до «Срока»
+- A file's diff is its own block with a frame and inner padding · diff файла — отдельный блок в рамке с отступом внутри
+- *Accept* and *Return with a comment* sit in one row, like *← Left · ↑ Up · ↓ Down · Right →*, and wrap in a narrow panel; the comment field and *Cancel* are a group of their own · «Принять» и «Вернуть с комментарием» стоят в один ряд, как «← Влево · ↑ Выше · ↓ Ниже · Вправо →», и в узкой панели переносятся; поле комментария и «Отмена» — своей группой
+- The terminal shows the review line by line, as before · в терминале ревью — строками, как было
+- New test: the Desktop layout of the review (the groups, the indented file list, the diff block, the button row, the comment group), and the terminal without them · новый тест: раскладка ревью в Desktop (группы, список файлов правее, блок diff, ряд кнопок, группа комментария) и терминал без них
+
 ## 0.54.0 — Заметки проекта · Project notes
 
 - Notebook pages and board cards have a *Context for folder: <folder>* toggle (boards and prompt templates don't): it marks the page as the notes of the folder the current session works in. One page per folder, and one page can serve several folders. It is only ever switched on by hand, and only for the folder of the session where it's pressed · у страниц блокнота и карточек досок появился переключатель «Контекст для папки: <папка>» (у самих досок и шаблонов промптов его нет): он делает страницу заметками папки, в которой работает текущая сессия. Одна страница на папку, а одна страница может служить нескольким папкам. Включается только вручную и только для папки той сессии, где его нажали
