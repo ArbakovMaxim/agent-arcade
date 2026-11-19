@@ -27,6 +27,7 @@ import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screen
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
+import { COMMITS_MAX, cleanComment, cutDiff, lastComment, lineDiff, pickSlot, restoreDetail, restoreReviews, returnLine, REVIEW_FILES, REVIEW_KEY, reviewed, reviewMark, SNAP_FILE, SNAP_PATHS, SNAP_TOTAL, splitPatch, unreview } from './review.js'
 import { ARCADE_SOUNDS, ownSoundFiles, SOUND_CUT_S, SOUND_EVERY, SOUND_EVERY_STD, SOUND_REPEAT_MAX, SOUND_STD, SOUND_VOLUMES, soundEveryOf, soundIdOf, soundLabelOf, soundSource, soundVolumeOf, systemSoundList } from './sounds.js'
 import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readsPrompt, readUrl } from './rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, SEARCH_SHOWS, searchUrl, showFeed } from './search.js'
@@ -3962,7 +3963,11 @@ function takeDesks(raw) {
 // Перечитать блокнот, пока он на экране: поменялся — экран перерисуется. По таймеру — раз в NOTES_POLL_MS
 export const NOTES_POLL_MS = 3_000
 export function refreshNotes($) {
-  return withNotes($, (moved) => moved)
+  return withNotes($, (moved) => {
+    // Итоги ревью по карточкам (app/review) пишут и другие сессии — перечитать заодно
+    rvLoad($).catch(() => {})
+    return moved
+  })
 }
 export const notesShown = () => /^(notes|boards|prompts)$|^(note|board):/.test(S.menu)
 
@@ -4256,8 +4261,16 @@ export async function sendNote($, id, queued = false, auto = false) {
   // Задача трекера — Claude прочитает её коннектором, если нужно больше. Комментарий в задачу — только кнопкой «Итог — в …»
   const task = trackerTask(page, Boolean(board))
   if (task) lines.push(`${t('Это задача в трекере')} ${task.app}: ${task.url} — ${t('подробности и обсуждение читай там инструментами коннектора этого трекера, если он подключён.')}`)
+  // Карточку вернули после ревью (app/review) — комментарий Claude получает отдельной строкой
+  if (reviewMark(page.body) === 'returned') {
+    const said = lastComment(page.body)
+    lines.push(said ? `${t('Карточку вернули после ревью с комментарием')}: «${said}». ${t('Исправь по комментарию и снова перенеси карточку в последнюю колонку.')}` : t('Карточку вернули после ревью — исправь и снова перенеси её в последнюю колонку.'))
+  }
   if (queued) lines.push(t('Карточки идут очередью Arcade: перенесёшь эту в последнюю колонку — следующую Arcade даст сам. Нужно решение человека — не переноси, спроси.'))
+  // Ревью по карточке: запомнить, с чего начали, — до того как Claude возьмётся
+  const made = last && columnOf(page, board.board.cols) !== last.id ? await rvStart($, page) : false
   const sent = await giveClaude($, lines.join('\n'), 'page')
+  if (!sent && made) S.rv.rounds.delete(page.id)
   // Карточку отдали этой сессии кнопкой — другие сессии видят «у сессии «…»» и очередью её не берут (очередь отмечает сама)
   if (!queued && sent && last && columnOf(page, board.board.cols) !== last.id) holdCard(page.id)
   await logGave($, page, board)
@@ -5767,6 +5780,7 @@ export async function checkCard($, id) {
   })
   S.qc.mine.add(id)
   holdCard(id)
+  rvAgain(id)
   nb.note = ''
   nb.bad = false
   $.ui.invalidate('ui.render')
@@ -5837,12 +5851,15 @@ function freeCards(board, others) {
 // Карточка, которую Claude не доделал, когда кончился лимит, — после сброса её первой (она уже может быть во второй
 // колонке). Сделана, удалена или у другой сессии — нет
 function again(board, others) {
-  const id = S.queue.retry
-  const page = id ? S.notes.find((p) => p.id === id && p.parent === board.id) : null
-  if (!page || columnOf(page, board.board.cols) === board.board.cols.at(-1).id) return ''
-  if (others.some((r) => r.card?.id === id || r.claim?.card === id)) return ''
-  const { me, taken } = cardTaker(page)
-  return !taken || taken === me ? id : ''
+  // Следом — вернутые кнопкой «Вернуть с комментарием» (app/review), по порядку
+  for (const id of [S.queue.retry, ...(S.queue.back ?? [])].filter(Boolean)) {
+    const page = S.notes.find((p) => p.id === id && p.parent === board.id)
+    if (!page || columnOf(page, board.board.cols) === board.board.cols.at(-1).id) continue
+    if (others.some((r) => r.card?.id === id || r.claim?.card === id)) continue
+    const { me, taken } = cardTaker(page)
+    if (!taken || taken === me) return id
+  }
+  return ''
 }
 
 // Остановить очередь: why — уже переведённое объяснение на экран доски и во всплывашку. Всегда false: дальше — ничего
@@ -5878,6 +5895,7 @@ async function giveNext($) {
     const card = S.notes.find((p) => p.id === (id === 'off' ? pick([]) : id))
     if (!card) break
     queue.retry = ''
+    queue.back = (queue.back ?? []).filter((x) => x !== card.id)
     queue.card = card.id
     queue.given.push(card.id)
     // Ход начинается раньше, чем submit ответит: отметка — заранее
@@ -5964,7 +5982,7 @@ export async function startQueue($, id, { retry = '', auto = false, anyway = fal
   const board = S.notes.find((p) => p.id === id)
   const last = board.board.cols.at(-1).id
   const check = S.notes.filter((p) => p.parent === id && columnOf(p, board.board.cols) === last && hasMark(p.body) && (S.qc.mine.has(p.id) || !mates.length)).map((p) => p.id)
-  S.queue = { board: id, card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry, check }
+  S.queue = { board: id, card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry, check, back: [] }
   await queueNext($)
 }
 
@@ -6702,6 +6720,518 @@ export async function reviewChanges($) {
   $.ui.invalidate('ui.render')
 }
 
+// ━━━━━━━━━━ app/review ━━━━━━━━━━
+// Arcade: ревью по карточке. Карточку отдают Claude (кнопкой «Отдать Claude» или очередью) — сессия запоминает, с чего
+// начали: HEAD и копию файлов, которые уже были изменены. Claude перенёс карточку в последнюю колонку — в конце хода
+// Arcade читает, что поменялось: файлы, +/− строк, коммиты. Числа — в $.store (REVIEW_KEY, общий для сессий этого
+// компьютера), подробности с diff — в ~/.claude/arcade/review/r<место>.json, для последних REVIEW_SLOTS карточек.
+// git здесь только читает (--no-optional-locks). «Принять» и «Вернуть с комментарием» меняют только текст карточки:
+// Arcade ничего не коммитит и не отправляет. На сайт с общей доской уходит только текст карточки — пометка ✓ или ↩ и
+// комментарий; файлы и diff остаются на этом компьютере
+
+const ROUNDS_MAX = 10 // столько отданных карточек сессия помнит сразу
+const PAST_MAX = 20 // и столько сделанных — чтобы вернутую считать от той же точки
+
+// rounds — отданные карточки: id → с чего начали; past — сделанные (их могут вернуть); sums — числа карточек из
+// $.store, sumsJson — они же строкой; detail — подробности открытой карточки; files — у какой карточки раскрыт список
+// файлов; open — у каких файлов раскрыт diff; asking — у какой карточки открыто поле комментария; pending — вернули,
+// пока Claude был занят: отдать в конце хода; dir — папка подробностей
+S.rv = { rounds: new Map(), past: new Map(), sums: {}, sumsJson: '', detail: null, files: '', open: new Set(), asking: '', pending: '', dir: '' }
+
+// git только на чтение, в папке path: вывод или null
+async function rvOut($, path, args) {
+  try {
+    const res = await $.process.run(['git', '--no-optional-locks', '-C', path, ...args], { timeoutMs: GIT_MS })
+    return res.exitCode === 0 ? String(res.stdout ?? '') : null
+  } catch {
+    return null
+  }
+}
+// Путь для git — буквально и от корня репозитория: «*» и «:» в имени файла — просто символы
+const spec = (p) => `:(top,literal)${p}`
+const ddmm = (ms) => {
+  const d = new Date(ms)
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`
+}
+
+// Копия файла, изменённого ещё до карточки: sig — размер и время правки; text — содержимое небольшого текстового;
+// bin — двоичный; gone — файла нет. budget.left — сколько ещё можно запомнить
+async function rvSnap($, full, budget) {
+  const st = await $.fs.stat(full).catch(() => null)
+  if (!st || st.kind !== 'file') return { gone: true }
+  const sig = `${st.size}:${st.mtimeMs}`
+  if (st.size > SNAP_FILE || st.size > budget.left) return { sig }
+  const text = await $.fs.read(full).catch(() => null)
+  if (typeof text !== 'string') return { sig }
+  budget.left -= st.size
+  return text.includes('\0') ? { sig, bin: true } : { sig, text }
+}
+
+// Карточку отдают Claude: запомнить, с чего начали. Вернули её или она не прошла проверку, а сессия помнит прежний
+// отсчёт, — считаем от него. true — начали новый
+async function rvStart($, page) {
+  const id = page.id
+  if (S.rv.rounds.has(id)) return false
+  const mark = reviewMark(page.body)
+  const sum = S.rv.sums[id]
+  const prev = mark === 'returned' && sum ? { n: sum.n, add: sum.add, del: sum.del, commits: sum.commits } : null
+  const old = S.rv.past.get(id)
+  if (old && (mark === 'returned' || hasMark(page.body))) {
+    S.rv.past.delete(id)
+    S.rv.rounds.set(id, { ...old, prev: prev ?? old.prev })
+    return false
+  }
+  let path = S.ag?.path ?? ''
+  if (!path) {
+    try {
+      path = (await $.session.cwd()) ?? ''
+    } catch {
+      path = ''
+    }
+  }
+  const round = { id, at: await $.clock.now(), git: false, top: '', path: String(path), head: '', dirty: new Map(), prev }
+  if (round.path) {
+    try {
+      const top = await rvOut($, round.path, ['rev-parse', '--show-toplevel'])
+      if (top !== null && top.trim()) {
+        round.top = slashes(top.split('\n')[0])
+        round.git = true
+        const head = ((await rvOut($, round.top, ['rev-parse', '--verify', '-q', 'HEAD'])) ?? '').trim()
+        round.head = /^[0-9a-f]{7,64}$/.test(head) ? head : ''
+        const st = await rvOut($, round.top, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames'])
+        const budget = { left: SNAP_TOTAL }
+        for (const f of st === null ? [] : parseStatus(st).files.slice(0, SNAP_PATHS)) round.dirty.set(f.path, await rvSnap($, `${round.top}/${f.path}`, budget))
+      }
+    } catch (err) {
+      log(`ревью карточки: ${err?.message ?? err}`)
+    }
+  }
+  S.rv.rounds.set(id, round)
+  while (S.rv.rounds.size > ROUNDS_MAX) S.rv.rounds.delete(S.rv.rounds.keys().next().value)
+  return true
+}
+
+// Карточка не прошла проверку между карточками — Claude делает её снова: считать от прежней точки
+function rvAgain(id) {
+  const old = S.rv.past.get(id)
+  if (!old || S.rv.rounds.has(id)) return
+  S.rv.past.delete(id)
+  S.rv.rounds.set(id, old)
+}
+
+// Конец хода: отданные карточки, которые Claude перенёс в последнюю колонку, — прочитать, что поменялось
+async function rvDone($) {
+  if (!S.rv.rounds.size) return
+  await refreshNotes($)
+  for (const [id, round] of [...S.rv.rounds]) {
+    const card = S.notes.find((p) => p.id === id)
+    const board = card ? S.notes.find((p) => p.id === card.parent) : null
+    if (!card || !isBoard(board)) {
+      S.rv.rounds.delete(id)
+      continue
+    }
+    if (columnOf(card, board.board.cols) !== board.board.cols.at(-1).id) continue
+    S.rv.rounds.delete(id)
+    S.rv.past.delete(id)
+    S.rv.past.set(id, round)
+    while (S.rv.past.size > PAST_MAX) S.rv.past.delete(S.rv.past.keys().next().value)
+    await rvFinish($, round, card).catch((err) => log(`ревью карточки: ${err?.message ?? err}`))
+  }
+}
+
+// Что поменялось с тех пор, как карточку отдали: закоммиченное после тогдашнего HEAD и незакоммиченное. Файл, который
+// был изменён ещё до карточки, сравниваем с его копией; копии нет (большой файл) — только помечаем, числа неполные
+async function rvRead($, round) {
+  const at = round.top || round.path
+  const st = await rvOut($, at, ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames'])
+  const now = new Map((st === null ? [] : parseStatus(st).files).map((f) => [f.path, f.xy]))
+  const nums = round.head ? parseNumstat((await rvOut($, at, ['diff', '--numstat', '-z', '--no-renames', round.head])) ?? '') : new Map()
+  const paths = [...new Set([...nums.keys(), ...now.keys(), ...round.dirty.keys()])].sort()
+  const files = []
+  const patch = []
+  let reads = 0
+  let cut = false
+  for (const path of paths) {
+    const full = `${at}/${path}`
+    const snap = round.dirty.get(path)
+    if (snap && !snap.gone) {
+      const stat = await $.fs.stat(full).catch(() => null)
+      if (!stat || stat.kind !== 'file') {
+        const d = typeof snap.text === 'string' ? lineDiff(snap.text, '') : null
+        if (!d) cut = true
+        files.push({ path, add: 0, del: d ? d.del : 0, state: 'gone', diff: d ? d.text : '' })
+        continue
+      }
+      if (`${stat.size}:${stat.mtimeMs}` === snap.sig) continue
+      if (typeof snap.text === 'string' && stat.size <= SNAP_FILE && reads < REVIEW_FILES) {
+        reads++
+        const text = await $.fs.read(full).catch(() => null)
+        if (typeof text !== 'string') {
+          cut = true
+          files.push({ path, add: 0, del: 0, state: 'big', diff: '' })
+        } else if (text.includes('\0')) files.push({ path, add: 0, del: 0, state: 'bin', diff: '' })
+        else {
+          const d = lineDiff(snap.text, text)
+          if (d.add || d.del) files.push({ path, add: d.add, del: d.del, state: '', diff: d.text })
+        }
+      } else {
+        if (!snap.bin) cut = true
+        files.push({ path, add: 0, del: 0, state: snap.bin ? 'bin' : 'big', diff: '' })
+      }
+      continue
+    }
+    const n = snap?.gone ? null : nums.get(path)
+    if (n?.bin) {
+      files.push({ path, add: 0, del: 0, state: 'bin', diff: '' })
+      continue
+    }
+    if (n) {
+      files.push({ path, add: n.add, del: n.del, state: (now.get(path) ?? '').includes('D') ? 'gone' : '', diff: '' })
+      if (files.length <= REVIEW_FILES) patch.push(path)
+      continue
+    }
+    // Новый файл — или файл, которого не было и тогда
+    const stat = await $.fs.stat(full).catch(() => null)
+    if (!stat || stat.kind !== 'file') continue
+    if (stat.size > SNAP_FILE || reads >= REVIEW_FILES) {
+      cut = true
+      files.push({ path, add: 0, del: 0, state: 'big', diff: '' })
+      continue
+    }
+    reads++
+    const text = await $.fs.read(full).catch(() => null)
+    if (typeof text !== 'string') {
+      cut = true
+      files.push({ path, add: 0, del: 0, state: 'big', diff: '' })
+    } else if (text.includes('\0')) files.push({ path, add: 0, del: 0, state: 'bin', diff: '' })
+    else {
+      const d = lineDiff('', text)
+      files.push({ path, add: d.add, del: d.del, state: 'new', diff: d.text })
+    }
+  }
+  if (patch.length) {
+    const out = await rvOut($, at, ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--src-prefix=a/', '--dst-prefix=b/', '-U3', round.head, '--', ...patch.map(spec)])
+    const parts = splitPatch(out ?? '')
+    for (const f of files) {
+      const part = parts.get(f.path)
+      if (!part) continue
+      if (part.bin) f.state = 'bin'
+      else f.diff = part.diff
+    }
+  }
+  for (const f of files) {
+    const c = cutDiff(f.diff)
+    f.diff = c.text
+    f.cut = c.cut
+  }
+  const hist = round.git ? await rvOut($, at, ['log', '--no-color', '--format=%h%x09%s', '-n', '100', round.head ? `${round.head}..HEAD` : 'HEAD']) : null
+  const commits = (hist ?? '').split('\n').filter(Boolean).map((line) => line.replace('\t', ' '))
+  return { files, n: files.length, add: files.reduce((x, f) => x + f.add, 0), del: files.reduce((x, f) => x + f.del, 0), commits, cut }
+}
+
+// В той же папке, пока карточку делали, работала другая сессия — чьи изменения, не разобрать: её имя или ''
+function rvMixed(round) {
+  const here = key(round.top || round.path)
+  const others = S.ag?.on ? othersFrom(S.ag.read) : []
+  const r = others.find((x) => (x.changes?.top === here || samePath(x.path, round.path)) && (busy(x.status) || x.status === 'permission' || (lastOf(x)?.at ?? 0) > round.at))
+  return r ? r.name || '?' : ''
+}
+
+// Карточку сделали: числа — в $.store, подробности — файлом. Прежняя пометка «принято» или «вернули» больше не про неё
+async function rvFinish($, round, card) {
+  const read = round.git ? await rvRead($, round) : null
+  const sum = {
+    at: await $.clock.now(),
+    git: round.git,
+    n: read?.n ?? 0,
+    add: read?.add ?? 0,
+    del: read?.del ?? 0,
+    commits: read?.commits.length ?? 0,
+    mixed: rvMixed(round),
+    top: key(round.top),
+    slot: 0,
+    prev: round.prev,
+    state: '',
+    cut: Boolean(read?.cut),
+  }
+  const detail = read ? { files: read.files.slice(0, REVIEW_FILES), more: Math.max(0, read.n - REVIEW_FILES), commits: read.commits.slice(0, COMMITS_MAX) } : null
+  await rvSave($, card.id, sum, detail)
+  if (reviewMark(card.body)) {
+    const { note, bad } = nb
+    await editNotes($, (list, at) => {
+      const p = list.find((x) => x.id === card.id)
+      return p ? updatePage(list, card.id, { body: unreview(p.body) }, at) : list
+    })
+    nb.note = note
+    nb.bad = bad
+  }
+}
+
+// Записать итог карточки (и подробности — на её место из REVIEW_SLOTS)
+async function rvSave($, id, sum, detail) {
+  const all = restoreReviews(await $.store.get(REVIEW_KEY))
+  if (detail && S.rv.dir) {
+    const slot = pickSlot(all, id)
+    for (const [x, r] of Object.entries(all)) if (x !== id && r.slot === slot) all[x] = { ...r, slot: 0 }
+    try {
+      await $.fs.write(`${S.rv.dir}${S.sep}r${slot}.json`, JSON.stringify({ v: 1, id, at: sum.at, ...detail }))
+      sum.slot = slot
+    } catch (err) {
+      log(`ревью карточки: ${err?.message ?? err}`)
+    }
+  }
+  all[id] = sum
+  const clean = restoreReviews(all)
+  await $.store.set(REVIEW_KEY, clean)
+  S.rv.sums = clean
+  S.rv.sumsJson = JSON.stringify(clean)
+  if (S.rv.detail?.id === id) await rvDetail($, id)
+  $.ui.invalidate('ui.render')
+}
+
+// Итоги из $.store — при старте и вместе с блокнотом: их пишут и другие сессии этого компьютера
+export async function rvLoad($) {
+  const raw = await $.store.get(REVIEW_KEY)
+  const json = JSON.stringify(restoreReviews(raw))
+  if (json === S.rv.sumsJson) return
+  S.rv.sumsJson = json
+  S.rv.sums = restoreReviews(raw)
+  const d = S.rv.detail
+  if (d && d.at !== S.rv.sums[d.id]?.at) {
+    S.rv.detail = null
+    if (S.rv.files === d.id) await rvDetail($, d.id)
+  }
+  if (notesShown()) $.ui.invalidate('ui.render')
+}
+
+// Подробности карточки — из файла её места. Место уже заняла другая карточка — подробностей нет
+async function rvDetail($, id) {
+  const sum = S.rv.sums[id]
+  let detail = null
+  if (sum?.slot && S.rv.dir) {
+    const raw = await $.fs.read(`${S.rv.dir}${S.sep}r${sum.slot}.json`).catch(() => null)
+    try {
+      const d = typeof raw === 'string' ? restoreDetail(JSON.parse(raw), id) : null
+      if (d && d.at === sum.at) detail = d
+    } catch {
+      detail = null
+    }
+  }
+  S.rv.detail = detail ?? { id, at: sum?.at ?? 0, gone: true, files: [], more: 0, commits: [] }
+  $.ui.invalidate('ui.render')
+}
+
+// Что сказали про карточку — в итог ($.store)
+async function rvState($, id, state) {
+  const all = restoreReviews(await $.store.get(REVIEW_KEY))
+  if (!all[id]) return
+  all[id] = { ...all[id], state }
+  const clean = restoreReviews(all)
+  await $.store.set(REVIEW_KEY, clean)
+  S.rv.sums = clean
+  S.rv.sumsJson = JSON.stringify(clean)
+}
+
+// Пометка ревью в тексте карточки; пометка «проверка не прошла» остаётся первой строкой
+const withReview = (body, state) => (hasMark(body) ? marked(reviewed(unmark(body), state, S.lang, MAX_BODY), String(body).split('\n')[0]) : reviewed(body, state, S.lang, MAX_BODY))
+// Строка под сделанной карточкой на доске
+const rvLabel = (sum) => `  ${tr('файлов', S.lang)}: ${sum.n} · +${sum.add} −${sum.del}`
+
+// «Принять»: только пометка в тексте карточки — Arcade ничего не коммитит и не отправляет
+export async function rvAccept($, id) {
+  const ok = await editNotes(
+    $,
+    (list, at) => {
+      const p = list.find((x) => x.id === id)
+      return p ? updatePage(list, id, { body: withReview(p.body, 'accepted') }, at) : 'Открытую карточку удалили в другой сессии.'
+    },
+    'Принято. Arcade ничего не коммитит и не отправляет.',
+  )
+  if (ok !== true) return
+  S.rv.asking = ''
+  await rvState($, id, 'accepted')
+  const card = S.notes.find((p) => p.id === id)
+  const board = card ? S.notes.find((p) => p.id === card.parent) : null
+  const at = await $.clock.now()
+  await withNotes($, async () => logDay($, [{ at, kind: 'accept', id, title: card?.title ?? '', ...(board ? { board: board.title } : {}) }]))
+  $.ui.invalidate('ui.render')
+}
+
+// «Вернуть с комментарием»: пометка ↩ и строка с комментарием в тексте карточки, карточка — во вторую колонку. Claude
+// получит её как «проверка не прошла»: очередью (первой), сразу или в конце хода
+export async function rvReturn($, id, text) {
+  const comment = cleanComment(text)
+  if (!comment) {
+    nb.note = 'Напиши, что поправить, — без комментария не вернуть.'
+    nb.bad = true
+    $.ui.invalidate('ui.render')
+    return
+  }
+  const ok = await editNotes($, (list, at) => {
+    const p = list.find((x) => x.id === id)
+    const board = p ? list.find((x) => x.id === p.parent) : null
+    if (!p || !isBoard(board)) return 'Открытую карточку удалили в другой сессии.'
+    const body = `${withReview(p.body, 'returned').replace(/\s+$/, '')}\n\n${returnLine(S.lang, `${ddmm(at)} ${hhmm(at)}`, comment)}`
+    if (body.length > MAX_BODY) return 'Комментарий не помещается в карточку — сократи текст карточки или комментарий.'
+    const cols = board.board.cols
+    const next = updatePage(list, id, { body }, at)
+    return columnOf(p, cols) === cols.at(-1).id ? moveCard(next, id, { col: (cols.length > 2 ? cols[1] : cols[0]).id }, at) : next
+  })
+  if (ok !== true) return
+  S.rv.asking = ''
+  nb.field++
+  await rvState($, id, 'returned')
+  const card = S.notes.find((p) => p.id === id)
+  const board = card ? S.notes.find((p) => p.id === card.parent) : null
+  const at = await $.clock.now()
+  await withNotes($, async () => logDay($, [{ at, kind: 'return', id, title: card?.title ?? '', ...(board ? { board: board.title } : {}), comment }]))
+  const sum = S.rv.sums[id]
+  let cwd = S.ag?.path ?? ''
+  if (!cwd) {
+    try {
+      cwd = (await $.session.cwd()) ?? ''
+    } catch {
+      cwd = ''
+    }
+  }
+  const here = cwd ? key(cwd) : ''
+  nb.bad = false
+  if (S.queue && S.queue.board === board?.id) {
+    if (!S.queue.back.includes(id)) S.queue.back.push(id)
+    nb.note = 'Вернули. Очередь даст её Claude первой.'
+  } else if (S.queue) nb.note = 'Вернули. Идёт очередь другой доски — отдай карточку Claude, когда она кончится.'
+  else if (board && boardMates(board.id).length) nb.note = 'Вернули. Очередь этой доски идёт в другой сессии — отдай карточку Claude, когда она кончится.'
+  else if (!sum) nb.note = 'Вернули. Отдай карточку Claude кнопкой «Отдать Claude».'
+  else if (sum.top && here && here !== sum.top && !here.startsWith(`${sum.top}/`)) nb.note = 'Вернули. Карточку делали в другой папке — отдай её Claude из сессии той папки.'
+  else if (S.status !== 'idle' && S.status !== 'done') {
+    S.rv.pending = id
+    nb.note = 'Вернули. Claude получит её, когда закончит ход.'
+  } else {
+    nb.note = ''
+    await sendNote($, id)
+  }
+  $.ui.invalidate('ui.render')
+}
+
+// Раздел «Ревью» на сделанной карточке: файлы, diff, «Принять» и «Вернуть с комментарием». Файлов и diff нет —
+// карточку делали не здесь (или на другом компьютере общей доски): остаются кнопки и пометка
+function rvItems($, kit, page) {
+  const { Button, Input, Text, dim, section } = kit
+  const id = page.id
+  const sum = S.rv.sums[id]
+  const mark = reviewMark(page.body)
+  const items = [section('Ревью')]
+  // Папка не в git — считать нечего: ни строки «файлов», ни списка
+  if (sum && !sum.git) items.push(dim('Папка не в git — изменений не посчитать.'))
+  else if (sum) {
+    const open = S.rv.files === id
+    const head = `${open ? '▾' : '▸'} ${tr('файлов', S.lang)}: ${sum.n} · +${sum.add} −${sum.del}${sum.commits ? ` · ${tr('коммитов', S.lang)}: ${sum.commits}` : ''}`
+    items.push(
+      keep(
+        Button({
+          key: 'arcade-review-files',
+          label: head,
+          onPress: async () => {
+            S.rv.open.clear()
+            if (open) {
+              S.rv.files = ''
+              $.ui.invalidate('ui.render')
+              return
+            }
+            S.rv.files = id
+            await rvDetail($, id)
+          },
+        }),
+      ),
+    )
+    if (!sum.n) items.push(dim('Файлы не поменялись.'))
+    if (sum.mixed) items.push(keep(Text({ color: 'warning', wrap: 'wrap', children: [fill(tr('В этой папке работала и сессия «{0}» — не разобрать, чьи изменения.', S.lang), [sum.mixed])] })))
+    if (sum.prev) items.push(keep(dim(`${tr('До возврата', S.lang)}: ${tr('файлов', S.lang)}: ${sum.prev.n} · +${sum.prev.add} −${sum.prev.del}`)))
+    if (sum.cut) items.push(dim('Числа неполные: часть файлов большая или менялась ещё до карточки.'))
+    const detail = S.rv.detail?.id === id ? S.rv.detail : null
+    if (open && !detail) items.push(dim('Читаю подробности…'))
+    else if (open && detail.gone) items.push(dim('Подробности уже стёрты: Arcade хранит их для последних 40 карточек.'))
+    else if (open) {
+      detail.files.forEach((f, i) => {
+        const shown = S.rv.open.has(f.path)
+        const what =
+          f.state === 'new'
+            ? `${tr('новый', S.lang)} · +${f.add}`
+            : f.state === 'gone'
+              ? `${tr('удалён', S.lang)}${f.del ? ` · −${f.del}` : ''}`
+              : f.state === 'bin'
+                ? tr('двоичный', S.lang)
+                : f.state === 'big'
+                  ? tr('большой', S.lang)
+                  : `+${f.add} −${f.del}`
+        items.push(
+          keep(
+            Button({
+              key: `arcade-review-file-${i}`,
+              label: `${shown ? '▾' : '▸'} ${f.path} · ${what}`,
+              onPress: () => {
+                if (shown) S.rv.open.delete(f.path)
+                else S.rv.open.add(f.path)
+                $.ui.invalidate('ui.render')
+              },
+            }),
+          ),
+        )
+        if (!shown) return
+        if (!f.diff) {
+          items.push(dim('Без diff: двоичный или большой файл.'))
+          return
+        }
+        for (const line of f.diff.split('\n')) {
+          const look = line.startsWith('+') ? { color: 'success' } : line.startsWith('-') ? { color: 'error' } : line.startsWith('@@') ? { dimColor: true } : {}
+          items.push(keep(Text({ mono: true, wrap: 'wrap', ...look, children: [line || ' '] })))
+        }
+        if (f.cut) items.push(keep(dim(fill(tr('… обрезано, ещё строк: {0}', S.lang), [f.cut]))))
+      })
+      if (detail.more) items.push(keep(dim(`${tr('Ещё файлов', S.lang)}: ${detail.more}`)))
+      if (detail.commits.length) items.push(dim('Коммиты:'), ...detail.commits.map((c) => keep(dim(`  ${c}`))))
+    }
+  }
+  if (mark === 'accepted') {
+    items.push(keep(Text({ color: 'success', children: [`✓ ${tr('принято', S.lang)}`] })))
+    return items
+  }
+  if (mark === 'returned') items.push(keep(Text({ color: 'warning', children: [`↩ ${tr('вернули', S.lang)}`] })))
+  items.push(
+    Button({ key: 'arcade-review-accept', label: 'Принять', onPress: () => rvAccept($, id) }),
+    Button({
+      key: 'arcade-review-return',
+      label: 'Вернуть с комментарием',
+      onPress: () => {
+        S.rv.asking = id
+        nb.note = ''
+        $.ui.invalidate('ui.render')
+      },
+    }),
+  )
+  if (S.rv.asking === id)
+    items.push(
+      Input({
+        key: `arcade-review-comment-${nb.field}`,
+        label: 'Комментарий',
+        placeholder: 'что поправить',
+        autoFocus: true,
+        submitLabel: tr('Вернуть', S.lang),
+        onSubmit: (value) => rvReturn($, id, value),
+      }),
+      Button({
+        key: 'arcade-review-cancel',
+        label: 'Отмена',
+        onPress: () => {
+          S.rv.asking = ''
+          $.ui.invalidate('ui.render')
+        },
+      }),
+    )
+  items.push(dim('«Принять» только помечает карточку — Arcade ничего не коммитит и не отправляет.'))
+  return items
+}
+
 // ━━━━━━━━━━ app/asks ━━━━━━━━━━
 // Arcade: Claude ждёт человека — разрешения на инструмент или ответа на вопрос (AskUserQuestion). Отсюда — статус
 // «ждёт разрешения», уведомление, остановка очереди на вопрос и что показать в карточке вкладки «Агенты».
@@ -7102,8 +7632,16 @@ export async function turnDone($, turnId, e) {
     S.ag.last = { text: S.lastReply ?? '', at: await $.clock.now(), files: turnFiles(S.turnBase, S.ag.changes) }
     S.ag.lastBase = S.turnBase
   }
+  // Ревью по карточке: карточку перенесли в последнюю колонку — прочитать, что поменялось, до следующей карточки очереди
+  await rvDone($).catch(modError)
   // Очередь карточек: карточка сделана — следующая уходит новым ходом, не изнутри конца этого
   if (e && S.queue && (await queueTurnDone($, e))) $.clock.after(0, () => queueNext($).catch(modError))
+  // Карточку вернули после ревью, пока Claude был занят, — отдать её сейчас, новым ходом
+  if (!S.queue && S.rv.pending) {
+    const id = S.rv.pending
+    S.rv.pending = ''
+    $.clock.after(0, () => sendNote($, id).catch(modError))
+  }
   if (S.paneOpen && S.view !== 'library') {
     S.agentAlert = 'done'
     if (S.onDone === 'pause') {
@@ -10145,6 +10683,7 @@ export function notesScreen($, e, kit) {
               }),
             ),
           }),
+          ...(done && !isPrompts(parent) ? rvItems($, kit, page) : []),
           ...dueItems,
           ...checkItems,
         ]
@@ -10602,16 +11141,35 @@ export function boardsScreen($, e, kit) {
       const by = col === lastCol ? null : sessionOf(card.id)
       const session = by ? (by.me ? tr('у этой сессии', S.lang) : fill(tr('у сессии «{0}»', S.lang), [by.name])) : ''
       const failed = hasMark(card.body)
-      const parts = [failed ? `⚠ ${tr('проверка не прошла', S.lang)}` : '', total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '', session]
+      // Ревью по карточке (app/review): «принято» — у сделанной, «вернули» — пока её снова не сделали
+      const said = reviewMark(card.body)
+      const back = said === 'returned' && col !== lastCol
+      const parts = [said === 'accepted' && col === lastCol ? `✓ ${tr('принято', S.lang)}` : '', back ? `↩ ${tr('вернули', S.lang)}` : '', failed ? `⚠ ${tr('проверка не прошла', S.lang)}` : '', total ? `☑ ${done}/${total}` : '', card.due ? `📅 ${dayText(card.due, today)}` : '', taken ? `${tr('в работе у', S.lang)} ${deskPerson(taken, base)}` : '', session]
       const text = parts.filter(Boolean).join(' · ')
       if (!text) return []
-      return [keep(late || failed ? Text({ color: 'warning', children: [`  ${text}`] }) : dim(`  ${text}`))]
+      return [keep(late || failed || back ? Text({ color: 'warning', children: [`  ${text}`] }) : dim(`  ${text}`))]
     }
+    // Строка «файлов: N · +A −D» под сделанной карточкой — открывает карточку со списком файлов
+    const rvButton = (card) =>
+      keep(
+        Button({
+          key: `arcade-card-review-${card.id}`,
+          label: rvLabel(S.rv.sums[card.id]),
+          plain: true,
+          dimColor: true,
+          onPress: async () => {
+            S.rv.open.clear()
+            S.rv.files = card.id
+            await rvDetail($, card.id)
+            return leave(`note:${card.id}`)()
+          },
+        }),
+      )
     const columnBox = (c) => {
       const cards = columnCards(S.notes, board, c.id)
       const children = [
         keep(strong(`${colName(c)} · ${cards.length}`)),
-        ...cards.flatMap((card) => [cardButton(card), ...cardAbout(card, c.id)]),
+        ...cards.flatMap((card) => [cardButton(card), ...cardAbout(card, c.id), ...(c.id === lastCol && S.rv.sums[card.id]?.git ? [rvButton(card)] : [])]),
         ...(cards.length ? [] : [dim('пусто')]),
         // В Desktop колонка узкая: без подписи слева поле занимает всю её ширину, подсказка — в самом поле
         Input({
@@ -13092,7 +13650,10 @@ export function register(on) {
         S.sep = home.includes('\\') ? '\\' : '/'
         S.dataDir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'roms'].join(S.sep)
         S.snd.dir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'sounds'].join(S.sep)
+        S.rv.dir = [home.replace(/[\\/]+$/, ''), '.claude', 'arcade', 'review'].join(S.sep)
       }
+      // Итоги ревью по карточкам (app/review)
+      await rvLoad($).catch(modError)
       // «Не сейчас» у строки «сыграть?» — отсрочка файлом в ~/.claude/arcade, общая для сессий этого компьютера
       startLater(home)
       // Отметка этой сессии для вкладки «Агенты» и очереди на несколько сессий — файлом в ~/.claude/arcade/agents
