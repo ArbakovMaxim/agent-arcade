@@ -12,9 +12,11 @@ const ID = /^[a-z0-9]{1,20}$/ // как у страниц блокнота
 //   done — карточку перенесли в последнюю колонку доски (by: claude — его инструментом блокнота, me — с экрана);
 //   checked — на странице отметили n пунктов чек-листа (by — так же);
 //   check — очередь проверила карточку командой доски: ok — прошла, code — код выхода (-1 — время вышло или не
-//   запустилась), cmd — команда, tail — последние строки вывода.
+//   запустилась), cmd — команда, tail — последние строки вывода;
+//   accept — карточку приняли кнопкой «Принять» (ревью по карточке);
+//   return — вернули кнопкой «Вернуть с комментарием»: comment — комментарий.
 // title и board — названия на тот момент: страницу могли потом удалить
-const KINDS = ['gave', 'done', 'checked', 'check']
+const KINDS = ['gave', 'done', 'checked', 'check', 'accept', 'return']
 export function restoreLog(raw) {
   if (!Array.isArray(raw)) return []
   const out = []
@@ -30,6 +32,7 @@ export function restoreLog(raw) {
       entry.cmd = typeof x.cmd === 'string' ? x.cmd.slice(0, 200) : ''
       entry.tail = typeof x.tail === 'string' ? x.tail.split('\n').slice(-5).join('\n').slice(-400) : ''
     }
+    if (x.kind === 'return') entry.comment = typeof x.comment === 'string' ? x.comment.slice(0, 200) : ''
     out.push(entry)
   }
   return out
@@ -67,7 +70,7 @@ export function noteChanges(before, after, at, by) {
 
 // Итоги дня day («ГГГГ-ММ-ДД») по журналу и блокноту сейчас: gave — что отдали Claude, done — какие карточки
 // закончены, checked — где сколько пунктов отмечено, checks — проверки между карточками (последняя у карточки), doing —
-// что ещё в работе. Названия — нынешние, если страница
+// что ещё в работе, accepted и returned — ревью по карточке (последнее слово у карточки). Названия — нынешние, если страница
 // жива. me — мой номер аккаунта: на общей доске в работе только то, что взял я или отдал своему Claude
 export function daySummary(log, notes, day, me = '') {
   const pages = new Map(notes.map((p) => [p.id, p]))
@@ -89,8 +92,13 @@ export function daySummary(log, notes, day, me = '') {
     const last = today.filter((e) => e.kind === 'check' && e.id === x.id).at(-1)
     return { id: x.id, title: x.title, board: x.board, ok: last.ok, code: last.code, cmd: last.cmd, tail: last.tail, at: last.at }
   })
-  // Карточка не прошла проверку позже, чем её перенесли в последнюю колонку, — она не сделана
-  const failed = new Map(checks.filter((x) => !x.ok).map((x) => [x.id, x.at]))
+  // Ревью: у карточки — последнее слово, «принято» или «вернули» с комментарием
+  const said = new Map()
+  for (const x of today.filter((e) => e.kind === 'accept' || e.kind === 'return')) said.set(x.id, { ...item(x), kind: x.kind, comment: x.comment ?? '', at: x.at })
+  const accepted = [...said.values()].filter((x) => x.kind === 'accept').map(({ id, title, board }) => ({ id, title, board }))
+  const returned = [...said.values()].filter((x) => x.kind === 'return')
+  // Карточка не прошла проверку или её вернули позже, чем перенесли в последнюю колонку, — она не сделана
+  const failed = new Map([...checks.filter((x) => !x.ok), ...returned].map((x) => [x.id, x.at]))
   const doneAt = (id) => today.filter((e) => e.kind === 'done' && e.id === id).at(-1)?.at ?? 0
   const done = once('done').filter((x) => !(failed.get(x.id) >= doneAt(x.id)))
   const finished = new Set(done.map((x) => x.id))
@@ -117,7 +125,7 @@ export function daySummary(log, notes, day, me = '') {
       if (total && ticked < total) doing.push({ id: p.id, title: p.title, board: '', left: total - ticked })
     }
   }
-  return { gave, done, checked, checks: checks.map(({ at, ...x }) => x), doing }
+  return { gave, done, checked, checks: checks.map(({ at, ...x }) => x), doing, accepted, returned: returned.map(({ id, title, board, comment }) => ({ id, title, board, comment })) }
 }
 
 // Текст страницы «Итоги» — разделами; t — перевод фразы, colName — название колонки. Названия страниц — как есть
@@ -133,6 +141,15 @@ export function summaryBody(sum, t, colName) {
       ...(x.ok || !x.tail ? [] : x.tail.split('\n').map((l) => `    ${l}`)),
     ].join('\n'),
   )
+  const accepted = sum.accepted ?? []
+  const returned = sum.returned ?? []
+  const reviewLines = accepted.length || returned.length
+    ? [
+        `${t('Принято')} — ${accepted.length}, ${t('вернули')} — ${returned.length}.`,
+        ...accepted.map((x) => `- ✓ ${x.title}${onBoard(x)}`),
+        ...returned.map((x) => `- ↩ ${x.title}${onBoard(x)}${x.comment ? `: ${x.comment}` : ''}`),
+      ]
+    : []
   return [
     ...part(
       'Отдано Claude',
@@ -147,6 +164,8 @@ export function summaryBody(sum, t, colName) {
       sum.doing.map((x) => `- ${x.title}${onBoard(x)}${x.col ? `, ${t('колонка')} «${colName(x.col)}»` : ''}${x.left ? `: ${t('осталось пунктов')} — ${x.left}` : ''}`),
     ),
     ...(checkLines.length ? part('Проверки между карточками', checkLines) : []),
+    // Ревью по карточке — разделом, только когда кого-то приняли или вернули
+    ...(reviewLines.length ? part('Ревью карточек', reviewLines) : []),
   ]
     .join('\n')
     .trimEnd()
