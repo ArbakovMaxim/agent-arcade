@@ -5,6 +5,7 @@ import { S } from '../hooks/app/state.js'
 import { AGENT_TICK_MS } from '../hooks/register.js'
 import { ORPHANS_AFTER_MS, RESUME_AFTER_MS, USAGE_POLL_MS } from '../hooks/register.js'
 import { clockText, freshLimits, limitsOf, pctText, resetText, spentWindow, usdText } from '../hooks/register.js'
+import { addReading, FC_ASK, FC_SOON, forecast, mergeLimits, soonest } from '../hooks/forecast.js'
 import { HEAVY, PANE, WINDOWS, start, stubs, test } from './kit.ts'
 
 const NOTES = 'mcp__arcade__notes'
@@ -355,5 +356,158 @@ test('лимиты: замеры других сессий — в «Лимита
   await ui.press({ key: 'arcade-menu-agents' })
   await clock.advance(AGENT_TICK_MS)
   expect(await text(/Контекст: 63% · \$2\.50/)).toBeDefined()
+  await ui.unmount()
+})
+
+// Замер, что растёт с темпом: заглушка смотрит на часы — окна в момент замера: box.windows(сейчас) → [вид, проценты, сброс]
+const pacedStub = (on: any, clock: any, windows: (now: number) => [string, number, number?][]) => {
+  const box = { windows }
+  on('session.usage', () => ({ value: reading(box.windows(clock.now())) }))
+  return box
+}
+
+test('лимиты: прогноз — темп по замерам за час; мало замеров — прогноза нет; окна из замеров нескольких сессий', () => {
+  const R5 = T0 + 3 * HOUR
+  const R7 = T0 + 50 * HOUR
+  // +10% за 20 минут при 60% — кончится через 80 минут; неделя: +1% за 20 минут — не отличить от случайности
+  let h: any = {}
+  for (let i = 0; i <= 40; i++) {
+    h = addReading(h, [{ kind: 'five_hour', pct: 50 + i / 4, reset: R5 }, { kind: 'seven_day', pct: 30 + i / 40, reset: R7 }, { kind: 'spend_limit', pct: 5, reset: 0 }], T0 - 20 * MIN + i * 30_000)
+  }
+  expect(forecast(h.five_hour, T0, R5)).toEqual({ end: T0 + 80 * MIN })
+  expect(forecast(h.seven_day, T0, R7)).toBeNull()
+  expect(h.spend_limit).toBeUndefined()
+  // +1% за 30 минут — до сброса хватит
+  let g: any = addReading({}, [{ kind: 'five_hour', pct: 60, reset: R5 }], T0 - 30 * MIN)
+  g = addReading(g, [{ kind: 'five_hour', pct: 61, reset: R5 }], T0)
+  expect(forecast(g.five_hour, T0, R5)).toEqual({ enough: true })
+  // Замеры — меньше 10 минут или +1% за 15 минут: прогноза нет, а не случайная цифра
+  let s: any = addReading({}, [{ kind: 'five_hour', pct: 60, reset: R5 }], T0 - 9 * MIN)
+  s = addReading(s, [{ kind: 'five_hour', pct: 70, reset: R5 }], T0)
+  expect(forecast(s.five_hour, T0, R5)).toBeNull()
+  let q: any = addReading({}, [{ kind: 'five_hour', pct: 60, reset: R5 }], T0 - 15 * MIN)
+  q = addReading(q, [{ kind: 'five_hour', pct: 61, reset: R5 }], T0)
+  expect(forecast(q.five_hour, T0, R5)).toBeNull()
+  // Окно сбросилось — замеры заново; замер не новее последнего — мимо; старше часа — прочь; сброс прошёл — прогноза нет
+  expect(addReading(h, [{ kind: 'five_hour', pct: 2, reset: R5 + 5 * HOUR }], T0 + MIN).five_hour.pts).toEqual([[T0 + MIN, 2]])
+  expect(addReading(h, [{ kind: 'five_hour', pct: 99, reset: R5 }], T0 - MIN).five_hour.pts.length).toBe(41)
+  expect(addReading(h, [{ kind: 'five_hour', pct: 61, reset: R5 }], T0 + 50 * MIN).five_hour.pts.length).toBe(22)
+  expect(forecast(h.five_hour, T0, T0 - 1)).toBeNull()
+
+  // Кончится раньше чем через полчаса (вопрос перед очередью), раньше чем через 20 минут (всплывашка)
+  let z: any = addReading({}, [{ kind: 'five_hour', pct: 70, reset: R5 }], T0 - 20 * MIN)
+  z = addReading(z, [{ kind: 'five_hour', pct: 85, reset: R5 }], T0)
+  const now5 = [{ kind: 'five_hour', pct: 85, reset: R5 }]
+  expect(soonest(z, now5, T0, FC_ASK)).toEqual({ kind: 'five_hour', end: T0 + 20 * MIN })
+  expect(soonest(z, now5, T0 + MIN, FC_SOON)).toEqual({ kind: 'five_hour', end: T0 + 20 * MIN })
+  expect(soonest(z, now5, T0, FC_SOON)).toBeNull()
+  expect(soonest(g, [{ kind: 'five_hour', pct: 61, reset: R5 }], T0, FC_ASK)).toBeNull()
+
+  // Окна общие на учётную запись: замер сессии, что давно не говорила с Claude, отстаёт — берём больше процентов;
+  // окно, чей сброс прошёл, — прочь; сброс позже — окно новое
+  expect(
+    mergeLimits(
+      [
+        [{ kind: 'five_hour', pct: 40, reset: R5 }, { kind: 'seven_day', pct: 20, reset: R7 }],
+        [{ kind: 'five_hour', pct: 55, reset: R5 + MIN }, { kind: 'spend_limit', pct: 5, reset: 0 }],
+        undefined,
+        [{ kind: 'five_hour', pct: 90, reset: T0 - MIN }, { kind: 'seven_day', pct: 5, reset: R7 + 168 * HOUR }],
+      ],
+      T0,
+    ),
+  ).toEqual([
+    { kind: 'five_hour', pct: 55, reset: R5 + MIN },
+    { kind: 'seven_day', pct: 5, reset: R7 + 168 * HOUR },
+  ])
+  expect(mergeLimits(undefined, T0)).toEqual([])
+})
+
+test('лимиты: «в этом темпе кончится около …» под окном, медленно — «хватит»; всплывашка за 20 минут — раз на окно, под выключателем', HEAVY, async ($, on) => {
+  const { clock, saved, toasts } = stubs(on, { env: WINDOWS })
+  await clock.advance(T0)
+  const R = T0 + 3 * HOUR
+  // Окно 5 часов: +10% за 20 минут (с 50,25% — конец не на ровной минуте); неделя стоит
+  pacedStub(on, clock, (now) => [['five_hour', 50.25 + (now - T0) / (2 * MIN), R], ['seven_day', 30, T0 + 50 * HOUR]])
+  await start($)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  await ui.press({ key: 'arcade-menu-usage' })
+  // Замеры — меньше 10 минут: строки нет
+  await clock.advance(9 * MIN)
+  expect(await text(/Примерно/)).toBeUndefined()
+  // 20 минут, +10% при 60% — кончится через ~80 минут; неделя не растёт, но полчаса ещё не прошло — строки нет
+  await clock.advance(11 * MIN)
+  const end = `Примерно: в этом темпе кончится около ${hm(T0 + 99.5 * MIN)}`
+  expect(await text(`  ${end}`)).toMatchObject({ props: { dimColor: true } })
+  expect(await text(/до сброса хватит/)).toBeUndefined()
+  // Полчаса без роста — до сброса хватит
+  await clock.advance(11 * MIN)
+  expect(await text('  Примерно: в этом темпе до сброса хватит')).toMatchObject({ props: { dimColor: true } })
+
+  // Выключатель — тот же, что у 80 и 90%: выключен — меньше 20 минут осталось, а всплывашки нет
+  const soon = () => toasts.filter((t: string) => t.includes('в этом темпе кончится'))
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-usage-warn' })
+  expect(saved.get('usageWarn')).toBe(false)
+  await clock.advance(50 * MIN)
+  expect(soon()).toEqual([])
+  // Включили — одна всплывашка; о том же окне больше не говорим ни здесь, ни в других сессиях
+  await ui.press({ key: 'arcade-usage-warn' })
+  await clock.advance(USAGE_POLL_MS)
+  expect(soon().length).toBe(1)
+  expect(soon()[0].startsWith('Лимит Claude «5 часов»: в этом темпе кончится примерно через ')).toBe(true)
+  await clock.advance(5 * MIN)
+  expect(soon().length).toBe(1)
+  expect((saved.get('usageWarned') as any)[`five_hour|${R}|soon`]).toBeDefined()
+  // На экране — цветом предупреждения: меньше получаса
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-usage' })
+  expect(await text(/^  Примерно: в этом темпе кончится около /)).toMatchObject({ props: { color: 'warning' } })
+  // Desktop — строкой под временем сброса
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await desk.find({ type: 'Text', text: end })).toMatchObject({ props: { color: 'warning' } })
+  await desk.unmount()
+  await ui.unmount()
+})
+
+test('лимиты: перед очередью — по прогнозу лимит кончится через 15 минут: «Запустить» или «Отмена»; хватит — без вопроса', HEAVY, async ($, on) => {
+  const stub = stubs(on, { env: WINDOWS, submit: true })
+  const { clock, submits } = stub
+  await clock.advance(T0)
+  // Окно 5 часов: +1% за полчаса — до сброса хватит
+  const usage = pacedStub(on, clock, (now) => [['five_hour', 60 + (now - T0) / (30 * MIN), T0 + 3 * HOUR]])
+  await start($)
+  await clock.advance(31 * MIN)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  await queueBoard($, stub, ui, ['A', 'B'])
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(submits.length).toBe(1)
+  expect(await ui.find({ key: 'arcade-board-queue-go' })).toBeUndefined()
+  await ui.press({ key: 'arcade-board-queue' })
+  expect((await ui.find({ key: 'arcade-board-queue' })).props.label).toBe('Очередь для Claude')
+
+  // Новое окно и темп быстрее: +1% в минуту, через 20 минут — 84,75%, кончится через ~15 минут
+  const T1 = T0 + 40 * MIN
+  usage.windows = (now) => [['five_hour', 64.75 + (now - T1) / MIN, T1 + 5 * HOUR]]
+  await clock.set(T1 + 20 * MIN)
+  const ask = `  Лимит, скорее всего, кончится около ${hm(T1 + 35.25 * MIN)}. Запустить всё равно?`
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(await text(ask)).toMatchObject({ props: { color: 'warning' } })
+  expect(submits.length).toBe(1)
+  // «Отмена» — вопрос прочь, очередь не запущена
+  await ui.press({ key: 'arcade-board-queue-no' })
+  expect(await text(ask)).toBeUndefined()
+  expect(submits.length).toBe(1)
+  // Доска продолжает сама после сброса — так и сказать
+  await ui.press({ key: 'arcade-board-resume-auto' })
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(await text(`${ask} После сброса очередь продолжится сама.`)).toBeDefined()
+  // «Запустить» — очередь идёт, вопрос прочь
+  await ui.press({ key: 'arcade-board-queue-go' })
+  expect(submits.length).toBe(2)
+  expect(await text(/Запустить всё равно/)).toBeUndefined()
+  expect((await ui.find({ key: 'arcade-board-queue' })).props.label).toBe('Остановить очередь')
   await ui.unmount()
 })
