@@ -4,6 +4,7 @@
 // Каталог плагинов Anthropic разрешает передавать $ только функции, объявленной на верхнем уровне того же файла, поэтому
 // весь код, который зовёт Claude Code, — в этом файле, разделами: помощники (app/…), экраны панели (screens/…) и в конце
 // подписки на события. Состояние и значки — в hooks/app/, чистые модули без $ (каталог, переводы, ленты и т. п.) — рядом, в hooks/.
+import { ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERTS_KEY, alertKey, alertText, alertWhat, keepTold, restoreAlerts, seenOf } from './alerts.js'
 import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parseSettings, parseStart, parseWeb, restoreAccount, restoreStamps, suggestHandle, SYNC_KEYS, syncPlan } from './account.js'
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
@@ -22,7 +23,7 @@ import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
-import { avatarXaml, keepPopped, popupChats, popupCommand, restorePopped } from './popup.js'
+import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
 import { bundledFeeds, itemStats, listenUrl, parseFeeds, parseItems, readsPrompt, readUrl } from './rss.js'
 import { feedLanguage, freshFound, mix, ownTopic, ownTopicPrompt, parseOwnTopic, parseSearch, plainTopic, rememberTopic, restoreMyTopics, SEARCH_SHOWS, searchUrl, showFeed } from './search.js'
@@ -295,6 +296,10 @@ export const HIDDEN_MAX = 64 // скрытых сессий помним не б
 S.ag = null
 S.agNotify = true // всплывашка «Сессия «…» ждёт разрешения» — настройка agentsNotify
 S.agDone = false // всплывашка «В сессии «…» Claude закончил ход» — настройка agentsDone
+S.agOs = true // о том же — системное уведомление поверх всех окон (alerts.js) — настройка agentsOs
+S.agSound = true // у него звук: «ждёт тебя» и «закончил» — разные — настройка agentsSound
+// pending — события для уведомления: ключ → { key, sid, seen, name, what, at }; busy — объявление в пути
+S.al = { pending: new Map(), busy: false }
 S.agHidden = [] // id сессий, скрытых крестиком во вкладке «Агенты»: их нет в списке и нет всплывашек о них — agentsHidden
 
 const STATUS_ORDER = { permission: 0, done: 1, working: 2, background: 2, idle: 3 }
@@ -311,7 +316,7 @@ const slotPath = (slot) => `${S.ag.dir}${S.sep}s${slot}.json`
 // Запустить отметки — из session.start. Нет домашней папки или id сессии — их нет: очередь идёт по-старому, одна
 export async function startAgents($, home) {
   const old = S.ag
-  S.ag = { on: false, dir: '', sid: '', name: '', path: '', slot: 0, ready: false, status: S.status, since: 0, wrote: 0, sent: '', read: 0, sig: '', files: {}, seen: null, card: null, doneAt: 0, claim: null, joinWarn: '', chain: Promise.resolve(), taking: null, ticking: false, launched: false }
+  S.ag = { on: false, dir: '', sid: '', name: '', path: '', slot: 0, ready: false, status: S.status, since: 0, wrote: 0, sent: '', read: 0, sig: '', files: {}, seen: null, card: null, doneAt: 0, claim: null, joinWarn: '', chain: Promise.resolve(), taking: null, ticking: false, launched: false, look: old?.look ?? 0 }
   if (!home) return
   try {
     const ag = S.ag
@@ -359,6 +364,7 @@ function recordOf(at) {
     ask: S.ask ?? null,
     usage: usageOf(),
     changes: ag.changes ?? null,
+    look: ag.look || 0,
   }
 }
 // Замер лимитов и контекста этой сессии (app/usage) — для чужих «Агентов» и «Лимитов»
@@ -532,7 +538,9 @@ export async function agentsTick($) {
       await readSlots($, now)
       if (await readHidden($)) ag.sig = ''
       const others = othersFrom(now)
-      notify($, others)
+      const all = ag.ready ? [...others, { ...recordOf(now), slot: ag.slot }] : others
+      notify($, all, now)
+      alertsTick($, all, now)
       const sig = JSON.stringify(others.map((r) => [r.sid, r.name, r.status, r.bg, r.since, r.card?.id, r.queue?.n, r.queue?.of, r.ask?.kind, r.ask?.id, r.ask?.what, r.usage?.at, r.changes?.at]).sort())
       if (sig !== ag.sig) {
         ag.sig = sig
@@ -546,23 +554,33 @@ export async function agentsTick($) {
   }
 }
 
-// Всплывашки о других сессиях: первое чтение только запоминает, что видно; дальше — «ждёт разрешения» или «ждёт
-// ответа на вопрос» (и у новой сессии тоже; каждый новый вопрос — заново) и, если включено, «закончил ход» у знакомой
-const seenOf = (r) => (r.status === 'permission' && r.ask?.kind === 'question' ? `question:${r.ask.id}` : r.status)
-function notify($, others) {
+// Всплывашки о других сессиях и уведомления ОС о всех (и о своей): первое чтение только запоминает, что видно; дальше —
+// «ждёт разрешения» или «ждёт ответа на вопрос» (и у новой сессии тоже; каждый новый вопрос — заново) и, если
+// включено, «закончил ход» у знакомой. Уведомления копятся в S.al.pending — объявит alertsTick
+function notify($, all, now) {
   const ag = S.ag
   const first = !ag.seen
   const was = ag.seen ?? new Map()
-  ag.seen = new Map(others.map((r) => [r.sid, seenOf(r)]))
+  ag.seen = new Map(all.map((r) => [r.sid, seenOf(r)]))
   if (first) return
-  for (const r of others) {
+  for (const r of all) {
     const before = was.get(r.sid)
     if (before === seenOf(r) || S.agHidden.includes(r.sid)) continue
-    if (r.status === 'permission' && S.agNotify)
-      $.ui.toast(fill(tr(r.ask?.kind === 'question' ? 'Сессия «{0}» ждёт ответа на вопрос' : 'Сессия «{0}» ждёт разрешения', S.lang), [r.name]))
-    else if (r.status === 'done' && before !== undefined && S.agDone) $.ui.toast(fill(tr('В сессии «{0}» Claude закончил ход', S.lang), [r.name]))
+    const wait = r.status === 'permission'
+    const done = r.status === 'done' && before !== undefined
+    if (!wait && !done) continue
+    const what = alertWhat(r)
+    if (alertOn(what)) S.al.pending.set(alertKey(r), { key: alertKey(r), sid: r.sid, seen: seenOf(r), name: r.name, what, at: now })
+    if (r.sid === ag.sid) continue
+    if (wait && S.agNotify) $.ui.toast(fill(tr(what === 'question' ? 'Сессия «{0}» ждёт ответа на вопрос' : 'Сессия «{0}» ждёт разрешения', S.lang), [r.name]))
+    else if (done && S.agDone) $.ui.toast(fill(tr('В сессии «{0}» Claude закончил ход', S.lang), [r.name]))
   }
 }
+
+// Уведомление ОС о сессиях включено: само, на этой системе есть чем показать, и то же событие включено всплывашкой
+const alertOn = (what) => S.agOs && Boolean(S.platform) && (what === 'done' ? S.agDone : S.agNotify)
+// Об этом событии своей сессии скажет уведомление о сессиях — старое «пока играешь в окне» молчит
+const alertsCover = (what) => Boolean(S.ag?.on) && alertOn(what)
 
 // Уйти — из session.end. /clear: процесс тот же, id сессии будет новый — место оставляем себе. Иначе — место свободно
 export async function leaveAgents($, reason) {
@@ -1037,6 +1055,7 @@ export async function desktopWindow($, id, opened, toast = false) {
 // Хук нажатия (ui.press, ui.input по Enter): next ждёт обработчик до конца, потом открываем то, что он поставил в
 // очередь, — по одному, как нажимали
 export async function handlePress($, e, next) {
+  await lookHere($)
   S.pressing++
   try {
     return await next(e)
@@ -2751,6 +2770,127 @@ async function openFromPopup($, id) {
   await openPane($)
   await openChat($, id)
   loadChats($, true).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+}
+
+// --- Уведомления о сессиях -----------------------------------------------------------------------------------------
+// «Ждёт тебя» и «закончил ход» — карточкой поверх всех окон и со звуком (alerts.js). Объявляет одна сессия на
+// компьютере: заявка в $.store, выждать, перечитать — как напоминания календаря. Первой — та, где человек был
+// последним: клик по карточке откроет «Агентов» в ней
+const LOOK_MS = 10_000 // «человек здесь» в отметке обновляется не чаще раза в столько
+const ALERT_DEFER_MS = 5_000 // сессия, где человека не было, объявляет на столько позже: пусть успеет та, где он был
+
+// Человек что-то сделал в этой сессии (написал или нажал в панели) — отметить. Ошибка здесь ничего не ломает
+export async function lookHere($) {
+  try {
+    const ag = S.ag
+    if (!ag?.on) return
+    const now = await $.clock.now()
+    if (now - ag.look >= LOOK_MS) ag.look = now
+  } catch (err) {
+    log(`отметка сессии: ${err?.message ?? err}`)
+  }
+}
+
+// Какую сессию человек смотрит: где он что-то делал последним. Никого — ''
+const watchedOf = (all) => all.reduce((best, r) => (r.look > (best?.look ?? 0) ? r : best), null)?.sid ?? ''
+
+// Шаг уведомлений — из agentsTick, после всплывашек: забыть, что уже неактуально (ответили, сессию скрыли или
+// закрыли, уведомление выключили); копится дольше ALERT_GATHER_MS — объявить
+function alertsTick($, all, now) {
+  const al = S.al
+  if (al.busy || !al.pending.size) return
+  const by = new Map(all.map((r) => [r.sid, r]))
+  for (const [key, ev] of al.pending) {
+    const r = by.get(ev.sid)
+    if (!r || S.agHidden.includes(ev.sid) || seenOf(r) !== ev.seen || !alertOn(ev.what)) al.pending.delete(key)
+  }
+  if (!al.pending.size) return
+  const watched = watchedOf(all)
+  const gather = ALERT_GATHER_MS + (watched && watched !== S.ag.sid ? ALERT_DEFER_MS : 0)
+  const oldest = Math.min(...[...al.pending.values()].map((ev) => ev.at))
+  if (now - oldest < gather) return
+  al.busy = true
+  $.clock.after(0, async () => {
+    try {
+      await announce($, watched)
+    } catch (err) {
+      log(`уведомление о сессиях не показалось: ${err?.message ?? err}`)
+    } finally {
+      al.busy = false
+    }
+  })
+}
+
+// Объявить накопленное: что уже объявила другая сессия — забыть; объявляли меньше ALERT_GAP_MS назад — подождать.
+// Заявка: записать в $.store, выждать CAL_CLAIM_MS, перечитать — осталась моя, значит объявляю я
+async function announce($, watched) {
+  const al = S.al
+  // Плитки могли переключить в другой сессии — объявить по тому, что выбрано сейчас
+  S.agNotify = (await $.store.get('agentsNotify')) !== false
+  S.agDone = (await $.store.get('agentsDone')) === true
+  S.agOs = (await $.store.get('agentsOs')) !== false
+  S.agSound = (await $.store.get('agentsSound')) !== false
+  for (const [key, ev] of al.pending) if (!alertOn(ev.what)) al.pending.delete(key)
+  const now = await $.clock.now()
+  const was = restoreAlerts(await $.store.get(ALERTS_KEY), now)
+  for (const key of al.pending.keys()) if (was.told[key]) al.pending.delete(key)
+  // last 0 — ещё не объявляли
+  if (!al.pending.size || (was.last > 0 && now - was.last < ALERT_GAP_MS)) return
+  const batch = [...al.pending.values()]
+  const told = { ...was.told }
+  for (const ev of batch) told[ev.key] = now
+  await $.store.set(ALERTS_KEY, { by: me, last: now, told: keepTold(told) })
+  await $.clock.sleep(CAL_CLAIM_MS)
+  const after = restoreAlerts(await $.store.get(ALERTS_KEY), await $.clock.now())
+  if (after.by !== me) {
+    for (const key of al.pending.keys()) if (after.told[key]) al.pending.delete(key)
+    return
+  }
+  for (const ev of batch) al.pending.delete(ev.key)
+  showAlert($, batch, watched)
+}
+
+// Карточка о пачке. Впереди окно Claude Code — без сессии, которую человек смотрит (одна она — карточки нет); это
+// узнаёт сама карточка, только на Windows. Клик — окно Claude Code впереди, в панели Arcade — «Агенты»
+function showAlert($, batch, watched) {
+  const t = (text) => tr(text, S.lang)
+  const said = alertText(batch, t)
+  if (!said) return
+  const rest = batch.filter((ev) => ev.sid !== watched)
+  const fg = rest.length === batch.length ? undefined : (alertText(rest, t) ?? null)
+  const lead = batch.find((ev) => ev.what !== 'done') ?? batch[0]
+  const free = [...Array(POPUP_SLOTS).keys()].find((n) => !popSlots.has(n))
+  const slot = free ?? 0
+  const command = popupCommand(S.platform, {
+    title: said.title,
+    text: said.text,
+    pic: S.platform === 'windows' ? letterXaml(lead.name, lead.sid) : '',
+    slot,
+    sound: S.agSound ? said.kind : 'none',
+    hold: said.kind === 'wait' ? ALERT_HOLD_S : undefined,
+    fg,
+  })
+  if (!command) return
+  if (free !== undefined) popSlots.add(slot)
+  $.clock.after(0, async () => {
+    try {
+      const result = await $.process.run(command.argv, { env: command.env, timeoutMs: POPUP_RUN_MS })
+      if (result.stdout.includes('open')) await openAgents($)
+    } catch (err) {
+      log(`уведомление о сессиях не показалось: ${err?.message ?? err}`)
+    } finally {
+      if (free !== undefined) popSlots.delete(slot)
+      if (S.pop.waiting) watchMessages($).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+    }
+  })
+}
+
+// Клик по уведомлению о сессиях: панель Arcade на вкладке «Агенты»
+async function openAgents($) {
+  if (S.view !== 'library') toLibrary()
+  S.menu = 'agents'
+  S.libraryNotice = ''
+  await openPane($)
 }
 
 // --- В сети и приглашения в игру ---------------------------------------------------------------------------------
@@ -6301,7 +6441,8 @@ export async function waitForPerson($, ask) {
   }
   log(question ? 'Claude задал вопрос' : `запрос разрешения: ${ask.tool || 'инструмент'}`)
   const now = await $.clock.now()
-  const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS
+  // Включены уведомления о сессиях — о ней скажут они (alerts.js), второе не нужно
+  const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS && !alertsCover(question ? 'question' : 'permission')
     ? notifyCommand(S.platform, 'Claude Code', tr(question ? 'Агент задал вопрос' : 'Агент ждёт разрешения', S.lang))
     : null
   if (command) {
@@ -6656,7 +6797,7 @@ export async function turnDone($, turnId, e) {
   else if (watching) await $.ui.toast(tr('Агент закончил — можно возвращаться', S.lang))
   // Играешь в окне браузера — Claude Code не видно: системное уведомление, если ход был долгим
   const now = await $.clock.now()
-  const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS && now - S.turnStartedAt >= NOTIFY_AFTER_MS
+  const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS && now - S.turnStartedAt >= NOTIFY_AFTER_MS && !alertsCover('done')
     ? notifyCommand(S.platform, 'Claude Code', tr('Агент закончил — можно возвращаться', S.lang))
     : null
   if (command) {
@@ -7739,27 +7880,53 @@ export function settingsScreen($, e, kit) {
           dim(S.platform === 'windows' ? '  всплывают внизу слева поверх всех окон; клик открывает чат' : '  системное уведомление, когда друг пишет в чат'),
         ]
       : []),
-    // Другие сессии Claude Code на этом компьютере (вкладка «Агенты»): всплывашка в этой панели, без звука
+    // Сессии Claude Code на этом компьютере (вкладка «Агенты»): о другой — всплывашка в этой панели; о любой, и о
+    // своей тоже, — системное уведомление со звуком (alerts.js), если оно включено ниже
     Button({
       key: 'arcade-agents-notify',
-      label: `Другая сессия ждёт разрешения: ${S.agNotify ? 'да' : 'нет'}`,
+      label: `Сессия ждёт разрешения или ответа: ${S.agNotify ? 'да' : 'нет'}`,
       onPress: async () => {
         S.agNotify = !S.agNotify
         $.ui.invalidate('ui.render')
         await $.store.set('agentsNotify', S.agNotify)
       },
     }),
-    dim('  всплывашка в панели Arcade, без звука и системного уведомления'),
+    dim('  о другой сессии — всплывашка в панели Arcade; о любой — системное уведомление'),
     Button({
       key: 'arcade-agents-done',
-      label: `Другая сессия закончила ход: ${S.agDone ? 'да' : 'нет'}`,
+      label: `Сессия закончила ход: ${S.agDone ? 'да' : 'нет'}`,
       onPress: async () => {
         S.agDone = !S.agDone
         $.ui.invalidate('ui.render')
         await $.store.set('agentsDone', S.agDone)
       },
     }),
-    dim('  всплывашка в панели Arcade, без звука'),
+    dim('  то же, когда Claude закончил ход'),
+    ...(S.platform
+      ? [
+          Button({
+            key: 'arcade-agents-os',
+            label: `Системное уведомление о сессиях: ${S.agOs ? 'да' : 'нет'}`,
+            onPress: async () => {
+              S.agOs = !S.agOs
+              if (!S.agOs) S.al.pending.clear()
+              $.ui.invalidate('ui.render')
+              await $.store.set('agentsOs', S.agOs)
+            },
+          }),
+          dim(S.platform === 'windows' ? '  поверх всех окон, даже когда Claude Code свёрнут; клик поднимает окно' : '  уведомление системы, даже когда Claude Code свёрнут'),
+          Button({
+            key: 'arcade-agents-sound',
+            label: `Звук уведомления о сессиях: ${S.agSound ? 'да' : 'нет'}`,
+            onPress: async () => {
+              S.agSound = !S.agSound
+              $.ui.invalidate('ui.render')
+              await $.store.set('agentsSound', S.agSound)
+            },
+          }),
+          dim('  «ждёт тебя» и «закончил» звучат по-разному'),
+        ]
+      : []),
     // Окно лимита Claude дошло до 80 и 90% (плитка «Лимиты»): о каждом пороге — раз во всех сессиях
     Button({
       key: 'arcade-usage-warn',
@@ -12348,6 +12515,8 @@ export function register(on) {
       S.msgNotify = (await $.store.get('msgNotify')) !== false
       S.agNotify = (await $.store.get('agentsNotify')) !== false
       S.agDone = (await $.store.get('agentsDone')) === true
+      S.agOs = (await $.store.get('agentsOs')) !== false
+      S.agSound = (await $.store.get('agentsSound')) !== false
       S.agHidden = hiddenOf(await $.store.get('agentsHidden'))
       S.us.warn = (await $.store.get('usageWarn')) !== false
       S.acct.session = restoreAccount(await $.store.get('account'))
@@ -12554,6 +12723,8 @@ export function register(on) {
   // Уведомление о фоновой задаче (конец субагента и т. п.) будит Claude новым ходом — это не просьба человека. Только
   // смотрим: что пришло, то и уходит дальше
   on('prompt.submit', async ($, e, next) => {
+    // Человек сам написал в этой сессии — он здесь: пока Claude Code впереди, уведомление о ней не всплывёт
+    if (e.origin?.kind === 'composer' || e.origin?.kind === 'sdk') await lookHere($)
     if (e.origin?.kind !== 'task-notification' || e.turnId) return next(e)
     S.wake = true
     try {
