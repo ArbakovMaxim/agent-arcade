@@ -14,6 +14,7 @@ import { branchOf, nextRemind, remindChoices } from '../hooks/register.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/register.js'
+import { ALERT_KEEP_MS, alertText, restoreAlerts } from '../hooks/alerts.js'
 import { ANSWER_POLL_MS, asksReset, callSeen, toolDecided } from '../hooks/register.js'
 import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
@@ -5591,8 +5592,8 @@ test('агенты: заявки наперегонки — при любых з
   expect(dropped).toBeGreaterThan(40)
 })
 
-test('агенты: другая сессия ждёт разрешения — всплывашка в своей панели, без звука и системного уведомления; в «Настройках» — выключить, «закончил ход» — включить', async ($, on) => {
-  const { clock, saved, toasts, notifies, popups, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME })
+test('агенты: другая сессия ждёт разрешения — всплывашка в своей панели; системное уведомление выключено — его нет; в «Настройках» — выключить, «закончил ход» — включить', async ($, on) => {
+  const { clock, saved, toasts, notifies, popups, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { agentsOs: false } })
   const rival = agentFile(putFile, clock, disk)
   const docs = { sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' }
   const state = async (status: string) => {
@@ -5615,19 +5616,285 @@ test('агенты: другая сессия ждёт разрешения — 
 
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'arcade-menu-settings' })
-  expect(await ui.find({ key: 'arcade-agents-notify' })).toMatchObject({ props: { label: 'Другая сессия ждёт разрешения: да' } })
-  expect(await ui.find({ key: 'arcade-agents-done' })).toMatchObject({ props: { label: 'Другая сессия закончила ход: нет' } })
+  expect(await ui.find({ key: 'arcade-agents-notify' })).toMatchObject({ props: { label: 'Сессия ждёт разрешения или ответа: да' } })
+  expect(await ui.find({ key: 'arcade-agents-done' })).toMatchObject({ props: { label: 'Сессия закончила ход: нет' } })
+  expect(await ui.find({ key: 'arcade-agents-os' })).toMatchObject({ props: { label: 'Системное уведомление о сессиях: нет' } })
+  expect(await ui.find({ key: 'arcade-agents-sound' })).toMatchObject({ props: { label: 'Звук уведомления о сессиях: да' } })
+  expect(await ui.find({ type: 'Text', text: '  поверх всех окон, даже когда Claude Code свёрнут; клик поднимает окно' })).toBeDefined()
   await ui.press({ key: 'arcade-agents-notify' })
   await ui.press({ key: 'arcade-agents-done' })
-  expect(await ui.find({ key: 'arcade-agents-notify' })).toMatchObject({ props: { label: 'Другая сессия ждёт разрешения: нет' } })
-  expect(await ui.find({ key: 'arcade-agents-done' })).toMatchObject({ props: { label: 'Другая сессия закончила ход: да' } })
+  await ui.press({ key: 'arcade-agents-sound' })
+  expect(await ui.find({ key: 'arcade-agents-notify' })).toMatchObject({ props: { label: 'Сессия ждёт разрешения или ответа: нет' } })
+  expect(await ui.find({ key: 'arcade-agents-done' })).toMatchObject({ props: { label: 'Сессия закончила ход: да' } })
+  expect(await ui.find({ key: 'arcade-agents-sound' })).toMatchObject({ props: { label: 'Звук уведомления о сессиях: нет' } })
   expect(saved.get('agentsNotify')).toBe(false)
   expect(saved.get('agentsDone')).toBe(true)
+  expect(saved.get('agentsSound')).toBe(false)
   await state('working')
   await state('permission')
   await state('done')
   expect(about()).toEqual(['Сессия «docs» ждёт разрешения', 'В сессии «docs» Claude закончил ход'])
+  await clock.advance(40_000)
+  expect(notifies).toEqual([])
+  expect(popups).toEqual([])
   await ui.unmount()
+})
+
+// Уведомления о сессиях: другие сессии на этом компьютере (место → отметка); отметки обновляются, пока идёт время
+const alertRivals = (putFile: any, clock: any, disk: Map<string, any>, list: Record<string, any>) => {
+  const rival = agentFile(putFile, clock, disk)
+  const marks = () => {
+    for (const r of Object.values(list)) rival(r.slot, r)
+  }
+  return {
+    marks,
+    live: async (ms: number) => {
+      for (let left = ms; left > 0; left -= 5_000) {
+        marks()
+        await clock.advance(Math.min(5_000, left))
+      }
+    },
+    set: (name: string, status: string, more: any = {}) => {
+      list[name] = { ...list[name], status, since: clock.now(), ...more }
+    },
+  }
+}
+
+test('агенты: системное уведомление о сессиях — «ждёт тебя» со звуком и именем, не чаще раза в 30 с; закончившие разом — одним, со своим звуком; клик — «Агенты»', HEAVY, async ($, on) => {
+  let answer = ''
+  const { clock, toasts, notifies, popups, opens, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { agentsDone: true }, popupAnswer: () => answer })
+  const list: Record<string, any> = {
+    api: { slot: 3, sid: 'sess-a', name: 'api', status: 'working' },
+    docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' },
+    site: { slot: 12, sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'working' },
+  }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  marks()
+  await start($)
+  await live(10_000)
+  expect(popups).toEqual([])
+
+  // «docs» ждёт разрешения — карточка поверх всех окон: кто ждёт, буква сессии, звук «ждёт тебя», держится 15 с
+  set('docs', 'permission')
+  await live(20_000)
+  expect(popups.length).toBe(1)
+  expect(popups[0].env).toEqual({
+    ARCADE_POPUP_TITLE: 'Ждёт тебя: docs',
+    ARCADE_POPUP_TEXT: 'docs — ждёт разрешения',
+    ARCADE_POPUP_PIC: letterXaml('docs', 'sess-b'),
+    ARCADE_POPUP_SLOT: '0',
+    ARCADE_POPUP_SOUND: 'Windows Message Nudge.wav',
+    ARCADE_POPUP_HOLD: '15',
+  })
+  expect(toasts).toContain('Сессия «docs» ждёт разрешения')
+  // Старое уведомление «пока играешь в окне» не дублирует
+  expect(notifies).toEqual([])
+
+  // Ещё одна ждёт — меньше чем через 30 с после прошлого уведомления подождёт, потом скажет
+  set('api', 'permission')
+  await live(10_000)
+  expect(popups.length).toBe(1)
+  await live(25_000)
+  expect(popups.length).toBe(2)
+  expect(popups[1].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Ждёт тебя: api', ARCADE_POPUP_TEXT: 'api — ждёт разрешения' })
+
+  // Трое закончили разом — одно уведомление: звук «закончил», карточка не задерживается
+  answer = 'open'
+  const opened = opens.length
+  for (const name of ['api', 'docs', 'site']) set(name, 'done')
+  await live(40_000)
+  expect(popups.length).toBe(3)
+  expect(popups[2].env).toMatchObject({
+    ARCADE_POPUP_TITLE: 'Claude закончил ход в сессиях: api, docs, site',
+    ARCADE_POPUP_TEXT: 'api — закончил ход; docs — закончил ход; site — закончил ход',
+    ARCADE_POPUP_SOUND: 'Windows Notify System Generic.wav',
+  })
+  expect(popups[2].env.ARCADE_POPUP_HOLD).toBeUndefined()
+  // Клик по уведомлению — панель Arcade на вкладке «Агенты»
+  expect(opens.length).toBeGreaterThan(opened)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await boxKeys(ui, 'agents-line-')).sort()).toEqual(['agents-line-sess-a', 'agents-line-sess-b', 'agents-line-sess-c', 'agents-line-sess-me'])
+  await ui.unmount()
+  expect(notifies).toEqual([])
+})
+
+test('агенты: системное уведомление — вопрос «ждёт ответа», без звука, если он выключен; о скрытой сессии — ничего; выключили — накопленное забыто', HEAVY, async ($, on) => {
+  const { clock, toasts, popups, saved, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, stored: { agentsSound: false, agentsHidden: ['sess-c'] } })
+  const list: Record<string, any> = {
+    docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' },
+    site: { slot: 12, sid: 'sess-c', name: 'site', path: 'D:\\work\\site', status: 'working' },
+  }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  marks()
+  await start($)
+  await live(10_000)
+  set('docs', 'permission', { ask: { kind: 'question', id: 'q1' } })
+  set('site', 'permission')
+  await live(20_000)
+  expect(popups.length).toBe(1)
+  expect(popups[0].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Ждёт тебя: docs', ARCADE_POPUP_TEXT: 'docs — ждёт ответа', ARCADE_POPUP_SOUND: 'none', ARCADE_POPUP_HOLD: '15' })
+  expect(toasts).toContain('Сессия «docs» ждёт ответа на вопрос')
+  await live(40_000)
+  expect(popups.length).toBe(1)
+  expect(toasts.filter((t: string) => t.includes('site'))).toEqual([])
+
+  // Звук включили в другой сессии — следующее уведомление уже со звуком
+  saved.set('agentsSound', true)
+  set('docs', 'permission', { ask: { kind: 'question', id: 'q2' } })
+  await live(20_000)
+  expect(popups.length).toBe(2)
+  expect(popups[1].env).toMatchObject({ ARCADE_POPUP_TEXT: 'docs — ждёт ответа', ARCADE_POPUP_SOUND: 'Windows Message Nudge.wav' })
+  await live(40_000)
+
+  // Новый вопрос — снова; выключили системное уведомление, пока копилось, — его нет, всплывашка в панели осталась
+  set('docs', 'permission', { ask: { kind: 'question', id: 'q3' } })
+  await live(5_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-agents-os' })
+  await live(40_000)
+  expect(popups.length).toBe(2)
+  expect(toasts.filter((t: string) => t === 'Сессия «docs» ждёт ответа на вопрос').length).toBe(3)
+
+  // Выключили в другой сессии — эта тоже молчит
+  await ui.press({ key: 'arcade-agents-os' })
+  expect(saved.get('agentsOs')).toBe(true)
+  saved.set('agentsOs', false)
+  set('docs', 'permission', { ask: { kind: 'question', id: 'q4' } })
+  await live(40_000)
+  expect(popups.length).toBe(2)
+  expect(toasts.filter((t: string) => t === 'Сессия «docs» ждёт ответа на вопрос').length).toBe(4)
+  await ui.unmount()
+})
+
+test('агенты: системное уведомление объявляет одна сессия на компьютере — объявленное другой не повторяется, проигравшая заявку молчит', HEAVY, async ($, on) => {
+  const { clock, saved, meanwhile, popups, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME })
+  const list: Record<string, any> = {
+    api: { slot: 3, sid: 'sess-a', name: 'api', status: 'working' },
+    docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' },
+  }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  marks()
+  await start($)
+  await live(10_000)
+  // Что «docs» ждёт, другая сессия уже объявила
+  set('docs', 'permission')
+  saved.set('agentAlerts', { by: 'other', last: clock.now() - 60_000, told: { [`sess-b|permission|${list.docs.since}`]: clock.now() } })
+  await live(40_000)
+  expect(popups).toEqual([])
+
+  // Заявку перехватила другая сессия, пока эта выжидала, — объявит она
+  meanwhile.store = (step: string, key: string) => {
+    if (step === 'set' && key === 'agentAlerts') saved.set('agentAlerts', { ...(saved.get('agentAlerts') as any), by: 'other' })
+  }
+  set('api', 'permission')
+  await live(40_000)
+  expect(popups).toEqual([])
+  expect(Object.keys((saved.get('agentAlerts') as any).told)).toContain(`sess-a|permission|${list.api.since}`)
+
+  // Никто не мешает — объявляет эта, и в хранилище её отметка
+  meanwhile.store = undefined
+  set('api', 'working')
+  await live(10_000)
+  set('api', 'permission')
+  await live(40_000)
+  expect(popups.length).toBe(1)
+  expect(popups[0].env.ARCADE_POPUP_TITLE).toBe('Ждёт тебя: api')
+  expect((saved.get('agentAlerts') as any).by).not.toBe('other')
+})
+
+test('агенты: сессию, которую человек смотрит, не объявлять, если впереди окно Claude Code; другие — объявлять; нажал в панели — смотрит эту', HEAVY, async ($, on) => {
+  const { clock, popups, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME })
+  const list: Record<string, any> = {
+    api: { slot: 3, sid: 'sess-a', name: 'api', status: 'working' },
+    docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' },
+  }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  marks()
+  await start($)
+  await live(10_000)
+  // Человек последним что-то делал в «api»
+  list.api.look = clock.now()
+  set('api', 'permission')
+  await live(25_000)
+  expect(popups.length).toBe(1)
+  // Впереди окно Claude Code — карточки нет: человек это и так видит; свёрнуто — карточка как обычно
+  expect(popups[0].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Ждёт тебя: api', ARCADE_POPUP_FG: '1' })
+  expect(popups[0].env.ARCADE_POPUP_FG_TITLE).toBeUndefined()
+
+  // Ждут обе — при Claude Code впереди карточка только о «docs»
+  set('api', 'working')
+  await live(10_000)
+  set('api', 'permission')
+  set('docs', 'permission')
+  await live(40_000)
+  expect(popups.length).toBe(2)
+  expect(popups[1].env).toMatchObject({
+    ARCADE_POPUP_TITLE: 'Ждут тебя: api, docs',
+    ARCADE_POPUP_TEXT: 'api — ждёт разрешения; docs — ждёт разрешения',
+    ARCADE_POPUP_FG: '1',
+    ARCADE_POPUP_FG_TITLE: 'Ждёт тебя: docs',
+    ARCADE_POPUP_FG_TEXT: 'docs — ждёт разрешения',
+    ARCADE_POPUP_FG_SOUND: 'Windows Message Nudge.wav',
+  })
+
+  // Человек нажал в панели этой сессии — смотрит её: об «api» карточка при любом окне впереди
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await live(5_000)
+  expect(ownRecord(disk).look).toBeGreaterThan(list.api.look)
+  set('api', 'working')
+  await live(10_000)
+  set('api', 'permission')
+  await live(40_000)
+  expect(popups.length).toBe(3)
+  expect(popups[2].env.ARCADE_POPUP_TITLE).toBe('Ждёт тебя: api')
+  expect(popups[2].env.ARCADE_POPUP_FG).toBeUndefined()
+  await ui.unmount()
+})
+
+test('alerts.js: текст уведомления о сессиях, что уже объявлено; popup.js: звук, срок и «впереди Claude Code» — Windows, macOS, Linux', () => {
+  const ru = (s: string) => tr(s, 'ru')
+  expect(alertText([], ru)).toBeNull()
+  expect(alertText([{ sid: 'a', name: 'api', what: 'done' }], ru)).toEqual({ title: 'Claude закончил ход: api', text: 'api — закончил ход', kind: 'done' })
+  // Ждущие — в заголовке и впереди, даже если пришли позже
+  expect(alertText([{ sid: 'a', name: 'api', what: 'done' }, { sid: 'b', name: 'docs', what: 'question' }], ru)).toEqual({ title: 'Ждёт тебя: docs', text: 'docs — ждёт ответа; api — закончил ход', kind: 'wait' })
+  // Больше трёх имён — остальные числом
+  const five = ['a', 'b', 'c', 'd', 'e'].map((name) => ({ sid: name, name, what: 'permission' }))
+  expect(alertText(five, ru)!.title).toBe('Ждут тебя: a, b, c +2')
+  expect(alertText(five.slice(0, 2), (s: string) => tr(s, 'en'))).toEqual({ title: 'Waiting for you: a, b', text: 'a — waiting for permission; b — waiting for permission', kind: 'wait' })
+  // Что уже объявлено: старше часа и странное — забыто; время «объявляли» из будущего — ноль
+  expect(restoreAlerts({ by: 'x', last: 5, told: { k: 1, old: -ALERT_KEEP_MS, bad: 'x' } }, 10)).toEqual({ by: 'x', last: 5, told: { k: 1 } })
+  expect(restoreAlerts(null, 10)).toEqual({ by: '', last: 0, told: {} })
+  expect(restoreAlerts({ last: 99, told: [1] }, 10)).toEqual({ by: '', last: 0, told: {} })
+
+  // Windows: звук, срок, и что показать, если впереди окно Claude Code — без сессии, которую человек смотрит
+  const said = { title: 'Ждут тебя: api, docs', text: 'api — ждёт разрешения; docs — ждёт разрешения' }
+  expect(popupCommand('windows', { ...said, sound: 'wait', hold: 15, fg: { title: 'Ждёт тебя: docs', text: 'docs — ждёт разрешения', kind: 'wait' } })!.env).toEqual({
+    ARCADE_POPUP_TITLE: said.title,
+    ARCADE_POPUP_TEXT: said.text,
+    ARCADE_POPUP_PIC: '',
+    ARCADE_POPUP_SLOT: '0',
+    ARCADE_POPUP_SOUND: 'Windows Message Nudge.wav',
+    ARCADE_POPUP_HOLD: '15',
+    ARCADE_POPUP_FG: '1',
+    ARCADE_POPUP_FG_TITLE: 'Ждёт тебя: docs',
+    ARCADE_POPUP_FG_TEXT: 'docs — ждёт разрешения',
+    ARCADE_POPUP_FG_SOUND: 'Windows Message Nudge.wav',
+  })
+  // Звук выключен — тихо и при Claude Code впереди; на экране вся пачка — fg null, при Claude Code впереди карточки нет
+  expect(popupCommand('windows', { ...said, sound: 'none', fg: { title: 'x', text: 'y', kind: 'done' } })!.env).toMatchObject({ ARCADE_POPUP_SOUND: 'none', ARCADE_POPUP_FG_SOUND: 'none' })
+  const alone = popupCommand('windows', { ...said, sound: 'done', fg: null })!.env
+  expect(alone).toMatchObject({ ARCADE_POPUP_SOUND: 'Windows Notify System Generic.wav', ARCADE_POPUP_FG: '1' })
+  expect(Object.keys(alone).filter((k) => k.startsWith('ARCADE_POPUP_FG_'))).toEqual([])
+  for (const name of ['$env:ARCADE_POPUP_FG', '$env:ARCADE_POPUP_HOLD', '$env:ARCADE_POPUP_SOUND']) expect(POPUP_SCRIPT_TEXT).toContain(name)
+  // macOS: свой звук у «ждёт» и «закончил»; выключен — без звука
+  const mac = (sound: string) => popupCommand('mac', { title: 'T', text: 'x', sound })!.argv[4]
+  const shown = 'display notification (item 2 of argv) with title (item 1 of argv) subtitle "Arcade"'
+  expect([mac('wait'), mac('done'), mac('none')]).toEqual([`${shown} sound name "Ping"`, `${shown} sound name "Glass"`, shown])
+  // Linux: звук — подсказкой уведомлению
+  const linux = (sound: string) => popupCommand('linux', { title: 'T', text: 'x', sound })!.argv.slice(2, -2)
+  expect([linux('wait'), linux('done'), linux('none')]).toEqual([['--hint=string:sound-name:message-new-instant'], ['--hint=string:sound-name:complete'], ['--hint=boolean:suppress-sound:true']])
 })
 
 test('агенты: крестик скрывает другую сессию — её нет в списке и всплывашек о ней нет; «Скрытые» возвращают; помнится в хранилище, скрытое в другой сессии видно сразу', async ($, on) => {
