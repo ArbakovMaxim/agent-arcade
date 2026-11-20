@@ -2688,6 +2688,80 @@ test('Flappy Arcade: движок — падение без взмахов, тр
   expect(idle.score).toBe(0)
 })
 
+test('Flappy Arcade: шаг по часам — доли кадра, та же трасса дня, птица между шагами, мягкий взмах', async () => {
+  const YELLOW = (40 << 16) | (204 << 8) | 250 // цвет птицы в кадре (0xBBGGRR)
+  const birdTop = (frame: Uint32Array | number[]) => {
+    for (let y = 0; y < 240; y++) for (let x = 50; x < 90; x++) if (frame[y * 256 + x] === YELLOW) return y
+    return -1
+  }
+  // Те же шаги кусками неровной длины дают ту же игру, что и кадр за кадром: трасса дня и счёт не меняются
+  const pieces = [[0.5, 0.5], [0.25, 0.25, 0.25, 0.25], [1.5, 0.5], [3], [0.75, 0.25, 1]]
+  const byFrame = createFlappy(() => {}, { seed: 20261120 })
+  const byClock = createFlappy(() => {}, { seed: 20261120 })
+  for (const g of [byFrame, byClock]) {
+    g.buttonDown(1, 0)
+    g.buttonUp(1, 0)
+  }
+  for (let round = 0; round < 400 && byFrame.state === 'play'; round++) {
+    const piece = pieces[round % pieces.length]
+    const steps = piece.reduce((a, b) => a + b, 0)
+    for (let i = 0; i < steps; i++) byFrame.frame()
+    for (const part of piece) byClock.advance(part)
+    expect([byClock.ticks, byClock.birdY, byClock.score, byClock.state]).toEqual([byFrame.ticks, byFrame.birdY, byFrame.score, byFrame.state])
+    // Бот целится в середину ближайшей щели: взмах, когда птица падает ниже неё
+    const next = byFrame.pipes.find((pipe: { x: number }) => pipe.x + 24 > 62)
+    if (byFrame.birdY > (next ? next.top + 44 : 110) && byFrame.speed > 0) {
+      for (const g of [byFrame, byClock]) {
+        g.buttonDown(1, 0)
+        g.buttonUp(1, 0)
+      }
+    }
+  }
+  expect(byFrame.score).toBeGreaterThan(0)
+
+  // Полшага — птица нарисована посередине между двумя шагами, а сама игра стоит. Кадр отстаёт от игры на шаг:
+  // advance рисует между прошлым и последним шагом
+  let frame: Uint32Array | number[] = []
+  const half = createFlappy((f) => (frame = f), { seed: 1 })
+  half.buttonDown(1, 0)
+  half.buttonUp(1, 0)
+  for (let i = 0; i < 48; i++) half.advance(1) // падает во весь опор, клювом вниз
+  const from = birdTop(frame)
+  const ticks = half.ticks
+  half.advance(0.5)
+  const between = birdTop(frame)
+  expect(half.ticks).toBe(ticks)
+  half.advance(0.5)
+  const to = birdTop(frame)
+  expect(half.ticks).toBe(ticks + 1)
+  expect(half.state).toBe('play')
+  expect(between).toBeGreaterThan(from)
+  expect(to).toBeGreaterThan(between)
+
+  // После долгой задержки больше 6 шагов за раз не догоняет
+  const late = createFlappy(() => {}, { seed: 1 })
+  late.buttonDown(1, 0)
+  late.buttonUp(1, 0)
+  late.advance(100)
+  expect(late.ticks).toBe(6)
+
+  // Взмах мягче и дольше, но на ту же высоту, что раньше (≈ 33 точки за 15 шагов): щель 64 проходится так же
+  const jump = createFlappy(() => {}, { seed: 1 })
+  jump.buttonDown(1, 0)
+  jump.buttonUp(1, 0)
+  const start = jump.birdY
+  let top = start
+  let up = 0
+  do {
+    jump.frame()
+    top = Math.min(top, jump.birdY)
+    up++
+  } while (jump.speed < 0)
+  expect(start - top).toBeGreaterThan(31)
+  expect(start - top).toBeLessThan(36)
+  expect(up).toBeGreaterThan(15)
+})
+
 test('кто ждёт по вариантам: контроль времени у шахмат и размер доски у го', async ($, on) => {
   const site = JSON.parse(siteCatalog())
   site.consoles.push({ id: 'board', title: 'Настольные' })
