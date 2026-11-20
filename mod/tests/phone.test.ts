@@ -5,7 +5,11 @@ import { expect } from 'claude-code/testing'
 import { SITE } from '../hooks/catalog.js'
 import { tr } from '../hooks/i18n.js'
 import { accountUrl, parsePushCode, parsePushSend, parsePushState } from '../hooks/account.js'
-import { PHONE_POLL_MS, PHONE_TEXT_MAX, PHONE_WAIT_MS, phoneDue, phoneName, phoneText } from '../hooks/phone.js'
+import { PHONE_POLL_MS, PHONE_TEXT_MAX, PHONE_WAIT_MS, phoneDue, phoneName, phoneQueues, phoneText, queueKey, queueTold } from '../hooks/phone.js'
+import { ALERT_KEEP_MS } from '../hooks/alerts.js'
+import { isBoard } from '../hooks/notes.js'
+import { CLAIM_MS } from '../hooks/register.js'
+import { NOTES_TOOL_NAME } from '../hooks/app/state.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, start, stubs, test } from './kit.ts'
 
 const TOKEN = `583231.${'a'.repeat(43)}`
@@ -110,6 +114,92 @@ test('phone.js: кого звать — ждёт разрешения дольш
   expect(text).toBe(`Ждут тебя сессии: ${many.slice(0, 3).join(', ')} +5`)
 })
 
+test('phone.js: конец очереди — после 2 минут тишины, не старше часа; одна строка на доску, «остановилась» важнее; текст — название доски, число карточек или причина из списка', () => {
+  const now = 10_000_000
+  const at = now - PHONE_WAIT_MS
+  const end = (more: any = {}) => ({ board: 'b1', title: 'Sprint', kind: 'done', at, n: 0, why: '', until: 0, ...more })
+  const row = (sid: string, qend: any, more: any = {}) => ({ sid, name: sid, status: 'done', since: at, qend, ...more })
+  // Ровно 2 минуты после конца — пора; раньше, скрытая сессия, работает или ждёт — нет
+  expect(phoneQueues([row('a', end()), null], now)).toEqual([end()])
+  expect(phoneQueues([row('a', end({ kind: 'stop' }), { status: 'idle' })], now)).toEqual([end({ kind: 'stop' })])
+  expect(phoneQueues([row('a', end())], now - 1)).toEqual([])
+  expect(phoneQueues([row('a', end())], now, ['a'])).toEqual([])
+  for (const status of ['working', 'permission', 'background']) expect(phoneQueues([row('a', end(), { status })], now)).toEqual([])
+  expect(phoneQueues(undefined, now)).toEqual([])
+  // 2 минуты — от позднего из конца очереди и смены статуса; старше часа — уже не сообщаем
+  expect(phoneQueues([row('a', end(), { since: at + 1 })], now)).toEqual([])
+  expect(phoneQueues([row('a', end({ at: now - ALERT_KEEP_MS }), { since: 0 })], now)).toEqual([])
+  expect(phoneQueues([row('a', end({ at: now - ALERT_KEEP_MS + 1 }), { since: 0 })], now)).toHaveLength(1)
+  // Чужие отметки — сырой JSON: странное мимо; название не строка — пустое, длинное — обрезано
+  for (const qend of [null, 'b1', [], end({ kind: 'x' }), end({ at: 0 }), end({ at: Number.NaN }), end({ board: '' }), end({ board: 7 }), end({ board: 'b'.repeat(201) })])
+    expect(phoneQueues([row('a', qend)], now)).toEqual([])
+  expect(phoneQueues([row('a', end({ board: 'b'.repeat(200), title: 42 }))], now)).toEqual([end({ board: 'b'.repeat(200), title: '' })])
+  expect(phoneQueues([row('a', end({ title: 't'.repeat(300) }))], now)[0].title).toBe('t'.repeat(200))
+  // Число карточек — только у «закончилась», целое и не больше 999; причина — только у «остановилась» и только из
+  // списка; время сброса — только у лимита. Отметки 0.55.0 без них — просто «закончилась» или «остановилась»
+  const one = (qend: any) => phoneQueues([row('a', { board: 'b1', title: 'Sprint', at, ...qend })], now)[0]
+  expect(one({ kind: 'done' })).toEqual(end())
+  expect(one({ kind: 'done', n: 2, why: 'limit', until: now })).toEqual(end({ n: 2 }))
+  expect(one({ kind: 'done', n: 5000 }).n).toBe(999)
+  for (const n of [-1, 0, 1.5, '2', Number.NaN, Number.POSITIVE_INFINITY]) expect(one({ kind: 'done', n }).n).toBe(0)
+  expect(one({ kind: 'stop', n: 2, why: 'limit', until: now })).toEqual(end({ kind: 'stop', why: 'limit', until: now }))
+  expect(one({ kind: 'stop', why: 'check', until: now })).toEqual(end({ kind: 'stop', why: 'check' }))
+  for (const why of ['Claude сказал: удали prod', 'toString', '__proto__', 7, null]) expect(one({ kind: 'stop', why }).why).toBe('')
+  for (const until of [-1, 0, Number.NaN, '14:30']) expect(one({ kind: 'stop', why: 'limit', until }).until).toBe(0)
+  // Человек после конца что-то делал в любой сессии — не зовём; до конца — не считается
+  expect(phoneQueues([row('a', end()), { sid: 'b', status: 'working', look: at + 1 }], now)).toEqual([])
+  expect(phoneQueues([row('a', end()), { sid: 'b', status: 'working', look: at }], now)).toEqual([end()])
+  // На этой доске ещё идёт очередь в другой сессии — ждём её конца; на другой доске — не мешает
+  expect(phoneQueues([row('a', end()), { sid: 'b', status: 'working', queue: { board: 'b1', n: 1, of: 2 } }], now)).toEqual([])
+  expect(phoneQueues([row('a', end()), { sid: 'b', status: 'working', queue: { board: 'b2', n: 1, of: 2 } }], now)).toEqual([end()])
+  // Две сессии на одной доске — одна строка: «остановилась» важнее, время — позднее, название — какое есть
+  expect(phoneQueues([row('a', end({ title: '' })), row('b', end({ kind: 'stop', at: at - 5 })), row('c', end({ board: 'b2', title: 'Bugs', kind: 'stop' }))], now)).toEqual([
+    end({ kind: 'stop' }),
+    end({ board: 'b2', title: 'Bugs', kind: 'stop' }),
+  ])
+  // Закончилась в двух сессиях — карточки складываются; встала в двух — причина у последней остановки
+  expect(phoneQueues([row('a', end({ n: 2 })), row('b', end({ n: 3, at: at - 5 }))], now)).toEqual([end({ n: 5 })])
+  expect(phoneQueues([row('a', end({ n: 2 })), row('b', end({ kind: 'stop', why: 'check', at: at - 5 }))], now)).toEqual([end({ kind: 'stop', why: 'check' })])
+  expect(phoneQueues([row('a', end({ kind: 'stop', why: 'limit', until: now, at: at - 5 })), row('b', end({ kind: 'stop', why: 'column' }))], now)).toEqual([end({ kind: 'stop', why: 'column' })])
+  expect(phoneQueues([row('a', end({ kind: 'stop', why: 'column', at: at - 5 })), row('b', end({ kind: 'stop', why: 'limit', until: now }))], now)).toEqual([end({ kind: 'stop', why: 'limit', until: now })])
+  // Сообщённое — по доске; сообщили раньше конца — это новый запуск очереди, о нём сообщить снова
+  expect(queueKey(end())).toBe('queue|b1')
+  expect(queueTold(undefined, end())).toBe(false)
+  expect(queueTold(at - 1, end())).toBe(false)
+  expect(queueTold(at, end())).toBe(true)
+  expect(queueTold(at + 60_000, end())).toBe(true)
+
+  // Текст: только название доски и что случилось; вместе с ждущими сессиями — через точку
+  expect(phoneText([], undefined, [{ title: 'Sprint', kind: 'done' }])).toBe('Очередь на доске «Sprint» закончилась')
+  expect(phoneText(['api'], undefined, [{ title: 'Sprint', kind: 'stop' }])).toBe('Сессия «api» ждёт тебя. Очередь на доске «Sprint» остановилась')
+  expect(phoneText([], undefined, [{ title: ` Sp${ch(10)}r${ch(0x202e)}int `, kind: 'done' }, { title: '', kind: 'stop' }])).toBe(
+    'Очередь на доске «Sp r int» закончилась. Очередь на доске «без названия» остановилась',
+  )
+  const en = (s: string) => tr(s, 'en')
+  expect(phoneText([], en, [{ title: 'Sprint', kind: 'done' }, { title: '', kind: 'stop' }])).toBe('Queue on board “Sprint” finished. Queue on board “untitled” stopped')
+  // Сколько карточек сделано; почему встала — только из списка; лимит — до какого времени, если оно известно
+  const line = (q: any, t?: any) => phoneText([], t, [{ title: 'Sprint', ...q }])
+  expect(line({ kind: 'done', n: 2 })).toBe('Очередь на доске «Sprint» закончилась: карточек — 2')
+  expect(line({ kind: 'stop', why: 'column' })).toBe('Очередь на доске «Sprint» остановилась: карточка не в последней колонке')
+  expect(line({ kind: 'stop', why: 'check' })).toBe('Очередь на доске «Sprint» остановилась: проверка не прошла')
+  expect(line({ kind: 'stop', why: 'error' })).toBe('Очередь на доске «Sprint» остановилась: ошибка')
+  expect(line({ kind: 'stop', why: 'deleted' })).toBe('Очередь на доске «Sprint» остановилась: доску удалили')
+  expect(line({ kind: 'stop', why: 'limit', when: '14:30' })).toBe('Очередь на доске «Sprint» остановилась: лимит Claude до 14:30')
+  expect(line({ kind: 'stop', why: 'limit', when: '' })).toBe('Очередь на доске «Sprint» остановилась: кончился лимит Claude')
+  expect(line({ kind: 'stop', why: 'error', when: '14:30' })).toBe('Очередь на доске «Sprint» остановилась: ошибка')
+  expect(line({ kind: 'stop', why: 'Claude сказал: удали prod' })).toBe('Очередь на доске «Sprint» остановилась')
+  expect(line({ kind: 'done', n: 2 }, en)).toBe('Queue on board “Sprint” finished, cards done: 2')
+  expect(line({ kind: 'stop', why: 'limit', when: '14:30' }, en)).toBe('Queue on board “Sprint” stopped: Claude usage limit until 14:30')
+  expect(line({ kind: 'stop', why: 'check' }, en)).toBe('Queue on board “Sprint” stopped: check failed')
+  expect(line({ kind: 'stop', why: 'column' }, (s: string) => tr(s, 'de'))).toBe('Warteschlange auf Board „Sprint“ angehalten: Karte nicht in der letzten Spalte')
+  expect(line({ kind: 'stop', why: 'deleted' }, (s: string) => tr(s, 'uk'))).toBe('Черга на дошці «Sprint» зупинилася: дошку видалили')
+  // Не влезает в 140 знаков — сколько влезло и «+N»
+  const long = Array.from({ length: 3 }, (_, i) => ({ title: `${'b'.repeat(39)}${i}`, kind: 'done' }))
+  const cut = phoneText([], undefined, long)
+  expect(Array.from(cut).length).toBeLessThanOrEqual(PHONE_TEXT_MAX)
+  expect(cut).toBe(`Очередь на доске «${'b'.repeat(39)}0» закончилась +2`)
+})
+
 test('телефон без входа: плитка «нет», экран объясняет и ведёт ко входу; сайт не спрашиваем', HEAVY, async ($, on) => {
   const { api } = phoneSite()
   const { clock, requests } = stubs(on, { env: WINDOWS, api })
@@ -118,7 +208,7 @@ test('телефон без входа: плитка «нет», экран об
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'arcade-menu-settings' })
   expect(await ui.find({ key: 'arcade-phone' })).toMatchObject({ props: { label: 'Уведомления на телефон: нет' } })
-  expect(await ui.find({ type: 'Text', text: '  когда сессия ждёт тебя дольше 2 минут; только имя сессии, без вопроса и кода' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '  сессия ждёт тебя или встала очередь, а тебя нет 2 минуты; только имя сессии или доски, без вопроса и кода' })).toBeDefined()
   await ui.press({ key: 'arcade-phone' })
   await clock.settle()
   expect(await ui.find({ type: 'Text', text: 'Уведомления на телефон идут через сайт Arcade — нужен вход через GitHub на этом компьютере. На телефоне входить не нужно.' })).toBeDefined()
@@ -366,4 +456,168 @@ test('телефон: сайт молчит — через минуту ещё �
   set('docs', 'permission')
   await live(200_000)
   expect(sends().length).toBe(4)
+})
+
+test('телефон: очередь другой сессии встала — через 2 минуты только название доски; пока на доске идёт очередь — ждём; две сессии — одно уведомление', HEAVY, async ($, on) => {
+  const { api, st } = phoneSite()
+  st.phones = 1
+  const { clock, requests, saved, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME, api, stored: { ...SIGNED, phonePush: true, agentsNotify: false } })
+  const { marks, live, set } = rivals(putFile, clock, disk, phoneList())
+  const sends = () => sent(requests, 'api/me/push/send', 'POST')
+  marks()
+  await start($)
+  await live(10_000)
+  // «docs» встала на доске b1 с ошибкой, а «api» на той же доске ещё делает карточку — ждём
+  set('api', 'working', { queue: { board: 'b1', n: 2, of: 3, started: clock.now() }, card: { id: 'c2', title: 'Секретная карточка', board: 'b1', boardTitle: 'Sprint' } })
+  set('docs', 'done', { qend: { board: 'b1', title: 'Sprint', kind: 'stop', why: 'error', at: clock.now() } })
+  await live(200_000)
+  expect(sends()).toEqual([])
+  // «api» прошла ту же очередь: доска свободна, а «docs» стоит дольше 2 минут — сразу одно уведомление о доске
+  set('api', 'done', { queue: null, card: null, qend: { board: 'b1', title: 'Sprint', kind: 'done', n: 2, at: clock.now() } })
+  await live(10_000)
+  expect(sends().map((r) => [r.headers.Authorization, r.body])).toEqual([[`Bearer ${TOKEN}`, { text: 'Очередь на доске «Sprint» остановилась: ошибка' }]])
+  expect(JSON.stringify(sends())).not.toContain('Секретная')
+  expect(saved.get('phoneSent').told['queue|b1']).toEqual(expect.any(Number))
+  // Конец в «api» — та же доска раньше уведомления: о нём уже сообщили, второй раз не зовём
+  await live(400_000)
+  expect(sends().length).toBe(1)
+  // Очередь на доске запустили снова, и в обеих сессиях она кончилась — через 2 минуты одно новое уведомление
+  set('api', 'done', { qend: { board: 'b1', title: 'Sprint', kind: 'done', n: 2, at: clock.now() } })
+  set('docs', 'done', { qend: { board: 'b1', title: 'Sprint', kind: 'done', n: 1, at: clock.now() } })
+  await live(100_000)
+  expect(sends().length).toBe(1)
+  await live(30_000)
+  expect(sends().map((r) => r.body.text)).toEqual(['Очередь на доске «Sprint» остановилась: ошибка', 'Очередь на доске «Sprint» закончилась: карточек — 3'])
+  await live(400_000)
+  expect(sends().length).toBe(2)
+  // Встала на лимите — время сброса на часах этого компьютера; время уже прошло — без него
+  const hm = (ms: number) => [new Date(ms).getHours(), new Date(ms).getMinutes()].map((n) => String(n).padStart(2, '0')).join(':')
+  const reset = clock.now() + 3 * 3_600_000
+  set('docs', 'done', { qend: { board: 'b1', title: 'Sprint', kind: 'stop', why: 'limit', until: reset, at: clock.now() } })
+  await live(400_000)
+  expect(sends().map((r) => r.body.text).at(-1)).toBe(`Очередь на доске «Sprint» остановилась: лимит Claude до ${hm(reset)}`)
+  set('docs', 'done', { qend: { board: 'b1', title: 'Sprint', kind: 'stop', why: 'limit', until: clock.now() - 1_000, at: clock.now() } })
+  await live(400_000)
+  expect(sends().map((r) => r.body.text).at(-1)).toBe('Очередь на доске «Sprint» остановилась: кончился лимит Claude')
+  expect(sends().length).toBe(4)
+})
+
+test('телефон: своя очередь пройдена или встала, человека 2 минуты нет — название доски; прервал ход или нажал что-то в Arcade — молчим', HEAVY, async ($, on) => {
+  const { api, st } = phoneSite()
+  st.phones = 1
+  const { clock, requests, saved, submits } = stubs(on, { env: AG_ENV, agents: AG_ME, submit: true, api, stored: { ...SIGNED, phonePush: true, agentsNotify: false } })
+  const sends = () => sent(requests, 'api/me/push/send', 'POST')
+  const wait = async (ms: number) => {
+    for (let left = ms; left > 0; left -= 10_000) await clock.advance(Math.min(10_000, left))
+  }
+  await start($)
+  await clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const text = (t: any) => ui.find({ type: 'Text', text: t })
+  const pages = () => saved.get('notes') as any[]
+  const page = (title: string) => pages().find((p) => p.title === title)
+  const board = () => pages().find(isBoard)
+  const label = async () => (await ui.find({ key: 'arcade-board-queue' }))?.props.label
+  const add = (title: string) => $.tool.call({ tool: NOTES_TOOL_NAME, action: 'create', title, parent: 'Sprint' })
+  // Запустить очередь: Arcade заявляет карточку и выжидает CLAIM_MS
+  const queue = async () => {
+    const pressed = ui.press({ key: 'arcade-board-queue' })
+    await clock.advance(CLAIM_MS + 100)
+    await pressed
+  }
+  // Ход Claude по выданной карточке: 'done' — перенёс её в «Готово», 'left' — закончил, не перенеся, 'aborted' — прервали
+  let turns = 0
+  const turn = async (title: string, how: string) => {
+    const turnId = `t${++turns}`
+    await $.turn.start({ turnId, text: submits[submits.length - 1].text })
+    if (how === 'done') await $.tool.call({ tool: NOTES_TOOL_NAME, action: 'move', page: page(title).id, column: 'done' })
+    await $.turn.complete({ turnId, reason: how === 'aborted' ? 'aborted' : 'answer', answer: '' })
+    await clock.advance(10)
+  }
+  await $.tool.call({ tool: NOTES_TOOL_NAME, action: 'create', title: 'Sprint', board: true })
+  await add('Карточка про пароли')
+  await ui.press({ key: 'arcade-menu-boards' })
+  await ui.press({ key: `arcade-desk-${board().id}` })
+  await queue()
+  expect(submits.length).toBe(1)
+
+  // Пройдена, и 2 минуты никто ничего не делал — на телефон название доски, без карточек
+  await turn('Карточка про пароли', 'done')
+  expect(await text('Очередь пройдена: в колонке «Сделать» карточек больше нет.')).toBeDefined()
+  await wait(100_000)
+  expect(sends()).toEqual([])
+  await wait(30_000)
+  expect(sends().map((r) => [r.headers.Authorization, r.body])).toEqual([[`Bearer ${TOKEN}`, { text: 'Очередь на доске «Sprint» закончилась: карточек — 1' }]])
+  expect(JSON.stringify(sends())).not.toContain('пароли')
+  await wait(60_000)
+  expect(sends().length).toBe(1)
+
+  // Человек прервал ход — очередь встала по его воле: не сообщаем
+  await add('B')
+  await queue()
+  expect(submits.length).toBe(2)
+  await turn('B', 'aborted')
+  expect(await text('Очередь остановлена: ход Claude прервали.')).toBeDefined()
+  await wait(400_000)
+  expect(sends().length).toBe(1)
+
+  // Claude закончил, не перенеся карточку, — очередь встала сама; но человек через минуту нажал что-то в Arcade — он здесь
+  await add('C')
+  await queue()
+  expect(submits.length).toBe(3)
+  await turn('C', 'left')
+  expect(await text(/^Очередь стоит: Claude закончил ход, а карточка «C»/)).toBeDefined()
+  await wait(60_000)
+  await ui.press({ key: 'arcade-back' })
+  await wait(200_000)
+  expect(sends().length).toBe(1)
+
+  // Снова встала, человека нет — «остановилась»
+  await ui.press({ key: `arcade-desk-${board().id}` })
+  await add('D')
+  await queue()
+  expect(submits.length).toBe(4)
+  await turn('D', 'left')
+  expect(await label()).toBe('Очередь для Claude')
+  await wait(130_000)
+  expect(sends().map((r) => r.body.text)).toEqual(['Очередь на доске «Sprint» закончилась: карточек — 1', 'Очередь на доске «Sprint» остановилась: карточка не в последней колонке'])
+
+  // Пока Claude делал карточку, доску удалили не в Arcade этого компьютера (на сайте, в другом месте) — «доску удалили»,
+  // название — сохранённое при запуске очереди
+  await add('E')
+  await queue()
+  expect(submits.length).toBe(5)
+  const gone = board().id
+  await $.turn.start({ turnId: 'gone', text: submits[4].text })
+  saved.set(
+    'notes',
+    pages().filter((p) => p.id !== gone && p.parent !== gone),
+  )
+  await $.turn.complete({ turnId: 'gone', reason: 'answer', answer: '' })
+  await clock.advance(10)
+  expect(board()).toBeUndefined()
+  await wait(400_000)
+  expect(sends().map((r) => r.body.text)).toEqual([
+    'Очередь на доске «Sprint» закончилась: карточек — 1',
+    'Очередь на доске «Sprint» остановилась: карточка не в последней колонке',
+    'Очередь на доске «Sprint» остановилась: доску удалили',
+  ])
+
+  // Доску удалил сам человек кнопкой в Arcade — он здесь и знает: молчим
+  await $.tool.call({ tool: NOTES_TOOL_NAME, action: 'create', title: 'Sprint', board: true })
+  await add('F')
+  if (!(await ui.find({ key: `arcade-desk-${board().id}` }))) await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: `arcade-desk-${board().id}` })
+  await queue()
+  expect(submits.length).toBe(6)
+  await $.turn.start({ turnId: 'mine', text: submits[5].text })
+  await ui.press({ key: 'arcade-board-delete' })
+  await ui.press({ key: 'arcade-board-delete' })
+  expect(board()).toBeUndefined()
+  await $.turn.complete({ turnId: 'mine', reason: 'answer', answer: '' })
+  await clock.advance(10)
+  await wait(400_000)
+  expect(sends().length).toBe(3)
+  expect(JSON.stringify(sends())).not.toMatch(/«[A-F]»|пароли/)
+  await ui.unmount()
 })
