@@ -10,10 +10,13 @@ const GROUND = 216 // где начинается земля
 const BIRD_X = 64
 const BIRD_W = 14
 const BIRD_H = 10
-const GRAVITY = 0.3
-const FLAP = -4.6
-const MAX_FALL = 6.5
+// Физика мягче, чем в 0.12–0.55.1 (0.3 / −4.6 / 6.5): птица меньше прыгает от кадра к кадру. Высота взмаха та же —
+// FLAP² / (2·GRAVITY) ≈ 35 точек, трубы, щель и трасса дня не менялись
+const GRAVITY = 0.24
+const FLAP = -4.1
+const MAX_FALL = 5.2
 const SPEED = 1.5
+const CATCH_UP = 6 // advance: больше шагов за раз не догоняем — после паузы игра не проматывается вперёд
 const PIPE_W = 24
 const GAP = 64
 const SPACING = 104 // расстояние между трубами
@@ -50,6 +53,81 @@ const BIRD_ART = [
 ]
 const ART_COLOR = { y: BIRD, d: BIRD_DARK, w: WHITE, k: BLACK, o: BEAK }
 
+// Наклон птицы — целым рисунком: четыре готовые птицы (вверх, ровно, вниз, пике) с углом, при котором каждая
+// рисуется (радианы, плюс — клювом вниз). Раньше каждый столбец сдвигался отдельно, и птица ломалась и дрожала.
+const BIRD_UP = [
+  '....yyyyywww...',
+  '...yyyyyywwkw..',
+  '.yyyyyyyywwkw..',
+  '.yyyyyyyywwww..',
+  'yyyyyyyyyyoooo.',
+  'ddddyyyyyyoo...',
+  'yddddyyyyyoo...',
+  'yyyyyyyyyyy....',
+  '.yyyyyyyyy.....',
+  '...yyyyyyy.....',
+]
+const BIRD_DOWN = [
+  '...yyyyyy......',
+  '.yyyyyyyyyy....',
+  'ddyyyyyyyyyw...',
+  'ydddyyyyyywwkw.',
+  'yydddyyyywwwkw.',
+  '.yyyyyyyyywww..',
+  '.yyyyyyyyyoow..',
+  '..yyyyyyyooooo.',
+  '...yyyyyyoo....',
+  '.....yyy.......',
+]
+const BIRD_DIVE = [
+  '..yyyyyyy......',
+  '.yddyyyyyyy....',
+  'yydddyyyyyyy...',
+  '.yyddyyyyyyy...',
+  '.yyyyyyyyywww..',
+  '.yyyyyyyyywwkw.',
+  '..yyyyyyyywwkw.',
+  '..yyyyyyoooww..',
+  '...yyyyyoooo...',
+  '.....yyyoo.....',
+]
+const TILTS = [-0.22, 0, 0.3, 0.6]
+// Точки каждой птицы подряд: x, y, цвет. Наклонённые сдвинуты так, чтобы их середина совпала с серединой ровной —
+// при смене рисунка птица поворачивается на месте, а не прыгает на точку в сторону
+const artPixels = (art) => {
+  const pixels = []
+  art.forEach((row, y) => {
+    for (let x = 0; x < row.length; x++) if (ART_COLOR[row[x]] !== undefined) pixels.push(x, y, ART_COLOR[row[x]])
+  })
+  return pixels
+}
+const middle = (pixels) => {
+  let x = 0
+  let y = 0
+  for (let i = 0; i < pixels.length; i += 3) {
+    x += pixels[i]
+    y += pixels[i + 1]
+  }
+  return [(x * 3) / pixels.length, (y * 3) / pixels.length]
+}
+const LEVEL_MIDDLE = middle(artPixels(BIRD_ART))
+const BIRD_SPRITES = [BIRD_UP, BIRD_ART, BIRD_DOWN, BIRD_DIVE].map((art) => {
+  const pixels = artPixels(art)
+  const [mx, my] = middle(pixels)
+  const dx = Math.round(LEVEL_MIDDLE[0] - mx)
+  const dy = Math.round(LEVEL_MIDDLE[1] - my)
+  for (let i = 0; i < pixels.length; i += 3) {
+    pixels[i] += dx
+    pixels[i + 1] += dy
+  }
+  return pixels
+})
+const tiltIndex = (angle) => {
+  let best = 0
+  for (let i = 1; i < TILTS.length; i++) if (Math.abs(TILTS[i] - angle) < Math.abs(TILTS[best] - angle)) best = i
+  return best
+}
+
 // Цифры 3×5 для счёта в кадре (рисуются крупно, по 4 пикселя на точку)
 const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001', '111100111001111', '111100111101111', '111001001001001', '111101111101111', '111101111001111']
 
@@ -81,12 +159,16 @@ function createFlappy(onFrame, options = {}) {
     seed,
     birdY: 100,
     speed: 0,
+    angle: 0, // наклон птицы, плавно догоняет скорость
     pipes: [],
     ticks: 0,
     overAt: 0,
     scroll: 0,
   }
   let rand = random(seed)
+  // Что было до последнего шага: кадр между двумя шагами (advance) рисует птицу, трубы и землю между ними
+  const before = { birdY: 100, pipes: false, scroll: false }
+  let carry = 0 // доля шага, которую часы уже прошли, а игра ещё нет
 
   const reset = () => {
     rand = random(seed) // каждая попытка — та же трасса дня
@@ -94,8 +176,11 @@ function createFlappy(onFrame, options = {}) {
     game.score = 0
     game.birdY = 100
     game.speed = 0
+    game.angle = 0
     game.pipes = []
     game.ticks = 0
+    before.birdY = 100
+    before.pipes = false
   }
   const spawn = (x) => {
     const top = 24 + Math.floor(rand() * (GROUND - GAP - 48))
@@ -121,14 +206,20 @@ function createFlappy(onFrame, options = {}) {
 
   const step = () => {
     game.ticks++
+    before.birdY = game.birdY
+    before.pipes = false
+    before.scroll = game.state !== 'over'
     if (game.state !== 'over') game.scroll = (game.scroll + SPEED) % 16
     if (game.state === 'ready') {
       game.birdY = 100 + Math.sin(game.ticks / 10) * 4 // покачивается, пока ждёт
+      game.angle = 0
       return
     }
     if (game.state === 'over' && game.birdY >= GROUND - BIRD_H) return
     game.speed = Math.min(MAX_FALL, game.speed + GRAVITY)
     game.birdY += game.speed
+    // Вверх — чуть задрана, вниз — клювом вниз тем сильнее, чем быстрее падает; без рывков
+    game.angle += (Math.max(TILTS[0], Math.min(TILTS[TILTS.length - 1], game.speed * 0.14)) - game.angle) * 0.25
     if (game.birdY < 0) {
       game.birdY = 0
       game.speed = 0
@@ -140,6 +231,7 @@ function createFlappy(onFrame, options = {}) {
     }
     if (game.state !== 'play') return
     for (const p of game.pipes) p.x -= SPEED
+    before.pipes = true
     if (game.pipes.length && game.pipes[0].x < -PIPE_W) game.pipes.shift()
     const last = game.pipes[game.pipes.length - 1]
     if (!last || last.x < W - SPACING) spawn((last ? last.x : W) + SPACING)
@@ -178,19 +270,23 @@ function createFlappy(onFrame, options = {}) {
       x += 4 * size
     }
   }
-  const draw = () => {
+  // at — где кадр между прошлым и последним шагом: 1 — сам последний шаг (frame), 0.5 — посередине (advance)
+  const draw = (at = 1) => {
+    const lag = 1 - at
+    const pipeShift = before.pipes ? SPEED * lag : 0
     for (let y = 0; y < GROUND; y++) {
       const color = y > GROUND - 60 ? SKY_LOW : SKY
       frame.fill(color, y * W, y * W + W)
     }
     // облака — медленнее труб
-    const cloudShift = (game.ticks * 0.3) % (W + 60)
+    const cloudShift = ((game.ticks - lag) * 0.3) % (W + 60)
     for (const [cx, cy] of [[40, 40], [150, 70], [230, 30]]) {
       const x = ((cx - cloudShift + W + 60) % (W + 60)) - 30
       fill(x, cy, 30, 8, CLOUD)
       fill(x + 6, cy - 5, 18, 6, CLOUD)
     }
-    for (const p of game.pipes) {
+    for (const pipe of game.pipes) {
+      const p = { x: pipe.x + pipeShift, top: pipe.top }
       fill(p.x, 0, PIPE_W, p.top, PIPE)
       fill(p.x, p.top + GAP, PIPE_W, GROUND - p.top - GAP, PIPE)
       fill(p.x + 3, 0, 4, p.top, PIPE_LIGHT)
@@ -204,14 +300,15 @@ function createFlappy(onFrame, options = {}) {
     }
     fill(0, GROUND, W, 6, GRASS)
     fill(0, GROUND + 6, W, H - GROUND - 6, DIRT)
-    for (let x = -16; x < W + 16; x += 16) fill(x - game.scroll, GROUND + 10, 8, 3, DIRT_DARK)
-    const tilt = game.state === 'play' ? Math.max(-2, Math.min(3, Math.round(game.speed / 2))) : 0
-    BIRD_ART.forEach((row, ry) => {
-      for (let rx = 0; rx < row.length; rx++) {
-        const color = ART_COLOR[row[rx]]
-        if (color !== undefined) fill(BIRD_X + rx, Math.round(game.birdY) + ry + Math.round((rx - 7) * tilt * 0.15), 1, 1, color)
-      }
-    })
+    const scroll = game.scroll - (before.scroll ? SPEED * lag : 0)
+    for (let x = -16; x < W + 16; x += 16) fill(x - scroll, GROUND + 10, 8, 3, DIRT_DARK)
+    const sprite = BIRD_SPRITES[tiltIndex(game.angle)]
+    const birdY = Math.round(before.birdY + (game.birdY - before.birdY) * at)
+    for (let i = 0; i < sprite.length; i += 3) {
+      const x = BIRD_X + sprite[i]
+      const y = birdY + sprite[i + 1]
+      if (x >= 0 && x < W && y >= 0 && y < H) frame[y * W + x] = sprite[i + 2]
+    }
     if (game.state !== 'ready') number(game.score, W / 2, 14)
     onFrame?.(frame)
   }
@@ -221,8 +318,19 @@ function createFlappy(onFrame, options = {}) {
   return Object.assign(game, {
     // Шаг на 1/60 секунды и кадр — как nes.frame()
     frame() {
+      carry = 0
       step()
       draw()
+    },
+    // Столько шагов по 1/60 секунды, сколько прошло по часам, с долями: целые шаги — игра, остаток — где между двумя
+    // шагами нарисовать кадр. Так птица летит ровно, даже когда кадры приходят неровно или не по 60 в секунду
+    advance(steps) {
+      carry = Math.min(carry + Math.max(0, steps), CATCH_UP)
+      while (carry >= 1) {
+        step()
+        carry -= 1
+      }
+      draw(carry)
     },
     // Любая кнопка — взмах, по нажатию, а не по удержанию
     buttonDown(player, button) {

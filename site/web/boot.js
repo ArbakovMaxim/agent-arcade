@@ -328,16 +328,12 @@
       engine.buttonDown(1, 'pointer')
       engine.buttonUp(1, 'pointer')
     })
-    // 60 шагов в секунду; окно не в фокусе — пауза, как у Денди
+    // 60 шагов в секунду по часам; кадр экрана рисуется между шагами (advance), поэтому птица летит ровно и на
+    // экранах 120 Гц, и когда кадры браузера приходят неровно. Окно не в фокусе — пауза, как у Денди
     let last = performance.now()
-    let behind = 0
     const tick = (now) => {
       if (document.hasFocus()) {
-        behind = Math.min(behind + now - last, 200)
-        while (behind >= 1000 / 60) {
-          engine.frame()
-          behind -= 1000 / 60
-        }
+        engine.advance(Math.min(now - last, 200) / (1000 / 60))
         context.putImageData(image, 0, 0)
         if (status) status.textContent = line()
       }
