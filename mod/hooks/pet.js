@@ -172,6 +172,23 @@ export function petMood(pet, { now, hour, waiting = 0, sessions = 1 }) {
   return 'idle'
 }
 
+// Полоса на главном экране (п. 43): что питомец показывает. treat — только покормили или пришло угощение (в том числе
+// за очередь доски); happy — погладили; wait — сессия ждёт человека; sleep — ночь; hungry — сидит у пустой миски;
+// sad — грустно; done — агент закончил ход; иначе idle (гуляет и шалит)
+export const DONE_MS = 60_000 // сколько радуется концу хода
+export const TREAT_MS = 8_000 // сколько радуется новому угощению
+export function walkReaction(pet, { now, hour, waiting = 0, doneAt = 0, treatAt = 0 }) {
+  const mood = petMood(pet, { now, hour, waiting, sessions: 1 })
+  if (mood === 'eat' || now - treatAt < TREAT_MS) return 'treat'
+  if (mood === 'happy') return 'happy'
+  if (waiting > 0) return 'wait'
+  if (mood === 'sleep') return 'sleep'
+  if (fullness(pet, now) < 15) return 'hungry'
+  if (mood === 'sad') return 'sad'
+  if (doneAt && now - doneAt < DONE_MS) return 'done'
+  return 'idle'
+}
+
 // Когда настроение сменится само (конец еды или сердечек) — чтобы перерисовать экран один раз, без постоянного таймера
 export function moodChangeIn(pet, now) {
   const ends = [pet.fedAt + EAT_MS, pet.patAt + PAT_MS].filter((t) => t > now)

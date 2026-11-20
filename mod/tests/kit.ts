@@ -365,6 +365,7 @@ export const MENU_OF: Record<string, string> = {
   'arcade-notify': 'settings',
   'arcade-assign': 'settings',
   'arcade-wide': 'settings',
+  'arcade-pet-walk': 'settings',
   'arcade-ask-after': 'settings',
   'arcade-on-done': 'settings',
   'arcade-on-permission': 'settings',
