@@ -2271,7 +2271,7 @@ test('главное меню: свёрнутое с прошлого раза �
   await start($)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   expect(await ui.find({ key: 'arcade-fold-read' })).toMatchObject({ props: { label: expect.stringMatching(/^▸ Читать и слушать · \d+$/) } })
-  expect(await ui.find({ key: 'arcade-fold-more' })).toMatchObject({ props: { label: '▸ Ещё · 4' } }) // настройки, язык, отчёт об ошибке, поддержка
+  expect(await ui.find({ key: 'arcade-fold-more' })).toMatchObject({ props: { label: '▸ Ещё · 5' } }) // питомец, настройки, язык, отчёт об ошибке, поддержка
   expect(await ui.find({ key: 'arcade-menu-settings' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-menu-nes' })).toBeDefined()
   await ui.unmount()
