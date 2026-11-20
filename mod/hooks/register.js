@@ -26,7 +26,7 @@ import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
-import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneText } from './phone.js'
+import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneQueues, phoneText, queueKey, queueTold } from './phone.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
 import { COMMITS_MAX, cleanComment, cutDiff, lastComment, lineDiff, pickSlot, restoreDetail, restoreReviews, returnLine, REVIEW_FILES, REVIEW_KEY, reviewed, reviewMark, SNAP_FILE, SNAP_PATHS, SNAP_TOTAL, splitPatch, unreview } from './review.js'
@@ -321,8 +321,10 @@ S.agHidden = [] // id сессий, скрытых крестиком во вк�
 // last — когда подключили последний (время сайта), askedAt — когда спрашивали; code — код подключения на экране, until —
 // до каких пор он живёт, base — last в момент выдачи кода: сменился — телефон подключили; busy — вопрос к сайту в пути;
 // note и bad — строка под кнопками; told — о каких ожиданиях телефону уже сообщили (alertKey → когда); wait — раньше
-// не отправлять; sending — отправка в пути; timer — опрос сайта, пока показан код
-S.phone = { on: false, phones: -1, last: 0, askedAt: 0, code: '', until: 0, base: 0, busy: false, note: '', bad: false, told: new Map(), wait: 0, sending: false, timer: null }
+// не отправлять; sending — отправка в пути; timer — опрос сайта, пока показан код; qend — очередь этой сессии
+// закончилась или остановилась сама: { board, title, kind: 'done' | 'stop', at } (at 0 — время ещё не узнали), уходит
+// в отметку сессии; человек что-то сделал здесь или запустил очередь снова — null
+S.phone = { on: false, phones: -1, last: 0, askedAt: 0, code: '', until: 0, base: 0, busy: false, note: '', bad: false, told: new Map(), wait: 0, sending: false, timer: null, qend: null }
 // «Пока тебя не было» (away.js): agSeen — чьи концы ходов человек уже видел ({ id: время }, agentsSeen в $.store);
 // away — какой экран открыт сейчас ('agents', 'today' или '') и что было увидено до его открытия; ready — прочитано из
 // хранилища. lastReply — начало ответа Claude в последнем ходе, turnBase — «Что поменялось» в начале хода
@@ -396,6 +398,7 @@ function recordOf(at) {
     look: ag.look || 0,
     last: ag.last ?? null,
     ctx: ctxTitle(),
+    qend: S.phone.qend?.at ? { ...S.phone.qend } : null,
   }
 }
 // Замер лимитов и контекста этой сессии (app/usage) — для чужих «Агентов» и «Лимитов»
@@ -563,10 +566,14 @@ export async function agentsTick($) {
       ag.status = S.status
     }
     holdCheck(now)
+    // Конец очереди: время, если ещё не узнали; старше часа — о нём уже не сообщать
+    const qend = S.phone.qend
+    if (qend && !qend.at) qend.at = now
+    else if (qend && now - qend.at >= ALERT_KEEP_MS) S.phone.qend = null
     if (ag.ready && (bodyOf(recordOf(0)) !== ag.sent || now - ag.wrote >= AGENT_WRITE_MS)) await put($)
     const shown = S.paneOpen && S.view === 'library' && (S.menu === 'agents' || S.menu === 'usage' || S.menu === 'today' || /^(boards|board:|note:)/.test(S.menu))
     // Пока звучит повтор «ждёт тебя» — читать каждый шаг: ответили — смолкнуть сразу
-    // Уведомления на телефон тоже читают чужие отметки — кто ждёт дольше 2 минут
+    // Уведомления на телефон тоже читают чужие отметки — кто ждёт дольше 2 минут и чья очередь встала
     const phone = S.phone.on && Boolean(S.acct.session)
     if (shown || S.al.again || ((S.agNotify || S.agDone || phone) && now - ag.read >= AGENT_READ_MS)) {
       await readSlots($, now)
@@ -2872,6 +2879,8 @@ const ALERT_DEFER_MS = 5_000 // сессия, где человека не бы�
 
 // Человек что-то сделал в этой сессии (написал или нажал в панели) — отметить. Ошибка здесь ничего не ломает
 export async function lookHere($) {
+  // Человек здесь — о конце очереди этой сессии на телефон не сообщать
+  S.phone.qend = null
   try {
     const ag = S.ag
     if (!ag?.on) return
@@ -3788,18 +3797,19 @@ async function phoneLost($) {
   if (was) await $.ui.toast(tr('Телефонов для уведомлений Arcade больше нет — подключи телефон заново в настройках Arcade.', S.lang))
 }
 
-// Шаг уведомлений на телефон — из agentsTick: кто ждёт дольше PHONE_WAIT_MS и о ком телефону ещё не сообщали —
-// отправить. Сообщённое помнится ALERT_KEEP_MS: сессия ждёт дольше часа — напомнить ещё раз
+// Шаг уведомлений на телефон — из agentsTick: кто ждёт дольше PHONE_WAIT_MS и чья очередь встала (phoneQueues), о
+// чём телефону ещё не сообщали, — отправить. Сообщённое помнится ALERT_KEEP_MS: сессия ждёт дольше часа — напомнить ещё раз
 function phoneTick($, all, now) {
   const ph = S.phone
   if (!ph.on || ph.sending || !S.acct.session || now < ph.wait) return
   for (const [key, at] of ph.told) if (now - at >= ALERT_KEEP_MS) ph.told.delete(key)
   const due = phoneDue(all, now, S.agHidden).filter((r) => !ph.told.has(alertKey(r)))
-  if (!due.length) return
+  const queues = phoneQueues(all, now, S.agHidden).filter((q) => !queueTold(ph.told.get(queueKey(q)), q))
+  if (!due.length && !queues.length) return
   ph.sending = true
   $.clock.after(0, async () => {
     try {
-      await phoneSend($, due)
+      await phoneSend($, due, queues)
     } catch (err) {
       log(`уведомление на телефон: ${err?.message ?? err}`)
       ph.wait = now + PHONE_RETRY_MS
@@ -3811,7 +3821,7 @@ function phoneTick($, all, now) {
 
 // Отправить: что уже отправила другая сессия — забыть; отправляли меньше PHONE_GAP_MS назад — подождать. Отправляет
 // одна сессия на компьютере: заявка в $.store, выждать CAL_CLAIM_MS, перечитать — осталась моя, значит отправляю я
-async function phoneSend($, due) {
+async function phoneSend($, due, queues = []) {
   const ph = S.phone
   // Выключить могли в другой сессии этого компьютера
   ph.on = (await $.store.get(PHONE_PREF)) === true
@@ -3821,13 +3831,14 @@ async function phoneSend($, due) {
   const was = restoreAlerts(await $.store.get(PHONE_KEY), now)
   for (const [key, at] of Object.entries(was.told)) ph.told.set(key, at)
   const fresh = due.filter((r) => !was.told[alertKey(r)])
-  if (!fresh.length) return
+  const ends = queues.filter((q) => !queueTold(was.told[queueKey(q)], q))
+  if (!fresh.length && !ends.length) return
   // last 0 — ещё не отправляли
   if (was.last > 0 && now - was.last < PHONE_GAP_MS) {
     ph.wait = was.last + PHONE_GAP_MS
     return
   }
-  const keys = fresh.map(alertKey)
+  const keys = [...fresh.map(alertKey), ...ends.map(queueKey)]
   const told = { ...was.told }
   for (const key of keys) told[key] = now
   await $.store.set(PHONE_KEY, { by: me, last: now, told: keepTold(told) })
@@ -3837,10 +3848,12 @@ async function phoneSend($, due) {
     for (const [key, at] of Object.entries(after.told)) ph.told.set(key, at)
     return
   }
-  // Только имена сессий — без текста вопроса, кода и имён файлов
+  // Только имена сессий, названия досок, число карточек и причина из списка — без текста вопроса, названий карточек,
+  // кода и имён файлов. Время сброса лимита — на часах этого компьютера; уже прошло — без времени
   const text = phoneText(
     fresh.map((r) => r.name),
     (s) => tr(s, S.lang),
+    ends.map((q) => ({ ...q, when: q.until > now ? clockText(q.until, now) : '' })),
   )
   const res = parsePushSend(await accountFetch($, 'pushsend', { method: 'POST', body: { text }, token }))
   if (!res.error || res.error === 'invalid') {
@@ -6289,9 +6302,33 @@ function again(board, others) {
 }
 
 // Остановить очередь: why — уже переведённое объяснение на экран доски и во всплывашку. Всегда false: дальше — ничего
-export function stopQueue($, why, bad = true) {
-  if (!S.queue) return false
+export function stopQueue($, why, bad = true, phone = '', until = 0) {
+  const queue = S.queue
+  if (!queue) return false
   S.queue = null
+  // Очередь встала сама — phone: 'done' (пройдена) или причина из QUEUE_WHY ('limit' — с временем сброса until, 'error',
+  // 'column', 'check', 'deleted'): если человек 2 минуты ничего не сделает, телефону — название доски, сколько карточек
+  // сделано или почему встала. Остановил человек (кнопка, другая просьба, вопрос, прерванный ход) — '' и не сообщать.
+  // Название — сохранённое при запуске, если доску уже удалили
+  if (phone) {
+    const done = phone === 'done'
+    const ev = {
+      board: queue.board,
+      title: boardTitle(queue.board) || queue.title || '',
+      kind: done ? 'done' : 'stop',
+      n: done ? queue.given.length : 0,
+      why: done ? '' : phone,
+      until: phone === 'limit' && until > 0 ? until : 0,
+      at: 0,
+    }
+    S.phone.qend = ev
+    $.clock.now().then(
+      (at) => {
+        if (!ev.at) ev.at = at
+      },
+      () => {},
+    )
+  }
   S.dk.note = why
   S.dk.bad = bad
   log(`очередь Claude: ${why}`)
@@ -6304,8 +6341,8 @@ export function stopQueue($, why, bad = true) {
 async function giveNext($) {
   const queue = S.queue
   const board = S.notes.find((p) => p.id === queue.board && isBoard(p))
-  if (!board) return stopQueue($, t('Очередь остановлена: доску удалили.'))
-  if (queue.given.length >= QUEUE_MAX) return stopQueue($, `${t('Очередь пройдена: Claude сделал карточек')} — ${queue.given.length}. ${t('Запусти её снова, чтобы продолжить.')}`, false)
+  if (!board) return boardGone($, queue)
+  if (queue.given.length >= QUEUE_MAX) return stopQueue($, `${t('Очередь пройдена: Claude сделал карточек')} — ${queue.given.length}. ${t('Запусти её снова, чтобы продолжить.')}`, false, 'done')
   if (await stoppedEverywhere($, queue)) return stopQueue($, t('Очередь остановили во всех сессиях. Claude доделает текущую карточку, следующую не получит.'), false)
   for (;;) {
     // Карточку заявляем так, чтобы её не взяла другая сессия; отметок нет (нет домашней папки) — очередь одна, как раньше.
@@ -6317,7 +6354,7 @@ async function giveNext($) {
     }
     const id = await takeCard($, pick, () => refreshNotes($).catch(() => {}))
     if (S.queue !== queue) return
-    if (id === null) return stopQueue($, t('Очередь остановлена: не получилось занять карточку так, чтобы её не взяла другая сессия. Запусти очередь снова.'))
+    if (id === null) return stopQueue($, t('Очередь остановлена: не получилось занять карточку так, чтобы её не взяла другая сессия. Запусти очередь снова.'), true, 'error')
     const card = S.notes.find((p) => p.id === (id === 'off' ? pick([]) : id))
     if (!card) break
     queue.retry = ''
@@ -6336,7 +6373,7 @@ async function giveNext($) {
     nb.note = ''
     nb.bad = false
     if (!sent) dropCard()
-    if (!sent) return stopQueue($, `${t('Очередь остановлена: не получилось отдать карточку')} «${card.title}». ${t('Если она в поле ввода — отправь её сам.')}`)
+    if (!sent) return stopQueue($, `${t('Очередь остановлена: не получилось отдать карточку')} «${card.title}». ${t('Если она в поле ввода — отправь её сам.')}`, true, 'error')
     // Отданная карточка — во вторую колонку («В работе»), если в доске их больше двух
     const cols = board.board.cols
     if (cols.length > 2) {
@@ -6356,7 +6393,7 @@ async function giveNext($) {
     return
   }
   const first = colName(board.board.cols[0])
-  stopQueue($, queue.given.length ? `${t('Очередь пройдена: в колонке')} «${first}» ${t('карточек больше нет.')}` : `${t('В колонке')} «${first}» ${t('нет карточек для Claude.')}`, !queue.given.length)
+  stopQueue($, queue.given.length ? `${t('Очередь пройдена: в колонке')} «${first}» ${t('карточек больше нет.')}` : `${t('В колонке')} «${first}» ${t('нет карточек для Claude.')}`, !queue.given.length, queue.given.length ? 'done' : '')
 }
 
 // Запустить очередь на доске id — кнопкой «Очередь для Claude» или сама после сброса лимита (auto): тогда retry —
@@ -6408,7 +6445,8 @@ export async function startQueue($, id, { retry = '', auto = false, anyway = fal
   const board = S.notes.find((p) => p.id === id)
   const last = board.board.cols.at(-1).id
   const check = S.notes.filter((p) => p.parent === id && columnOf(p, board.board.cols) === last && hasMark(p.body) && (S.qc.mine.has(p.id) || !mates.length)).map((p) => p.id)
-  S.queue = { board: id, card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry, check, back: [] }
+  S.queue = { board: id, title: board.title ?? '', card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry, check, back: [] }
+  S.phone.qend = null
   await queueNext($)
 }
 
@@ -6439,7 +6477,7 @@ async function limitStop($, queue) {
   const hit = await limitHit($)
   if (S.queue !== queue) return true
   if (hit) {
-    stopQueue($, await limitNote($, w, hit.reset))
+    stopQueue($, await limitNote($, w, hit.reset), true, 'limit', hit.reset)
     return true
   }
   // Замер мог ещё не прийти — если придёт вскоре и покажет кончившийся лимит, скажем об этом (limitLate)
@@ -6459,6 +6497,12 @@ export async function limitLate($) {
   const w = spentWindow(S.us.me?.limits, now)
   if (!w) return
   S.qr.err = null
+  // Телефону — тоже лимит с временем сброса, а не «ошибка»
+  const qe = S.phone.qend
+  if (qe?.board === err.board && qe.why === 'error') {
+    qe.why = 'limit'
+    qe.until = w.reset > 0 ? w.reset : 0
+  }
   const why = await limitNote($, err, w.reset)
   S.dk.note = why
   S.dk.bad = true
@@ -6621,13 +6665,33 @@ export async function resumeTick($) {
   }
 }
 
-// «Остановить везде»: эта сессия и все другие с очередью на доске id доделывают текущие карточки и новых не берут
-export async function stopEverywhere($, id) {
+// Отметить в $.store, что очереди на досках ids остановили везде: другие сессии увидят это перед следующей карточкой
+async function markStops($, ids) {
   const now = await $.clock.now()
   const old = await $.store.get(STOP_KEY).catch(() => null)
   const stops = Object.fromEntries(Object.entries(old && typeof old === 'object' ? old : {}).filter(([, at]) => now - Number(at) < STOP_KEEP_MS))
-  stops[id] = now
+  for (const id of ids) stops[id] = now
   await $.store.set(STOP_KEY, stops)
+}
+
+// Человек удалил доски ids в Arcade — очереди на них встают, как по «Остановить везде»: о том, что он сделал сам,
+// телефону не сообщать (boardGone). Ошибка здесь удаление не отменяет
+export async function boardsDeleted($, ids) {
+  if (!ids.length) return
+  await markStops($, ids).catch((err) => log(`остановка очередей удалённых досок: ${err?.message ?? err}`))
+}
+
+// Доска очереди пропала. Удалил человек в Arcade (boardsDeleted) — встать молча; иначе (удалили на сайте, в другом
+// месте или Claude) — телефону «доску удалили»
+async function boardGone($, queue) {
+  const mine = await stoppedEverywhere($, queue)
+  if (S.queue !== queue) return false
+  return stopQueue($, t('Очередь остановлена: доску удалили.'), true, mine ? '' : 'deleted')
+}
+
+// «Остановить везде»: эта сессия и все другие с очередью на доске id доделывают текущие карточки и новых не берут
+export async function stopEverywhere($, id) {
+  await markStops($, [id])
   const why = t('Очередь остановлена во всех сессиях: каждая доделает текущую карточку, новую не возьмёт.')
   if (S.queue?.board === id) return stopQueue($, why, false)
   S.dk.note = why
@@ -6658,7 +6722,7 @@ export async function queueNext($) {
     await giveNext($)
   })().catch((err) => {
     modError(err)
-    stopQueue($, t('Очередь остановлена: ошибка Arcade.'))
+    stopQueue($, t('Очередь остановлена: ошибка Arcade.'), true, 'error')
   })
 }
 
@@ -6669,7 +6733,7 @@ async function checksFail($, queue) {
     const fail = await checkCard($, queue.check.shift())
     if (S.queue !== queue) return true
     if (!fail) continue
-    stopQueue($, fill(t('Проверка после «{0}» не прошла — {1}. Карточка вернулась в «{2}», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.'), [fail.title, codeText(fail.code), fail.col]))
+    stopQueue($, fill(t('Проверка после «{0}» не прошла — {1}. Карточка вернулась в «{2}», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.'), [fail.title, codeText(fail.code), fail.col]), true, 'check')
     const sent = await giveClaude($, fail.text, 'check')
     if (!sent && nb.note) S.dk.note = `${S.dk.note} ${t(nb.note)}`
     nb.note = ''
@@ -6725,17 +6789,17 @@ export async function queueTurnDone($, e) {
   // Ошибка API — это может быть кончившийся лимит: тогда — когда он сбросится и как продолжить
   if (e.reason === 'error' && (await limitStop($, queue))) return false
   if (S.queue !== queue) return false
-  if (e.reason !== 'answer') return stopQueue($, t('Очередь остановлена: Claude не закончил ход — ошибка или отказ.'))
+  if (e.reason !== 'answer') return stopQueue($, t('Очередь остановлена: Claude не закончил ход — ошибка или отказ.'), true, 'error')
   // Свежий блокнот, а в нём — правки Claude за этот ход: перенос карточки могла затереть запись другой сессии
   await checkNotes($)
   if (S.queue !== queue) return false
   const card = S.notes.find((p) => p.id === queue.card)
   const board = S.notes.find((p) => p.id === queue.board && isBoard(p))
-  if (!board) return stopQueue($, t('Очередь остановлена: доску удалили.'))
+  if (!board) return boardGone($, queue)
   const last = board.board.cols.at(-1)
   if (!card || columnOf(card, board.board.cols) !== last.id) {
     const title = card?.title ?? ''
-    return stopQueue($, `${t('Очередь стоит: Claude закончил ход, а карточка')} «${title}» ${t('не в колонке')} «${colName(last)}». ${t('Посмотри, что он ответил.')}`)
+    return stopQueue($, `${t('Очередь стоит: Claude закончил ход, а карточка')} «${title}» ${t('не в колонке')} «${colName(last)}». ${t('Посмотри, что он ответил.')}`, true, 'column')
   }
   // Карточка сделана — перед следующей её проверит команда доски, если она есть (queueNext)
   queue.check = [card.id]
@@ -9370,7 +9434,7 @@ export function settingsScreen($, e, kit) {
       : []),
     // Уведомления на телефон (п. 39) — отдельным экраном: подключить телефон, включить, выключить
     Button({ key: 'arcade-phone', label: `Уведомления на телефон: ${S.phone.on ? 'да' : 'нет'}`, onPress: open('phone') }),
-    dim('  когда сессия ждёт тебя дольше 2 минут; только имя сессии, без вопроса и кода'),
+    dim('  сессия ждёт тебя или встала очередь, а тебя нет 2 минуты; только имя сессии или доски, без вопроса и кода'),
     // Окно лимита Claude дошло до 80 и 90% (плитка «Лимиты»): о каждом пороге — раз во всех сессиях
     Button({
       key: 'arcade-usage-warn',
@@ -9442,8 +9506,8 @@ export function phoneScreen($, e, kit) {
   const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open('settings') })
   const note = ph.note ? [Text({ ...(ph.bad ? { color: 'warning' } : {}), children: [ph.note] })] : []
   const about = [
-    Text({ children: ['Когда сессия Claude Code ждёт твоего ответа больше 2 минут, Arcade пришлёт уведомление на телефон.'] }),
-    dim('В уведомлении только имя сессии — без текста вопроса и кода. Не чаще раза в 5 минут. Ответить с телефона нельзя.'),
+    Text({ children: ['Когда сессия Claude Code ждёт твоего ответа больше 2 минут или очередь на доске закончилась или остановилась, а тебя нет 2 минуты, Arcade пришлёт уведомление на телефон.'] }),
+    dim('В уведомлении только имя сессии или название доски — без текста вопроса, карточек и кода. Не чаще раза в 5 минут. Ответить с телефона нельзя.'),
   ]
   if (!S.acct.session) {
     return [
@@ -11435,7 +11499,9 @@ export function notesScreen($, e, kit) {
           nb.confirm = null
           if (nb.draft?.id === id) nb.draft = null
           if (nb.editing === id) nb.editing = ''
+          const boards = S.notes.filter((p) => (p.id === id || p.parent === id) && isBoard(p)).map((p) => p.id)
           if (!(await editNotes($, (list) => removePage(list, id), 'Страница удалена.'))) return
+          await boardsDeleted($, boards)
           nb.focus = ''
           S.menuFrom = null
           S.menu = parent ? (isBoard(parent) ? `board:${parent.id}` : `note:${parent.id}`) : 'notes'
@@ -11925,6 +11991,7 @@ export function boardsScreen($, e, kit) {
                 S.dk.confirm = ''
                 if (S.notes.some((p) => p.id === nb.draft?.id && p.parent === id)) nb.draft = null
                 if (!(await editBoard($, (list) => removePage(list, id), 'Доска удалена.'))) return
+                await boardsDeleted($, [id])
                 if (share) await forgetDesk($, share)
                 S.dk.pick = ''
                 S.dk.focus = ''

@@ -122,7 +122,8 @@ The sender's IP address is not stored with a report.</p>
 
 <h2>Phone notifications (optional)</h2>
 <p>If you are signed in, you can have Arcade notify your phone when a Claude Code session has been waiting for your answer
-for a while. It is off until you turn it on.</p>
+for a while, or when a queue on one of your boards finished or stopped and nobody has done anything since. It is off until
+you turn it on.</p>
 <ul>
   <li><b>Connecting.</b> Arcade in Claude Code shows a one-time code. You enter it on the <a href="push">/push</a> page on
     your phone, without signing in to GitHub there. The code is tied to your GitHub ID, works once and expires after 10
@@ -132,8 +133,11 @@ for a while. It is off until you turn it on.</p>
     created (the push service address and the encryption keys for it), when the phone was connected, and a hash of the
     phone's key. The key itself stays in that browser and lets it only check its own connection or turn it off. The website
     also keeps how many notifications were sent today and when the last one was, to apply the limits.</li>
-  <li><b>What a notification says.</b> Only that a session is waiting, with the session's name. Never the question text,
-    code or file names. You can't answer from the phone.</li>
+  <li><b>What a notification says.</b> Only that a session is waiting, with the session's name, or that a board's queue
+    finished or stopped, with the board's name and either the number of cards done or a reason from a short fixed list:
+    Claude usage limit (with the time it resets, if known), error, a failed check, a card not in the last column, or the
+    board was deleted. Never the question text, card titles, Claude's replies, code or file names. You can't answer from
+    the phone.</li>
   <li><b>Delivery.</b> Notifications are encrypted end to end between the website and your phone's browser and are delivered
     by your browser's push service: Google (Chrome and Android), Apple (Safari), Mozilla (Firefox) or Microsoft (Edge). That
     service sees the subscription address, the time and the encrypted message, not its text. An undelivered notification
