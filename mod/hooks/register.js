@@ -1879,9 +1879,13 @@ function nesButton(id) {
   return Controller[`BUTTON_${ACTIONS.find((a) => a.id === id).nes}`]
 }
 
-// Один шаг Денди, два кадра. Повторное нажатие уже зажатой кнопки отпускает её на первый кадр,
-// чтобы игра увидела новое нажатие — например, второй выстрел подряд.
-export function stepNes() {
+// Половина шага. Денди — всегда один кадр. Flappy (у неё есть advance) — столько шагов по 1/60 секунды, сколько прошло
+// по часам, с долями: таймер панели тикает неровно, а птица от этого не должна дёргаться
+const advanceNes = (frames) => (S.nes.advance ? S.nes.advance(frames) : S.nes.frame())
+
+// Один шаг Денди, два кадра (frames — сколько кадров по 1/60 секунды прошло, для Flappy). Повторное нажатие уже
+// зажатой кнопки отпускает её на первый кадр, чтобы игра увидела новое нажатие — например, второй выстрел подряд.
+export function stepNes(frames = 2) {
   const wanted = new Set(S.taps)
   for (const key of S.heldKeys) {
     const action = actionOf(key)
@@ -1899,7 +1903,7 @@ export function stepNes() {
     }
   }
   S.taps = new Set()
-  S.nes.frame()
+  advanceNes(frames / 2)
   for (const a of ACTIONS) {
     const want = wanted.has(a.id)
     if (want && !S.down.has(a.id)) {
@@ -1911,7 +1915,7 @@ export function stepNes() {
       S.down.delete(a.id)
     }
   }
-  S.nes.frame()
+  advanceNes(frames / 2)
 }
 
 export function releaseAll() {
@@ -2144,7 +2148,15 @@ export function screenContent() {
 // в каждой сессии Claude, и впустую грузил процессор. Заводит его отрисовка панели (игру открыли — панель
 // перерисовалась), снимает сам себя. В Desktop и VS Code кадр уходит перерисовкой панели (Svg), в терминале — $.ui.blit.
 let gameLoop = null
+let lastTickAt = 0 // когда был прошлый шаг игры; 0 — после паузы или остановки, следующий шаг обычный, на 2 кадра
 const gameOn = () => nesView() && S.paneOpen && Boolean(S.nes)
+// Сколько кадров по 1/60 секунды прошло с прошлого шага: таймер тикает неровно, Flappy идёт по часам, а не по тикам.
+// Больше 6 за раз не догоняем — после долгой задержки игра не проматывается вперёд
+const elapsedFrames = (now) => {
+  const frames = lastTickAt ? Math.min(6, Math.max(0, (now - lastTickAt) / (1000 / 60))) : 2
+  lastTickAt = now
+  return frames
+}
 
 export function runGameLoop($) {
   if (gameLoop || !gameOn()) return
@@ -2155,16 +2167,22 @@ async function gameTick($) {
   if (!gameOn()) {
     gameLoop?.cancel()
     gameLoop = null
+    lastTickAt = 0
     return
   }
-  if (S.paused) return
+  if (S.paused) {
+    lastTickAt = 0
+    return
+  }
+  const now = await $.clock.now()
+  if (!gameOn() || S.paused) return
   if (S.remoteSurface) {
-    stepNes()
+    stepNes(elapsedFrames(now))
     $.ui.invalidate('ui.render')
     return
   }
   if (!S.screen) return
-  stepNes()
+  stepNes(elapsedFrames(now))
   const pixels = pixelMode()
   let shown = false
   try {
