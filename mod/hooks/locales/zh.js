@@ -1108,6 +1108,7 @@ export default {
   "YouTube, Twitch and TikTok": "YouTube、Twitch 和 TikTok",
   "Your channels and the Arcade catalog. No sign-up needed: your channels are kept only on your computer.": "你的频道和 Arcade 目录。无需注册：你的频道只保存在你的电脑上。",
   "Your last tool was cut off midway: check what it managed to do before continuing.": "你的上一个工具在中途被打断了：继续之前，先检查它完成了哪些。",
+  "Your organization’s Claude Code settings (Team or Enterprise) don’t let plugins add to the system prompt: the notes don’t reach Claude on their own. Press “Give to Claude” or ask Claude to read this page.": "你所在组织的 Claude Code 设置（Team 或 Enterprise）不允许插件补充系统提示词：笔记不会自动送达 Claude。请按“交给 Claude”，或让 Claude 读取此页面。",
   "Your own files": "自己的文件",
   "Your own handle": "自己的用户名",
   "Your own text": "自己的文字",

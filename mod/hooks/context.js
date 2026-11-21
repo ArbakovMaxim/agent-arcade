@@ -6,6 +6,9 @@
 export const CTX_KEY = 'ctx' // ключ $.store: какие папки к каким страницам привязаны
 export const SNAP_KEY = 'ctxsnap' // и снимки раздела по сессиям — чтобы после /reload-plugins раздел остался прежним
 export const CTX_SECTION = 'arcade:project-notes' // id раздела в системном промпте
+// и отметка «Claude ответил, а prompt.compose Arcade не позвали»: так бывает, когда настройки организации (Team,
+// Enterprise) закрывают системный промпт от плагинов. Только наблюдение — тариф не угадываем, защиту не обходим
+export const CTX_BLOCKED_KEY = 'ctxblocked'
 export const CTX_MAX = 8_000 // знаков страницы в разделе; длиннее — обрезается
 export const CTX_DIRS = 50 // папок с контекстом, не больше
 export const SNAPS_MAX = 20 // снимков (сессий) в $.store, не больше

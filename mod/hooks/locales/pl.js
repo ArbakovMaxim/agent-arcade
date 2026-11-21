@@ -1108,6 +1108,7 @@ export default {
   "YouTube, Twitch and TikTok": "YouTube, Twitch i TikTok",
   "Your channels and the Arcade catalog. No sign-up needed: your channels are kept only on your computer.": "Twoje kanały i katalog Arcade. Rejestracja niepotrzebna: twoje kanały są zapisane tylko na twoim komputerze.",
   "Your last tool was cut off midway: check what it managed to do before continuing.": "Twoje ostatnie narzędzie zostało przerwane w połowie: sprawdź, co zdążyło zrobić, zanim będziesz kontynuować.",
+  "Your organization’s Claude Code settings (Team or Enterprise) don’t let plugins add to the system prompt: the notes don’t reach Claude on their own. Press “Give to Claude” or ask Claude to read this page.": "Ustawienia Claude Code w twojej organizacji (Team lub Enterprise) nie pozwalają wtyczkom uzupełniać promptu systemowego: notatki same nie docierają do Claude. Naciśnij „Wyślij do Claude” albo poproś Claude o przeczytanie tej strony.",
   "Your own files": "Własne pliki",
   "Your own handle": "Własny nick",
   "Your own text": "Własny tekst",
