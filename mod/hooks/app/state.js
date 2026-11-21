@@ -12,7 +12,7 @@ export const PANE = 'arcade'
 export const PLUGIN_NAME = 'arcade'
 // Версия мода — менять вместе с version в .claude-plugin/plugin.json: уходит в отчёт об ошибке. Файл по
 // $.plugin.root не читаем по той же причине
-export const ARCADE_VERSION = '0.57.1'
+export const ARCADE_VERSION = '0.58.0'
 export const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
 export const ASK_AFTER_MS = 10_000 // через сколько работы агента показать вопрос «сыграть?», пока его не настроили; для быстрой проверки поставь 5_000
 // Строка «сыграть?» над полем ввода: через сколько секунд работы агента, на выбор в настройках; 0 — не показывать
@@ -140,6 +140,12 @@ S.collapsed = []
 S.hidden = []
 // Питомец гуляет по главному экрану (п. 43) — настройка, по умолчанию да; на этом компьютере, в $.store — petWalk
 S.petWalk = true
+// Настройки питомца на его экране (п. 45), все в $.store этого компьютера: petScreens — сидит маленьким в шапке других
+// экранов; petFollow — спускается за прокруткой; petSize — normal или small; petNight — спит с 23 до 7
+S.petScreens = true
+S.petFollow = true
+S.petSize = 'normal'
+S.petNight = true
 // Первый запуск: вместо главного меню — приветствие с выбором разделов, пока его не закрыли «Готово». На этом компьютере,
 // в $.store — welcomed
 S.welcomed = true
@@ -239,7 +245,7 @@ export const CALENDAR_TOOL_NAME = `mcp__arcade__${CALENDAR_TOOL.name}`
 // когда он сработает (wakeAt). Полоса на главном экране: сцена шалости и когда выбрана (scene, sceneAt), сколько
 // угощений видели (seenTreats) и когда пришло новое (treatAt), когда агент закончил ход (doneAt), с какого экрана
 // пришли (lastMenu) и вход ли это на главный (entered)
-export const pt = { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, field: 0, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true }
+export const pt = { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, field: 0, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeEnter: true, badgeReaction: '', followMenu: '', followEnter: true, followReaction: '' }
 export const NOTE_LINES = 400 // строк страницы на экране; дальше — в поле «Текст» по «Редактировать»
 // Доска проектов: основы общих досок (desks.js), список общих досок с сайта и состояние экрана. trouble — беда сверки
 // одной доски { share, text }; picked — отмеченные друзья; syncing и again — какие доски сверяются и каким нужна ещё сверка
