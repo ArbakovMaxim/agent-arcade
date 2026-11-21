@@ -27,7 +27,7 @@ import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreM
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
 import { buy, canBuy, cleanName, collect, CORNER, cornerOf, dailyCookie, DAY_QUEST_COINS, DONE_MS, feed, formOf, fullness, LINE_COOKIE_MS, LINE_QUEST_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodChangeIn, moodOf, newPet, pat, PET_KEY, petLine, petMood, questCheck, questMark, questProgress, restorePet, SHOP, shopScenes, stageOf, streakOf, toggleDecor, toggleWear, TREAT_MS, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, TURNS_PER_TREAT, turnsToday, unlocked, UNLOCKS, walkReaction, WEEK_QUEST_COINS } from './pet.js'
-import { petBadgeSvg, petCornerSvg, petGrabSvg, petPerchSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
+import { petBadgeSvg, petCornerSvg, petPerchSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
 import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneQueues, phoneText, queueKey, queueTold } from './phone.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
@@ -290,6 +290,7 @@ export async function launchCheck($, now, first) {
 // отметку, выжидает и перечитывает — как и карточку очереди (claimCard)
 
 export const AGENT_TICK_MS = 2_500 // шаг: своя отметка, а когда нужно — и чужие
+const WORK_REDRAW_S = 5 // пока агент работает, счётчик секунд перерисовываем раз в столько секунд (п. 48)
 export const AGENT_WRITE_MS = 15_000 // ничего не поменялось — отметку всё равно обновить раз в столько
 export const AGENT_READ_MS = 5_000 // вкладки нет на экране, а всплывашки включены — чужие отметки раз в столько
 export const AGENT_TTL_MS = 45_000 // отметка старше — сессию закрыли или она упала: в списке её нет
@@ -13440,6 +13441,8 @@ function petWake($, now) {
   if (pt.pet && (S.petWalk || S.menu === 'pet')) for (const at of petLineEnds(now)) if (at > now) ends.push(at)
   // Дрёма (п. 49): в этот момент одна перерисовка — питомец на полосе и у края застывает
   if (S.petWalk && S.menu !== 'pet' && pt.inputAt + PET_DOZE_MS > now) ends.push(pt.inputAt + PET_DOZE_MS)
+  // Прогулка по плиткам (0.65): прыжок, возвращение на место и новая прогулка — каждый раз одна перерисовка
+  if (pt.roamable && S.petWalk && S.menu !== 'pet') ends.push(roamNext(now))
   const at = ends.length ? Math.min(...ends) : 0
   if (at && at === pt.wakeAt && pt.wake) return
   pt.wake?.cancel()
@@ -13591,7 +13594,7 @@ function petReset() {
   petLoop?.cancel()
   petLoop = null
   pt.wake?.cancel()
-  Object.assign(pt, { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeAt: 0, badgeReaction: '', queueAt: 0, dones: [], log: [], show: '' })
+  Object.assign(pt, { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeAt: 0, badgeReaction: '', queueAt: 0, dones: [], log: [], show: '', roamable: false, tileInfo: null })
 }
 
 // Открыть «Питомца» с чистыми подсказками и свежим чтением
@@ -13682,10 +13685,10 @@ export function petStrip($, e, kit) {
 const PET_FOLLOW_MAIN = 6 // на главном — когда полоса ушла из виду
 const PET_FOLLOW_ROWS = 3 // на других экранах — когда ушла шапка
 const PET_ENTER_MS = 1600
-// В Desktop (п. 49): навёл мышь на плитку — питомец уходит из угла и сидит на ней; навёл на него самого — он доволен
-// и подпрыгивает, нажал — тянется, будто его оттянули. Всё это — наведение Desktop (одна группа PET_HOVER: угол
-// и плитки) и CSS внутри картинки; мышь плагину не видна, хуков и перерисовок нет. Клетка — ~7,5 × 17 пикселей
-const PET_HOVER = 'arcade-pet'
+// В Desktop питомец один (0.65): живая картинка (isInteractive) сама откликается на мышь — навёл, подпрыгивает и
+// пускает сердечко; нажал — тянется, будто его оттянули; держишь — вырывается. Всё это CSS внутри картинки: мышь
+// плагину не видна, хуков и перерисовок нет. Наведение Desktop прятать не умеет (0.64: вторая картинка оставалась
+// рядом), поэтому ни посадки на плитку под мышкой, ни второй картинки «в руке». Клетка — ~7,5 × 17 пикселей
 const PX_COL = 7.5
 const PX_ROW = 17
 const petLook = (pet) => ({ species: pet.species, stage: stageOf(pet), wear: pet.wear, form: formOf(pet) })
@@ -13694,6 +13697,7 @@ function petExtras(e, now, { Box, Svg }, seat) {
   const offset = e.props?.scroll?.offset ?? 0
   const main = S.menu === 'main' && S.welcomed
   const follow = !!pet && S.petWalk && S.petFollow && (main ? offset >= PET_FOLLOW_MAIN : seat && !petHeadOnly() && offset >= PET_FOLLOW_ROWS)
+  pt.roamable = false
   if (!pet || !seat) pt.badgeMenu = ''
   if (!pet || (!seat && !follow)) return {}
   const dozing = petDozing(now)
@@ -13705,45 +13709,100 @@ function petExtras(e, now, { Box, Svg }, seat) {
   const size = S.petSize === 'small' ? 36 : 48
   const look = petLook(pet)
   const alt = petTitle(pet)
-  const picture = (enter) => keep(Svg({ source: petBadgeSvg({ ...look, reaction, enter, size, still: dozing }), alt, width: size, height: size }))
   const desktop = e.surface === 'desktop'
   const cols = Math.ceil(size / PX_COL)
   const rows = Math.ceil(size / PX_ROW)
-  // Под мышкой — тот же питомец, довольный, с запасом клетки слева, справа и сверху: есть куда подпрыгнуть
-  const grab = desktop
-    ? (() => {
-        const width = Math.round((cols + 2) * PX_COL)
-        const height = (rows + 1) * PX_ROW
-        const source = petGrabSvg({ ...look, size, pad: PX_COL, top: PX_ROW, width, height })
-        return Box({ position: 'absolute', top: -1, left: -1, display: 'none', hover: { display: 'flex' }, children: [keep(Svg({ source, alt, width, height, isInteractive: true }))] })
-      })()
-    : null
-  // Ключ — на блоке питомца. В Desktop блок держит место, а картинка в нём уходит влево за край (из виду), пока мышь
-  // на плитке или на нём самом: на плитке он сидит сам, под мышкой — картинка grab
-  const pet1 = (key, enter) =>
-    desktop
-      ? Box({ key, width: cols, height: Math.round(size / PX_ROW), hover: { scope: PET_HOVER }, children: [Box({ position: 'absolute', top: 0, left: 0, hover: { scope: PET_HOVER, left: -500 }, children: [picture(enter)] }), grab] })
-      : Box({ key, children: [picture(enter)] })
+  const high = Math.round(size / PX_ROW)
+  // В Desktop картинка живая и выше на строку: есть куда подпрыгнуть, вытянуться и пустить сердечко. Сам питомец
+  // стоит там же, где стоял бы без запаса: картинка поднята на строку над своим блоком
+  const play = desktop ? PX_ROW : 0
+  const svg = (source) => keep(Svg({ source, alt, width: size, height: size + play, ...(desktop ? { isInteractive: true } : {}) }))
+  const picture = (enter) => svg(petBadgeSvg({ ...look, reaction, enter, size, still: dozing, play }))
+  // Ключ — на блоке питомца: блок держит место в шапке или у края, картинка в нём одна
+  const pet1 = (key, pic) => (desktop ? Box({ key, width: cols, height: high, children: [Box({ position: 'absolute', top: -1, left: 0, children: [pic] })] }) : Box({ key, children: [pic] }))
+  // Прогулка по плиткам (0.65): в Desktop, где он уже может уйти с места — на главном, когда спустился к краю; на
+  // других экранах с плитками, кроме тех, где читают и пишут. Не когда ждёт тебя, ест, радуется концу хода или спит
+  const range = desktop && S.petFollow && (main ? follow : seat && !petHeadOnly()) && ROAM_MOODS.has(reaction) ? roamRange(pt.tileInfo, offset, e.props?.scroll?.bodyRows ?? 0, rows) : null
+  pt.roamable = !!range
+  const roam = range ? roamNow(now) : null
+  const spot = roam ? roamSpot(roam, pt.tileInfo, range, cols) : null
+  // Вернулся с прогулки — влетает на место, как при приходе на экран
+  const back = range ? roamBack(now) : 0
+  const home = !dozing && now - back < PET_ENTER_MS
   const out = {}
-  if (seat) out.badge = pet1(`arcade-pet-badge-${S.menu}`, !dozing && now - pt.badgeAt < PET_ENTER_MS)
-  if (follow) out.follow = Box({ key: `arcade-pet-follow-${S.menu}`, position: 'absolute', top: offset, right: 1, children: [pet1(`arcade-pet-follow-in-${S.menu}`, false)] })
+  // Ушёл гулять — место в шапке держит пустой блок того же размера: шапка не прыгает
+  if (seat) out.badge = spot ? Box({ key: `arcade-pet-badge-${S.menu}`, width: cols, height: high }) : pet1(`arcade-pet-badge-${S.menu}`, picture(home || (!dozing && now - pt.badgeAt < PET_ENTER_MS)))
+  if (spot) {
+    const source = petPerchSvg({ ...look, size, hop: now - roam.at < ROAM_LAND_MS ? 14 : 0, play })
+    out.follow = Box({ key: `arcade-pet-roam-${S.menu}`, position: 'absolute', top: offset + spot.row, left: spot.left, children: [pet1(`arcade-pet-roam-in-${S.menu}`, svg(source))] })
+  } else if (follow) out.follow = Box({ key: `arcade-pet-follow-${S.menu}`, position: 'absolute', top: offset, right: 1, children: [pet1(`arcade-pet-follow-in-${S.menu}`, picture(home))] })
   return out
 }
 
-// Сажать ли питомца на плитки (п. 49): в Desktop, где он маленький — в шапке или у края. На главном — когда полоса
-// ушла из виду и он спустился к краю. Плитки зовут это сами, по ходу рисования экрана: питомец к этому времени прочитан
-function petPerchOn(e) {
-  if (e.surface !== 'desktop' || !pt.pet || !S.petWalk || S.view !== 'library') return false
-  if (S.menu === 'main') return S.welcomed && S.petFollow && (e.props?.scroll?.offset ?? 0) >= PET_FOLLOW_MAIN
-  return S.petScreens && petSeat()
+// Прогулка по плиткам (п. 49, 0.65): в Desktop питомец сам, без мыши, уходит из шапки или от края и прыгает по
+// плиткам. Через ROAM_WAIT после последнего действия в панели и дальше раз в ROAM_EVERY — ROAM_HOPS прыжков через
+// ROAM_HOP, потом сидит до ROAM_AWAY и возвращается на место. Ни таймера, ни записей: где он сейчас — считается из
+// pt.inputAt и часов, а каждый прыжок — одна разовая перерисовка из petWake. Действие возвращает его сразу, дрёма —
+// тоже. Где плитки, плагину не видно: столбец — по сетке tiles(), строка — любая в окне, ниже последних плиток не
+// спускается
+export const ROAM_WAIT = 5_000
+export const ROAM_EVERY = 30_000
+export const ROAM_HOP = 1_500
+export const ROAM_HOPS = 3
+export const ROAM_AWAY = 12_000
+export const ROAM_LAND_MS = 1_200 // столько после прыжка перерисовка показывает приземление; дальше — просто стоит
+const ROAM_MOODS = new Set(['idle', 'happy', 'hungry', 'sad'])
+const roamHash = (s) => {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return h >>> 0
 }
-
-// Питомец на плитке: спрятан, пока мышь не на этой плитке; сидит над её правым краем, ногами на рамке
-function petPerch({ Box, Svg }) {
-  const rows = S.petSize === 'small' ? 2 : 3
-  const size = rows * PX_ROW
-  const picture = keep(Svg({ source: petPerchSvg({ ...petLook(pt.pet), size }), alt: petTitle(pt.pet), width: size, height: size }))
-  return Box({ position: 'absolute', top: -rows, right: 3, display: 'none', hover: { display: 'flex' }, children: [picture] })
+// Строки окна, куда можно прыгнуть: ниже шапки и выше нижнего края окна; ниже последних плиток — нет (плитка — не
+// меньше 5 строк, шапка — 4). Нет плиток или места — не гуляет
+function roamRange(info, offset, bodyRows, rows) {
+  if (!info?.count) return null
+  const lo = Math.max(1, 4 - offset)
+  const hi = Math.min(bodyRows - rows - 1, 4 + Math.ceil(info.count / info.perRow) * 5 - offset - rows)
+  return hi >= lo ? { lo, hi } : null
+}
+// Прыжок сейчас: прогулка k, прыжок j, с момента at; null — сидит на месте
+function roamNow(now) {
+  const t = now - pt.inputAt - ROAM_WAIT
+  if (t < 0) return null
+  const k = Math.floor(t / ROAM_EVERY)
+  const into = t - k * ROAM_EVERY
+  if (into >= ROAM_AWAY) return null
+  const j = Math.min(ROAM_HOPS - 1, Math.floor(into / ROAM_HOP))
+  return { k, j, at: pt.inputAt + ROAM_WAIT + k * ROAM_EVERY + j * ROAM_HOP }
+}
+// Следующий момент прогулки после now: прыжок, возвращение или новая прогулка
+function roamNext(now) {
+  const base = pt.inputAt + ROAM_WAIT
+  if (now < base) return base
+  const start = base + Math.floor((now - base) / ROAM_EVERY) * ROAM_EVERY
+  for (let j = 1; j < ROAM_HOPS; j++) if (start + j * ROAM_HOP > now) return start + j * ROAM_HOP
+  return start + ROAM_AWAY > now ? start + ROAM_AWAY : start + ROAM_EVERY
+}
+// Когда он в последний раз вернулся на место; 0 — с последнего действия ещё не гулял
+function roamBack(now) {
+  const back = pt.inputAt + ROAM_WAIT + ROAM_AWAY
+  return now < back ? 0 : back + Math.floor((now - back) / ROAM_EVERY) * ROAM_EVERY
+}
+// Куда прыгнул: первый прыжок — на любой столбец плиток и строку в окне, дальше — на соседний столбец и на 2–5 строк
+// выше или ниже. Те же прогулка, прыжок и действие — то же место: перерисовка его не сдвигает. Стоит у правого края
+// плитки, над её текстом
+function roamSpot({ k, j }, { perRow, width, gap }, { lo, hi }, cols) {
+  const seed = (n) => roamHash(`${pt.inputAt}|${k}|${n}`)
+  let c = seed(0) % perRow
+  let row = lo + ((seed(0) >>> 8) % (hi - lo + 1))
+  for (let n = 1; n <= j; n++) {
+    const h = seed(n)
+    if (perRow > 1) c = c === 0 ? 1 : c === perRow - 1 ? c - 1 : c + (h & 1 ? 1 : -1)
+    const d = (h & 2 ? 1 : -1) * (2 + ((h >>> 2) % 4))
+    if (row + d >= lo && row + d <= hi) row += d
+    else if (row - d >= lo && row - d <= hi) row -= d
+  }
+  return { row, left: Math.max(0, c * (width + gap) + width - cols - 2) }
 }
 
 // Настройки питомца (п. 45) общие для всех сессий и лежат в $.store; события «изменилось» у него нет — читаем при
@@ -14707,6 +14766,8 @@ export async function drawPane($, e) {
   // Дрёма питомца (п. 49): другой экран, прокрутка, ширина панели или панель открыта заново — действие, питомец просыпается
   const seen = `${screenNow}|${e.props?.scroll?.offset ?? 0}|${e.props?.bodyColumns ?? 0}`
   if (seen !== pt.seenSig) Object.assign(pt, { seenSig: seen, inputAt: now })
+  // Плитки этого рисунка — для прогулки питомца (0.65); их запишет tiles()
+  pt.tileInfo = null
   // Поле поиска рисуется заново, когда на экран поиска приходят с другого: запрос остаётся, а пока человек печатает,
   // поле то же — набранное не сбивается
   if (game || S.menu !== 'search') finder.shown = false
@@ -14978,9 +15039,8 @@ export async function drawPane($, e) {
     // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
     // Иконка и текст прижаты к верху, лишнее обрезается рамкой, а не ложится на соседнюю плитку.
     // Блок с ключом — сам зона наведения
-    const card = (children, key, width, more = {}) =>
+    const card = (children, key, width) =>
       Box({
-        ...more,
         key: `card-${key}`,
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -15008,8 +15068,7 @@ export async function drawPane($, e) {
         const room = Math.max(60, Math.round((width - 8) * 3.6))
         const words = (t) => [...(t.children ?? t.props?.children ?? [])].join('')
         const out = []
-        // Питомец садится на плитку под мышкой (п. 49): картинка одна на весь ряд плиток
-        const perch = petPerchOn(e) ? petPerch({ Box, Svg }) : null
+        let laid = 0
         for (let i = 0; i < list.length; i++) {
           const x = list[i]
           if (!x || (x.type === 'Text' && words(x) === ' ')) continue
@@ -15048,10 +15107,14 @@ export async function drawPane($, e) {
             // У игры и книги — звёздочка избранного в углу карточки
             const starred = cardKey.startsWith('arcade-game-') ? gameById(cardKey.slice(12)) : null
             const corner = starred && starred.id !== FIELD.id ? [favButton(starred)] : []
-            const tile = card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body }), ...corner], cardKey, width, { flexGrow: 1 })
-            // Обёртка — всегда, с питомцем и без: плитки не ставятся заново, когда он появился или ушёл
-            out.push(Box({ key: `arcade-pet-on-${cardKey}`, flexDirection: 'column', width, ...(perch ? { hover: { scope: PET_HOVER } } : {}), children: [tile, ...(perch ? [perch] : [])] }))
+            out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body }), ...corner], cardKey, width))
+            laid++
           } else out.push(x)
+        }
+        // Для прогулки питомца (0.65): сетка — по первым плиткам экрана, число — всех
+        if (laid) {
+          const room = Math.max(min, (e.viewport?.columns ?? PANE_COLUMNS) - 4)
+          pt.tileInfo = pt.tileInfo ? { ...pt.tileInfo, count: pt.tileInfo.count + laid } : { perRow: Math.max(1, Math.floor((room + TILE_GAP) / (width + TILE_GAP))), width, gap: TILE_GAP, count: laid }
         }
         return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: TILE_GAP, rowGap: 'md', children: out })
       }
@@ -15202,7 +15265,8 @@ export async function drawPane($, e) {
       const seat = S.petWalk && S.petScreens && petSeat()
       if (seat) await petOn($, now)
       extras = petExtras(e, now, kit, seat)
-      if (seat) petWake($, now)
+      // На главном petWake уже был до petExtras — с прошлым pt.roamable; здесь — с нынешним, лишний будильник снимется
+      if (seat || pt.roamable || (S.menu === 'main' && S.petWalk)) petWake($, now)
     }
     const top = extras.badge ? headerOf([Box({ key: 'arcade-head-space', flexGrow: 1 }), extras.badge]) : headerExtra.length ? headerOf(headerExtra) : header
     return Box({ flexDirection: 'column', children: [top, gap, ...items, ...(extras.follow ? [extras.follow] : [])] })
@@ -15406,9 +15470,12 @@ export function register(on) {
         argumentHint: tr('путь к файлу .nes, .md или .bin', S.lang),
         immediate: true,
       })
-      // Раз в секунду: проверить порог вопроса и обновить счётчик секунд. Счётчик идёт, только пока агент работает;
-      // в остальное время открытую панель перерисовываем раз в минуту — «5 мин назад» в чатах и подборках
+      // Раз в секунду: проверить порог вопроса — это без перерисовки. Счётчик секунд в шапке и в строке «сыграть?» идёт,
+      // только пока агент работает, и перерисовывается раз в WORK_REDRAW_S секунд: каждую секунду — лишняя нагрузка (п. 48).
+      // В остальное время открытую панель перерисовываем раз в минуту — «5 мин назад» в чатах и подборках
       let quiet = 0
+      let beat = 0
+      let shape = ''
       $.clock.every(1000, async () => {
         const now = await $.clock.now()
         const due = () => S.status === 'working' && S.askAfter > 0 && !S.asked && !S.paneOpen && now - S.turnStartedAt >= S.askAfter * 1000
@@ -15422,10 +15489,18 @@ export function register(on) {
           } else if (!later && !S.askVisible && due()) {
             S.askStep = 'ask'
             S.askVisible = true
+            $.ui.invalidate('ui.render')
           }
         }
-        quiet = S.paneOpen && S.status !== 'working' ? quiet + 1 : 0
-        if (S.askVisible || (S.paneOpen && (quiet === 0 || quiet % 60 === 0))) $.ui.invalidate('ui.render')
+        const working = S.status === 'working'
+        quiet = S.paneOpen && !working ? quiet + 1 : 0
+        // Состояние сменилось (начался ход, Claude проснулся после агентов в фоне) — шапку сразу, как раньше, а дальше
+        // секунды — снова раз в WORK_REDRAW_S: начало хода само панель не перерисовывает
+        const look = `${S.status}|${S.bg?.n ?? 0}|${S.agentTurn ?? ''}`
+        const moved = look !== shape
+        shape = look
+        beat = working ? (moved ? 0 : (beat + 1) % WORK_REDRAW_S) : 0
+        if ((working && beat === 0 && (S.askVisible || S.paneOpen)) || (S.paneOpen && !working && (moved || quiet % 60 === 0))) $.ui.invalidate('ui.render')
       })
     } catch (err) {
       log(`ошибка мода: ${err?.message ?? err}`)

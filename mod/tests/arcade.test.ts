@@ -139,11 +139,12 @@ test('без игры в панели игровой таймер не тика�
   redraws = 0
   await clock.advance(30_000)
   expect(redraws <= 1).toBe(true)
-  // Агент работает — счётчик секунд в шапке идёт
+  // Агент работает — счётчик секунд в шапке идёт, но перерисовка — раз в 5 секунд, а не каждую (п. 48)
   await $.turn.start({ turnId: 't1' })
   redraws = 0
-  await clock.advance(5_000)
-  expect(redraws >= 5).toBe(true)
+  await clock.advance(10_000)
+  expect(redraws).toBeGreaterThanOrEqual(2)
+  expect(redraws).toBeLessThanOrEqual(3)
   expect(await ui.find({ type: 'Text', text: /^Агент работает \d+ с$/ })).toBeDefined()
   // Игра — таймер тикает; вышли в библиотеку — снят
   await go(ui, 'arcade-game-thwaite')

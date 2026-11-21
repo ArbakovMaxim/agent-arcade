@@ -7,11 +7,12 @@
 // 0.62.1 (п. 48): бесконечные петли — неподвижные кадры по 0,2 с, чтобы питомец не стоил ядра процессора
 // 0.63 (п. 49): дрёма без действий в панели, настройки из другой сессии без перезапуска
 // 0.64 (п. 49): без повторного влёта, садится на плитки под мышкой, есть во всех экранах библиотеки, откликается на мышь
+// 0.65 (п. 49): один питомец на экране — живая картинка откликается на мышь; сам гуляет по плиткам разовыми перерисовками
 import { expect } from 'claude-code/testing'
 import { buy, canBuy, collect, CORNER, cornerOf, DAILY_COOKIES, dailyCookie, DAY_QUEST_COINS, DAY_QUESTS, dayQuests, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_COOKIE_MS, LINE_QUEST_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, questCheck, questMark, questProgress, restoreCard, restorePet, SHOP, shopScenes, stageOf, streakOf, toggleDecor, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, turnsToday, unlocked, walkReaction, WEEK_QUEST_COINS, WEEK_QUESTS, weekKey, weekQuest } from '../hooks/pet.js'
 import { dayKey } from '../hooks/calendar.js'
-import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petGrabSvg, petPerchSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, stepFrames, stillSvg, TRICK_SCENES } from '../hooks/petart.js'
-import { AGENT_TICK_MS, PET_DOZE_MS, petCells } from '../hooks/register.js'
+import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petPerchSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, stepFrames, stillSvg, TRICK_SCENES } from '../hooks/petart.js'
+import { AGENT_TICK_MS, PET_DOZE_MS, petCells, ROAM_AWAY, ROAM_EVERY, ROAM_HOP, ROAM_WAIT } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
 
 // Пятница, 20 ноября 2026, 13:00 по местному времени — день, питомец не спит
@@ -549,8 +550,9 @@ test('маленький питомец в шапке Desktop: доски, аг�
     const pics = await small()
     expect(pics.length).toBe(1)
     const art = pics[0]
-    expect(art.props).toMatchObject({ alt: 'Рыжик', width: 48, height: 48 })
-    expect(art.props.isInteractive).toBeUndefined()
+    // Живая картинка (0.65): откликается на мышь, сверху строка для прыжка
+    expect(art.props).toMatchObject({ alt: 'Рыжик', width: 48, height: 65, isInteractive: true })
+    expect(art.props.source).toContain('class="grab"')
     expect(art.props.source.startsWith('<svg') && art.props.source.length <= 131_072).toBe(true)
     // Пришёл на экран — входит; перерисовка того же экрана — та же картинка, вход не начинается заново
     expect(art.props.source).toContain('fill="freeze"')
@@ -614,12 +616,9 @@ test('настройки питомца на его экране: на друг�
   await go(ui, 'arcade-menu-settings')
   await clock.advance(50)
   expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeDefined()
-  // Маленький: в шапке 36, под мышкой — 53×68 с местом для прыжка, на плитках — 34
+  // Маленький: в шапке одна живая картинка 36 и строка над ней для прыжка; на плитках питомца нет (0.65)
   const owl = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Ухти')
-  expect(owl.filter((s: any) => !s.props.isInteractive && s.props.width === s.props.height && s.props.width !== 34).map((s: any) => s.props.width)).toEqual([36])
-  expect(owl.filter((s: any) => s.props.isInteractive).map((s: any) => [s.props.width, s.props.height])).toEqual([[53, 68]])
-  expect(owl.filter((s: any) => s.props.width === 34).every((s: any) => s.props.height === 34)).toBe(true)
-  expect(owl.filter((s: any) => s.props.width === 34).length).toBeGreaterThan(5)
+  expect(owl.map((s: any) => [s.props.width, s.props.height, s.props.isInteractive])).toEqual([[36, 53, true]])
   // На других экранах — нет
   await go(ui, 'arcade-pet-screens')
   await clock.advance(50)
@@ -651,9 +650,9 @@ test('питомец спускается за мной при прокрутк�
   const down = await $.ui.mount(at(10))
   const follow = await down.find({ key: 'arcade-pet-follow-main' })
   expect(follow).toMatchObject({ props: { position: 'absolute', top: 10, right: 1 } })
-  // find не показывает hover у самого найденного — маленький питомец смотрим ребёнком коробки у края
-  expect(follow.children[0]).toMatchObject({ props: { key: 'arcade-pet-follow-in-main', width: 7, height: 3 }, hover: { scope: 'arcade-pet' }, group: { plugin: 'arcade' } })
-  expect([...new Set((await down.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').map((s: any) => s.props.width))].sort((a, b) => a - b)).toEqual([48, 51, 68, 435])
+  // 0.65: у края одна живая картинка, без hover и без копий на плитках — на экране полоса и он
+  expect(follow.children[0]).toMatchObject({ props: { key: 'arcade-pet-follow-in-main', width: 7, height: 3 } })
+  expect([...new Set((await down.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').map((s: any) => s.props.width))].sort((a, b) => a - b)).toEqual([48, 435])
   // Другой экран — и в шапке, и у края
   await go(down, 'arcade-menu-settings')
   await clock.advance(50)
@@ -712,8 +711,8 @@ test('питомец дремлет без действий в панели: з�
   await clock.advance(200)
   const props = (offset: number) => ({ ...PANE.props, scroll: { offset, bodyRows: 30 } })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props(0) })
-  const strip = async () => (await ui.findAll({ type: 'Svg' })).find((s: any) => s.props.isInteractive === true)?.props.source ?? ''
-  const follow = async () => (await ui.findAll({ type: 'Svg' })).find((s: any) => s.props.alt === 'Искра' && s.props.height === 48)?.props.source ?? ''
+  const strip = async () => (await ui.findAll({ type: 'Svg' })).find((s: any) => s.props.isInteractive === true && s.props.width > 100)?.props.source ?? ''
+  const follow = async () => (await ui.findAll({ type: 'Svg' })).find((s: any) => s.props.alt === 'Искра' && s.props.width === 48)?.props.source ?? ''
   const label = async () => (await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label
   const moving = (svg: string) => /<(animate|animateTransform|set)\b/.test(svg)
   expect(moving(await strip())).toBe(true)
@@ -749,10 +748,10 @@ test('настройки питомца из другой сессии дохо�
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, scroll: { offset: 12, bodyRows: 30 } } })
-  // Полоса 72, у края 48, на плитках 51 и под мышкой 68 — без повторов
-  const sizes = async () => [...new Set((await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').map((s: any) => s.props.height))].sort((a, b) => a - b)
+  // Полоса 72 и у края 65 (48 и строка для прыжка) — больше картинок питомца нет (0.65)
+  const sizes = async () => (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').map((s: any) => s.props.height).sort((a: number, b: number) => a - b)
   expect(await ui.find({ key: 'arcade-pet-follow-main' })).toBeDefined()
-  expect(await sizes()).toEqual([48, 51, 68, 72])
+  expect(await sizes()).toEqual([65, 72])
   // Другая сессия: «не спускаться» и маленький размер — здесь через шаг
   saved.set('petFollow', false)
   saved.set('petSize', 'small')
@@ -799,7 +798,7 @@ const svgsIn = (n: any): any[] => {
 }
 const cardCount = async (ui: any) => (JSON.stringify(await ui.drawn()).match(/"key":"card-/g) ?? []).length
 
-test('картинки под мышкой: на плитке — одно приземление без петель, в углу — шире на поля и без анимации SMIL (п. 49)', () => {
+test('живая картинка питомца (0.65): на плитке — одно приземление без петель; с запасом — выше на строку, прыжок под мышкой, сердечко и рывок (п. 49)', () => {
   const smil = /<(animate|animateTransform|set)\b/g
   for (const species of [...SPECIES, '']) {
     for (const stage of ['egg', 'baby', 'adult']) {
@@ -809,13 +808,31 @@ test('картинки под мышкой: на плитке — одно пр�
       expect(perch.match(smil)?.length).toBe(1)
       expect(perch).toContain('fill="freeze"')
       expect(perch).not.toContain('indefinite')
-      const grab = petGrabSvg({ species, stage, size: 48, pad: 7.5, top: 17, width: 68, height: 68 })
-      expect(grab).toContain('viewBox="-10 -22.67 90.67 90.67" width="68" height="68"')
-      expect(grab).toContain('<g class="grab">')
-      expect(grab).toContain('.grab:active')
-      expect(grab.match(smil)).toBeNull()
+      expect(perch).not.toContain('class="grab"')
+      // В Desktop: сверху строка (17 пикселей), питомец внизу на прежнем месте, вся живость — CSS внутри картинки
+      const badge = petBadgeSvg({ species, stage, size: 48, play: 17 })
+      expect(badge).toContain('viewBox="0 -22.67 64 86.67" width="48" height="65"')
+      expect(badge.match(/<g class="grab">/g)?.length).toBe(1)
+      expect(badge.indexOf('class="love"')).toBeGreaterThan(badge.indexOf('class="grab"'))
+      for (const rule of ['.grab:hover{', '.grab:active{', '.grab:hover~.love{', '@keyframes hop', '@keyframes tug', '@keyframes love']) expect(badge).toContain(rule)
+      expect(badge.length).toBeLessThan(131_072)
+      // Спит — без SMIL, но на мышь откликается
+      const still = petBadgeSvg({ species, stage, size: 48, play: 17, still: true })
+      expect(still.match(smil)).toBeNull()
+      expect(still).toContain('<g class="grab">')
+      // Без запаса — как было
+      const plain = petBadgeSvg({ species, stage, size: 48 })
+      expect(plain).toContain('viewBox="0 0 64 64" width="48" height="48"')
+      expect(plain).not.toContain('class="grab"')
+      // На прогулке: та же живость, приземление — одно
+      const hop = petPerchSvg({ species, stage, size: 48, play: 17 })
+      expect(hop).toContain('viewBox="0 -24.67 64 86.67" width="48" height="65"')
+      expect(hop).toContain('<g class="grab">')
+      expect(hop.match(smil)?.length).toBe(1)
     }
   }
+  // Маленький — запас та же строка
+  expect(petBadgeSvg({ species: 'owl', stage: 'baby', size: 36, play: 17 })).toContain('viewBox="0 -30.22 64 94.22" width="36" height="53"')
 })
 
 test('питомец не влетает заново: вход — только когда пришёл на экран; прокрутка и перерисовка — без него, у края — никогда (п. 49)', HEAVY, async ($, on) => {
@@ -826,7 +843,7 @@ test('питомец не влетает заново: вход — только
   await clock.advance(200)
   const props = (offset: number) => ({ ...PANE.props, scroll: { offset, bodyRows: 30 } })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props(0) })
-  const art = async (key: string) => svgsIn(await ui.find({ key })).filter((s) => !s.props.isInteractive).map((s) => s.props.source)
+  const art = async (key: string) => svgsIn(await ui.find({ key })).map((s) => s.props.source)
   await go(ui, 'arcade-menu-settings')
   await clock.advance(50)
   const head = await art('arcade-pet-badge-settings')
@@ -852,61 +869,49 @@ test('питомец не влетает заново: вход — только
   await ui.unmount()
 })
 
-test('питомец садится на плитку под мышкой: плитки и маленький питомец — одна группа наведения, на каждой плитке — спрятанная картинка над правым краем (п. 49)', HEAVY, async ($, on) => {
+test('в Desktop питомец один (0.65): у плиток ни обёрток, ни картинок, наведение не прячет; у края и в шапке — одна живая картинка на строку выше блока (п. 49)', HEAVY, async ($, on) => {
   const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
   const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
   const at = (offset: number) => ({ ...PANE, surface: 'desktop', props: { ...PANE.props, scroll: { offset, bodyRows: 30 } } })
-  // Наверху главного питомец гуляет полосой: обёртки плиток те же, но без него
-  const top = await $.ui.mount(at(0))
-  const bare = await drawnKey(top, 'arcade-pet-on-arcade-menu-settings')
-  expect(bare.hover).toBeUndefined()
-  expect(kids(bare).map((c: any) => c.props.key)).toEqual(['card-arcade-menu-settings'])
-  await top.unmount()
-  // Пролистал — питомец у края, плитки в его группе
   const ui = await $.ui.mount(at(10))
-  const wrap = await drawnKey(ui, 'arcade-pet-on-arcade-menu-settings')
-  expect(wrap).toMatchObject({ props: { flexDirection: 'column' }, hover: { scope: 'arcade-pet' }, group: { plugin: 'arcade' } })
-  const [tile, perch] = kids(wrap)
-  expect(tile.props).toMatchObject({ key: 'card-arcade-menu-settings', flexGrow: 1 })
-  // Без группы: открывается только на той плитке, над которой мышь
-  expect(perch).toMatchObject({ props: { position: 'absolute', top: -3, right: 3, display: 'none' }, hover: { display: 'flex' } })
-  expect(perch.hover.scope).toBeUndefined()
-  expect(svgsIn(perch).map((s) => [s.props.alt, s.props.width, s.props.height, s.props.isInteractive])).toEqual([['Бип', 51, 51, undefined]])
-  const perches = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип' && s.props.width === 51)
-  expect(perches.length).toBe(await cardCount(ui))
-  expect(perches.length).toBeGreaterThan(10)
-  expect(new Set(perches.map((s: any) => s.props.source)).size).toBe(1)
-  // Маленький питомец у края: 7×3 клетки в той же группе; его картинка уходит за край, пока мышь на плитке или на нём,
-  // а на нём самом появляется картинка, которую можно дёрнуть
+  const tree = JSON.stringify(await ui.drawn())
+  expect(tree).not.toContain('arcade-pet-on-')
+  expect(tree).not.toContain('"scope":"arcade-pet"')
+  expect(await cardCount(ui)).toBeGreaterThan(10)
+  // На главном — полоса и он у края, больше питомца нигде
+  const bips = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип')
+  expect(bips.length).toBe(2)
+  // У края: блок 7×3 клетки, в нём одна картинка — поднята на строку, живая
   const corner = await drawnKey(ui, 'arcade-pet-follow-in-main')
-  expect(corner).toMatchObject({ props: { width: 7, height: 3 }, hover: { scope: 'arcade-pet' } })
-  const [pic, grab] = kids(corner)
-  expect(pic).toMatchObject({ props: { position: 'absolute', top: 0, left: 0 }, hover: { scope: 'arcade-pet', left: -500 } })
-  expect(grab).toMatchObject({ props: { position: 'absolute', top: -1, left: -1, display: 'none' }, hover: { display: 'flex' } })
-  expect(grab.hover.scope).toBeUndefined()
-  const [g] = svgsIn(grab)
-  expect(g.props).toMatchObject({ alt: 'Бип', width: 68, height: 68, isInteractive: true })
-  expect(g.props.source).toContain('class="grab"')
-  expect(g.props.source.length).toBeLessThan(131_072)
-  // Плитка по-прежнему открывает экран
+  expect(corner.props).toMatchObject({ width: 7, height: 3 })
+  expect(corner.hover).toBeUndefined()
+  expect(kids(corner).length).toBe(1)
+  expect(kids(corner)[0].props).toMatchObject({ position: 'absolute', top: -1, left: 0 })
+  const live = svgsIn(corner)
+  expect(live.length).toBe(1)
+  expect(live[0].props).toMatchObject({ alt: 'Бип', width: 48, height: 65, isInteractive: true })
+  expect(live[0].props.source).toContain('class="grab"')
+  expect(live[0].props.source).toContain('class="love"')
+  expect(live[0].props.source.length).toBeLessThan(131_072)
+  // Плитка по-прежнему открывает экран; в шапке — такой же блок с одной живой картинкой
   await ui.press({ key: 'arcade-menu-settings' })
   await clock.advance(50)
-  expect(await drawnKey(ui, 'arcade-pet-badge-settings')).toMatchObject({ props: { width: 7, height: 3 }, hover: { scope: 'arcade-pet' } })
-  // На плитках настроек — тоже
-  const inner = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип' && s.props.width === 51)
-  expect(inner.length).toBe(await cardCount(ui))
-  expect(inner.length).toBeGreaterThan(5)
+  const head = await drawnKey(ui, 'arcade-pet-badge-settings')
+  expect(head.props).toMatchObject({ width: 7, height: 3 })
+  expect(head.hover).toBeUndefined()
+  expect(svgsIn(head).map((s) => [s.props.alt, s.props.width, s.props.height, s.props.isInteractive])).toEqual([['Бип', 48, 65, true]])
+  expect(JSON.stringify(await ui.drawn())).not.toContain('arcade-pet-on-')
   await ui.unmount()
-  // В терминале — ни обёрток, ни картинок
+  // В терминале — без обёрток
   const term = await $.ui.mount({ ...at(10), surface: 'terminal' })
-  expect(await term.find({ key: 'arcade-pet-on-arcade-menu-settings' })).toBeUndefined()
+  expect(JSON.stringify(await term.drawn())).not.toContain('arcade-pet-on-')
   await term.unmount()
 })
 
-test('питомец не садится на плитки, когда на других экранах его нет', HEAVY, async ($, on) => {
+test('питомца нет ни в шапке, ни на плитках, когда на других экранах он выключен', HEAVY, async ($, on) => {
   const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
   const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), petScreens: false } })
   await clock.set(T0)
@@ -921,7 +926,7 @@ test('питомец не садится на плитки, когда на др
   await ui.unmount()
 })
 
-test('питомец в блокноте: в шапке списка и страницы, на плитках страниц; на странице при прокрутке не спускается (п. 49)', HEAVY, async ($, on) => {
+test('питомец в блокноте: в шапке списка и страницы; на странице при прокрутке не спускается (п. 49)', HEAVY, async ($, on) => {
   const pet = { ...newPet('fox', 'Рыжик', T0 - H), xp: 3, treats: 0 }
   const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), notes: [NOTE] } })
   await clock.set(T0)
@@ -932,9 +937,10 @@ test('питомец в блокноте: в шапке списка и стра
   await go(ui, 'arcade-menu-notes')
   await clock.advance(50)
   expect(await ui.find({ key: 'arcade-pet-badge-notes' })).toBeDefined()
-  const wrap = await drawnKey(ui, 'arcade-pet-on-arcade-note-page-pn')
-  expect(wrap.hover).toEqual({ scope: 'arcade-pet' })
-  expect(svgsIn(wrap).filter((s) => s.props.alt === 'Рыжик').map((s) => s.props.width)).toEqual([51])
+  // Страницы — обычные плитки, питомец один — в шапке (0.65)
+  expect(await cardCount(ui)).toBeGreaterThan(0)
+  expect(await drawnKey(ui, 'arcade-pet-on-arcade-note-page-pn')).toBeUndefined()
+  expect((await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Рыжик').map((s: any) => [s.props.height, s.props.isInteractive])).toEqual([[65, true]])
   // Список пролистал — спускается к краю
   await ui.redraw(props(10))
   await clock.advance(50)
@@ -1488,4 +1494,163 @@ test('питомец 0.62.1: бесконечные петли — неподв�
   expect(owl).toContain('dur="0.2s" repeatCount="8"')
   expect(owl).toContain('begin="1.6s;k1.end"')
   expect(petBadgeSvg({ species: 'owl', stage: 'adult', enter: false })).toContain('begin="0s;k1.end"')
+})
+
+test('питомец 0.65: приземление на плитку — с высоты прыжка; без прыжка стоит без анимации; по умолчанию как было', () => {
+  const smil = /<(animate|animateTransform|set)\b/g
+  for (const species of [...SPECIES, '']) {
+    for (const stage of ['egg', 'baby', 'adult']) {
+      expect(petPerchSvg({ species, stage, size: 48 })).toContain('values="0 -10;0 0;0 -3;0 0"')
+      const hop = petPerchSvg({ species, stage, size: 48, hop: 14 })
+      expect(hop).toContain('values="0 -14;0 0;0 -4;0 0"')
+      expect(hop.match(smil)?.length).toBe(1)
+      const still = petPerchSvg({ species, stage, size: 48, hop: 0 })
+      expect(still.match(smil)).toBeNull()
+      expect(still.startsWith('<svg') && still.endsWith('</svg>')).toBe(true)
+    }
+  }
+})
+
+test('питомец 0.65 гуляет по плиткам сам: через паузу уходит из шапки, три прыжка, сидит и возвращается; через полминуты — снова (п. 49)', HEAVY, async ($, on) => {
+  const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const props = (offset: number) => ({ ...PANE.props, scroll: { offset, bodyRows: 30 } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props(0) })
+  await go(ui, 'arcade-menu-settings')
+  await clock.advance(50)
+  const roam = () => ui.find({ key: 'arcade-pet-roam-settings' })
+  const badgeArt = async () => svgsIn(await drawnKey(ui, 'arcade-pet-badge-settings')).map((s) => s.props.source)
+  const roamArt = async () => svgsIn(await drawnKey(ui, 'arcade-pet-roam-in-settings')).map((s) => s.props.source)
+  const spot = async () => {
+    const box = await roam()
+    return box && [box.props.top, box.props.left]
+  }
+  // Пока не прошло ROAM_WAIT после действия — сидит в шапке
+  await clock.advance(ROAM_WAIT - 250)
+  expect(await roam()).toBeUndefined()
+  expect((await badgeArt()).length).toBe(1)
+  // В срок — одна перерисовка: место в шапке пустое того же размера, а он на плитках — в окне, ниже шапки
+  await clock.advance(300)
+  const box = await roam()
+  expect(box).toMatchObject({ props: { position: 'absolute' } })
+  expect(box.props.top).toBeGreaterThanOrEqual(4)
+  expect(box.props.top).toBeLessThanOrEqual(26)
+  expect(box.props.left).toBeGreaterThanOrEqual(0)
+  expect(await drawnKey(ui, 'arcade-pet-badge-settings')).toMatchObject({ props: { width: 7, height: 3 } })
+  expect(await badgeArt()).toEqual([])
+  expect(await ui.find({ key: 'arcade-pet-follow-settings' })).toBeUndefined()
+  // На прогулке он тот же: одна живая картинка в блоке 7×3, без наведения и второй картинки
+  const inner = await drawnKey(ui, 'arcade-pet-roam-in-settings')
+  expect(inner.props).toMatchObject({ width: 7, height: 3 })
+  expect(inner.hover).toBeUndefined()
+  const walking = svgsIn(inner)
+  expect(walking.map((s) => [s.props.width, s.props.height, s.props.isInteractive])).toEqual([[48, 65, true]])
+  expect(walking[0].props.source).toContain('class="grab"')
+  expect((await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').length).toBe(1)
+  // Только что прыгнул — приземляется с высоты; перерисовка позже — просто стоит на том же месте
+  const first = await spot()
+  expect((await roamArt())[0]).toContain('values="0 -14;')
+  await clock.advance(1_200)
+  await ui.redraw(props(0))
+  await clock.advance(10)
+  expect(await spot()).toEqual(first)
+  expect((await roamArt())[0]).not.toMatch(/<animate/)
+  // Следующий прыжок — сам, без действий: другое место и снова приземление
+  await clock.advance(ROAM_HOP - 1_200)
+  expect(await spot()).not.toEqual(first)
+  expect((await roamArt())[0]).toContain('values="0 -14;')
+  // Посидел — вернулся в шапку и влетает на место; у края не появляется
+  await clock.advance(ROAM_AWAY - ROAM_HOP)
+  expect(await roam()).toBeUndefined()
+  const back = await badgeArt()
+  expect(back.length).toBe(1)
+  expect(back[0]).toContain(ENTER)
+  // Через ROAM_EVERY от начала прогулки — новая
+  await clock.advance(ROAM_EVERY - ROAM_AWAY)
+  expect(await roam()).toBeDefined()
+  expect(await badgeArt()).toEqual([])
+  // Прокрутка — действие: он сразу на месте, прогулка — снова через паузу
+  await ui.redraw(props(5))
+  await clock.advance(50)
+  expect(await roam()).toBeUndefined()
+  expect((await badgeArt()).length).toBe(1)
+  expect(await ui.find({ key: 'arcade-pet-follow-settings' })).toBeDefined()
+  await clock.advance(ROAM_WAIT + 100)
+  expect(await roam()).toBeDefined()
+  expect(await ui.find({ key: 'arcade-pet-follow-settings' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('питомец 0.65 на главном Desktop: гуляет, когда спустился к краю; наверху — полосой, как было (п. 49)', HEAVY, async ($, on) => {
+  const pet = { ...newPet('fox', 'Рыжик', T0 - H), xp: 3, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const props = (offset: number) => ({ ...PANE.props, scroll: { offset, bodyRows: 30 } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props(0) })
+  await clock.advance(ROAM_WAIT + 500)
+  expect(await ui.find({ key: 'arcade-pet-roam-main' })).toBeUndefined()
+  await ui.redraw(props(10))
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-follow-main' })).toBeDefined()
+  await clock.advance(ROAM_WAIT + 100)
+  const box = await ui.find({ key: 'arcade-pet-roam-main' })
+  expect(box).toMatchObject({ props: { position: 'absolute' } })
+  // Строка — в окне прокрутки: от первой видимой строки и выше нижнего края
+  expect(box.props.top).toBeGreaterThanOrEqual(10 + 1)
+  expect(box.props.top).toBeLessThanOrEqual(10 + 26)
+  expect(await ui.find({ key: 'arcade-pet-follow-main' })).toBeUndefined()
+  // Плитки по-прежнему открывают экраны
+  await ui.press({ key: 'arcade-menu-settings' })
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('питомец 0.65 не гуляет: где читают и пишут, в терминале, когда спускаться выключено, во сне (п. 49)', HEAVY, async ($, on) => {
+  const pet = { ...newPet('owl', 'Ухти', T0 - H), xp: 2, treats: 0 }
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), notes: [NOTE] } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const props = (offset: number) => ({ ...PANE.props, scroll: { offset, bodyRows: 30 } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props(0) })
+  // Страница блокнота — только шапка
+  await go(ui, 'arcade-menu-notes')
+  await clock.advance(50)
+  await ui.press({ key: 'arcade-note-page-pn' })
+  await clock.advance(ROAM_WAIT + 500)
+  expect(await ui.find({ key: 'arcade-pet-roam-note:pn' })).toBeUndefined()
+  expect(svgsIn(await drawnKey(ui, 'arcade-pet-badge-note:pn')).length).toBeGreaterThan(0)
+  // Список блокнота — гуляет
+  await ui.press({ key: 'arcade-back' })
+  await clock.advance(ROAM_WAIT + 500)
+  expect(await ui.find({ key: 'arcade-pet-roam-notes' })).toBeDefined()
+  // Спит — сидит в шапке, неподвижно
+  await clock.advance(PET_DOZE_MS)
+  expect(await ui.find({ key: 'arcade-pet-roam-notes' })).toBeUndefined()
+  const dozing = svgsIn(await drawnKey(ui, 'arcade-pet-badge-notes'))
+  expect(dozing.length).toBe(1)
+  expect(dozing[0].props.source).not.toMatch(/<(animate|animateTransform|set)\b/)
+  // Спит, но на мышь откликается
+  expect(dozing[0].props.source).toContain('class="grab"')
+  // «Не спускаться за мной» — не уходит с места и гулять
+  saved.set('petFollow', false)
+  await clock.advance(AGENT_TICK_MS)
+  await go(ui, 'arcade-menu-settings')
+  await clock.advance(ROAM_WAIT + 500)
+  expect(await ui.find({ key: 'arcade-pet-roam-settings' })).toBeUndefined()
+  expect(svgsIn(await drawnKey(ui, 'arcade-pet-badge-settings')).length).toBeGreaterThan(0)
+  await ui.unmount()
+  // В терминале — нет
+  saved.set('petFollow', true)
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal', props: props(0) })
+  await go(term, 'arcade-menu-settings')
+  await clock.advance(ROAM_WAIT + 500)
+  expect(await term.find({ key: 'arcade-pet-roam-settings' })).toBeUndefined()
+  await term.unmount()
 })
