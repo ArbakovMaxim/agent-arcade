@@ -97,7 +97,7 @@ test('фон: агент кончился и разбудил Claude — тот 
   await finish($, subagents, 'a1')
   await clock.advance(10)
   await $.turn.start({ turnId: 't2', text: WAKE })
-  await clock.advance(1_000) // шапка перерисовывается раз в секунду
+  await clock.advance(1_000) // новый ход — шапка в течение секунды, дальше секунды раз в 5 с (0.65)
   expect(await text(/^Агент работает 3[01] с$/)).toBeDefined()
   // Пауза прошла, а Claude ещё работает — «закончил» не приходит
   await clock.advance(BG_GRACE_MS + AGENT_TICK_MS)

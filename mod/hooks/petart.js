@@ -419,9 +419,9 @@ const ENTERS = {
 }
 
 // reaction — как у полосы (walkReaction); enter — проиграть вход; size — сторона картинки в пикселях
-export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48, form = '', still = false }) {
+// play — живая картинка (0.65): выше на столько пикселей, отклик на мышь внутри (playable)
+export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48, form = '', still = false, play = 0 }) {
   const mood = BADGE_MOOD[reaction] ?? 'idle'
-  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
   const egg = stage === 'egg' || !LOOKS[species]
   const kind = egg ? 'egg' : species
   const flies = kind === 'dragon' || kind === 'owl'
@@ -432,8 +432,8 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
   const top = stage === 'adult' ? 3 : 20
   const rx = egg ? 13 : stage === 'baby' ? 11 : 14
   const shadow = `<ellipse cx="32" cy="59" rx="${rx}" ry="2.5" fill="#00000022">${enter ? `<animate attributeName="rx" values="2;${rx}" dur="${ENTER_S}s" fill="freeze"/>` : ''}</ellipse>`
-  const body = enter ? ENTERS[kind](fig, top) : fig
-  const svg = `${head}${shadow}${body}${mood === 'sleep' ? zzz(still) : ''}</svg>`
+  const body = (enter ? ENTERS[kind](fig, top) : fig) + (mood === 'sleep' ? zzz(still) : '')
+  const svg = `${frame(0, size, play)}${shadow}${play ? playable(body) : body}</svg>`
   return still ? stillSvg(svg) : stepFrames(svg)
 }
 
@@ -445,8 +445,28 @@ const GRAB_CSS =
   '<style>.grab{cursor:grab;transform-box:fill-box;transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.8,.5,1)}.grab:hover{animation:hop .45s ease-out 2}.grab:active{animation:none;cursor:grabbing;transform:scale(.8,1.3);transition-duration:.12s}@keyframes hop{50%{transform:translateY(-5px)}}</style>'
 export const grabbable = (inner) => `${GRAB_CSS}<g class="grab">${inner}</g>`
 
-// Маленький питомец, неподвижный и довольный: на плитке под мышкой и под мышкой в углу. Без входа и без петель —
-// спрятанная до наведения картинка ничего не стоит
+// Маленький питомец живой картинкой (0.65): то же, что grabbable, и ещё — навёл, над головой всплывает сердечко;
+// держишь дольше PLAY_TUG_S — вырывается, покачиваясь. Сердечко — после .grab: ловит наведение только сам питомец
+const PLAY_TUG_S = 0.7
+const PLAY_CSS =
+  '<style>.grab{cursor:grab;transform-box:fill-box;transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.8,.5,1)}.grab:hover{animation:hop .45s ease-out 2}' +
+  `.grab:active{cursor:grabbing;transform:scale(.8,1.3);transition-duration:.12s;animation:tug .24s ${PLAY_TUG_S}s infinite}` +
+  '.love{opacity:0;pointer-events:none;transform-box:fill-box;transform-origin:50% 100%}.grab:hover~.love{animation:love 1.2s ease-out}' +
+  '@keyframes hop{50%{transform:translateY(-5px)}}@keyframes tug{0%,100%{transform:scale(.8,1.3) rotate(-7deg)}50%{transform:scale(.8,1.3) rotate(7deg)}}' +
+  '@keyframes love{0%{opacity:0;transform:translateY(4px) scale(.5)}25%{opacity:1}100%{opacity:0;transform:translateY(-16px) scale(1.1)}}</style>'
+const LOVE = '<g class="love"><path d="M46 4.6c-1.6-2.6-5.2-1.4-4.6 1.3.4 1.9 2.8 3.2 4.6 4.7 1.8-1.5 4.2-2.8 4.6-4.7.6-2.7-3-3.9-4.6-1.3z" fill="#ff6b8b"/></g>'
+export const playable = (inner) => `${PLAY_CSS}<g class="grab">${inner}</g>${LOVE}`
+
+// Окно маленького питомца: 64 × 64 единицы от y. play — живая картинка выше на столько пикселей: есть куда
+// подпрыгнуть, вытянуться и пустить сердечко; питомец в ней стоит у нижнего края, как без запаса
+function frame(y, size, play) {
+  if (!play) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${y} 64 64" width="${size}" height="${size}">`
+  const k = 64 / size
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${num(y - play * k)} 64 ${num(64 + play * k)}" width="${size}" height="${size + play}">`
+}
+
+// Маленький питомец, неподвижный и довольный: на плитке, куда он прыгнул сам (0.65). Без входа и без петель —
+// между прыжками картинка ничего не стоит
 function petPose({ species, stage, wear, form }) {
   const egg = stage === 'egg' || !LOOKS[species]
   const fig = egg ? eggShell(LOOKS[species] ?? { egg: ['#f1e4d3', '#c9a77c'] }, 'idle') : petFigure({ species, stage, mood: 'happy', wear, form })
@@ -454,21 +474,15 @@ function petPose({ species, stage, wear, form }) {
   return { shadow: `<ellipse cx="32" cy="59" rx="${rx}" ry="2.5" fill="#00000022"/>`, fig: stillSvg(fig) }
 }
 
-// На плитке (п. 49): навёл мышь на плитку — питомец из угла уже стоит на её верхнем крае. Рамка на 2 единицы выше
-// поля: ноги — у нижнего края картинки, на рамке плитки. Один короткий прыжок-приземление, без повторов
-export function petPerchSvg({ species, stage = 'baby', wear = [], form = '', size = 48 }) {
+// На плитке (п. 49, 0.65): прыгнул сам — стоит на её верхнем крае. Рамка на 2 единицы выше
+// поля: ноги — у нижнего края картинки, на рамке плитки. Один короткий прыжок-приземление, без повторов.
+// hop — с какой высоты он приземляется, в единицах картинки (0.65: прыжки по плиткам — выше); 0 — просто стоит.
+// play — живая картинка, как у petBadgeSvg
+export function petPerchSvg({ species, stage = 'baby', wear = [], form = '', size = 48, hop = 10, play = 0 }) {
   const { shadow, fig } = petPose({ species, stage, wear, form })
-  const land = '<animateTransform attributeName="transform" type="translate" values="0 -10;0 0;0 -3;0 0" keyTimes="0;0.5;0.75;1" dur="0.4s" fill="freeze"/>'
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -2 64 64" width="${size}" height="${size}">${shadow}<g>${land}${fig}</g></svg>`
-}
-
-// В углу под мышкой (п. 49): картинка поверх маленького питомца, шире его на pad пикселей по бокам и выше на top —
-// есть куда подпрыгнуть и вытянуться. Питомец в ней стоит ровно там же, где под ней; width и height — вся картинка
-export function petGrabSvg({ species, stage = 'baby', wear = [], form = '', size = 48, pad = 0, top = 0, width = size, height = size }) {
-  const { shadow, fig } = petPose({ species, stage, wear, form })
-  const k = 64 / size
-  const box = [-pad * k, -top * k, width * k, height * k].map(num).join(' ')
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box}" width="${width}" height="${height}">${shadow}${grabbable(fig)}</svg>`
+  const land = hop ? `<animateTransform attributeName="transform" type="translate" values="0 -${hop};0 0;0 -${Math.round(hop * 0.3)};0 0" keyTimes="0;0.5;0.75;1" dur="0.4s" fill="freeze"/>` : ''
+  const body = `<g>${land}${fig}</g>`
+  return `${frame(-2, size, play)}${shadow}${play ? playable(body) : body}</svg>`
 }
 
 // ━━━━━━━━━━ полоса на главном экране ━━━━━━━━━━
