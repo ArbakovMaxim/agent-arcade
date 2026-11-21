@@ -161,13 +161,14 @@ export function toggleWear(pet, id, open) {
 }
 
 // Что сейчас делает: eat — только покормили; happy — погладили; sleep — ночь или ни одной сессии; sad — сессия ждёт
-// человека, голоден или грустно; иначе idle. waiting — сессии, что ждут ответа; sessions — сколько сессий открыто
-export function petMood(pet, { now, hour, waiting = 0, sessions = 1 }) {
+// человека, голоден или грустно; иначе idle. waiting — сессии, что ждут ответа; sessions — сколько сессий открыто;
+// night — спать ли ночью (настройка на экране «Питомец», п. 45)
+export function petMood(pet, { now, hour, waiting = 0, sessions = 1, night = true }) {
   if (now - pet.fedAt < EAT_MS) return 'eat'
   if (now - pet.patAt < PAT_MS) return 'happy'
   if (waiting > 0) return 'sad'
-  const night = hour >= NIGHT[0] || hour < NIGHT[1]
-  if (night || sessions < 1) return 'sleep'
+  const asleep = night && (hour >= NIGHT[0] || hour < NIGHT[1])
+  if (asleep || sessions < 1) return 'sleep'
   if (fullness(pet, now) < 15 || moodOf(pet, now) < 20) return 'sad'
   return 'idle'
 }
@@ -177,8 +178,8 @@ export function petMood(pet, { now, hour, waiting = 0, sessions = 1 }) {
 // sad — грустно; done — агент закончил ход; иначе idle (гуляет и шалит)
 export const DONE_MS = 60_000 // сколько радуется концу хода
 export const TREAT_MS = 8_000 // сколько радуется новому угощению
-export function walkReaction(pet, { now, hour, waiting = 0, doneAt = 0, treatAt = 0 }) {
-  const mood = petMood(pet, { now, hour, waiting, sessions: 1 })
+export function walkReaction(pet, { now, hour, waiting = 0, doneAt = 0, treatAt = 0, night = true }) {
+  const mood = petMood(pet, { now, hour, waiting, sessions: 1, night })
   if (mood === 'eat' || now - treatAt < TREAT_MS) return 'treat'
   if (mood === 'happy') return 'happy'
   if (waiting > 0) return 'wait'

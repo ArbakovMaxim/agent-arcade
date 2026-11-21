@@ -3,7 +3,7 @@
 // П. 43: гуляет полосой по главному экрану, шалит и откликается на работу; выключатель в настройках
 import { expect } from 'claude-code/testing'
 import { collect, DONE_MS, EAT_MS, feed, fullness, moodOf, newPet, pat, PAT_MS, petCard, petMood, restoreCard, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TREATS_MAX, unlocked, walkReaction } from '../hooks/pet.js'
-import { PET_SCENES, petSvg, petWalkSvg, pickScene, SPECIES } from '../hooks/petart.js'
+import { PET_SCENES, petBadgeSvg, petSvg, petWalkSvg, pickScene, SPECIES } from '../hooks/petart.js'
 import { petCells } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
 
@@ -416,7 +416,7 @@ test('питомец гуляет по главному экрану Desktop: н
   await ui.unmount()
 })
 
-test('питомец на главном: выключатель в настройках — полосы нет, «Питомец» в «Ещё» и уголком на «Сегодня»; включили — гуляет', HEAVY, async ($, on) => {
+test('питомец на главном: выключатель на экране питомца — полосы нет, «Питомец» в «Ещё» и уголком на «Сегодня»; включили — гуляет', HEAVY, async ($, on) => {
   const pet = { ...newPet('owl', 'Ухти', T0 - H), xp: 2, treats: 1 }
   const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet } })
   await clock.set(T0)
@@ -429,7 +429,8 @@ test('питомец на главном: выключатель в настро
   await clock.advance(50)
   expect(await ui.find({ key: 'today-pet' })).toBeUndefined()
   await ui.press({ key: 'arcade-back' })
-  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
   expect(await ui.find({ key: 'arcade-pet-walk' })).toMatchObject({ props: { label: 'Питомец гуляет по Arcade: да' } })
   await ui.press({ key: 'arcade-pet-walk' })
   expect(await ui.find({ key: 'arcade-pet-walk' })).toMatchObject({ props: { label: 'Питомец гуляет по Arcade: нет' } })
@@ -479,7 +480,196 @@ test('питомец на главном: выключен в хранилище
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ key: 'arcade-pet-strip' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-menu-pet' })).toBeDefined()
-  await ui.press({ key: 'arcade-menu-settings' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
   expect(await ui.find({ key: 'arcade-pet-walk' })).toMatchObject({ props: { label: 'Питомец гуляет по Arcade: нет' } })
+  // Не гуляет — остальных переключателей прогулки нет, сон ночью — есть
+  expect(await ui.find({ key: 'arcade-pet-screens' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-pet-follow' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-pet-size' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-pet-night' })).toBeDefined()
+  // И маленького на других экранах нет
+  await ui.press({ key: 'arcade-back' })
+  await ui.press({ key: 'arcade-menu-settings' })
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeUndefined()
+  await ui.unmount()
+})
+
+// ━━━━━━━━━━ п. 45: маленький питомец на других экранах, прокрутка, размер, сон ━━━━━━━━━━
+
+const REACTIONS = ['idle', 'treat', 'happy', 'done', 'wait', 'hungry', 'sad', 'sleep']
+
+test('маленький питомец: картинка входа своя у каждого вида, одинаковая для одних вводных, в пределах размера', () => {
+  for (const species of [...SPECIES, ''])
+    for (const stage of ['egg', 'baby', 'adult'])
+      for (const reaction of REACTIONS)
+        for (const enter of [true, false]) {
+          const one = { species, stage, wear: stage === 'adult' ? ['cap'] : [], reaction, enter }
+          const svg = petBadgeSvg(one)
+          expect(svg.startsWith('<svg') && svg.length <= 131_072).toBe(true)
+          expect(petBadgeSvg({ ...one })).toBe(svg)
+        }
+  // Вход — разовая анимация, без него — просто сидит
+  const fox = { species: 'fox', stage: 'baby', reaction: 'idle' }
+  expect(petBadgeSvg({ ...fox, enter: true }) === petBadgeSvg({ ...fox, enter: false })).toBe(false)
+  expect(petBadgeSvg({ ...fox, enter: true })).toContain('fill="freeze"')
+  expect(petBadgeSvg({ ...fox, enter: false })).not.toContain('fill="freeze"')
+  // У каждого вида свой вход
+  expect(new Set(SPECIES.map((species) => petBadgeSvg({ species, stage: 'baby', enter: true }))).size).toBe(SPECIES.length)
+  // Робот спускается на тросе
+  expect(petBadgeSvg({ species: 'robot', stage: 'baby', enter: true })).toContain('stroke="#5b6b7a"')
+  // Размер
+  expect(petBadgeSvg({ ...fox, size: 36 })).toContain('width="36" height="36"')
+})
+
+test('маленький питомец в шапке Desktop: доски, агенты, настройки — есть; поиск, заметки, главный и экран питомца — нет; терминал — нет', HEAVY, async ($, on) => {
+  const pet = { ...newPet('fox', 'Рыжик', T0 - H), xp: 3, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const badge = (menu: string) => ui.find({ key: `arcade-pet-badge-${menu}` })
+  const small = async () => (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Рыжик' && s.props.width <= 48)
+  expect(await badge('main')).toBeUndefined()
+  for (const menu of ['settings', 'agents', 'boards', 'calendar']) {
+    await go(ui, `arcade-menu-${menu}`)
+    await clock.advance(50)
+    expect(await badge(menu)).toBeDefined()
+    const pics = await small()
+    expect(pics.length).toBe(1)
+    const art = pics[0]
+    expect(art.props).toMatchObject({ alt: 'Рыжик', width: 48, height: 48 })
+    expect(art.props.isInteractive).toBeUndefined()
+    expect(art.props.source.startsWith('<svg') && art.props.source.length <= 131_072).toBe(true)
+    // Пришёл на экран — входит; перерисовка того же экрана — та же картинка, вход не начинается заново
+    expect(art.props.source).toContain('fill="freeze"')
+    await ui.press({ key: 'arcade-back' })
+    await clock.advance(50)
+  }
+  await go(ui, 'arcade-menu-settings')
+  const first = (await small())[0].props.source
+  await clock.advance(1_000)
+  expect((await small())[0].props.source).toBe(first)
+  await ui.press({ key: 'arcade-back' })
+  for (const menu of ['search', 'notes', 'pet']) {
+    await go(ui, `arcade-menu-${menu}`)
+    await clock.advance(50)
+    expect(await badge(menu)).toBeUndefined()
+    if (menu !== 'pet') expect((await small()).length).toBe(0)
+    await ui.press({ key: 'arcade-back' })
+    await clock.advance(50)
+  }
+  await ui.unmount()
+  // В терминале — никогда
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await go(term, 'arcade-menu-settings')
+  await clock.advance(50)
+  expect(await term.find({ key: 'arcade-pet-badge-settings' })).toBeUndefined()
+  await term.unmount()
+})
+
+test('настройки питомца на его экране: на других экранах, прокрутка, размер, сон — сохраняются и меняют подпись', HEAVY, async ($, on) => {
+  const pet = { ...newPet('owl', 'Ухти', T0 - H), xp: 2, treats: 0 }
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  const label = async (key: string) => (await ui.find({ key }))?.props.label
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  expect(await label('arcade-pet-screens')).toBe('На других экранах: да')
+  expect(await label('arcade-pet-follow')).toBe('Спускается за мной при прокрутке: да')
+  expect(await label('arcade-pet-size')).toBe('Размер: обычный')
+  expect(await label('arcade-pet-night')).toBe('Спит ночью (23–7): да')
+  // Размер — маленький: на других экранах 36, полоса на главном ниже
+  await ui.press({ key: 'arcade-pet-size' })
+  await clock.advance(50)
+  expect(saved.get('petSize')).toBe('small')
+  expect(await label('arcade-pet-size')).toBe('Размер: маленький')
+  await ui.press({ key: 'arcade-back' })
+  await clock.advance(50)
+  const strip = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.isInteractive === true)
+  expect(strip.length).toBe(1)
+  expect(strip[0].props).toMatchObject({ alt: 'Ухти', width: 435, height: 48 })
+  await go(ui, 'arcade-menu-settings')
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeDefined()
+  expect((await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Ухти').map((s: any) => [s.props.width, s.props.height])).toEqual([[36, 36]])
+  // На других экранах — нет
+  await go(ui, 'arcade-pet-screens')
+  await clock.advance(50)
+  expect(saved.get('petScreens')).toBe(false)
+  expect(await label('arcade-pet-screens')).toBe('На других экранах: нет')
+  await go(ui, 'arcade-menu-settings')
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeUndefined()
+  // Прокрутка и сон
+  await go(ui, 'arcade-pet-follow')
+  await clock.advance(50)
+  expect(saved.get('petFollow')).toBe(false)
+  expect(await label('arcade-pet-follow')).toBe('Спускается за мной при прокрутке: нет')
+  await ui.press({ key: 'arcade-pet-night' })
+  await clock.advance(50)
+  expect(saved.get('petNight')).toBe(false)
+  expect(await label('arcade-pet-night')).toBe('Спит ночью (23–7): нет')
+  await ui.unmount()
+})
+
+test('питомец спускается за мной при прокрутке Desktop: у правого края на высоте прокрутки; мало пролистал или выключено — нет', HEAVY, async ($, on) => {
+  const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const at = (offset: number) => ({ ...PANE, surface: 'desktop', props: { ...PANE.props, scroll: { offset, bodyRows: 30 } } })
+  // Главный: пролистал на 10 строк — питомец у правого края на 10-й строке
+  const down = await $.ui.mount(at(10))
+  const follow = await down.find({ key: 'arcade-pet-follow-main' })
+  expect(follow).toMatchObject({ props: { position: 'absolute', top: 10, right: 1 } })
+  expect(await down.find({ key: 'arcade-pet-follow-art-main' })).toBeDefined()
+  expect((await down.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').map((s: any) => s.props.width)).toEqual([435, 48])
+  // Другой экран — и в шапке, и у края
+  await go(down, 'arcade-menu-settings')
+  await clock.advance(50)
+  expect(await down.find({ key: 'arcade-pet-follow-settings' })).toMatchObject({ props: { position: 'absolute', top: 10 } })
+  expect(await down.find({ key: 'arcade-pet-badge-settings' })).toBeDefined()
+  await down.unmount()
+  // Чуть-чуть пролистал — не спускается
+  const near = await $.ui.mount(at(2))
+  expect(await near.find({ key: 'arcade-pet-follow-main' })).toBeUndefined()
+  await near.unmount()
+  // В терминале — нет
+  const term = await $.ui.mount({ ...at(10), surface: 'terminal' })
+  expect(await term.find({ key: 'arcade-pet-follow-main' })).toBeUndefined()
+  await term.unmount()
+})
+
+test('питомец не спускается при прокрутке, когда выключено в хранилище', HEAVY, async ($, on) => {
+  const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, petFollow: false } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, scroll: { offset: 12, bodyRows: 30 } } })
+  expect(await ui.find({ key: 'arcade-pet-follow-main' })).toBeUndefined()
+  await go(ui, 'arcade-menu-settings')
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-follow-settings' })).toBeUndefined()
+  expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('питомец ночью не спит, когда сон выключен', HEAVY, async ($, on) => {
+  const night = new Date(2026, 10, 20, 23, 30).getTime()
+  const pet = { ...newPet('dragon', 'Искра', night - H), xp: 5, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, petNight: false } })
+  await clock.set(night)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect((await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label).toBe('Искра · Гуляет · угощений: 0')
   await ui.unmount()
 })
