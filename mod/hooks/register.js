@@ -1104,6 +1104,7 @@ export async function desktopWindow($, id, opened, toast = false) {
 // очередь, — по одному, как нажимали
 export async function handlePress($, e, next) {
   await lookHere($)
+  pt.inputAt = await $.clock.now() // нажатие будит питомца (п. 49)
   S.pressing++
   try {
     return await next(e)
@@ -13437,6 +13438,8 @@ function petWake($, now) {
   if (ms) ends.push(now + ms)
   if (S.petWalk) for (const at of [pt.treatAt + TREAT_MS, pt.doneAt + DONE_MS]) if (at > now) ends.push(at)
   if (pt.pet && (S.petWalk || S.menu === 'pet')) for (const at of petLineEnds(now)) if (at > now) ends.push(at)
+  // Дрёма (п. 49): в этот момент одна перерисовка — питомец на полосе и у края застывает
+  if (S.petWalk && S.menu !== 'pet' && pt.inputAt + PET_DOZE_MS > now) ends.push(pt.inputAt + PET_DOZE_MS)
   const at = ends.length ? Math.min(...ends) : 0
   if (at && at === pt.wakeAt && pt.wake) return
   pt.wake?.cancel()
@@ -13617,6 +13620,12 @@ function petCorner($, e, kit) {
 // ширины — одна и та же, пока они те же. В терминале — одна строка-кнопка, без кадров. Нажатие — экран «Питомец»
 // (питомца нет — там выбор вида)
 const PET_SCENE_MS = 45_000
+// Дрёма (п. 49): PET_DOZE_MS без действий в панели — питомец на полосе и у края застывает неподвижной картинкой:
+// спит, а если сессия ждёт тебя — стоит со стрелкой. Действие (нажатие, прокрутка, другой экран, панель открыта
+// заново) будит. Движения мыши плагину не видно
+export const PET_DOZE_MS = 3 * 60_000
+const petDozing = (now) => now - pt.inputAt >= PET_DOZE_MS
+const dozeReaction = (reaction) => (reaction === 'wait' ? 'wait' : 'sleep')
 const PET_STRIP_H = 72
 const PET_STRIP_SMALL = 48 // «Размер: маленький» — та же полоса, уменьшенная на треть
 const WALK_LABEL = { idle: 'Гуляет', wait: 'Грустит: сессия ждёт тебя', done: 'Радуется: агент закончил', treat: 'Ест', happy: 'Радуется', sleep: 'Спит', hungry: 'Грустит: хочет есть', sad: 'Грустит: погладь или покорми' }
@@ -13635,15 +13644,17 @@ export function petStrip($, e, kit) {
   const t = (text) => tr(text, S.lang)
   const pet = pt.pet
   const stage = pet ? stageOf(pet) : 'egg'
-  let reaction = 'idle'
+  const dozing = petDozing(now)
+  let reaction = dozing ? 'sleep' : 'idle'
   let label = t('Питомец: выбрать, кто это')
   if (pet) {
-    reaction = petReaction(now)
+    reaction = dozing ? dozeReaction(petReaction(now)) : petReaction(now)
     label = `${petTitle(pet)} · ${t(stage === 'egg' ? 'Яйцо: покорми — и вылупится' : WALK_LABEL[reaction])} · ${fill(t('угощений: {0}'), [pet.treats])} · 🪙 ${pet.coins}`
   }
   const button = keep(Button({ key: 'arcade-pet-strip-open', label, plain: true, ...(S.menuFrom === 'pet' ? { autoFocus: true } : {}), onPress: petOpen(open) }))
   if (e.surface === 'terminal') return [button]
-  if (pt.entered || !pt.scene || now - pt.sceneAt >= PET_SCENE_MS) {
+  // Дремлет — шалость та же: проснётся с ней же
+  if (!dozing && (pt.entered || !pt.scene || now - pt.sceneAt >= PET_SCENE_MS)) {
     const hat = (pet?.wear ?? []).some((id) => WEAR[id]?.slot === 'head')
     // Открытые трюки (0.59) — среди шалостей
     pt.scene = pickScene(Math.random(), pt.scene, { hat, tricks: pet ? [...tricksOf(pet, pt.streak), ...shopScenes(pet)] : [] })
@@ -13657,7 +13668,7 @@ export function petStrip($, e, kit) {
   const view = Math.min(2000, Math.round(fit * k))
   const width = Math.round(view / k)
   const height = Math.round(PET_STRIP_H / k)
-  const source = petWalkSvg({ species: pet?.species ?? '', stage, wear: pet?.wear ?? [], scene: pt.scene, reaction, width: view, height: PET_STRIP_H, show: 1 / k, form: formOf(pet), decor: pet?.decor ?? [] })
+  const source = petWalkSvg({ species: pet?.species ?? '', stage, wear: pet?.wear ?? [], scene: pt.scene, reaction, width: view, height: PET_STRIP_H, show: 1 / k, form: formOf(pet), decor: pet?.decor ?? [], still: dozing })
   const picture = keep(Svg({ source, alt: pet ? petTitle(pet) : t('Питомец'), width, height, isInteractive: true }))
   // Реплика (0.59) — строкой под полосой, пока есть что сказать
   const line = petLineNow(now)
@@ -13677,11 +13688,12 @@ function petExtras(e, now, { Box, Svg }, seat) {
   if (!pet || !seat) pt.badgeMenu = ''
   if (!follow) pt.followMenu = ''
   if (!pet || (!seat && !follow)) return {}
-  const reaction = petReaction(now)
+  const dozing = petDozing(now)
+  const reaction = dozing ? dozeReaction(petReaction(now)) : petReaction(now)
   const size = S.petSize === 'small' ? 36 : 48
   // Ключ — на обёртке: новый ключ (другой экран) — Desktop ставит картинку заново, и вход проигрывается
   const art = (key, enter) =>
-    Box({ key, children: [keep(Svg({ source: petBadgeSvg({ species: pet.species, stage: stageOf(pet), wear: pet.wear, reaction, enter, size, form: formOf(pet) }), alt: petTitle(pet), width: size, height: size }))] })
+    Box({ key, children: [keep(Svg({ source: petBadgeSvg({ species: pet.species, stage: stageOf(pet), wear: pet.wear, reaction, enter: enter && !dozing, size, form: formOf(pet), still: dozing }), alt: petTitle(pet), width: size, height: size }))] })
   const enterOf = (menu, enter, react) => {
     if (pt[menu] !== S.menu) Object.assign(pt, { [menu]: S.menu, [enter]: true, [react]: reaction })
     else if (pt[react] !== reaction) Object.assign(pt, { [enter]: false, [react]: reaction })
@@ -13694,6 +13706,26 @@ function petExtras(e, now, { Box, Svg }, seat) {
     out.follow = Box({ key: `arcade-pet-follow-${S.menu}`, position: 'absolute', top: offset, right: 1, children: [art(`arcade-pet-follow-art-${S.menu}`, enter)] })
   }
   return out
+}
+
+// Настройки питомца (п. 45) общие для всех сессий и лежат в $.store; события «изменилось» у него нет — читаем при
+// старте сессии и шагом отметок, пока панель открыта (п. 49): переключил в одной сессии — через пару секунд и в других.
+// Вернёт true, если что-то поменялось
+export async function petPrefs($) {
+  const got = {
+    petWalk: (await $.store.get('petWalk')) !== false,
+    petScreens: (await $.store.get('petScreens')) !== false,
+    petFollow: (await $.store.get('petFollow')) !== false,
+    petSize: (await $.store.get('petSize')) === 'small' ? 'small' : 'normal',
+    petNight: (await $.store.get('petNight')) !== false,
+  }
+  let changed = false
+  for (const [key, value] of Object.entries(got)) {
+    if (S[key] === value) continue
+    S[key] = value
+    changed = true
+  }
+  return changed
 }
 
 // Настройки питомца (п. 45) — на его экране, общие для всех сессий. full — питомец уже есть
@@ -14633,6 +14665,9 @@ export async function drawPane($, e) {
   const screenNow = !game && S.view === 'library' ? S.menu : S.view
   if (screenNow === 'main' && pt.lastMenu !== 'main') pt.entered = true
   pt.lastMenu = screenNow
+  // Дрёма питомца (п. 49): другой экран, прокрутка, ширина панели или панель открыта заново — действие, питомец просыпается
+  const seen = `${screenNow}|${e.props?.scroll?.offset ?? 0}|${e.props?.bodyColumns ?? 0}`
+  if (seen !== pt.seenSig) Object.assign(pt, { seenSig: seen, inputAt: now })
   // Поле поиска рисуется заново, когда на экран поиска приходят с другого: запрос остаётся, а пока человек печатает,
   // поле то же — набранное не сбивается
   if (game || S.menu !== 'search') finder.shown = false
@@ -15145,11 +15180,7 @@ export function register(on) {
       S.bk = { ...S.bk, lang: bookLang(await $.store.get('booksLang'), S.lang) }
       S.stamps = restoreStamps(await $.store.get('syncAt'))
       S.msgNotify = (await $.store.get('msgNotify')) !== false
-      S.petWalk = (await $.store.get('petWalk')) !== false
-      S.petScreens = (await $.store.get('petScreens')) !== false
-      S.petFollow = (await $.store.get('petFollow')) !== false
-      S.petSize = (await $.store.get('petSize')) === 'small' ? 'small' : 'normal'
-      S.petNight = (await $.store.get('petNight')) !== false
+      await petPrefs($)
       S.agNotify = (await $.store.get('agentsNotify')) !== false
       S.agDone = (await $.store.get('agentsDone')) === true
       S.agOs = (await $.store.get('agentsOs')) !== false
@@ -15268,6 +15299,8 @@ export function register(on) {
         await resumeTick($)
         // Задания по расписанию — тем же шагом: «на ногах ли сессия» считает resumeTick
         await scheduleTick($).catch(modError)
+        // Настройки питомца поменяли в другой сессии — перерисовать (п. 49); панель закрыта — питомца не видно
+        if (S.paneOpen && (await petPrefs($).catch(() => false))) $.ui.invalidate('ui.render')
       })
       // Лимиты и контекст — что Claude Code знает уже сейчас (контекст, расходы; окна лимитов — после первого ответа);
       // дальше — раз в полминуты и после каждого хода
@@ -15520,6 +15553,7 @@ export function register(on) {
   on('ui.close', async ($, e, next) => {
     if (e.id === PANE) {
       S.paneOpen = false
+      pt.seenSig = '' // открыл заново — питомец проснётся (п. 49)
       S.agentAlert = null
       S.paused = false // закрытая панель и так стоит на паузе
       releaseAll() // Денди стоит на паузе, пока панель закрыта
