@@ -89,6 +89,11 @@ export function turnFiles(base, changes) {
   if (!base || !changes || !Array.isArray(changes.files)) return null
   return changes.files.filter((f) => typeof f?.path === 'string' && base[f.path] !== sigOf(f)).length
 }
+// Какие файлы поменялись с начала: новые в списке и с другими числами строк. Не знаем — пусто
+export function changedPaths(base, changes) {
+  if (!base || !changes || !Array.isArray(changes.files)) return []
+  return changes.files.filter((f) => typeof f?.path === 'string' && base[f.path] !== sigOf(f)).map((f) => f.path)
+}
 
 // Последний ход из отметки сессии. Чужая отметка — из файла (и, может, от другой версии Arcade): что на неё не похоже,
 // не показываем
