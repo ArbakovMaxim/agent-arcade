@@ -9,7 +9,7 @@ import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends,
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, pt, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
 import { AVATAR_COUNT, avatarName, avatarSvg, letterColor, picSvg, validPic } from './avatars.js'
-import { addSeen, changeBase, lastOf, replyLine, restoreSeen, SEEN_KEY, turnFiles } from './away.js'
+import { addSeen, changeBase, changedPaths, lastOf, replyLine, restoreSeen, SEEN_KEY, turnFiles } from './away.js'
 import { BOOK_LANGS, BOOK_SECTIONS, BOOK_SOURCES, bookLang, bookQuery, booksPath, MIN_BOOK_QUERY, parseBooks } from './books.js'
 import { clipboardCommand, DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { addDays, addEvent, addMonths, ALL_DAY_HOUR, applyCalendarTool, between, CALENDAR_TOOL, cardDues, colorOf, COLORS, compareEvents, dayKey, DEFAULT_COLOR as CAL_COLOR, dueReminders, dueTasks, GIVE_KEY, GIVE_KINDS, giveTargets, markAlerted, markTask, MISSED_MS, monthGrid, nextReminder, parseRemind, quickParse, REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, remindAt, removeEvent, REPEATS, restoreCalendar, startOf, updateEvent, weekday } from './calendar.js'
@@ -6126,11 +6126,20 @@ const TAIL_LINES = 40 // хвост вывода для Claude
 const TAIL_CHARS = 3_000
 const ID = /^[a-z0-9]{1,20}$/
 const FAIL = 'Проверка не прошла'
+export const TRIES_MAX = 2 // попыток исправить на доске, не больше
+// Проверка прошла не с первой попытки — пометка первой строкой карточки (try — какая попытка)
+const PASS = { 2: 'Проверка прошла со 2-й попытки', 3: 'Проверка прошла с 3-й попытки' }
+export const TRY_TEXT = { 2: 'со 2-й попытки', 3: 'с 3-й попытки' }
+// Похоже на тесты: папка tests, test, __tests__, spec — или имя *.test.*, *_test.*, *.spec.*, test_*
+const TESTISH = /(^|[\\/])(tests?|__tests__|specs?)([\\/]|$)|(^|[\\/])test_[^\\/]+$|[._-](test|spec)s?\.[a-z0-9]+$/i
 
-// S.qc: boards — { [id доски]: команда }, cards — { [id карточки]: своя команда }; last — { [id доски]: последний итог
-// { card, title, cmd, ok, code, tail, at } }; running — идёт проверка { board, card, title, cmd }; mine — карточки, чья
-// проверка не прошла в этой сессии (после перезапуска очереди их проверить снова)
-S.qc = { boards: {}, cards: {}, last: {}, running: null, mine: new Set() }
+// S.qc: boards — { [id доски]: команда }, cards — { [id карточки]: своя команда }, tries — { [id доски]: попыток
+// исправить, 1 или 2 }; last — { [id доски]: последний итог { card, title, cmd, ok, code, tail, at, try?, files? } };
+// running — идёт проверка { board, card, title, cmd }; mine — карточки, чья проверка не прошла в этой сессии (после
+// перезапуска очереди их проверить снова); fix — { [id карточки]: { n, base } }: сколько попыток исправить потрачено в
+// этом запуске очереди и что менялось в папке до первой (base — changeBase); fixed — какие карточки прошли не с первой
+// попытки за этот запуск: [{ title, n, files, tests, at }] — для «Что поменялось»
+S.qc = { boards: {}, cards: {}, tries: {}, last: {}, running: null, mine: new Set(), fix: {}, fixed: [] }
 
 // Команда — одной строкой, без пробелов по краям, не длиннее CHECK_MAX; пустая — нет команды
 export const cleanCmd = (value) => String(value ?? '').replace(/[\r\n]+/g, ' ').trim().slice(0, CHECK_MAX)
@@ -6145,7 +6154,11 @@ function restore(raw) {
     }
     return out
   }
-  return { boards: pick(raw?.boards), cards: pick(raw?.cards) }
+  const tries = {}
+  if (raw?.tries && typeof raw.tries === 'object') {
+    for (const [id, n] of Object.entries(raw.tries).slice(-KEEP)) if (ID.test(id) && Number.isInteger(n) && n >= 1 && n <= TRIES_MAX) tries[id] = n
+  }
+  return { boards: pick(raw?.boards), cards: pick(raw?.cards), tries }
 }
 
 // Команды — из $.store: при старте сессии и перед каждой проверкой (другая сессия могла поменять)
@@ -6153,6 +6166,18 @@ export async function loadChecks($) {
   const saved = restore(await $.store.get(KEY).catch(() => null))
   S.qc.boards = saved.boards
   S.qc.cards = saved.cards
+  S.qc.tries = saved.tries
+}
+
+// Записать команды и попытки в $.store; удалённых страниц — прочь. Попыток нет — без ключа tries
+async function saveChecks($) {
+  const alive = new Set(S.notes.map((p) => p.id))
+  const keep = (obj) => Object.fromEntries(Object.entries(obj).filter(([x]) => alive.has(x)))
+  S.qc.boards = keep(S.qc.boards)
+  S.qc.cards = keep(S.qc.cards)
+  S.qc.tries = keep(S.qc.tries)
+  $.ui.invalidate('ui.render')
+  await $.store.set(KEY, { boards: S.qc.boards, cards: S.qc.cards, ...(Object.keys(S.qc.tries).length ? { tries: S.qc.tries } : {}) }).catch(modError)
 }
 
 // Команда проверки доски (kind 'boards') или карточки ('cards'); пустая — убрать. Поверх свежего из $.store; команды
@@ -6164,14 +6189,21 @@ export async function setCheck($, kind, id, value) {
   if (cmd) list[id] = cmd
   else delete list[id]
   S.qc[kind] = list
-  const alive = new Set(S.notes.map((p) => p.id))
-  const keep = (obj) => Object.fromEntries(Object.entries(obj).filter(([x]) => alive.has(x)))
-  S.qc.boards = keep(S.qc.boards)
-  S.qc.cards = keep(S.qc.cards)
-  $.ui.invalidate('ui.render')
-  await $.store.set(KEY, { boards: S.qc.boards, cards: S.qc.cards }).catch(modError)
+  await saveChecks($)
   log(`проверка между карточками: ${kind === 'boards' ? 'доски' : 'карточки'} ${id} — ${cmd ? 'задана' : 'убрана'}`)
   return cmd
+}
+
+// «Попыток исправить» у доски id: 0 — очередь встаёт сразу, как раньше; 1–2 — столько раз Claude исправляет, а очередь
+// сама проверяет снова. Поверх свежего из $.store
+export async function setTries($, id, n) {
+  await loadChecks($)
+  const tries = { ...S.qc.tries }
+  if (Number.isInteger(n) && n >= 1 && n <= TRIES_MAX) tries[id] = n
+  else delete tries[id]
+  S.qc.tries = tries
+  await saveChecks($)
+  log(`проверка между карточками: попыток исправить у доски ${id} — ${tries[id] ?? 0}`)
 }
 
 // Какая команда проверит карточку: своя или доски
@@ -6182,9 +6214,14 @@ export const cmdFor = (card) => (card ? S.qc.cards[card.id] || S.qc.boards[card.
 const MARKS = [...new Set(LANGS.map((l) => tr(FAIL, l)))]
 const isMark = (line) => line.startsWith('⚠ ') && MARKS.some((m) => line.slice(2).startsWith(m))
 export const hasMark = (body) => isMark(String(body ?? '').split('\n')[0])
+// «Проверка прошла со 2-й попытки» — тоже первой строкой; новая пометка (любая) её заменяет
+const PASSES = [...new Set(LANGS.flatMap((l) => Object.values(PASS).map((x) => tr(x, l))))]
+const isPass = (line) => line.startsWith('✓ ') && PASSES.some((m) => line.slice(2).startsWith(m))
+const isTop = (line) => isMark(line) || isPass(line)
+export const hasTop = (body) => isTop(String(body ?? '').split('\n')[0])
 function unmark(body) {
   const lines = String(body ?? '').split('\n')
-  if (!isMark(lines[0])) return body
+  if (!isTop(lines[0])) return body
   lines.shift()
   if (lines[0] === '') lines.shift()
   return lines.join('\n')
@@ -6221,6 +6258,29 @@ async function runCheck($, cmd) {
 
 export const codeText = (code) => (code === 'time' ? t('время вышло') : code === 'start' ? t('команда не запустилась') : `${t('код')} ${code}`)
 
+// Файлы списком: первые пять и сколько ещё
+export const fileList = (files) => `${files.slice(0, 5).join(', ')}${files.length > 5 ? ` +${files.length - 5}` : ''}`
+
+// Что менялось в папке сессии по git — перед первой попыткой исправить; не git или нет папки — null
+async function fixBase($) {
+  if (!S.ag?.path) return null
+  try {
+    return changeBase(await readChanges($, S.ag.path))
+  } catch {
+    return null
+  }
+}
+
+// Какие файлы поменялись с base — за попытки исправить
+async function fixFiles($, base) {
+  if (!base || !S.ag?.path) return []
+  try {
+    return changedPaths(base, await readChanges($, S.ag.path))
+  } catch {
+    return []
+  }
+}
+
 // Снять пометку «проверка не прошла» с карточки id
 async function clearMark($, id) {
   S.qc.mine.delete(id)
@@ -6249,12 +6309,28 @@ export async function checkCard($, id) {
   const res = await runCheck($, cmd)
   S.qc.running = null
   const at = await $.clock.now()
-  S.qc.last[board.id] = { card: id, title: card.title, cmd, ...res, at }
-  log(`проверка между карточками: «${card.title}» — ${res.ok ? 'прошла' : `не прошла (${res.code})`}`)
-  await logCheck($, { at, kind: 'check', id, title: card.title, board: board.title, ok: res.ok, code: typeof res.code === 'number' ? res.code : -1, cmd, tail: res.tail.split('\n').slice(-5).join('\n').slice(-400) })
+  // Прошла после попыток исправить — какая это попытка и какие файлы Claude поменял, исправляя
+  const fix = res.ok ? S.qc.fix[id] : null
+  const tryN = fix ? fix.n + 1 : 0
+  const files = fix ? (await fixFiles($, fix.base)).slice(0, 10).map((p) => p.slice(0, 200)) : []
+  S.qc.last[board.id] = { card: id, title: card.title, cmd, ...res, at, ...(tryN ? { try: tryN, files } : {}) }
+  log(`проверка между карточками: «${card.title}» — ${res.ok ? `прошла${tryN ? ` с попытки ${tryN}` : ''}` : `не прошла (${res.code})`}`)
+  await logCheck($, { at, kind: 'check', id, title: card.title, board: board.title, ok: res.ok, code: typeof res.code === 'number' ? res.code : -1, cmd, tail: res.tail.split('\n').slice(-5).join('\n').slice(-400), ...(tryN ? { try: tryN, files } : {}) })
   const cols = board.board.cols
+  if (res.ok && fix) {
+    // Пометка «прошла со 2-й попытки» — вместо «не прошла»: что поменялось и, если среди файлов тесты, — посмотреть их
+    delete S.qc.fix[id]
+    S.qc.mine.delete(id)
+    const tests = files.some((p) => TESTISH.test(p))
+    const line = [`✓ ${t(PASS[tryN])}, ${hhmm(at)}`, ...(files.length ? [fill(t('поменялись файлы: {0}'), [fileList(files)])] : []), ...(tests ? [t('среди них тесты — посмотри, не ослаблены ли они')] : [])].join(' · ')
+    await editNotes($, (list, when) => {
+      const now = list.find((p) => p.id === id)
+      return now ? updatePage(list, id, { body: marked(now.body, line) }, when) : list
+    })
+    S.qc.fixed = [...S.qc.fixed, { title: card.title, n: tryN, files, tests, at }].slice(-5)
+  }
   if (res.ok) {
-    await clearMark($, id)
+    if (!fix) await clearMark($, id)
     nb.note = ''
     nb.bad = false
     $.ui.invalidate('ui.render')
@@ -6275,6 +6351,12 @@ export async function checkCard($, id) {
   nb.note = ''
   nb.bad = false
   $.ui.invalidate('ui.render')
+  // Попытки исправить (у доски их задали): идёт очередь, а у карточки они ещё остались — очередь не встаёт, Claude
+  // исправляет, а Arcade проверит снова. До первой попытки — запомнить, что уже менялось в папке
+  const attempts = S.qc.tries[board.id] ?? 0
+  const used = S.qc.fix[id]?.n ?? 0
+  const retry = Boolean(S.queue) && used < attempts
+  if (retry) S.qc.fix[id] = { n: used + 1, base: used ? S.qc.fix[id].base : await fixBase($) }
   const last = cols.at(-1)
   const fence = res.tail.includes('```') ? '~~~' : '```'
   const text = [
@@ -6287,9 +6369,9 @@ export async function checkCard($, id) {
     res.tail || t('(вывода нет)'),
     fence,
     '',
-    `${t('Карточка вернулась в колонку')} «${colName(back)}». ${t('Исправь, что сломалось, и снова перенеси карточку в колонку')} «${colName(last)}» (${t('колонка')} ${last.id}) ${t('действием move инструмента mcp__arcade__notes.')} ${t('Команду можно запустить и самому — как обычно, с разрешения. Очередь продолжит человек, когда запустит её снова: Arcade сначала проверит эту карточку.')}`,
+    `${t('Карточка вернулась в колонку')} «${colName(back)}». ${t('Исправь, что сломалось, и снова перенеси карточку в колонку')} «${colName(last)}» (${t('колонка')} ${last.id}) ${t('действием move инструмента mcp__arcade__notes.')} ${retry ? fill(t('Попытка исправить {0} из {1}. Команду можно запустить и самому — как обычно, с разрешения. Когда перенесёшь карточку, Arcade сам снова запустит проверку, и очередь пойдёт дальше. Не ослабляй и не отключай проверки и тесты — исправь причину.'), [used + 1, attempts]) : t('Команду можно запустить и самому — как обычно, с разрешения. Очередь продолжит человек, когда запустит её снова: Arcade сначала проверит эту карточку.')}`,
   ].join('\n')
-  return { title: card.title, code: res.code, col: colName(back), text }
+  return { id, title: card.title, code: res.code, col: colName(back), text, retry, n: used + 1, of: attempts, spent: !retry && attempts > 0 }
 }
 
 // ━━━━━━━━━━ app/queue ━━━━━━━━━━
@@ -6499,6 +6581,9 @@ export async function startQueue($, id, { retry = '', auto = false, anyway = fal
   const board = S.notes.find((p) => p.id === id)
   const last = board.board.cols.at(-1).id
   const check = S.notes.filter((p) => p.parent === id && columnOf(p, board.board.cols) === last && hasMark(p.body) && (S.qc.mine.has(p.id) || !mates.length)).map((p) => p.id)
+  // Попытки исправить — на каждый запуск очереди заново
+  S.qc.fix = {}
+  S.qc.fixed = []
   S.queue = { board: id, title: board.title ?? '', card: '', given: [], sent: false, turn: '', started: await $.clock.now(), of: 0, joined: mates[0]?.name ?? '', retry, check, back: [] }
   S.phone.qend = null
   await queueNext($)
@@ -6780,14 +6865,36 @@ export async function queueNext($) {
   })
 }
 
-// Проверка между карточками: true — дальше нельзя (не прошла или очередь остановили, пока шла). Не прошла — очередь
-// встаёт, а Claude получает вывод
+// Проверка между карточками: true — дальше нельзя (не прошла или очередь остановили, пока шла). Не прошла — Claude
+// получает вывод; попытки исправить остались — очередь ждёт, когда он перенесёт карточку снова, и проверяет её сама;
+// нет — очередь встаёт
 async function checksFail($, queue) {
   while (queue.check?.length) {
     const fail = await checkCard($, queue.check.shift())
     if (S.queue !== queue) return true
     if (!fail) continue
-    stopQueue($, fill(t('Проверка после «{0}» не прошла — {1}. Карточка вернулась в «{2}», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.'), [fail.title, codeText(fail.code), fail.col]), true, 'check')
+    const stopText = `${fail.spent ? `${t('Попытки исправить кончились.')} ` : ''}${fill(t('Проверка после «{0}» не прошла — {1}. Карточка вернулась в «{2}», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.'), [fail.title, codeText(fail.code), fail.col])}`
+    if (fail.retry) {
+      // Ход с выводом — ход этой карточки: queueTurnStart узнает его по «(id …)», а конец хода снова даст её проверить
+      queue.card = fail.id
+      queue.sent = true
+      const note = fill(t('Проверка после «{0}» не прошла — {1}. Claude исправляет: попытка {2} из {3}, потом Arcade проверит снова.'), [fail.title, codeText(fail.code), fail.n, fail.of])
+      S.dk.note = note
+      S.dk.bad = false
+      log(`очередь Claude: ${note}`)
+      $.ui.toast(note)
+      const sent = await giveClaude($, fail.text, 'check')
+      const busy = nb.note
+      nb.note = ''
+      nb.bad = false
+      $.ui.invalidate('ui.render')
+      if (sent || S.queue !== queue) return true
+      queue.sent = false
+      stopQueue($, stopText, true, 'check')
+      if (busy) S.dk.note = `${S.dk.note} ${t(busy)}`
+      return true
+    }
+    stopQueue($, stopText, true, 'check')
     const sent = await giveClaude($, fail.text, 'check')
     if (!sent && nb.note) S.dk.note = `${S.dk.note} ${t(nb.note)}`
     nb.note = ''
@@ -6855,8 +6962,9 @@ export async function queueTurnDone($, e) {
     const title = card?.title ?? ''
     return stopQueue($, `${t('Очередь стоит: Claude закончил ход, а карточка')} «${title}» ${t('не в колонке')} «${colName(last)}». ${t('Посмотри, что он ответил.')}`, true, 'column')
   }
-  // Карточка сделана — перед следующей её проверит команда доски, если она есть (queueNext)
-  queue.check = [card.id]
+  // Карточка сделана — перед следующей её проверит команда доски, если она есть (queueNext); остальные, что ждали
+  // проверки, — следом
+  queue.check = [card.id, ...(queue.check ?? []).filter((x) => x !== card.id)]
   return true
 }
 
@@ -7577,7 +7685,7 @@ async function rvState($, id, state) {
 }
 
 // Пометка ревью в тексте карточки; пометка «проверка не прошла» остаётся первой строкой
-const withReview = (body, state) => (hasMark(body) ? marked(reviewed(unmark(body), state, S.lang, MAX_BODY), String(body).split('\n')[0]) : reviewed(body, state, S.lang, MAX_BODY))
+const withReview = (body, state) => (hasTop(body) ? marked(reviewed(unmark(body), state, S.lang, MAX_BODY), String(body).split('\n')[0]) : reviewed(body, state, S.lang, MAX_BODY))
 // Строка под сделанной карточкой на доске
 const rvLabel = (sum) => `  ${tr('файлов', S.lang)}: ${sum.n} · +${sum.add} −${sum.del}`
 
@@ -12005,6 +12113,7 @@ export function boardsScreen($, e, kit) {
     // какая и после какой карточки; последний итог — с концом вывода
     const running = S.qc.running?.board === id ? S.qc.running : null
     const lastCheck = running ? null : S.qc.last[id]
+    const tries = S.qc.tries[id] ?? 0
     const checkItems = [
       keep(
         Input({
@@ -12020,14 +12129,18 @@ export function boardsScreen($, e, kit) {
         }),
       ),
       dim('  Claude перенёс карточку в последнюю колонку — очередь запускает команду в папке сессии. Код 0 — следующая карточка; иначе карточка вернётся во вторую колонку, а Claude получит конец вывода. Команда идёт без запроса разрешения, как хук Claude Code, и хранится только на этом компьютере: ни Claude, ни участники доски её не поменяют.'),
+      Button({ key: 'arcade-board-check-tries', label: `Попыток исправить при проверке: ${tries}`, onPress: () => setTries($, id, (tries + 1) % (TRIES_MAX + 1)) }),
+      dim('  проверка не прошла, а попытки остались — Claude получает вывод и исправляет, очередь не встаёт и сама проверяет карточку снова; 0 — очередь встаёт сразу'),
       ...(running ? [keep(dim(`  ${fill(tr('Идёт проверка после «{0}»: {1}', S.lang), [running.title, running.cmd])}`))] : []),
       ...(lastCheck
         ? [
             keep(
               lastCheck.ok
-                ? dim(`  ✓ ${fill(tr('Проверка после «{0}» прошла', S.lang), [lastCheck.title])} · ${hhmm(lastCheck.at)}`)
+                ? dim(`  ✓ ${fill(tr('Проверка после «{0}» прошла', S.lang), [lastCheck.title])}${lastCheck.try ? ` ${tr(TRY_TEXT[lastCheck.try], S.lang)}` : ''} · ${hhmm(lastCheck.at)}`)
                 : Text({ color: 'warning', children: [`  ⚠ ${fill(tr('Проверка после «{0}» не прошла', S.lang), [lastCheck.title])} — ${codeText(lastCheck.code)} · ${hhmm(lastCheck.at)}`] }),
             ),
+            ...(lastCheck.ok && lastCheck.files?.length ? [keep(dim(`    ${fill(tr('поменялись файлы: {0}', S.lang), [fileList(lastCheck.files)])}`))] : []),
+            ...(lastCheck.ok && lastCheck.files?.some((p) => TESTISH.test(p)) ? [keep(Text({ color: 'warning', children: [`    ${tr('среди них тесты — посмотри, не ослаблены ли они', S.lang)}`] }))] : []),
             ...(lastCheck.ok ? [] : lastCheck.tail.split('\n').slice(-5).filter(Boolean).map((l) => keep(dim(`    ${l.slice(0, 200)}`)))),
           ]
         : []),
@@ -12790,7 +12903,15 @@ export function changesLines($, kit, r, all) {
   const head = [c.branch ? fill(t('ветка {0}'), [c.branch]) : t('без ветки')]
   head.push(...(c.n ? [fill(t('изменено файлов: {0}'), [c.n]), t('не закоммичено')] : [t('изменений нет')]))
   if (c.ahead) head.push(fill(t('не отправлено коммитов: {0}'), [c.ahead]))
-  if (!c.n) return [keep(dim(head.join(' · ')))]
+  const warn = (text) => keep(Text({ color: 'warning', children: [text] }))
+  // Проверка очереди прошла не с первой попытки (app/check): что Claude поменял, исправляя; тесты — предупреждением
+  const fixLines = r.me
+    ? S.qc.fixed.map((f) => {
+        const text = [fill(t('«{0}»: проверка прошла {1}'), [f.title, t(TRY_TEXT[f.n])]), ...(f.files.length ? [fill(t('поменялись файлы: {0}'), [fileList(f.files)])] : []), ...(f.tests ? [t('среди них тесты — посмотри, не ослаблены ли они')] : [])].join(' · ')
+        return f.tests ? warn(text) : keep(dim(text))
+      })
+    : []
+  if (!c.n) return [keep(dim(head.join(' · '))), ...fixLines]
   const open = S.chg.open.has(id)
   const toggle = () => {
     if (open) S.chg.open.delete(id)
@@ -12808,7 +12929,6 @@ export function changesLines($, kit, r, all) {
     if (c.n > c.files.length) out.push(keep(dim(`  ${fill(t('и ещё файлов: {0}'), [c.n - c.files.length])}`)))
   }
   // Пересечения с другими сессиями — предупреждением: одни и те же файлы правят двое
-  const warn = (text) => keep(Text({ color: 'warning', children: [text] }))
   const names = (who) => who.map((w) => w.name).join('», «')
   const ov = overlapsOf(r, all)
   const sameMe = ov.same.filter((w) => w.me)
@@ -12821,6 +12941,7 @@ export function changesLines($, kit, r, all) {
     if (x.who.some((w) => w.me)) out.push(warn(fill(t('{0} правит и эта сессия'), [x.path])))
   }
   if (ov.files.length > 3) out.push(warn(fill(t('и ещё общих файлов: {0}'), [ov.files.length - 3])))
+  out.push(...fixLines)
   if (r.me) out.push(Button({ key: 'agents-review', label: 'Дать Claude: проверить изменения', onPress: () => reviewChanges($) }))
   return out
 }

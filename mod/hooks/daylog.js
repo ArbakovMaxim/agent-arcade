@@ -12,7 +12,8 @@ const ID = /^[a-z0-9]{1,20}$/ // как у страниц блокнота
 //   done — карточку перенесли в последнюю колонку доски (by: claude — его инструментом блокнота, me — с экрана);
 //   checked — на странице отметили n пунктов чек-листа (by — так же);
 //   check — очередь проверила карточку командой доски: ok — прошла, code — код выхода (-1 — время вышло или не
-//   запустилась), cmd — команда, tail — последние строки вывода;
+//   запустилась), cmd — команда, tail — последние строки вывода; try — прошла с этой попытки (2 или 3: Claude исправлял
+//   после неудачной), files — какие файлы он при этом поменял;
 //   accept — карточку приняли кнопкой «Принять» (ревью по карточке);
 //   return — вернули кнопкой «Вернуть с комментарием»: comment — комментарий.
 // title и board — названия на тот момент: страницу могли потом удалить
@@ -31,6 +32,11 @@ export function restoreLog(raw) {
       entry.code = Number.isInteger(x.code) ? x.code : -1
       entry.cmd = typeof x.cmd === 'string' ? x.cmd.slice(0, 200) : ''
       entry.tail = typeof x.tail === 'string' ? x.tail.split('\n').slice(-5).join('\n').slice(-400) : ''
+      if (entry.ok && (x.try === 2 || x.try === 3)) {
+        entry.try = x.try
+        const files = Array.isArray(x.files) ? x.files.filter((f) => typeof f === 'string' && f).slice(0, 10).map((f) => f.slice(0, 200)) : []
+        if (files.length) entry.files = files
+      }
     }
     if (x.kind === 'return') entry.comment = typeof x.comment === 'string' ? x.comment.slice(0, 200) : ''
     out.push(entry)
@@ -90,7 +96,7 @@ export function daySummary(log, notes, day, me = '') {
   const gave = once('gave').map(({ id, title, board }) => ({ id, title, board }))
   const checks = once('check').map((x) => {
     const last = today.filter((e) => e.kind === 'check' && e.id === x.id).at(-1)
-    return { id: x.id, title: x.title, board: x.board, ok: last.ok, code: last.code, cmd: last.cmd, tail: last.tail, at: last.at }
+    return { id: x.id, title: x.title, board: x.board, ok: last.ok, code: last.code, cmd: last.cmd, tail: last.tail, at: last.at, ...(last.try ? { try: last.try } : {}), ...(last.files ? { files: last.files } : {}) }
   })
   // Ревью: у карточки — последнее слово, «принято» или «вернули» с комментарием
   const said = new Map()
@@ -137,7 +143,8 @@ export function summaryBody(sum, t, colName) {
   const checks = sum.checks ?? []
   const checkLines = checks.map((x) =>
     [
-      `- ${x.ok ? '✓' : '✗'} ${x.title}${onBoard(x)}: \`${x.cmd}\`${x.ok ? '' : ` — ${x.code >= 0 ? `${t('код')} ${x.code}` : t('время вышло или команда не запустилась')}`}`,
+      `- ${x.ok ? '✓' : '✗'} ${x.title}${onBoard(x)}: \`${x.cmd}\`${x.ok ? (x.try ? ` · ${t(x.try === 2 ? 'со 2-й попытки' : 'с 3-й попытки')}` : '') : ` — ${x.code >= 0 ? `${t('код')} ${x.code}` : t('время вышло или команда не запустилась')}`}`,
+      ...(x.ok && x.files?.length ? [`    ${t('поменялись файлы: {0}').replace('{0}', x.files.join(', '))}`] : []),
       ...(x.ok || !x.tail ? [] : x.tail.split('\n').map((l) => `    ${l}`)),
     ].join('\n'),
   )

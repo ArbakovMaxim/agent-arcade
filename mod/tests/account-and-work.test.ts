@@ -14,9 +14,9 @@ import { addDays, addEvent, addMonths, applyCalendarTool, between, cardDues, cle
 import { branchOf, nextRemind, remindChoices } from '../hooks/register.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
-import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard } from '../hooks/register.js'
+import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard, fileList } from '../hooks/register.js'
 import { ALERT_KEEP_MS, alertText, restoreAlerts } from '../hooks/alerts.js'
-import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, lastOf, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
+import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, changedPaths, lastOf, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
 import { ANSWER_POLL_MS, asksReset, callSeen, toolDecided } from '../hooks/register.js'
 import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
@@ -3367,6 +3367,22 @@ test('итоги дня: журнал — что ушло Claude и что сд�
       '- ✗ Тег · доска «Sprint»: `npm test` — время вышло или команда не запустилась',
     ].join('\n'),
   )
+  // Прошла не с первой попытки — с какой и какие файлы Claude поменял, исправляя
+  const tried = [...checkLog, { at: hour('12:40'), kind: 'check', id: 'c1', title: 'Логин', board: 'Sprint', ok: true, code: 0, cmd: 'npm test', tail: '', try: 2, files: ['app.js', 'tests/login.test.js'] }]
+  const withTry: any = daySummary(tried, notes, '2026-11-02')
+  expect(withTry.checks[0]).toMatchObject({ id: 'c1', ok: true, try: 2, files: ['app.js', 'tests/login.test.js'] })
+  expect(summaryBody(withTry, t, name).split('\n\n').at(-1).split('\n').slice(1, 3)).toEqual(['- ✓ Логин · доска «Sprint»: `npm test` · со 2-й попытки', '    поменялись файлы: app.js, tests/login.test.js'])
+  // Из $.store: попытка — только 2 или 3 и только у прошедшей; файлы — непустые строки
+  const back = restoreLog([
+    { at: 1, kind: 'check', id: 'c1', title: 'Логин', ok: true, code: 0, cmd: 'npm test', tail: '', try: 3, files: ['a.js', 7, '', 'b.js'] },
+    { at: 2, kind: 'check', id: 'c1', title: 'Логин', ok: true, code: 0, cmd: 'npm test', tail: '', try: 5, files: ['a.js'] },
+    { at: 3, kind: 'check', id: 'c1', title: 'Логин', ok: false, code: 1, cmd: 'npm test', tail: '', try: 2, files: ['a.js'] },
+  ])
+  expect(back.map((x: any) => [x.try, x.files])).toEqual([
+    [3, ['a.js', 'b.js']],
+    [undefined, undefined],
+    [undefined, undefined],
+  ])
 
   // В чат — текстом: заголовки с двоеточием, чек-лист значками, длинное — обрезано
   expect(chatText({ title: 'Итоги 02.11', body }, MAX_TEXT).split('\n').slice(0, 5)).toEqual(['Итоги 02.11', '', 'Отдано Claude:', '- Релиз', '- Тег · доска «Sprint»'])
@@ -8032,6 +8048,12 @@ test('пока тебя не было: строка ответа — начал�
   expect(turnFiles(base, null)).toBeNull()
   expect(changeBase(null)).toBeNull()
   expect(changeBase({ files: 'a.js' })).toBeNull()
+  // Какие файлы поменялись с начала — для «прошла со 2-й попытки»; не знаем — пусто
+  expect(changedPaths(base, { files: [{ path: 'a.js', add: 3, del: 0, state: '' }, { path: 'b.js', add: 2, del: 2, state: '' }, { path: 'c.txt', add: null, del: null, state: 'new' }] })).toEqual(['a.js', 'c.txt'])
+  expect(changedPaths(null, { files: [] })).toEqual([])
+  expect(changedPaths(base, null)).toEqual([])
+  expect(fileList(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).toBe('a, b, c, d, e +2')
+  expect(fileList(['a'])).toBe('a')
 
   // Последний ход из чужой отметки: не похожее — не показываем
   expect(lastOf({ last: { text: '  а\n б ', at: 5, files: 2.7 } })).toEqual({ text: 'а б', at: 5, files: 2 })
@@ -8511,4 +8533,198 @@ test('ветка из первой строки git status: обычная, бе
   expect(branchOf('No commits yet on main')).toEqual({ branch: 'main', ahead: 0, fresh: true })
   expect(branchOf('Initial commit on master')).toEqual({ branch: 'master', ahead: 0, fresh: true })
   expect(branchOf('HEAD (no branch)')).toEqual({ branch: '', ahead: 0, fresh: false })
+})
+
+// Тесты попыток исправить: доска Sprint с карточками A и B и командой проверки npm test, общие помощники
+async function triesBoard($: any, ui: any, saved: any, submits: any[], clock: any) {
+  const pages = () => saved.get('notes') as any[]
+  const page = (title: string) => pages().find((p) => p.title === title)
+  const board = () => pages().find(isBoard)
+  const q = {
+    pages,
+    page,
+    board,
+    text: (t: any) => ui.find({ type: 'Text', text: t }),
+    col: (title: string) => columnOf(page(title), board().board.cols),
+    card: (n: number) => submits[n].text.match(/\(id (\w+)\)/)[1],
+    tail: (n: number) => submits[n].text.split('\n').at(-1),
+    done: (title: string) => $.tool.call({ tool: NOTES, action: 'move', page: page(title).id, column: 'done' }),
+    // Ход очереди: Claude получил карточку n, что-то сделал и закончил ход. claim — после хода очередь заявляет
+    // следующую карточку (сессия видит другие, «Агенты») и выжидает CLAIM_MS
+    turn: async (id: string, n: number, work: () => Promise<unknown>, claim = false) => {
+      await $.turn.start({ turnId: id, text: submits[n].text })
+      await work()
+      const end = $.turn.complete({ turnId: id, answer: '', reason: 'answer' })
+      if (claim) await clock.advance(CLAIM_MS + 100)
+      await end
+      await clock.advance(10)
+    },
+    label: async () => (await ui.find({ key: 'arcade-board-queue' }))?.props.label,
+    tries: async () => (await ui.find({ key: 'arcade-board-check-tries' }))?.props.label,
+  }
+  await $.tool.call({ tool: NOTES, action: 'create', title: 'Sprint', board: true })
+  for (const title of ['A', 'B']) await $.tool.call({ tool: NOTES, action: 'create', title, parent: 'Sprint' })
+  await ui.press({ key: 'arcade-menu-boards' })
+  await ui.press({ key: `arcade-desk-${board().id}` })
+  await noteInput(ui, 'arcade-board-check-', 'npm test')
+  return q
+}
+
+// Сессия в git с одной попыткой: до попытки поменян app.js; проверка не прошла, Claude исправил app.js и тест — прошла со 2-й попытки
+async function secondTry($: any, on: any) {
+  const git = { status: '## main\0 M app.js\0', numstat: '2\t1\tapp.js\0' }
+  const answer = (argv: string[]) => {
+    const cmd = argv[4]
+    if (cmd === 'rev-parse') return { exitCode: 0, stdout: 'D:/work/web\n.git\n', stderr: '' }
+    if (cmd === 'status') return { exitCode: 0, stdout: git.status, stderr: '' }
+    if (cmd === 'diff') return { exitCode: 0, stdout: git.numstat, stderr: '' }
+    return { exitCode: 1, stdout: '', stderr: 'unexpected' }
+  }
+  const s = stubs(on, { env: AG_ENV, agents: { ...AG_ME, git: answer }, submit: true })
+  await start($)
+  await s.clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const q = await triesBoard($, ui, s.saved, s.submits, s.clock)
+  await ui.press({ key: 'arcade-board-check-tries' })
+  s.checks.answer = { exitCode: 1, stdout: 'FAIL a.test.js\n' }
+  // Очередь заявляет карточку A и выжидает CLAIM_MS
+  const pressed = ui.press({ key: 'arcade-board-queue' })
+  await s.clock.advance(CLAIM_MS + 100)
+  await pressed
+  // Попытка исправить — та же карточка, без новой заявки
+  await q.turn('t1', 0, () => q.done('A'))
+  expect([s.submits.length, q.col('A')]).toEqual([2, 'doing'])
+  git.status = '## main\0 M app.js\0 M tests/a.test.js\0'
+  git.numstat = '5\t1\tapp.js\0' + '1\t3\ttests/a.test.js\0'
+  s.checks.answer = { exitCode: 0 }
+  // Прошла — очередь заявляет следующую карточку B
+  await q.turn('t2', 1, () => q.done('A'), true)
+  return { ...s, ui, q }
+}
+
+test('доска: попытки исправить — кнопка 0 → 1 → 2 → 0 рядом с командой проверки, только на этом компьютере; не прошла, а попытка есть — Claude получает вывод, очередь не встаёт', async ($, on) => {
+  const { checks, clock, saved, submits, toasts } = stubs(on, { env: WINDOWS, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const q = await triesBoard($, ui, saved, submits, clock)
+  const id = q.board().id
+
+  // Попыток по умолчанию нет; кнопка — по кругу 0 → 1 → 2 → 0, хранится рядом с командой и только на этом компьютере
+  expect(await q.tries()).toBe('Попыток исправить при проверке: 0')
+  expect(await q.text('  проверка не прошла, а попытки остались — Claude получает вывод и исправляет, очередь не встаёт и сама проверяет карточку снова; 0 — очередь встаёт сразу')).toBeDefined()
+  await ui.press({ key: 'arcade-board-check-tries' })
+  expect(await q.tries()).toBe('Попыток исправить при проверке: 1')
+  expect(saved.get('queueCheck')).toEqual({ boards: { [id]: 'npm test' }, cards: {}, tries: { [id]: 1 } })
+  await ui.press({ key: 'arcade-board-check-tries' })
+  expect(saved.get('queueCheck')).toEqual({ boards: { [id]: 'npm test' }, cards: {}, tries: { [id]: 2 } })
+  await ui.press({ key: 'arcade-board-check-tries' })
+  expect(await q.tries()).toBe('Попыток исправить при проверке: 0')
+  expect(saved.get('queueCheck')).toEqual({ boards: { [id]: 'npm test' }, cards: {} })
+  await ui.press({ key: 'arcade-board-check-tries' })
+  expect(JSON.stringify(q.pages())).not.toContain('tries')
+
+  // Не прошла, а попытка есть — карточка во «В работе», Claude получает вывод, а очередь идёт
+  checks.answer = { exitCode: 1, stdout: 'FAIL a.test.js\n' }
+  await ui.press({ key: 'arcade-board-queue' })
+  expect(q.card(0)).toBe(q.page('A').id)
+  await q.turn('t1', 0, () => q.done('A'))
+  expect(submits.length).toBe(2)
+  expect(q.card(1)).toBe(q.page('A').id)
+  expect(q.tail(1)).toBe(
+    'Карточка вернулась в колонку «В работе». Исправь, что сломалось, и снова перенеси карточку в колонку «Готово» (колонка done) действием move инструмента mcp__arcade__notes. Попытка исправить 1 из 1. Команду можно запустить и самому — как обычно, с разрешения. Когда перенесёшь карточку, Arcade сам снова запустит проверку, и очередь пойдёт дальше. Не ослабляй и не отключай проверки и тесты — исправь причину.',
+  )
+  const note = 'Проверка после «A» не прошла — код 1. Claude исправляет: попытка 1 из 1, потом Arcade проверит снова.'
+  expect(toasts).toContain(note)
+  expect(await q.text(note)).toBeDefined()
+  expect(await q.label()).not.toBe('Очередь для Claude')
+  expect(q.col('A')).toBe('doing')
+  expect(q.page('A').body).toMatch(/^⚠ Проверка не прошла — код 1, \d\d:\d\d$/)
+  await ui.unmount()
+})
+
+test('доска: прошла со 2-й попытки — Arcade проверил сам, следующая карточка; какие файлы поменялись и тесты среди них — в карточке, на доске и в итогах дня', async ($, on) => {
+  const { checks, saved, submits, ui, q } = await secondTry($, on)
+  expect(checks.calls.length).toBe(2)
+  expect(submits.length).toBe(3)
+  expect(q.card(2)).toBe(q.page('B').id)
+  expect(q.col('A')).toBe('done')
+  expect(q.page('A').body).toMatch(/^✓ Проверка прошла со 2-й попытки, \d\d:\d\d · поменялись файлы: app\.js, tests\/a\.test\.js · среди них тесты — посмотри, не ослаблены ли они$/)
+  expect(await q.text(/^  ✓ Проверка после «A» прошла со 2-й попытки · \d\d:\d\d$/)).toBeDefined()
+  expect(await q.text('    поменялись файлы: app.js, tests/a.test.js')).toBeDefined()
+  expect(await q.text('    среди них тесты — посмотри, не ослаблены ли они')).toMatchObject({ props: { color: 'warning' } })
+  // В итогах дня — с какой попытки и какие файлы
+  expect((saved.get('daylog') as any[]).filter((x) => x.kind === 'check').map((x) => [x.title, x.ok, x.code, x.try, x.files])).toEqual([
+    ['A', false, 1, undefined, undefined],
+    ['A', true, 0, 2, ['app.js', 'tests/a.test.js']],
+  ])
+  await ui.unmount()
+})
+
+test('агенты: прошла со 2-й попытки — у своей сессии под изменениями, с файлами и предупреждением о тестах', async ($, on) => {
+  const { clock, ui } = await secondTry($, on)
+  await ui.unmount()
+  // Панель открывается там, где её оставили, — на доске: назад к меню и в «Агенты»
+  const desk = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  for (let i = 0; i < 3 && !(await desk.find({ key: 'arcade-menu-agents' })); i++) await desk.press({ key: 'arcade-back' })
+  await desk.press({ key: 'arcade-menu-agents' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(await desk.find({ type: 'Text', text: '«A»: проверка прошла со 2-й попытки · поменялись файлы: app.js, tests/a.test.js · среди них тесты — посмотри, не ослаблены ли они' })).toMatchObject({
+    props: { color: 'warning' },
+  })
+  await desk.unmount()
+})
+
+test('доска: попытки исправить кончились — очередь встаёт, как без них; новый запуск — попытки заново, прошла с 3-й попытки', async ($, on) => {
+  const { checks, clock, saved, submits, toasts } = stubs(on, { env: WINDOWS, submit: true })
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const q = await triesBoard($, ui, saved, submits, clock)
+  const fixing = (n: number) => `Проверка после «A» не прошла — код 1. Claude исправляет: попытка ${n} из 2, потом Arcade проверит снова.`
+  const stopped = `Попытки исправить кончились. Проверка после «A» не прошла — код 1. Карточка вернулась в «В работе», вывод ушёл Claude: он исправит и перенесёт её снова, а очередь продолжится, когда ты её запустишь.`
+  await ui.press({ key: 'arcade-board-check-tries' })
+  await ui.press({ key: 'arcade-board-check-tries' })
+  expect(saved.get('queueCheck').tries).toEqual({ [q.board().id]: 2 })
+
+  // Две попытки: обе не помогли — очередь идёт, Claude получает вывод снова
+  checks.answer = { exitCode: 1, stdout: 'FAIL a.test.js\n' }
+  await ui.press({ key: 'arcade-board-queue' })
+  await q.turn('t1', 0, () => q.done('A'))
+  expect(q.tail(1)).toContain(' Попытка исправить 1 из 2. ')
+  expect(toasts).toContain(fixing(1))
+  await q.turn('t2', 1, () => q.done('A'))
+  expect(submits.length).toBe(3)
+  expect(q.card(2)).toBe(q.page('A').id)
+  expect(q.tail(2)).toContain(' Попытка исправить 2 из 2. ')
+  expect(toasts).toContain(fixing(2))
+
+  // Третья неудача — попыток больше нет: очередь встаёт, как без попыток, и говорит почему
+  await q.turn('t3', 2, () => q.done('A'))
+  expect(checks.calls.length).toBe(3)
+  expect(submits.length).toBe(4)
+  expect(q.tail(3)).toMatch(/\. Команду можно запустить и самому — как обычно, с разрешения\. Очередь продолжит человек, когда запустит её снова: Arcade сначала проверит эту карточку\.$/)
+  expect(await q.text(stopped)).toMatchObject({ props: { color: 'warning' } })
+  expect(toasts).toContain(stopped)
+  expect(await q.label()).toBe('Очередь для Claude')
+  expect(q.col('A')).toBe('doing')
+
+  // Claude перенёс карточку, пока очередь стоит, — проверки нет; запустили — проверка и попытки заново
+  await q.turn('t4', 3, () => q.done('A'))
+  expect([checks.calls.length, submits.length]).toEqual([3, 4])
+  await ui.press({ key: 'arcade-board-queue' })
+  expect([checks.calls.length, submits.length]).toEqual([4, 5])
+  expect(q.card(4)).toBe(q.page('A').id)
+  expect(q.tail(4)).toContain(' Попытка исправить 1 из 2. ')
+  await q.turn('t5', 4, () => q.done('A'))
+  expect(q.tail(5)).toContain(' Попытка исправить 2 из 2. ')
+  checks.answer = { exitCode: 0 }
+  await q.turn('t6', 5, () => q.done('A'))
+  expect(submits.length).toBe(7)
+  expect(q.card(6)).toBe(q.page('B').id)
+  // Папка не git — какие файлы поменялись, не знаем: строки нет
+  expect(q.page('A').body).toMatch(/^✓ Проверка прошла с 3-й попытки, \d\d:\d\d$/)
+  expect(await q.text(/^  ✓ Проверка после «A» прошла с 3-й попытки · \d\d:\d\d$/)).toBeDefined()
+  expect(await q.text(/поменялись файлы/)).toBeUndefined()
+  await ui.unmount()
 })
