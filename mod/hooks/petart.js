@@ -241,14 +241,30 @@ function wearSvg(species, ids) {
   return out
 }
 
+// Облик взрослого (0.59): значок на груди по стилю работы — мастер карточек (зелёный, галочка), ревьюер (синий, лупа),
+// бегун очередей (оранжевый, молния). FORM_AT — где грудь у каждого вида
+export const FORM_COLOR = { maker: '#30a46c', reviewer: '#3e8ed0', runner: '#f08c00' }
+const FORM_AT = { robot: [32, 45], drop: [32, 52], owl: [32, 47], fox: [32, 49], dragon: [32, 48] }
+const FORM_MARK = {
+  maker: '<path d="M-2.1 0.1 L-0.6 1.7 L2.2 -1.5" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>',
+  reviewer: '<circle cx="-0.6" cy="-0.6" r="1.6" fill="none" stroke="#fff" stroke-width="1"/><path d="M0.6 0.6 L2.1 2.1" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>',
+  runner: '<path d="M0.7 -2.7 L-1.9 0.5 H0 L-0.7 2.7 L1.9 -0.5 H0 Z" fill="#fff"/>',
+}
+function formSvg(species, form) {
+  if (!FORM_COLOR[form]) return ''
+  const [x, y] = FORM_AT[species] ?? [32, 46]
+  return `<g transform="translate(${x} ${y})"><circle r="4" fill="${FORM_COLOR[form]}" stroke="${INK}" stroke-width="1"/>${FORM_MARK[form]}</g>`
+}
+
 // Питомец целиком: species — вид, stage — egg / baby / adult, mood — idle / happy / eat / sleep / sad, wear — надетое,
-// pat — показать сердечки. walk — ходить по полю (на большом экране); на маленькой картинке стоит на месте и дышит
-export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat = false, walk = true, size = 128 }) {
+// pat — показать сердечки. walk — ходить по полю (на большом экране); на маленькой картинке стоит на месте и дышит.
+// form — облик взрослого (formOf в pet.js)
+export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat = false, walk = true, size = 128, form = '' }) {
   const look = LOOKS[species] ?? LOOKS.robot
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
   if (stage === 'egg') return `${head}${eggSvg(look, mood)}${pat ? hearts() : ''}</svg>`
   const baby = stage === 'baby'
-  let body = petFigure({ species, stage, mood, wear })
+  let body = petFigure({ species, stage, mood, wear, form })
   if (mood === 'happy') body = `<g>${loop('translate', '0 0;0 -9;0 0;0 0', 0.7, ' keyTimes="0;0.35;0.7;1"')}${body}</g>`
   // Ходьба: туда-сюда по полю, разворот на краях, лёгкое покачивание шага
   else if (walk && mood === 'idle')
@@ -261,7 +277,7 @@ export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat 
 // поверх в тех же координатах (качается и растёт вместе с телом); tailAnim — своё движение хвоста вместо обычного;
 // rush — сколько секунд с начала крылья машут часто (полёт на входе), потом — как обычно
 const RUSH_BEAT = 0.2
-function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = '', tailAnim = null, rush = 0 }) {
+function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = '', tailAnim = null, rush = 0, form = '' }) {
   const look = LOOKS[species] ?? LOOKS.robot
   const baby = stage === 'baby'
   const adult = baby ? { back: [], top: [], front: [] } : look.adult
@@ -293,6 +309,7 @@ function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = 
     cheeks +
     eyesSvg(look, mood, baby) +
     mouthSvg(look, mood) +
+    (baby ? '' : formSvg(species, form)) +
     wearSvg(species, wear) +
     (mood === 'eat' ? cookie(look) : '') +
     (mood === 'sad' ? tear(look) : '') +
@@ -334,7 +351,7 @@ const ENTERS = {
 }
 
 // reaction — как у полосы (walkReaction); enter — проиграть вход; size — сторона картинки в пикселях
-export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48 }) {
+export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48, form = '' }) {
   const mood = BADGE_MOOD[reaction] ?? 'idle'
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
   const egg = stage === 'egg' || !LOOKS[species]
@@ -342,7 +359,7 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
   const flies = kind === 'dragon' || kind === 'owl'
   const fig = egg
     ? eggShell(LOOKS[species] ?? { egg: ['#f1e4d3', '#c9a77c'] }, mood === 'sleep' ? 'sleep' : 'idle')
-    : petFigure({ species, stage, mood, wear, rush: enter && flies ? ENTER_S : 0 })
+    : petFigure({ species, stage, mood, wear, form, rush: enter && flies ? ENTER_S : 0 })
   // Трос робота — до макушки: у взрослого антенна выше, малыш меньше
   const top = stage === 'adult' ? 3 : 20
   const rx = egg ? 13 : stage === 'baby' ? 11 : 14
@@ -357,11 +374,13 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
 // при перерисовке (pickScene), таймеров нет. Шалости только рисуются: ничего не нажимают и не закрывают
 
 export const PET_SCENES = ['peek', 'star', 'ball', 'butterfly', 'hat', 'hops', 'gesture']
+// Трюки за серии (0.59): показываются среди шалостей, когда открыты (tricksOf в pet.js)
+export const TRICK_SCENES = ['twirl', 'leap', 'dance', 'confetti', 'rainbow']
 
 // Какую шалость показать: r — случайное число 0..1, prev — прошлая (подряд не повторяется), hat — есть ли что-то
-// на голове (иначе ронять нечего)
-export function pickScene(r, prev = '', { hat = true } = {}) {
-  const list = PET_SCENES.filter((s) => s !== prev && (hat || s !== 'hat'))
+// на голове (иначе ронять нечего), tricks — открытые трюки (добавляются к шалостям)
+export function pickScene(r, prev = '', { hat = true, tricks = [] } = {}) {
+  const list = [...PET_SCENES, ...TRICK_SCENES.filter((s) => tricks.includes(s))].filter((s) => s !== prev && (hat || s !== 'hat'))
   return list[Math.min(list.length - 1, Math.max(0, Math.floor(r * list.length)))]
 }
 
@@ -480,8 +499,13 @@ const bowl = (x, g) => `<path d="M${r1(x - 13)} ${g - 8} a13 8 0 0 0 26 0 z" fil
 const bubble = (x) =>
   `<g transform="translate(${r1(x)} 14)"><g>${loop('translate', '0 0;0 -3;0 0', 1.2)}<circle r="9" fill="#fff" stroke="${INK}" stroke-width="1.2"/><path d="M0 5 V-4 M-3.5 -0.5 L0 -4 L3.5 -0.5" fill="none" stroke="${INK}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></g></g>`
 
+// Искорка и нота для трюков
+const SPARK = '<path d="M0 -5 L1.2 -1.2 L5 0 L1.2 1.2 L0 5 L-1.2 1.2 L-5 0 L-1.2 -1.2 Z" fill="#ffd166" stroke="#f08c00" stroke-width="0.6" stroke-linejoin="round"/>'
+const NOTE = `<ellipse cx="0" cy="4" rx="2.8" ry="2" fill="${INK}" transform="rotate(-20 0 4)"/><path d="M2.4 3.4 V-6 L6.5 -4" fill="none" stroke="${INK}" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>`
+
 // Шалости. Каждая: from — куда дойти, play(p) — что делает питомец (до ~7 с), under / over — предметы под и над
-// питомцем, extra — что дорисовать на самом питомце, tail — своё движение хвоста, noHead — снять головной убор с фигуры
+// питомцем, extra — что дорисовать на самом питомце, tail — своё движение хвоста, noHead — снять головной убор с фигуры,
+// spin — кадры поворота всей фигуры (сальто)
 const SCENES = {
   // Выглядывает из-за края карточки: прячется, выныривает слева и справа, выпрыгивает
   peek(c) {
@@ -726,6 +750,157 @@ const SCENES = {
       },
     }
   },
+
+  // ━━ трюки за серии (0.59) ━━
+  // Пируэт: два оборота на месте, вокруг искорки
+  twirl(c) {
+    let t0 = 0
+    return {
+      from: c.xs,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.3)
+        t0 = p.t
+        for (let i = 0; i < 2; i++)
+          for (const v of ['0.1 1', '-1 1', '0.1 1', '1 1']) {
+            poseTo(p, v, 0.15)
+            stay(p, 0.15)
+          }
+        hop(p, p.x, 0, 10, 0.45)
+        stay(p, 0.4)
+      },
+      over: () => sparks(c, c.xs, t0, 1.6),
+    }
+  },
+  // Сальто: присел, высокий прыжок с оборотом, приземлился и присел
+  leap(c) {
+    let t0 = 0
+    let t1 = 0
+    return {
+      from: c.xs,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.3)
+        poseTo(p, '1.1 0.86', 0.2)
+        stay(p, 0.3)
+        poseTo(p, '1 1', 0.1)
+        t0 = p.t
+        hop(p, p.x, 0, 22, 0.9)
+        t1 = p.t
+        poseTo(p, '1.1 0.86', 0.12)
+        stay(p, 0.25)
+        poseTo(p, '1 1', 0.2)
+        stay(p, 0.5)
+      },
+      spin: () => [[0, '0'], [t0, '0'], [t1, '-360']],
+      over: () => sparks(c, c.xs, t1, 1),
+    }
+  },
+  // Танец: шаги в стороны с разворотами и покачиванием, над головой — ноты
+  dance(c) {
+    let t0 = 0
+    return {
+      from: c.xs,
+      play(p) {
+        stay(p, 0.3)
+        t0 = p.t
+        const x = p.x
+        for (let i = 0; i < 6; i++) {
+          hop(p, x + (i % 2 ? -10 : 10), 0, 5, 0.32)
+          poseTo(p, i % 2 ? '1.05 0.94' : '0.95 1.05', 0.12)
+          stay(p, 0.18)
+        }
+        hop(p, x, 0, 8, 0.35)
+        poseTo(p, '1 1', 0.1)
+        stay(p, 0.4)
+      },
+      over() {
+        return [0, 0.9, 1.8, 2.7]
+          .map((d, i) => {
+            const x = c.xs + (i % 2 ? 16 : -14)
+            const top = c.ground - 50
+            const pos = [[0, `${r1(x)} ${top}`], [t0 + d, `${r1(x)} ${top}`], [t0 + d + 1.4, `${r1(x + (i % 2 ? 6 : -6))} ${top - 14}`]]
+            return O([[0, '0'], [t0 + d, '0'], [t0 + d + 0.15, '1'], [t0 + d + 1.1, '1'], [t0 + d + 1.4, '0']], T('translate', pos, NOTE, c.o), c.o)
+          })
+          .join('')
+      },
+    }
+  },
+  // Конфетти: подпрыгнул — сверху сыплются цветные бумажки
+  confetti(c) {
+    let t0 = 0
+    return {
+      from: c.xs,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.3)
+        poseTo(p, '1.08 0.88', 0.2)
+        stay(p, 0.25)
+        poseTo(p, '1 1', 0.1)
+        t0 = p.t
+        hop(p, p.x, 0, 16, 0.6)
+        stay(p, 0.6)
+        hop(p, p.x, 0, 8, 0.4)
+        stay(p, 1.6)
+      },
+      over() {
+        const colors = ['#ff6b6b', '#ffd166', '#30a46c', '#3e8ed0', '#c77dff', '#f08c00']
+        let out = ''
+        for (let i = 0; i < 14; i++) {
+          const x = c.xs - 52 + ((i * 37) % 104)
+          const d = t0 + 0.2 + ((i * 7) % 5) * 0.12
+          const fall = 2 + ((i * 3) % 4) * 0.25
+          const drift = ((i * 13) % 9) - 4
+          const pos = [[0, `${x} -6`], [d, `${x} -6`], [d + fall, `${r1(x + drift)} ${c.ground - 2}`]]
+          const spin = [[0, '0'], [d, '0'], [d + fall, String(i % 2 ? 540 : -540)]]
+          const bit = `<rect x="-2.5" y="-1.2" width="5" height="2.4" rx="0.6" fill="${colors[i % colors.length]}"/>`
+          out += O([[0, '0'], [d, '0'], [d + 0.05, '1'], [d + fall, '1'], [d + fall + 0.4, '0']], T('translate', pos, T('rotate', spin, bit, c.o), c.o), c.o)
+        }
+        return out
+      },
+    }
+  },
+  // Радуга: за питомцем появляется радуга, он перепрыгивает её туда и обратно
+  rainbow(c) {
+    const R = 30
+    let t0 = 0
+    let t1 = 0
+    return {
+      from: c.xs - R - 8,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.4)
+        t0 = p.t
+        stay(p, 0.6)
+        hop(p, c.xs + R + 8, 0, 26, 1.1)
+        stay(p, 0.5)
+        hop(p, c.xs - R - 8, 0, 26, 1.1)
+        t1 = p.t
+        stay(p, 0.6)
+      },
+      under() {
+        const bands = ['#ff6b6b', '#f08c00', '#ffd166', '#30a46c', '#3e8ed0', '#9b5de5']
+          .map((col, i) => {
+            const r = R - i * 3
+            return `<path d="M${r1(c.xs - r)} ${c.ground} A${r} ${r} 0 0 1 ${r1(c.xs + r)} ${c.ground}" fill="none" stroke="${col}" stroke-width="3"/>`
+          })
+          .join('')
+        return O([[0, '0'], [t0, '0'], [t0 + 0.5, '1'], [t1, '1'], [t1 + 0.6, '0']], bands, c.o)
+      },
+    }
+  },
+}
+
+// Искорки вокруг питомца на d секунд с t0
+function sparks(c, x, t0, d) {
+  return [
+    [-20, 40, 0],
+    [20, 46, 0.2],
+    [-8, 56, 0.4],
+    [14, 30, 0.6],
+  ]
+    .map(([dx, up, w]) => `<g transform="translate(${r1(x + dx)} ${c.ground - up})">${O([[0, '0'], [t0 + w, '0'], [t0 + w + 0.15, '1'], [t0 + w + d, '1'], [t0 + w + d + 0.3, '0']], SPARK, c.o)}</g>`)
+    .join('')
 }
 
 // Обычный круг: постоял, дошёл до места шалости, пошалил, огляделся, присел и зевнул, вернулся домой.
@@ -755,7 +930,7 @@ function dayLoop(p, c, scene) {
 // sleep — ночь; hungry — сидит у пустой миски; sad — медленно бродит. Без питомца или яйцом — качается яйцо.
 // Одинаковые входные данные — одинаковая картинка: панель не перезагружает её без нужды
 // show — во сколько раз картинка на экране меньше поля (маленький питомец, п. 45): поле то же, рисунок меньше
-export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1 }) {
+export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1, form = '' }) {
   const W = Math.round(clamp(width, 160, 2000))
   const H = height
   const ground = H - 6
@@ -804,7 +979,8 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   if (reaction === 'treat') extra += cookie(look)
   if (reaction === 'treat' || reaction === 'happy') extra += hearts()
 
-  const fig = petFigure({ species, stage, mood, wear: sc.noHead ? wear.filter((w) => WEAR[w]?.slot !== 'head') : wear, extra: extra + (sc.extra?.() ?? ''), tailAnim: sc.tail?.() ?? null })
+  const drawn = petFigure({ species, stage, mood, form, wear: sc.noHead ? wear.filter((w) => WEAR[w]?.slot !== 'head') : wear, extra: extra + (sc.extra?.() ?? ''), tailAnim: sc.tail?.() ?? null })
+  const fig = sc.spin ? around(32, 34, track('rotate', sc.spin(), c.o), drawn) : drawn
   const posed = `<g transform="translate(32 58)">${T('scale', p.poses, `<g transform="translate(-32 -58)">${fig}</g>`, c.o)}</g>`
   const jumps = reaction === 'done' || reaction === 'happy' ? '<animateTransform attributeName="transform" type="translate" values="0 0;0 -11;0 0;0 -11;0 0;0 -11;0 0" dur="2.1s"/>' : ''
   const sized = `<g transform="translate(${r1(-32 * K)} ${r1(-58 * K)}) scale(${K})">${posed}</g>`
@@ -812,6 +988,37 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const pet = T('translate', p.moves.map(([t, x, y]) => [t, `${r1(x)} ${r1(ground + y)}`]), faced, c.o)
   const shadow = T('translate', p.moves.map(([t, x]) => [t, `${r1(x)} ${ground + 1}`]), `<ellipse rx="${r1((stage === 'baby' ? 11 : 14) * K)}" ry="2.2" fill="#00000022"/>`, c.o)
   return `${head}${sc.under?.() ?? ''}${shadow}${pet}${sc.over?.() ?? ''}</svg>`
+}
+
+// ━━━━━━━━━━ уголок с вещами (0.59) ━━━━━━━━━━
+// Комната питомца на экране «Питомец»: стена, пол и открытые вещи (CORNER в pet.js). Питомец сидит посередине и дышит.
+// Без анимации, кроме дыхания, моргания и огонька лампы; одинаковые входные данные — одинаковая картинка
+export const CORNER_ITEMS = ['bed', 'ball', 'plant', 'rug', 'lamp', 'picture']
+const CW = 320
+const CH = 120
+const FLOOR = 84
+const CORNER_ART = {
+  picture: () =>
+    `<rect x="196" y="16" width="48" height="34" rx="2" fill="#fffaf0" stroke="#8a5f3f" stroke-width="3"/><circle cx="232" cy="25" r="4" fill="#ffd166"/><path d="M199 47 L213 31 L222 40 L229 33 L241 47 Z" fill="#6cbf4a"/>`,
+  lamp: () =>
+    `<ellipse cx="30" cy="22" rx="26" ry="20" fill="#ffd16633"><animate attributeName="opacity" values="0.7;1;0.7" dur="4s" repeatCount="indefinite"/></ellipse><rect x="28.5" y="24" width="3" height="${FLOOR + 14 - 24}" fill="#5b6b7a"/><ellipse cx="30" cy="${FLOOR + 14}" rx="10" ry="3" fill="#5b6b7a"/><path d="M18 26 L22 10 H38 L42 26 Z" fill="#ffe08a" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>`,
+  plant: () =>
+    `<ellipse cx="292" cy="60" rx="6" ry="14" fill="#4f9a35" stroke="${INK}" stroke-width="1" transform="rotate(-25 292 74)"/><ellipse cx="292" cy="58" rx="6" ry="16" fill="#6cbf4a" stroke="${INK}" stroke-width="1"/><ellipse cx="292" cy="60" rx="6" ry="14" fill="#8fd46c" stroke="${INK}" stroke-width="1" transform="rotate(25 292 74)"/><path d="M280 74 H304 L300 96 H284 Z" fill="#e07a5f" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/><rect x="278" y="72" width="28" height="5" rx="2" fill="#c8624a" stroke="${INK}" stroke-width="1.2"/>`,
+  rug: () => `<ellipse cx="160" cy="104" rx="66" ry="11" fill="#9b5de5" opacity="0.55"/><ellipse cx="160" cy="104" rx="52" ry="8" fill="none" stroke="#f1faee" stroke-width="2" stroke-dasharray="6 4"/>`,
+  bed: () => `<ellipse cx="78" cy="102" rx="36" ry="10" fill="#c25b56" stroke="${INK}" stroke-width="1.2"/><ellipse cx="78" cy="99" rx="26" ry="5.5" fill="#e8908a"/>`,
+  ball: () => `<g transform="translate(252 100)">${BALL}</g>`,
+}
+export function petCornerSvg({ items = [], species, stage = 'baby', wear = [], form = '', mood = 'idle', width = CW }) {
+  const has = (id) => items.includes(id)
+  const look = LOOKS[species]
+  const room = `<rect width="${CW}" height="${FLOOR}" fill="#f3ead8"/><rect y="${FLOOR}" width="${CW}" height="${CH - FLOOR}" fill="#d9b98c"/><rect y="${FLOOR - 1}" width="${CW}" height="3" fill="#b8956a"/>`
+  const back = ['picture', 'lamp', 'plant'].filter(has).map((id) => CORNER_ART[id]()).join('')
+  const floor = ['rug', 'bed'].filter(has).map((id) => CORNER_ART[id]()).join('')
+  const fig = !look || stage === 'egg' ? eggShell(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, mood === 'sleep' ? 'sleep' : 'idle') : petFigure({ species, stage, mood, wear, form })
+  const pet = `<ellipse cx="160" cy="105" rx="${stage === 'baby' ? 11 : 14}" ry="2.5" fill="#00000022"/><g transform="translate(128 47)">${fig}</g>${mood === 'sleep' ? `<g transform="translate(128 47)">${zzz()}</g>` : ''}`
+  const front = has('ball') ? CORNER_ART.ball() : ''
+  const w = Math.round(clamp(width, 160, 640))
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CW} ${CH}" width="${w}" height="${Math.round((w * CH) / CW)}">${room}${back}${floor}${pet}${front}</svg>`
 }
 
 // ━━━━━━━━━━ пиксели для терминала ━━━━━━━━━━
@@ -839,7 +1046,7 @@ const moved = (list, dx, dy, k = 1, cx = 32, cy = 58) =>
   })
 
 // Фигуры кадра для пикселей: те же части, что в SVG, без обводки; frame — 0, 1, 2: дыхание, моргание, шаг
-export function petShapes({ species, stage = 'baby', mood = 'idle', wear = [], frame = 0 }) {
+export function petShapes({ species, stage = 'baby', mood = 'idle', wear = [], frame = 0, form = '' }) {
   const look = LOOKS[species] ?? LOOKS.robot
   const bob = mood === 'happy' ? [0, -6, 0][frame % 3] : mood === 'sleep' ? 0 : [0, -1, 0][frame % 3]
   if (stage === 'egg') {
@@ -854,6 +1061,8 @@ export function petShapes({ species, stage = 'baby', mood = 'idle', wear = [], f
   const size = e.size * (baby ? 1.2 : 1)
   const shut = mood === 'sleep' || mood === 'happy' || (mood === 'idle' && frame % 3 === 2)
   for (const [x, y] of [e.l, e.r]) list.push(shut ? ['r', x - size, y - 0.5, size * 2, 1.2, 0, INK] : ['e', x, y, size * 0.85, size, e.color === INK ? INK : e.color])
+  // Облик взрослого — цветное пятнышко на груди
+  if (!baby && FORM_COLOR[form]) list.push(['e', ...(FORM_AT[species] ?? [32, 46]), 3.5, 3.5, FORM_COLOR[form]])
   for (const id of wear) {
     const w = WEAR[id]
     if (!w) continue

@@ -26,8 +26,8 @@ import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
-import { cleanName, collect, DONE_MS, feed, fullness, moodChangeIn, moodOf, newPet, pat, PET_KEY, petMood, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, unlocked, UNLOCKS, walkReaction } from './pet.js'
-import { petBadgeSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
+import { cleanName, collect, CORNER, cornerOf, DONE_MS, feed, formOf, fullness, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodChangeIn, moodOf, newPet, pat, PET_KEY, petLine, petMood, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TRICKS, tricksOf, unlocked, UNLOCKS, walkReaction } from './pet.js'
+import { petBadgeSvg, petCornerSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
 import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneQueues, phoneText, queueKey, queueTold } from './phone.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
@@ -13161,6 +13161,12 @@ const PET_ROWS = 16 // по два пикселя в клетке: картин�
 const SPECIES_LABEL = { robot: 'Робот', drop: 'Капелька', owl: 'Сова', fox: 'Лиса', dragon: 'Дракон' }
 const STAGE_LABEL = { egg: 'Яйцо', baby: 'Малыш', adult: 'Взрослая форма' }
 const MOOD_LABEL = { idle: 'Гуляет', eat: 'Ест', happy: 'Радуется', sleep: 'Спит', sad: 'Грустит' }
+// 0.59: облик взрослого, трюки за серии, вещи уголка
+const FORM_LABEL = { maker: 'Мастер карточек', reviewer: 'Ревьюер', runner: 'Бегун очередей' }
+const FORM_HINT = { maker: 'чаще всего ты закрываешь карточки', reviewer: 'чаще всего ты принимаешь ревью', runner: 'чаще всего ты проходишь очереди доски' }
+const TRICK_LABEL = { twirl: 'Пируэт', leap: 'Сальто', dance: 'Танец', confetti: 'Конфетти', rainbow: 'Радуга' }
+const CORNER_LABEL = { bed: 'Лежанка', ball: 'Мячик', plant: 'Цветок', rug: 'Коврик', lamp: 'Лампа', picture: 'Картина' }
+const PET_LINE_HOUR = 3_600_000
 const PET_GOOD = '#30a46c'
 
 const petShown = () =>
@@ -13186,8 +13192,12 @@ async function petSync($, now, queues = 0) {
   }
   const log = restoreLog(await $.store.get('daylog').catch(() => null))
   pt.streak = streakOf(log, now)
+  // Для реплик (0.59): карточки, закрытые за последний час (по одной на карточку)
+  const doneAt = new Map()
+  for (const x of log) if (x.kind === 'done' && x.at <= now && now - x.at < PET_LINE_HOUR) doneAt.set(x.id, Math.max(doneAt.get(x.id) ?? 0, x.at))
+  pt.dones = [...doneAt.values()]
   let next = collect(pet, log, now, queues)
-  if (pt.streak > next.best) next = { ...next, best: pt.streak }
+  if (pt.streak > next.best) next = { ...next, best: pt.streak, bestAt: now }
   if (next !== pet) await $.store.set(PET_KEY, next)
   pt.pet = next
   return next
@@ -13208,7 +13218,9 @@ export async function petOn($, now) {
 // Очередь доски прошла до конца — угощения сразу
 async function petQueueDone($) {
   await pt.reading
-  const pet = await petSync($, await $.clock.now(), 1)
+  const now = await $.clock.now()
+  pt.queueAt = now // реплика «Очередь доски пройдена» (0.59)
+  const pet = await petSync($, now, 1)
   if (pet && petShown()) $.ui.invalidate('ui.render')
 }
 
@@ -13234,6 +13246,7 @@ function petWake($, now) {
   const ms = pt.pet ? moodChangeIn(pt.pet, now) : 0
   if (ms) ends.push(now + ms)
   if (S.petWalk) for (const at of [pt.treatAt + TREAT_MS, pt.doneAt + DONE_MS]) if (at > now) ends.push(at)
+  if (pt.pet && (S.petWalk || S.menu === 'pet')) for (const at of petLineEnds(now)) if (at > now) ends.push(at)
   const at = ends.length ? Math.min(...ends) : 0
   if (at && at === pt.wakeAt && pt.wake) return
   pt.wake?.cancel()
@@ -13289,14 +13302,46 @@ async function petFeed($) {
 function petNow(now) {
   const hidden = new Set(S.agHidden ?? [])
   const list = agentsList(now)
-  const waiting = list.filter((r) => (r.me || !hidden.has(r.sid)) && (r.status === 'permission' || askOf(r))).length
+  const rows = list.filter((r) => (r.me || !hidden.has(r.sid)) && (r.status === 'permission' || askOf(r)))
+  const waiting = rows.length
   // Экран рисует открытая сессия — значит, одна есть всегда
-  return { waiting, mood: petMood(pt.pet, { now, hour: new Date(now).getHours(), waiting, sessions: Math.max(1, list.length), night: S.petNight }) }
+  return {
+    waiting,
+    rows: rows.map((r) => ({ name: r.name || base(r.path ?? ''), since: r.since })),
+    mood: petMood(pt.pet, { now, hour: new Date(now).getHours(), waiting, sessions: Math.max(1, list.length), night: S.petNight }),
+  }
 }
+
+// Реплика питомца (0.59): что сейчас важно — сессия долго ждёт, очередь доски пройдена, много карточек за час, новый
+// трюк, есть чем покормить. Считается при перерисовке, без таймеров
+const petLineNow = (now) =>
+  pt.pet ? petLine({ pet: pt.pet, now, waiting: petNow(now).rows, queueAt: pt.queueAt, dones: pt.dones }) : null
+
+// Когда реплика появится или сменится: сессия ждёт уже LINE_WAIT_MS, кончилось время реплик об очереди, карточках и трюке
+function petLineEnds(now) {
+  const ends = petNow(now).rows.filter((r) => r.since > 0).map((r) => r.since + LINE_WAIT_MS)
+  if (pt.queueAt) ends.push(pt.queueAt + LINE_QUEUE_MS)
+  const recent = pt.dones.filter((at) => at <= now).sort((a, b) => b - a)
+  if (recent.length >= 3) ends.push(recent[2] + PET_LINE_HOUR)
+  if (pt.pet?.bestAt) ends.push(pt.pet.bestAt + LINE_TRICK_MS)
+  return ends
+}
+
+function petLineText(line) {
+  const t = (text) => tr(text, S.lang)
+  if (line.kind === 'wait') return fill(t('«{0}» ждёт тебя больше {1} мин'), [line.name, Math.max(5, Math.floor(line.min / 5) * 5)])
+  if (line.kind === 'queue') return t('Очередь доски пройдена — держи угощения!')
+  if (line.kind === 'cards') return fill(t('Карточек за час: {0} — молодец!'), [line.n])
+  if (line.kind === 'trick') return fill(t('Новый трюк: {0}!'), [t(TRICK_LABEL[line.id])])
+  return t('Есть угощения — покорми меня')
+}
+// Ключ — на обёртке: у Text в Desktop своего ключа нет
+const petLineView = ({ Box, Text }, line) =>
+  Box({ key: 'arcade-pet-line', children: [keep(Text({ color: line.kind === 'wait' || line.kind === 'hungry' ? 'warning' : 'success', wrap: 'wrap', children: [petLineText(line)] }))] })
 
 // Кадр для терминала: полублоки — верхний пиксель цветом символа, нижний — фоном
 export function petCells(pet, mood, frame) {
-  const px = rasterize(petShapes({ species: pet.species, stage: stageOf(pet), mood, wear: pet.wear, frame }), PET_COLS, PET_ROWS * 2)
+  const px = rasterize(petShapes({ species: pet.species, stage: stageOf(pet), mood, wear: pet.wear, frame, form: formOf(pet) }), PET_COLS, PET_ROWS * 2)
   const words = new Uint32Array(PET_COLS * PET_ROWS * 3)
   for (let r = 0; r < PET_ROWS; r++)
     for (let c = 0; c < PET_COLS; c++) {
@@ -13336,12 +13381,12 @@ function petReset() {
   petLoop?.cancel()
   petLoop = null
   pt.wake?.cancel()
-  Object.assign(pt, { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeEnter: true, badgeReaction: '', followMenu: '', followEnter: true, followReaction: '' })
+  Object.assign(pt, { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeEnter: true, badgeReaction: '', followMenu: '', followEnter: true, followReaction: '', queueAt: 0, dones: [], show: '' })
 }
 
 // Открыть «Питомца» с чистыми подсказками и свежим чтением
 const petOpen = (open) => () => {
-  Object.assign(pt, { note: '', bad: false, naming: false, readAt: 0 })
+  Object.assign(pt, { note: '', bad: false, naming: false, readAt: 0, show: '' })
   return open('pet')()
 }
 
@@ -13355,7 +13400,7 @@ function petCorner($, e, kit) {
   const label = `${petTitle(pet)} · ${t(stage === 'egg' ? STAGE_LABEL.egg : MOOD_LABEL[mood])} · ${fill(t('угощений: {0}'), [pet.treats])}`
   const button = keep(Button({ key: 'today-pet', label, plain: true, onPress: petOpen(open) }))
   if (e.surface === 'terminal') return [section('Питомец'), button]
-  const picture = keep(Svg({ source: petSvg({ species: pet.species, stage, mood, wear: pet.wear, walk: false, size: 48 }), alt: petTitle(pet), width: 48, height: 48 }))
+  const picture = keep(Svg({ source: petSvg({ species: pet.species, stage, mood, wear: pet.wear, walk: false, size: 48, form: formOf(pet) }), alt: petTitle(pet), width: 48, height: 48 }))
   return [section('Питомец'), Box({ key: 'today-pet-box', flexDirection: 'row', alignItems: 'center', columnGap: desktop ? 'sm' : 1, children: [picture, button] })]
 }
 
@@ -13379,7 +13424,7 @@ function petReaction(now) {
 }
 
 export function petStrip($, e, kit) {
-  const { Box, Button, Svg, now, open } = kit
+  const { Box, Button, Svg, Text, now, open } = kit
   const t = (text) => tr(text, S.lang)
   const pet = pt.pet
   const stage = pet ? stageOf(pet) : 'egg'
@@ -13393,7 +13438,8 @@ export function petStrip($, e, kit) {
   if (e.surface === 'terminal') return [button]
   if (pt.entered || !pt.scene || now - pt.sceneAt >= PET_SCENE_MS) {
     const hat = (pet?.wear ?? []).some((id) => WEAR[id]?.slot === 'head')
-    pt.scene = pickScene(Math.random(), pt.scene, { hat })
+    // Открытые трюки (0.59) — среди шалостей
+    pt.scene = pickScene(Math.random(), pt.scene, { hat, tricks: pet ? tricksOf(pet, pt.streak) : [] })
     pt.sceneAt = now
   }
   pt.entered = false
@@ -13404,9 +13450,11 @@ export function petStrip($, e, kit) {
   const view = Math.min(2000, Math.round(fit * k))
   const width = Math.round(view / k)
   const height = Math.round(PET_STRIP_H / k)
-  const source = petWalkSvg({ species: pet?.species ?? '', stage, wear: pet?.wear ?? [], scene: pt.scene, reaction, width: view, height: PET_STRIP_H, show: 1 / k })
+  const source = petWalkSvg({ species: pet?.species ?? '', stage, wear: pet?.wear ?? [], scene: pt.scene, reaction, width: view, height: PET_STRIP_H, show: 1 / k, form: formOf(pet) })
   const picture = keep(Svg({ source, alt: pet ? petTitle(pet) : t('Питомец'), width, height, isInteractive: true }))
-  return [Box({ key: 'arcade-pet-strip', flexDirection: 'column', children: [picture, button] })]
+  // Реплика (0.59) — строкой под полосой, пока есть что сказать
+  const line = petLineNow(now)
+  return [Box({ key: 'arcade-pet-strip', flexDirection: 'column', children: [picture, button, ...(line ? [petLineView({ Box, Text }, line)] : [])] })]
 }
 
 // Маленький питомец (п. 45): справа в шапке на экранах-списках (seat) и у правого края окна, когда пролистали вниз.
@@ -13426,7 +13474,7 @@ function petExtras(e, now, { Box, Svg }, seat) {
   const size = S.petSize === 'small' ? 36 : 48
   // Ключ — на обёртке: новый ключ (другой экран) — Desktop ставит картинку заново, и вход проигрывается
   const art = (key, enter) =>
-    Box({ key, children: [keep(Svg({ source: petBadgeSvg({ species: pet.species, stage: stageOf(pet), wear: pet.wear, reaction, enter, size }), alt: petTitle(pet), width: size, height: size }))] })
+    Box({ key, children: [keep(Svg({ source: petBadgeSvg({ species: pet.species, stage: stageOf(pet), wear: pet.wear, reaction, enter, size, form: formOf(pet) }), alt: petTitle(pet), width: size, height: size }))] })
   const enterOf = (menu, enter, react) => {
     if (pt[menu] !== S.menu) Object.assign(pt, { [menu]: S.menu, [enter]: true, [react]: reaction })
     else if (pt[react] !== reaction) Object.assign(pt, { [enter]: false, [react]: reaction })
@@ -13535,7 +13583,7 @@ export function petScreen($, e, kit) {
     petFrames($)
   } else {
     // Отметки еды и сердечек — комментарием: новое нажатие — новая картинка, и сердечки проигрываются снова
-    const source = petSvg({ species: pet.species, stage, mood, wear: pet.wear, pat: mood === 'happy', walk: true, size: 160 }).replace(/<\/svg>$/, `<!--${pet.fedAt}-${pet.patAt}--></svg>`)
+    const source = petSvg({ species: pet.species, stage, mood, wear: pet.wear, pat: mood === 'happy', walk: true, size: 160, form: formOf(pet) }).replace(/<\/svg>$/, `<!--${pet.fedAt}-${pet.patAt}--></svg>`)
     picture = keep(Svg({ source, alt: petTitle(pet), width: 160, height: 160, isInteractive: true }))
   }
   const doing =
@@ -13570,6 +13618,62 @@ export function petScreen($, e, kit) {
     keep(Button({ key: `arcade-pet-wear-${u.id}`, label: `${pet.wear.includes(u.id) ? '✓ ' : ''}${t(WEAR[u.id].label)}`, onPress: () => petChange($, (p) => toggleWear(p, u.id, unlocked(p, pt.streak))) })),
   )
   const wearOff = UNLOCKS.filter((u) => !opened.includes(u.id)).map((u) => keep(dim(`${t(WEAR[u.id].label)} — ${how(u)}`)))
+  const line = petLineNow(now)
+
+  // ——— Облик (0.59): у взрослого — по тому, чем чаще кормили ———
+  const form = formOf(pet)
+  const style = pet.style ?? { cards: 0, reviews: 0, queues: 0 }
+  const look = [
+    form
+      ? keep(Text({ children: [`${t(FORM_LABEL[form])} — ${t(FORM_HINT[form])}`] }))
+      : dim(stage === 'adult' ? 'Облик появится с первыми угощениями.' : 'Во взрослой форме у питомца будет облик — по тому, чем ты чаще его кормишь: карточками, ревью или очередями доски.'),
+    keep(dim(fill(t('Закрытых карточек: {0} · принятых ревью: {1} · шагов очередей доски: {2}'), [style.cards, style.reviews, style.queues]))),
+  ]
+
+  // ——— Трюки (0.59): за лучшую серию дней с закрытыми карточками; в Desktop открытый можно посмотреть здесь же ———
+  const tricks = tricksOf(pet, pt.streak)
+  if (pt.show && !tricks.includes(pt.show)) pt.show = ''
+  const trickOn = TRICKS.filter((x) => tricks.includes(x.id)).map((x) =>
+    terminal
+      ? keep(Text({ children: [`✓ ${t(TRICK_LABEL[x.id])}`] }))
+      : keep(
+          Button({
+            key: `arcade-pet-trick-${x.id}`,
+            label: `${pt.show === x.id ? '▶ ' : ''}${t(TRICK_LABEL[x.id])}`,
+            onPress: () => {
+              pt.show = pt.show === x.id ? '' : x.id
+              $.ui.invalidate('ui.render')
+            },
+          }),
+        ),
+  )
+  const trickOff = TRICKS.filter((x) => !tricks.includes(x.id)).map((x) => keep(dim(`${t(TRICK_LABEL[x.id])} — ${fill(t('{0} дн. подряд с закрытыми карточками'), [x.streak])}`)))
+  const trickShow =
+    pt.show && !terminal
+      ? [
+          Box({
+            key: `arcade-pet-trick-show-${pt.show}`,
+            children: [keep(Svg({ source: petWalkSvg({ species: pet.species, stage, wear: pet.wear, scene: pt.show, width: 360, height: PET_STRIP_H, form }), alt: t(TRICK_LABEL[pt.show]), width: 360, height: PET_STRIP_H, isInteractive: true }))],
+          }),
+        ]
+      : []
+
+  // ——— Уголок (0.59): вещи за угощения, серии, очереди, ревью и рост; денег нет ———
+  const items = cornerOf(pet, pt.streak)
+  const cornerHow = (c) =>
+    c.xp
+      ? fill(t('после {0} угощений'), [c.xp])
+      : c.streak
+        ? fill(t('{0} дн. подряд с закрытыми карточками'), [c.streak])
+        : c.queues
+          ? fill(t('после {0} шагов очередей доски'), [c.queues])
+          : c.reviews
+            ? fill(t('после {0} принятых ревью'), [c.reviews])
+            : t('во взрослой форме')
+  const room = terminal
+    ? keep(Text({ children: [items.length ? `${t('В уголке')}: ${items.map((id) => t(CORNER_LABEL[id])).join(', ')}` : t('В уголке пока пусто')] }))
+    : keep(Svg({ source: petCornerSvg({ items, species: pet.species, stage, wear: pet.wear, form, mood }), alt: t('Уголок питомца'), width: 320, height: 120 }))
+  const cornerOff = CORNER.filter((c) => !items.includes(c.id)).map((c) => keep(dim(`${t(CORNER_LABEL[c.id])} — ${cornerHow(c)}`)))
 
   return [
     back,
@@ -13577,6 +13681,7 @@ export function petScreen($, e, kit) {
     picture,
     keep(strong(`${petTitle(pet)} · ${t(STAGE_LABEL[stage])} · ${t(SPECIES_LABEL[pet.species])}`)),
     Text({ key: 'arcade-pet-doing', ...(mood === 'sad' ? { color: 'warning' } : mood === 'happy' || mood === 'eat' ? { color: 'success' } : {}), children: [doing] }),
+    ...(line ? [petLineView({ Box, Text }, line)] : []),
     gap,
     bar('arcade-pet-full', 'Сытость', full),
     bar('arcade-pet-mood', 'Настроение', glad),
@@ -13589,6 +13694,16 @@ export function petScreen($, e, kit) {
     section('Наряды'),
     ...(wearOn.length ? [wrapRow('arcade-pet-wear', wearOn)] : []),
     ...wearOff,
+    section('Облик'),
+    ...look,
+    section('Трюки'),
+    ...(trickOn.length ? [wrapRow('arcade-pet-tricks', trickOn)] : []),
+    ...trickShow,
+    ...trickOff,
+    dim(tricks.length ? (S.petWalk ? 'Открытые трюки питомец показывает, когда гуляет по главному экрану.' : 'Трюки видно на главном экране, когда питомец гуляет по Arcade.') : 'Трюки открываются за серию дней с закрытыми карточками и остаются навсегда.'),
+    section('Уголок'),
+    room,
+    ...cornerOff,
     section('Настройки'),
     ...petSettings($, kit, true),
     gap,
@@ -14724,6 +14839,8 @@ export async function drawPane($, e) {
       // Питомец — свежий из хранилища, с угощениями за работу всех сессий (не чаще раза в PET_READ_MS)
       await petOn($, now)
       items = S.menu === 'pet' ? petScreen($, e, kit) : todayScreen($, e, kit)
+      // На «Питомце» реплика появится или кончится сама — одна перерисовка в этот момент (0.59)
+      if (S.menu === 'pet' && pt.pet) petWake($, now)
     }
     else if (S.menu === 'tiktok') items = tiktokScreen($, e, kit)
     else if (S.menu === 'twitch' || S.menu.startsWith('twitch:')) items = twitchScreen($, e, kit)

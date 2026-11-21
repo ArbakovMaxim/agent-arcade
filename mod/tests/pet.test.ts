@@ -1,9 +1,10 @@
 // Питомец (п. 41): угощения из журнала «Итогов дня», сытость и настроение по отметкам времени, наряды, экран в
 // терминале (картинка символами, кадры только пока экран открыт) и в Desktop (анимация внутри SVG), уголок на «Сегодня».
-// П. 43: гуляет полосой по главному экрану, шалит и откликается на работу; выключатель в настройках
+// П. 43: гуляет полосой по главному экрану, шалит и откликается на работу; выключатель в настройках.
+// 0.59: облик взрослого по стилю работы, трюки за серии, уголок с вещами, реплики-подсказки
 import { expect } from 'claude-code/testing'
-import { collect, DONE_MS, EAT_MS, feed, fullness, moodOf, newPet, pat, PAT_MS, petCard, petMood, restoreCard, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TREATS_MAX, unlocked, walkReaction } from '../hooks/pet.js'
-import { PET_SCENES, petBadgeSvg, petSvg, petWalkSvg, pickScene, SPECIES } from '../hooks/petart.js'
+import { collect, CORNER, cornerOf, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, restoreCard, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, unlocked, walkReaction } from '../hooks/pet.js'
+import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SPECIES, TRICK_SCENES } from '../hooks/petart.js'
 import { petCells } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
 
@@ -671,5 +672,223 @@ test('питомец ночью не спит, когда сон выключе�
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect((await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label).toBe('Искра · Гуляет · угощений: 0')
+  await ui.unmount()
+})
+
+// ——— 0.59: облик по стилю работы, трюки за серии, уголок с вещами, реплики ———
+
+test('питомец 0.59: чем кормили — облик взрослого: мастер, ревьюер, бегун; у яйца и малыша облика нет', () => {
+  const pet = newPet('fox', 'Рыжик', T0)
+  expect(pet.style).toEqual({ cards: 0, reviews: 0, queues: 0 })
+  const at = T0 + 60_000
+  const log = [
+    entry(at, 'done', 'a'),
+    entry(at + 1, 'done', 'b'),
+    entry(at + 2, 'accept', 'a'),
+    entry(at + 3, 'check', 'c', { ok: true }),
+    entry(at + 4, 'check', 'd', { ok: false }), // красная проверка — не еда и не стиль
+    entry(at + 5, 'done', 'a'), // та же карточка в тот же день — без счёта
+  ]
+  // Очереди доски до конца (2) и зелёная проверка — «очереди»
+  const got = collect(pet, log, at + 10, 2)
+  expect(got.style).toEqual({ cards: 2, reviews: 1, queues: 3 })
+  // Ничего нового — та же запись
+  expect(collect(got, log, at + 20)).toBe(got)
+  const adult = (style: any) => ({ ...pet, xp: 30, style })
+  expect(formOf(null)).toBe('')
+  expect(formOf({ ...got, xp: 0 })).toBe('')
+  expect(formOf({ ...got, xp: 29 })).toBe('')
+  expect(formOf(adult({ cards: 0, reviews: 0, queues: 0 }))).toBe('')
+  expect(formOf(adult({ cards: 5, reviews: 2, queues: 1 }))).toBe('maker')
+  expect(formOf(adult({ cards: 2, reviews: 5, queues: 5 }))).toBe('reviewer')
+  expect(formOf(adult({ cards: 2, reviews: 5, queues: 6 }))).toBe('runner')
+  // Поровну — «мастер»
+  expect(formOf(adult({ cards: 3, reviews: 3, queues: 3 }))).toBe('maker')
+  expect(FORMS).toEqual(['maker', 'reviewer', 'runner'])
+  // Из хранилища: стиль и время рекорда проверяются
+  const back = restorePet({ ...got, style: { cards: -5, reviews: 'x', queues: 2.7 }, bestAt: T0 + 5 * DAY }, T0)
+  expect(back?.style).toEqual({ cards: 0, reviews: 0, queues: 2 })
+  expect(back?.bestAt).toBe(0)
+  expect(restorePet({ ...got, style: null, bestAt: T0 - H }, T0)).toMatchObject({ style: { cards: 0, reviews: 0, queues: 0 }, bestAt: T0 - H })
+})
+
+test('питомец 0.59: трюки — за лучшую серию и навсегда; уголок — вещи за угощения, серию, очереди, ревью и рост', () => {
+  const p = { ...newPet('owl', 'Ухти', T0), xp: 0 }
+  expect(tricksOf(p, 0)).toEqual([])
+  expect(tricksOf(p, 2)).toEqual(['twirl'])
+  // Серия прервалась, лучшая осталась — трюки остаются
+  expect(tricksOf({ ...p, best: 5 }, 1)).toEqual(['twirl', 'leap', 'dance'])
+  expect(tricksOf({ ...p, best: 12 }, 0)).toEqual(TRICKS.map((x) => x.id))
+  expect(TRICKS.map((x) => x.id)).toEqual(TRICK_SCENES)
+  expect(cornerOf(null, 0)).toEqual([])
+  expect(cornerOf(p, 0)).toEqual([])
+  expect(cornerOf({ ...p, xp: 3 }, 0)).toEqual(['bed'])
+  expect(cornerOf({ ...p, xp: 15 }, 3)).toEqual(['bed', 'ball', 'plant'])
+  expect(cornerOf({ ...p, xp: 30, style: { cards: 0, reviews: 10, queues: 3 } }, 0)).toEqual(['bed', 'ball', 'rug', 'lamp', 'picture'])
+  expect(cornerOf({ ...p, xp: 30, best: 3, style: { cards: 0, reviews: 10, queues: 3 } }, 0)).toEqual(CORNER.map((c) => c.id))
+  expect(CORNER_ITEMS).toEqual(CORNER.map((c) => c.id))
+})
+
+test('питомец 0.59: реплика — что важнее: сессия ждёт 5 минут, очередь пройдена, три карточки за час, новый трюк, голод', () => {
+  const pet = { ...newPet('robot', 'Бип', T0 - DAY), xp: 5, treats: 0, full: 80, fullAt: T0 }
+  expect(petLine({ pet: null, now: T0 })).toBe(null)
+  expect(petLine({ pet, now: T0 })).toBe(null)
+  // Сессия ждёт: меньше 5 минут — рано; из нескольких — та, что ждёт дольше
+  const w = (name: string, ago: number) => ({ name, since: T0 - ago })
+  expect(petLine({ pet, now: T0, waiting: [w('api', LINE_WAIT_MS - 60_000)] })).toBe(null)
+  expect(petLine({ pet, now: T0, waiting: [w('api', 6 * 60_000), w('web', 12 * 60_000), { name: 'x', since: 0 }] })).toEqual({ kind: 'wait', name: 'web', min: 12 })
+  // Очередь доски пройдена — 15 минут
+  expect(petLine({ pet, now: T0, queueAt: T0 - LINE_QUEUE_MS + 60_000 })).toEqual({ kind: 'queue' })
+  expect(petLine({ pet, now: T0, queueAt: T0 - LINE_QUEUE_MS })).toBe(null)
+  expect(petLine({ pet, now: T0, queueAt: T0 - 60_000, waiting: [w('api', LINE_WAIT_MS)] })?.kind).toBe('wait')
+  // Три карточки за последний час
+  const dones = [T0 - 10 * 60_000, T0 - 30 * 60_000, T0 - 59 * 60_000]
+  expect(petLine({ pet, now: T0, dones })).toEqual({ kind: 'cards', n: 3 })
+  expect(petLine({ pet, now: T0, dones: [...dones.slice(0, 2), T0 - H] })).toBe(null)
+  expect(petLine({ pet, now: T0, dones, queueAt: T0 - 60_000 })?.kind).toBe('queue')
+  // Новый трюк: лучшая серия только что дошла до порога — два часа говорит о нём
+  const leap = { ...pet, best: 3, bestAt: T0 - H }
+  expect(petLine({ pet: leap, now: T0 })).toEqual({ kind: 'trick', id: 'leap' })
+  expect(petLine({ pet: { ...leap, bestAt: T0 - LINE_TRICK_MS }, now: T0 })).toBe(null)
+  expect(petLine({ pet: { ...leap, best: 4 }, now: T0 })).toBe(null)
+  expect(petLine({ pet: { ...leap, bestAt: 0 }, now: T0 })).toBe(null)
+  expect(petLine({ pet: leap, now: T0, dones })?.kind).toBe('cards')
+  // Голоден и есть угощения; без угощений или яйцом — молчит
+  const hungry = { ...pet, treats: 2, full: 10 }
+  expect(petLine({ pet: hungry, now: T0 })).toEqual({ kind: 'hungry' })
+  expect(petLine({ pet: { ...hungry, treats: 0 }, now: T0 })).toBe(null)
+  expect(petLine({ pet: { ...hungry, xp: 0 }, now: T0 })).toBe(null)
+  expect(petLine({ pet: { ...hungry, best: 3, bestAt: T0 - H }, now: T0 })?.kind).toBe('trick')
+})
+
+test('питомец 0.59: трюки среди шалостей — только открытые; облик и уголок — SVG в пределах и одинаковые для одних вводных', () => {
+  for (const r of [0, 0.3, 0.6, 0.999]) {
+    expect(TRICK_SCENES.includes(pickScene(r, ''))).toBe(false)
+    const s = pickScene(r, 'twirl', { tricks: ['twirl', 'leap'] })
+    expect(s !== 'twirl' && (PET_SCENES.includes(s) || s === 'leap')).toBe(true)
+  }
+  const all = new Set([...Array(40)].map((_, i) => pickScene(i / 40, '', { tricks: ['twirl', 'leap'] })))
+  expect([...all].sort()).toEqual([...PET_SCENES, 'twirl', 'leap'].sort())
+  for (const species of SPECIES)
+    for (const form of FORMS) {
+      for (const scene of TRICK_SCENES) {
+        const one = { species, stage: 'adult', wear: ['crown', 'scarf', 'glasses'], scene, width: 1400, form }
+        const svg = petWalkSvg(one)
+        expect(svg.startsWith('<svg') && svg.length <= 131_072).toBe(true)
+        expect(petWalkSvg({ ...one })).toBe(svg)
+      }
+      // Облик — значок цвета облика на картинке и на маленьком питомце
+      const big = petSvg({ species, stage: 'adult', form, wear: [], size: 160 })
+      expect(big.includes(FORM_COLOR[form]) && big.length <= 131_072).toBe(true)
+      expect(big === petSvg({ species, stage: 'adult', wear: [], size: 160 })).toBe(false)
+      expect(petBadgeSvg({ species, stage: 'adult', form }).includes(FORM_COLOR[form])).toBe(true)
+    }
+  const room = { items: CORNER_ITEMS, species: 'dragon', stage: 'adult', form: 'runner', wear: ['crown'] }
+  const corner = petCornerSvg(room)
+  expect(corner.startsWith('<svg') && corner.length <= 131_072).toBe(true)
+  expect(petCornerSvg({ ...room })).toBe(corner)
+  expect(petCornerSvg({ items: [], species: 'owl', stage: 'egg' }).length < corner.length).toBe(true)
+  // Кадр терминала взрослого с обликом — другой
+  const grown = { ...newPet('owl', 'Ухти', T0), xp: 30 }
+  expect(petCells({ ...grown, style: { cards: 0, reviews: 0, queues: 4 } }, 'idle', 0) === petCells(grown, 'idle', 0)).toBe(false)
+})
+
+test('питомец 0.59 в Desktop: облик, трюки и уголок на его экране; трюк — посмотреть здесь же', HEAVY, async ($, on) => {
+  const pet = { ...newPet('fox', 'Рыжик', T0 - 10 * DAY), xp: 40, treats: 0, best: 3, style: { cards: 2, reviews: 12, queues: 1 } }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  // Облик — ревьюер: подпись, счёт и значок на картинке
+  expect(await ui.find({ type: 'Text', text: 'Ревьюер — чаще всего ты принимаешь ревью' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Закрытых карточек: 2 · принятых ревью: 12 · шагов очередей доски: 1' })).toBeDefined()
+  const big = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.isInteractive === true)
+  expect(big.length).toBe(1)
+  expect(big[0].props.source.includes(FORM_COLOR.reviewer)).toBe(true)
+  // Трюки: серия 3 — пируэт и сальто открыты, танец — нет
+  expect(await ui.find({ key: 'arcade-pet-trick-twirl' })).toMatchObject({ props: { label: 'Пируэт' } })
+  expect(await ui.find({ key: 'arcade-pet-trick-leap' })).toMatchObject({ props: { label: 'Сальто' } })
+  expect(await ui.find({ key: 'arcade-pet-trick-dance' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Танец — 5 дн. подряд с закрытыми карточками' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Открытые трюки питомец показывает, когда гуляет по главному экрану.' })).toBeDefined()
+  await ui.press({ key: 'arcade-pet-trick-leap' })
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-trick-leap' })).toMatchObject({ props: { label: '▶ Сальто' } })
+  expect(await ui.find({ key: 'arcade-pet-trick-show-leap' })).toBeDefined()
+  const shown = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Сальто')
+  expect(shown.length).toBe(1)
+  expect(shown[0].props).toMatchObject({ width: 360, isInteractive: true })
+  await ui.press({ key: 'arcade-pet-trick-leap' })
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-trick-show-leap' })).toBeUndefined()
+  // Уголок: картинка без анимации; коврик ещё закрыт, лежанка открыта
+  const corner = (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Уголок питомца')
+  expect(corner.length).toBe(1)
+  expect(corner[0].props).toMatchObject({ width: 320, height: 120 })
+  expect(corner[0].props.isInteractive).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Коврик — после 3 шагов очередей доски' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Лежанка — после 3 угощений' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('питомец 0.59 в терминале: трюки и уголок — строками; у малыша облика ещё нет', HEAVY, async ($, on) => {
+  const pet = { ...newPet('owl', 'Ухти', T0 - DAY), xp: 16, treats: 0, best: 2 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  expect(await ui.find({ type: 'Text', text: 'Ревьюер — чаще всего ты принимаешь ревью' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Во взрослой форме у питомца будет облик — по тому, чем ты чаще его кормишь: карточками, ревью или очередями доски.' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓ Пируэт' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Сальто — 3 дн. подряд с закрытыми карточками' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'В уголке: Лежанка, Мячик' })).toBeDefined()
+  expect((await ui.findAll({ type: 'Svg' })).length).toBe(0)
+  await ui.press({ key: 'arcade-back' })
+  await ui.unmount()
+})
+
+test('питомец 0.59 на главном Desktop: реплика под полосой — три карточки за час; час прошёл — замолкает сама', HEAVY, async ($, on) => {
+  // Сыт: иначе после трёх карточек с угощениями заговорит голод
+  const pet = { ...newPet('robot', 'Бип', T0 - DAY), xp: 5, treats: 0, full: 100, fullAt: T0 }
+  const daylog = [entry(T0 - 50 * 60_000, 'done', 'a'), entry(T0 - 20 * 60_000, 'done', 'b'), entry(T0 - 5 * 60_000, 'done', 'c')]
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, daylog } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  expect(await ui.find({ key: 'arcade-pet-line' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Карточек за час: 3 — молодец!' })).toMatchObject({ props: { color: 'success' } })
+  // Первой карточке стал час — одна перерисовка, реплики нет
+  await clock.advance(10 * 60_000 + 1_000)
+  expect(await ui.find({ key: 'arcade-pet-line' })).toBeUndefined()
+  await ui.unmount()
+  // В терминале полоса — одной строкой, без реплики
+  const term = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect(await term.find({ key: 'arcade-pet-strip-open' })).toBeDefined()
+  expect(await term.find({ key: 'arcade-pet-line' })).toBeUndefined()
+  await term.unmount()
+})
+
+test('питомец 0.59: серия выросла до трюка — запись о рекорде и реплика на экране питомца', HEAVY, async ($, on) => {
+  const pet = { ...newPet('drop', 'Капля', T0 - 5 * DAY), xp: 8, treats: 0, best: 1, counted: T0 - 5 * DAY }
+  const daylog = [entry(T0 - 2 * DAY, 'done', 'x'), entry(T0 - DAY, 'done', 'y'), entry(T0 - 60_000, 'done', 'z')]
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet, daylog } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  expect(saved.get('pet')).toMatchObject({ best: 3 })
+  const at = saved.get('pet').bestAt
+  expect(at >= T0 && at <= T0 + 1_000).toBe(true)
+  expect(await ui.find({ type: 'Text', text: 'Новый трюк: Сальто!' })).toMatchObject({ props: { color: 'success' } })
+  expect(await ui.find({ key: 'arcade-pet-line' })).toBeDefined()
   await ui.unmount()
 })

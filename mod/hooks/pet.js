@@ -54,6 +54,8 @@ export function newPet(species, name, now) {
     counted: now, // журнал до этого — уже не еда
     wear: [],
     best: 0,
+    bestAt: 0, // когда лучшая серия выросла — реплика о новом трюке (0.59)
+    style: { cards: 0, reviews: 0, queues: 0 }, // чем кормили — от этого облик взрослого (0.59)
   }
 }
 
@@ -86,8 +88,15 @@ export function restorePet(raw, now) {
     counted: at(raw.counted) || now,
     wear: Array.isArray(raw.wear) ? [...new Set(raw.wear.filter((id) => WEAR[id]))].slice(0, 3) : [],
     best: Math.floor(num(raw.best, 0, 1000, 0)),
+    bestAt: at(raw.bestAt),
+    style: restoreStyle(raw.style),
   }
 }
+
+// Стиль работы (0.59): закрытые карточки, принятые ревью, шаги очередей доски (зелёные проверки и пройденные очереди)
+const STYLE_KEYS = ['cards', 'reviews', 'queues']
+const restoreStyle = (s) => Object.fromEntries(STYLE_KEYS.map((k) => [k, Math.floor(num(s && typeof s === 'object' ? s[k] : 0, 0, 1e6, 0))]))
+const styleOf = (x) => (x.kind === 'done' ? 'cards' : x.kind === 'accept' ? 'reviews' : 'queues')
 
 export const stageOf = (pet) => (pet.xp < 1 ? 'egg' : pet.xp < ADULT_XP ? 'baby' : 'adult')
 export const fullness = (pet, now) => clamp(pet.full - ((now - pet.fullAt) / HOUR) * HUNGER_PER_HOUR)
@@ -104,13 +113,80 @@ const foodKey = (x) => `${x.kind}:${x.id}:${dayKey(x.at)}`
 export function collect(pet, log, now, queues = 0) {
   const seen = new Set(log.filter((x) => x.at <= pet.counted && FOOD(x)).map(foodKey))
   let n = queues * QUEUE_TREATS
+  const style = { ...restoreStyle(pet.style) }
+  style.queues += queues
   for (const x of log) {
     if (x.at <= pet.counted || x.at > now || !FOOD(x) || seen.has(foodKey(x))) continue
     seen.add(foodKey(x))
+    style[styleOf(x)]++
     n++
   }
   if (!n) return pet
-  return { ...pet, treats: Math.min(TREATS_MAX, pet.treats + n), counted: Math.max(pet.counted, now) }
+  return { ...pet, treats: Math.min(TREATS_MAX, pet.treats + n), counted: Math.max(pet.counted, now), style }
+}
+
+// Облик взрослого (0.59) — по тому, чем кормили больше: карточки — «мастер», ревью — «ревьюер», очереди — «бегун».
+// У яйца и малыша облика нет; ровно поровну — «мастер»
+export const FORMS = ['maker', 'reviewer', 'runner']
+export function formOf(pet) {
+  if (!pet || stageOf(pet) !== 'adult') return ''
+  const { cards, reviews, queues } = restoreStyle(pet.style)
+  if (!cards && !reviews && !queues) return ''
+  if (reviews > cards && reviews >= queues) return 'reviewer'
+  if (queues > cards && queues > reviews) return 'runner'
+  return 'maker'
+}
+
+// Трюки (0.59): открываются лучшей серией дней с закрытыми карточками и потом остаются; питомец показывает их на полосе
+export const TRICKS = [
+  { id: 'twirl', streak: 2 },
+  { id: 'leap', streak: 3 },
+  { id: 'dance', streak: 5 },
+  { id: 'confetti', streak: 7 },
+  { id: 'rainbow', streak: 10 },
+]
+export const tricksOf = (pet, streak) => {
+  const best = Math.max(pet?.best ?? 0, streak)
+  return TRICKS.filter((x) => best >= x.streak).map((x) => x.id)
+}
+
+// Уголок с вещами (0.59): открывается угощениями (опыт), серией, очередями, ревью и взрослой формой. Покупок нет
+export const CORNER = [
+  { id: 'bed', xp: 3 },
+  { id: 'ball', xp: 15 },
+  { id: 'plant', streak: 3 },
+  { id: 'rug', queues: 3 },
+  { id: 'lamp', stage: 'adult' },
+  { id: 'picture', reviews: 10 },
+]
+export function cornerOf(pet, streak) {
+  if (!pet) return []
+  const best = Math.max(pet.best, streak)
+  const style = restoreStyle(pet.style)
+  const adult = stageOf(pet) === 'adult'
+  return CORNER.filter((c) => (c.xp ? pet.xp >= c.xp : c.streak ? best >= c.streak : c.queues ? style.queues >= c.queues : c.reviews ? style.reviews >= c.reviews : adult)).map((c) => c.id)
+}
+
+// Реплика-подсказка (0.59): одна строка по событиям Arcade, без своих таймеров — пересчитывается при перерисовке.
+// Порядок: сессия ждёт человека 5 минут и дольше → очередь доски только что пройдена → три карточки за час →
+// новый трюк → есть угощения, а питомец голоден. Иначе молчит.
+// waiting — [{ name, since }] сессий, что ждут ответа; queueAt — когда очередь прошла до конца; dones — когда закрыты
+// карточки. Новый трюк — лучшая серия выросла ровно до порога трюка (pet.bestAt) не больше LINE_TRICK_MS назад:
+// прерванная серия, дошедшая до того же числа снова, нового трюка не даёт
+export const LINE_WAIT_MS = 5 * 60_000
+export const LINE_QUEUE_MS = 15 * 60_000
+export const LINE_TRICK_MS = 2 * HOUR
+export function petLine({ pet, now, waiting = [], queueAt = 0, dones = [] }) {
+  if (!pet) return null
+  const long = waiting.filter((r) => r && r.since > 0 && now - r.since >= LINE_WAIT_MS).sort((a, b) => a.since - b.since)[0]
+  if (long) return { kind: 'wait', name: String(long.name ?? ''), min: Math.floor((now - long.since) / 60_000) }
+  if (queueAt && now >= queueAt && now - queueAt < LINE_QUEUE_MS) return { kind: 'queue' }
+  const n = dones.filter((at) => at <= now && now - at < HOUR).length
+  if (n >= 3) return { kind: 'cards', n }
+  const trick = TRICKS.find((x) => x.streak === pet.best)
+  if (trick && pet.bestAt && now >= pet.bestAt && now - pet.bestAt < LINE_TRICK_MS) return { kind: 'trick', id: trick.id }
+  if (pet.treats > 0 && stageOf(pet) !== 'egg' && fullness(pet, now) < 25) return { kind: 'hungry' }
+  return null
 }
 
 export function feed(pet, now) {
