@@ -218,11 +218,14 @@ const cookie = (look) => {
 const tear = (look) => `<ellipse cx="${look.eyes.l[0] - 1}" cy="${look.eyes.l[1] + 5}" rx="1.3" ry="2" fill="#7ec8f7"><animate attributeName="cy" values="${look.eyes.l[1] + 4};${look.eyes.l[1] + 12}" dur="2.2s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0" dur="2.2s" repeatCount="indefinite"/></ellipse>`
 
 // Яйцо вида: скорлупа в пятнышках, покачивается
-function eggSvg(look, mood) {
+function eggShell(look, mood) {
   const [light, dark] = look.egg
   const shell = `<ellipse cx="32" cy="38" rx="16" ry="20" fill="${light}" stroke="${INK}" stroke-width="1.4"/><ellipse cx="25" cy="32" rx="3.5" ry="2.5" fill="${dark}"/><ellipse cx="38" cy="42" rx="4" ry="3" fill="${dark}"/><ellipse cx="30" cy="50" rx="2.5" ry="2" fill="${dark}"/><ellipse cx="38" cy="26" rx="2" ry="1.6" fill="${dark}"/>`
   const rock = mood === 'sleep' ? loop('rotate', '0;2;0;-2;0', 6) : loop('rotate', '0;0;-7;6;-4;0;0', 2.6, ' keyTimes="0;0.5;0.62;0.74;0.86;0.95;1"')
-  return `<ellipse cx="32" cy="59" rx="13" ry="2.5" fill="#00000022"/>${around(32, 58, rock, shell)}${mood === 'sleep' ? zzz() : ''}`
+  return around(32, 58, rock, shell)
+}
+function eggSvg(look, mood) {
+  return `<ellipse cx="32" cy="59" rx="13" ry="2.5" fill="#00000022"/>${eggShell(look, mood)}${mood === 'sleep' ? zzz() : ''}`
 }
 
 // Слой одежды на виде
@@ -255,17 +258,22 @@ export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat 
 }
 
 // Фигура вида без рамки svg — на поле 64×64, ноги на y = 58: тело с дыханием, малыш меньше. extra — что нарисовать
-// поверх в тех же координатах (качается и растёт вместе с телом); tailAnim — своё движение хвоста вместо обычного
-function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = '', tailAnim = null }) {
+// поверх в тех же координатах (качается и растёт вместе с телом); tailAnim — своё движение хвоста вместо обычного;
+// rush — сколько секунд с начала крылья машут часто (полёт на входе), потом — как обычно
+const RUSH_BEAT = 0.2
+function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = '', tailAnim = null, rush = 0 }) {
   const look = LOOKS[species] ?? LOOKS.robot
   const baby = stage === 'baby'
   const adult = baby ? { back: [], top: [], front: [] } : look.adult
   const flap = mood === 'happy' ? 0.35 : mood === 'sad' || mood === 'sleep' ? 0 : 1.6
+  // Частые взмахи — позже обычных в документе: пока идут, они главнее; кончились — снова обычные
+  const beats = Math.max(1, Math.round(rush / RUSH_BEAT))
   const wings = look.wings
     ? look.wings
         .map((w, i) => {
           const [x, y] = w[0] === 'e' ? [w[1], w[2] - w[4] * 0.6] : [w[1][0], w[1][1]]
-          return flap ? around(x, y, loop('rotate', i ? '0;-14;0' : '0;14;0', flap), outline([w])) : outline([w])
+          const fast = rush ? `<animateTransform attributeName="transform" type="rotate" values="${i ? '0;-26;0' : '0;26;0'}" dur="${RUSH_BEAT}s" repeatCount="${beats}"/>` : ''
+          return flap || rush ? around(x, y, (flap ? loop('rotate', i ? '0;-14;0' : '0;14;0', flap) : '') + fast, outline([w])) : outline([w])
         })
         .join('')
     : ''
@@ -293,6 +301,54 @@ function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = 
   const breath = mood === 'sleep' ? loop('scale', '1 1;1.04 0.95;1 1', 3.6) : mood === 'sad' ? loop('scale', '1 0.97;1.01 0.95;1 0.97', 3) : loop('scale', '1 1;1.025 0.97;1 1', 2.2)
   const body = around(32, 58, breath, figure)
   return baby ? `<g transform="translate(32 58) scale(0.82) translate(-32 -58)">${body}</g>` : body
+}
+
+// ━━━━━━━━━━ маленький питомец на других экранах ━━━━━━━━━━
+// П. 45: сидит справа в шапке Arcade и спускается к краю окна, когда пролистали вниз. Входит своей анимацией один раз
+// (enter): дракон слетает, сова пикирует, лиса спрыгивает, капля стекает, робот спускается на тросе, яйцо падает и
+// качается; потом сидит и дышит. Вход — SMIL без повторов (fill="freeze"), таймеров нет. Одинаковые входные данные —
+// одинаковая картинка
+const ENTER_S = 1.6 // секунд на вход
+const BADGE_MOOD = { treat: 'eat', happy: 'happy', done: 'happy', wait: 'sad', hungry: 'sad', sad: 'sad', sleep: 'sleep', idle: 'idle' }
+// Разовое движение входа: values и keyTimes — через «;», в конце — на месте
+const once = (type, values, keyTimes, extra = '') => `<animateTransform attributeName="transform" type="${type}" values="${values}" keyTimes="${keyTimes}" dur="${ENTER_S}s" fill="freeze"${extra}/>`
+// Сжать или вытянуть от ног (32, 58)
+const fromFeet = (anim, inner) => `<g transform="translate(32 58)"><g>${anim}<g transform="translate(-32 -58)">${inner}</g></g></g>`
+const ENTERS = {
+  // Слетает сверху слева, покачиваясь, с наклоном вперёд; у земли — лёгкий отскок
+  dragon: (fig) =>
+    `<g>${once('translate', '-44 -54;-30 -36;-20 -32;-8 -12;0 0;0 -3;0 0', '0;0.25;0.4;0.62;0.8;0.9;1')}<g>${once('rotate', '-18 32 40;-8 32 40;6 32 40;0 32 40', '0;0.4;0.75;1')}${fig}</g></g>`,
+  // Пикирует по дуге сверху справа: клювом вниз, у земли выравнивается
+  owl: (fig) => `<g>${once('translate', '44 -56;26 -18;8 3;0 0;0 -2;0 0', '0;0.35;0.62;0.78;0.9;1')}<g>${once('rotate', '30 32 40;22 32 40;-8 32 40;0 32 40', '0;0.35;0.7;1')}${fig}</g></g>`,
+  // Спрыгивает сверху слева дугой и приседает при приземлении
+  fox: (fig) => `<g>${once('translate', '-40 -40;-30 -54;-18 -50;-7 -26;0 0;0 0', '0;0.14;0.3;0.48;0.62;1')}${fromFeet(once('scale', '1 1;1 1;1.18 0.8;0.94 1.08;1 1', '0;0.62;0.7;0.82;1'), fig)}</g>`,
+  // Капля вытягивается у верхнего края, срывается, плюхается и выпрямляется; ниточка сверху тает
+  drop: (fig) =>
+    `<line x1="32" y1="0" x2="32" y2="9" stroke="#7ec8f7" stroke-width="1.4" stroke-linecap="round" opacity="0"><animate attributeName="opacity" values="0.9;0.9;0" keyTimes="0;0.3;0.5" dur="${ENTER_S}s" fill="freeze"/></line>` +
+    `<g>${once('translate', '0 -52;0 -46;0 0;0 0', '0;0.3;0.58;1', ' calcMode="spline" keySplines="0 0 1 1;0.5 0 1 1;0 0 1 1"')}${fromFeet(once('scale', '0.5 1.5;0.6 1.4;0.75 1.3;1.35 0.65;0.92 1.1;1 1', '0;0.3;0.56;0.66;0.82;1'), fig)}</g>`,
+  // Спускается на тросе и чуть пружинит; потом трос уезжает вверх
+  robot: (fig, top) =>
+    `<g>${once('translate', '0 -70;0 -6;0 0;0 -3;0 0;0 0', '0;0.45;0.6;0.72;0.84;1')}<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -80" begin="${ENTER_S * 0.75}s" dur="0.5s" fill="freeze"/><line x1="32" y1="-80" x2="32" y2="${top}" stroke="#5b6b7a" stroke-width="1.2"/><circle cx="32" cy="${top}" r="1.6" fill="#5b6b7a"/></g>${fig}</g>`,
+  // Яйцо падает сверху и качается
+  egg: (fig) => `<g>${once('translate', '0 -60;0 0;0 -6;0 0;0 0', '0;0.45;0.6;0.75;1')}<g>${once('rotate', '0 32 58;0 32 58;-10 32 58;8 32 58;-4 32 58;0 32 58', '0;0.45;0.6;0.75;0.88;1')}${fig}</g></g>`,
+}
+
+// reaction — как у полосы (walkReaction); enter — проиграть вход; size — сторона картинки в пикселях
+export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48 }) {
+  const mood = BADGE_MOOD[reaction] ?? 'idle'
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
+  const egg = stage === 'egg' || !LOOKS[species]
+  const kind = egg ? 'egg' : species
+  const flies = kind === 'dragon' || kind === 'owl'
+  const fig = egg
+    ? eggShell(LOOKS[species] ?? { egg: ['#f1e4d3', '#c9a77c'] }, mood === 'sleep' ? 'sleep' : 'idle')
+    : petFigure({ species, stage, mood, wear, rush: enter && flies ? ENTER_S : 0 })
+  // Трос робота — до макушки: у взрослого антенна выше, малыш меньше
+  const top = stage === 'adult' ? 3 : 20
+  const rx = egg ? 13 : stage === 'baby' ? 11 : 14
+  const shadow = `<ellipse cx="32" cy="59" rx="${rx}" ry="2.5" fill="#00000022">${enter ? `<animate attributeName="rx" values="2;${rx}" dur="${ENTER_S}s" fill="freeze"/>` : ''}</ellipse>`
+  const body = enter ? ENTERS[kind](fig, top) : fig
+  return `${head}${shadow}${body}${mood === 'sleep' ? zzz() : ''}</svg>`
 }
 
 // ━━━━━━━━━━ полоса на главном экране ━━━━━━━━━━
@@ -698,12 +754,13 @@ function dayLoop(p, c, scene) {
 // пришло угощение (ест, сердечки); happy — погладили; wait — сессия ждёт (грустит и машет в сторону «Ждёт тебя»);
 // sleep — ночь; hungry — сидит у пустой миски; sad — медленно бродит. Без питомца или яйцом — качается яйцо.
 // Одинаковые входные данные — одинаковая картинка: панель не перезагружает её без нужды
-export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72 }) {
+// show — во сколько раз картинка на экране меньше поля (маленький питомец, п. 45): поле то же, рисунок меньше
+export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1 }) {
   const W = Math.round(clamp(width, 160, 2000))
   const H = height
   const ground = H - 6
   const xh = Math.round(clamp(W * 0.16, 40, 200))
-  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * show)}" height="${Math.round(H * show)}">`
   const placed = (x, inner) => `<g transform="translate(${r1(x - 32 * K)} ${r1(ground - 58 * K)}) scale(${K})">${inner}</g>`
   const look = LOOKS[species]
   if (!look || stage === 'egg') return `${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle'))}</svg>`

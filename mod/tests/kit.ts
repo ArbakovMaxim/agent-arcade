@@ -354,7 +354,8 @@ export function test(name: string, ...rest: TestRest) {
   else one(name, { timeoutMs: 15_000, ...rest[0] }, rest[1])
 }
 
-// Где в меню живёт кнопка: игры Денди — в «Денди», проверка клавиш и выбор окна и графики — в «Настройках»
+// Где в меню живёт кнопка: игры Денди — в «Денди», проверка клавиш и выбор окна и графики — в «Настройках»,
+// переключатели питомца — на его экране
 export const MENU_OF: Record<string, string> = {
   'arcade-game-thwaite': 'nes',
   'arcade-game-croom': 'nes',
@@ -365,7 +366,11 @@ export const MENU_OF: Record<string, string> = {
   'arcade-notify': 'settings',
   'arcade-assign': 'settings',
   'arcade-wide': 'settings',
-  'arcade-pet-walk': 'settings',
+  'arcade-pet-walk': 'pet',
+  'arcade-pet-screens': 'pet',
+  'arcade-pet-follow': 'pet',
+  'arcade-pet-size': 'pet',
+  'arcade-pet-night': 'pet',
   'arcade-ask-after': 'settings',
   'arcade-on-done': 'settings',
   'arcade-on-permission': 'settings',
