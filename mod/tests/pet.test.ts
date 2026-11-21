@@ -5,11 +5,12 @@
 // 0.60 (п. 47): печенье дня, угощения за ходы Claude, серия по рабочим дням
 // 0.61 (п. 47): задания дня и недели, монетки 🪙 и лавка
 // 0.62.1 (п. 48): бесконечные петли — неподвижные кадры по 0,2 с, чтобы питомец не стоил ядра процессора
+// 0.63 (п. 49): дрёма без действий в панели, настройки из другой сессии без перезапуска
 import { expect } from 'claude-code/testing'
 import { buy, canBuy, collect, CORNER, cornerOf, DAILY_COOKIES, dailyCookie, DAY_QUEST_COINS, DAY_QUESTS, dayQuests, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_COOKIE_MS, LINE_QUEST_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, questCheck, questMark, questProgress, restoreCard, restorePet, SHOP, shopScenes, stageOf, streakOf, toggleDecor, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, turnsToday, unlocked, walkReaction, WEEK_QUEST_COINS, WEEK_QUESTS, weekKey, weekQuest } from '../hooks/pet.js'
 import { dayKey } from '../hooks/calendar.js'
-import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, stepFrames, TRICK_SCENES } from '../hooks/petart.js'
-import { petCells } from '../hooks/register.js'
+import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, stepFrames, stillSvg, TRICK_SCENES } from '../hooks/petart.js'
+import { AGENT_TICK_MS, PET_DOZE_MS, petCells } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
 
 // Пятница, 20 ноября 2026, 13:00 по местному времени — день, питомец не спит
@@ -666,6 +667,93 @@ test('питомец не спускается при прокрутке, ког
   await clock.advance(50)
   expect(await ui.find({ key: 'arcade-pet-follow-settings' })).toBeUndefined()
   expect(await ui.find({ key: 'arcade-pet-badge-settings' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('дрёма: неподвижные картинки полосы и маленького питомца без единого движения, «z» видны (п. 49)', () => {
+  const moving = /<(animate|animateTransform|set)\b/
+  for (const species of [...SPECIES, '']) {
+    for (const stage of ['egg', 'baby', 'adult']) {
+      for (const reaction of ['sleep', 'wait']) {
+        const walk = petWalkSvg({ species, stage, reaction, scene: 'peek', width: 600, still: true, decor: ['garden', 'house'] })
+        expect(moving.test(walk)).toBe(false)
+        expect(walk.startsWith('<svg') && walk.endsWith('</svg>')).toBe(true)
+        const badge = petBadgeSvg({ species, stage, reaction, enter: false, still: true })
+        expect(moving.test(badge)).toBe(false)
+        if (reaction === 'sleep') expect([walk, badge].every((svg) => (svg.match(/>z<\/text>/g) ?? []).length === 2)).toBe(true)
+      }
+    }
+  }
+  // Без дрёмы — как было
+  expect(moving.test(petWalkSvg({ species: 'dragon', stage: 'baby', reaction: 'sleep' }))).toBe(true)
+  expect(stillSvg('<svg><g><animate attributeName="opacity" values="0;1" dur="1s"/><set id="k0" attributeName="visibility" to="visible" dur="1s"/></g></svg>')).toBe('<svg><g></g></svg>')
+})
+
+test('питомец дремлет без действий в панели: застывает на полосе и у края, прокрутка и нажатие будят (п. 49)', HEAVY, async ($, on) => {
+  const pet = { ...newPet('dragon', 'Искра', T0 - H), xp: 5, treats: 0 }
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const props = (offset: number) => ({ ...PANE.props, scroll: { offset, bodyRows: 30 } })
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: props(0) })
+  const strip = async () => (await ui.findAll({ type: 'Svg' })).find((s: any) => s.props.isInteractive === true)?.props.source ?? ''
+  const follow = async () => (await ui.findAll({ type: 'Svg' })).find((s: any) => s.props.alt === 'Искра' && s.props.height === 48)?.props.source ?? ''
+  const label = async () => (await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label
+  const moving = (svg: string) => /<(animate|animateTransform|set)\b/.test(svg)
+  expect(moving(await strip())).toBe(true)
+  expect(await label()).toBe('Искра · Гуляет · угощений: 0 · 🪙 0')
+  // Почти три минуты без действий — ещё гуляет; в срок — одна перерисовка, и картинка неподвижна: спит
+  await clock.advance(PET_DOZE_MS - 1_000)
+  expect(moving(await strip())).toBe(true)
+  await clock.advance(1_100)
+  expect(moving(await strip())).toBe(false)
+  expect(await strip()).toContain('>z</text>')
+  expect(await label()).toBe('Искра · Спит · угощений: 0 · 🪙 0')
+  // Прокрутка будит; пролистал вниз — маленький питомец у края тоже засыпает в срок
+  await ui.redraw(props(12))
+  await clock.advance(50)
+  expect(moving(await strip())).toBe(true)
+  expect(moving(await follow())).toBe(true)
+  await clock.advance(PET_DOZE_MS + 100)
+  expect(moving(await strip())).toBe(false)
+  expect(moving(await follow())).toBe(false)
+  expect(await follow()).toContain('>z</text>')
+  // Нажатие будит
+  await ui.press({ key: 'arcade-fold-work' })
+  await clock.advance(50)
+  expect(moving(await strip())).toBe(true)
+  expect(moving(await follow())).toBe(true)
+  await ui.unmount()
+})
+
+test('настройки питомца из другой сессии доходят сюда без перезапуска — шагом отметок, пока панель открыта (п. 49)', HEAVY, async ($, on) => {
+  const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop', props: { ...PANE.props, scroll: { offset: 12, bodyRows: 30 } } })
+  const sizes = async () => (await ui.findAll({ type: 'Svg' })).filter((s: any) => s.props.alt === 'Бип').map((s: any) => s.props.height)
+  expect(await ui.find({ key: 'arcade-pet-follow-main' })).toBeDefined()
+  expect(await sizes()).toEqual([72, 48])
+  // Другая сессия: «не спускаться» и маленький размер — здесь через шаг
+  saved.set('petFollow', false)
+  saved.set('petSize', 'small')
+  await clock.advance(AGENT_TICK_MS)
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-follow-main' })).toBeUndefined()
+  expect(await sizes()).toEqual([48])
+  // Другая сессия выключила прогулки — полосы на главном нет
+  saved.set('petWalk', false)
+  await clock.advance(AGENT_TICK_MS)
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-strip-open' })).toBeUndefined()
+  // Включила обратно — полоса вернулась
+  saved.set('petWalk', true)
+  await clock.advance(AGENT_TICK_MS)
+  await clock.advance(50)
+  expect(await ui.find({ key: 'arcade-pet-strip-open' })).toBeDefined()
   await ui.unmount()
 })
 
