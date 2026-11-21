@@ -27,7 +27,7 @@ import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreM
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
 import { buy, canBuy, cleanName, collect, CORNER, cornerOf, dailyCookie, DAY_QUEST_COINS, DONE_MS, feed, formOf, fullness, LINE_COOKIE_MS, LINE_QUEST_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodChangeIn, moodOf, newPet, pat, PET_KEY, petLine, petMood, questCheck, questMark, questProgress, restorePet, SHOP, shopScenes, stageOf, streakOf, toggleDecor, toggleWear, TREAT_MS, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, TURNS_PER_TREAT, turnsToday, unlocked, UNLOCKS, walkReaction, WEEK_QUEST_COINS } from './pet.js'
-import { petBadgeSvg, petCornerSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
+import { petBadgeSvg, petCornerSvg, petGrabSvg, petPerchSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
 import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneQueues, phoneText, queueKey, queueTold } from './phone.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
 import { MAX_REPORT, parseClosed, parseReports, parseReportSent, reportBody } from './reports.js'
@@ -13326,14 +13326,14 @@ const PET_GOOD = '#30a46c'
 const petShown = () =>
   S.paneOpen && S.view === 'library' && (S.menu === 'pet' || S.menu === 'today' || (S.petWalk && (S.menu === 'main' || (S.petScreens && petSeat()))))
 
-// Экраны, где питомец сидит маленьким в шапке (п. 45). Нет его там, где печатают, читают или смотрят (чаты,
-// заметки, поиск, промпты, видео и трансляции, аккаунт и коды), и в играх; на главном у него своя полоса,
-// на «Питомце» и «Сегодня» — своя картинка
-const PET_NO_SEAT = new Set(['main', 'pet', 'today', 'lang', 'account', 'phone', 'report', 'search', 'notes', 'chats', 'youtube', 'tiktok', 'twitch', 'friends:invite'])
-function petSeat() {
-  if (S.view !== 'library' || PET_NO_SEAT.has(S.menu) || promptsShown()) return false
-  return !/^(chats|youtube|twitch|note):/.test(S.menu)
-}
+// Экраны, где питомец сидит маленьким в шапке (п. 45) — все экраны библиотеки (п. 49: «чтобы он по-любому
+// появлялся»), кроме главного (там своя полоса) и «Питомца» и «Сегодня» (там своя картинка). В играх его нет
+const PET_NO_SEAT = new Set(['main', 'pet', 'today'])
+const petSeat = () => S.view === 'library' && !PET_NO_SEAT.has(S.menu)
+// Там, где печатают, читают или смотрят (чаты, страница блокнота, поиск, промпты, видео и трансляции, аккаунт
+// и коды), он только в шапке: за прокруткой к краю не спускается
+const PET_HEAD_ONLY = new Set(['account', 'phone', 'report', 'search', 'chats', 'youtube', 'tiktok', 'twitch', 'friends:invite'])
+const petHeadOnly = () => PET_HEAD_ONLY.has(S.menu) || promptsShown() || /^(chats|youtube|twitch|note):/.test(S.menu)
 const petTitle = (pet) => pet.name || tr(SPECIES_LABEL[pet.species], S.lang)
 
 // Перечитать питомца и журнал «Итогов дня», собрать угощения. queues — сколько очередей доски прошло до конца,
@@ -13591,7 +13591,7 @@ function petReset() {
   petLoop?.cancel()
   petLoop = null
   pt.wake?.cancel()
-  Object.assign(pt, { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeEnter: true, badgeReaction: '', followMenu: '', followEnter: true, followReaction: '', queueAt: 0, dones: [], log: [], show: '' })
+  Object.assign(pt, { pet: null, readAt: 0, reading: null, streak: 0, pick: '', naming: false, note: '', bad: false, frame: 0, term: false, wake: null, wakeAt: 0, scene: '', sceneAt: 0, seenTreats: null, treatAt: 0, doneAt: 0, lastMenu: '', entered: true, badgeMenu: '', badgeAt: 0, badgeReaction: '', queueAt: 0, dones: [], log: [], show: '' })
 }
 
 // Открыть «Питомца» с чистыми подсказками и свежим чтением
@@ -13675,37 +13675,75 @@ export function petStrip($, e, kit) {
   return [Box({ key: 'arcade-pet-strip', flexDirection: 'column', children: [picture, button, ...(line ? [petLineView({ Box, Text }, line)] : [])] })]
 }
 
-// Маленький питомец (п. 45): справа в шапке на экранах-списках (seat) и у правого края окна, когда пролистали вниз.
-// Вход проигрывается, когда питомец появился на новом экране или спустился; новый отклик на том же экране — уже без
-// входа. Картинка та же, пока те же вид, рост, наряд, отклик и размер: перерисовка панели вход не повторяет
+// Маленький питомец (п. 45): справа в шапке на экранах библиотеки (seat) и у правого края окна, когда пролистали вниз.
+// Вход (п. 49) — только в шапке и только первые PET_ENTER_MS после прихода на новый экран: Desktop ставит картинку
+// заново, когда та сдвигается или перерисовывается, и вход внутри неё повторялся бы на каждой прокрутке. У края —
+// никогда: он уже здесь, просто спустился следом. Новый отклик на том же экране — без входа
 const PET_FOLLOW_MAIN = 6 // на главном — когда полоса ушла из виду
 const PET_FOLLOW_ROWS = 3 // на других экранах — когда ушла шапка
+const PET_ENTER_MS = 1600
+// В Desktop (п. 49): навёл мышь на плитку — питомец уходит из угла и сидит на ней; навёл на него самого — он доволен
+// и подпрыгивает, нажал — тянется, будто его оттянули. Всё это — наведение Desktop (одна группа PET_HOVER: угол
+// и плитки) и CSS внутри картинки; мышь плагину не видна, хуков и перерисовок нет. Клетка — ~7,5 × 17 пикселей
+const PET_HOVER = 'arcade-pet'
+const PX_COL = 7.5
+const PX_ROW = 17
+const petLook = (pet) => ({ species: pet.species, stage: stageOf(pet), wear: pet.wear, form: formOf(pet) })
 function petExtras(e, now, { Box, Svg }, seat) {
   const pet = pt.pet
   const offset = e.props?.scroll?.offset ?? 0
   const main = S.menu === 'main' && S.welcomed
-  const follow = !!pet && S.petWalk && S.petFollow && (main ? offset >= PET_FOLLOW_MAIN : seat && offset >= PET_FOLLOW_ROWS)
+  const follow = !!pet && S.petWalk && S.petFollow && (main ? offset >= PET_FOLLOW_MAIN : seat && !petHeadOnly() && offset >= PET_FOLLOW_ROWS)
   if (!pet || !seat) pt.badgeMenu = ''
-  if (!follow) pt.followMenu = ''
   if (!pet || (!seat && !follow)) return {}
   const dozing = petDozing(now)
   const reaction = dozing ? dozeReaction(petReaction(now)) : petReaction(now)
+  if (seat) {
+    if (pt.badgeMenu !== S.menu) Object.assign(pt, { badgeMenu: S.menu, badgeAt: now, badgeReaction: reaction })
+    else if (pt.badgeReaction !== reaction) Object.assign(pt, { badgeAt: 0, badgeReaction: reaction })
+  }
   const size = S.petSize === 'small' ? 36 : 48
-  // Ключ — на обёртке: новый ключ (другой экран) — Desktop ставит картинку заново, и вход проигрывается
-  const art = (key, enter) =>
-    Box({ key, children: [keep(Svg({ source: petBadgeSvg({ species: pet.species, stage: stageOf(pet), wear: pet.wear, reaction, enter: enter && !dozing, size, form: formOf(pet), still: dozing }), alt: petTitle(pet), width: size, height: size }))] })
-  const enterOf = (menu, enter, react) => {
-    if (pt[menu] !== S.menu) Object.assign(pt, { [menu]: S.menu, [enter]: true, [react]: reaction })
-    else if (pt[react] !== reaction) Object.assign(pt, { [enter]: false, [react]: reaction })
-    return pt[enter]
-  }
+  const look = petLook(pet)
+  const alt = petTitle(pet)
+  const picture = (enter) => keep(Svg({ source: petBadgeSvg({ ...look, reaction, enter, size, still: dozing }), alt, width: size, height: size }))
+  const desktop = e.surface === 'desktop'
+  const cols = Math.ceil(size / PX_COL)
+  const rows = Math.ceil(size / PX_ROW)
+  // Под мышкой — тот же питомец, довольный, с запасом клетки слева, справа и сверху: есть куда подпрыгнуть
+  const grab = desktop
+    ? (() => {
+        const width = Math.round((cols + 2) * PX_COL)
+        const height = (rows + 1) * PX_ROW
+        const source = petGrabSvg({ ...look, size, pad: PX_COL, top: PX_ROW, width, height })
+        return Box({ position: 'absolute', top: -1, left: -1, display: 'none', hover: { display: 'flex' }, children: [keep(Svg({ source, alt, width, height, isInteractive: true }))] })
+      })()
+    : null
+  // Ключ — на блоке питомца. В Desktop блок держит место, а картинка в нём уходит влево за край (из виду), пока мышь
+  // на плитке или на нём самом: на плитке он сидит сам, под мышкой — картинка grab
+  const pet1 = (key, enter) =>
+    desktop
+      ? Box({ key, width: cols, height: Math.round(size / PX_ROW), hover: { scope: PET_HOVER }, children: [Box({ position: 'absolute', top: 0, left: 0, hover: { scope: PET_HOVER, left: -500 }, children: [picture(enter)] }), grab] })
+      : Box({ key, children: [picture(enter)] })
   const out = {}
-  if (seat) out.badge = art(`arcade-pet-badge-${S.menu}`, enterOf('badgeMenu', 'badgeEnter', 'badgeReaction'))
-  if (follow) {
-    const enter = enterOf('followMenu', 'followEnter', 'followReaction')
-    out.follow = Box({ key: `arcade-pet-follow-${S.menu}`, position: 'absolute', top: offset, right: 1, children: [art(`arcade-pet-follow-art-${S.menu}`, enter)] })
-  }
+  if (seat) out.badge = pet1(`arcade-pet-badge-${S.menu}`, !dozing && now - pt.badgeAt < PET_ENTER_MS)
+  if (follow) out.follow = Box({ key: `arcade-pet-follow-${S.menu}`, position: 'absolute', top: offset, right: 1, children: [pet1(`arcade-pet-follow-in-${S.menu}`, false)] })
   return out
+}
+
+// Сажать ли питомца на плитки (п. 49): в Desktop, где он маленький — в шапке или у края. На главном — когда полоса
+// ушла из виду и он спустился к краю. Плитки зовут это сами, по ходу рисования экрана: питомец к этому времени прочитан
+function petPerchOn(e) {
+  if (e.surface !== 'desktop' || !pt.pet || !S.petWalk || S.view !== 'library') return false
+  if (S.menu === 'main') return S.welcomed && S.petFollow && (e.props?.scroll?.offset ?? 0) >= PET_FOLLOW_MAIN
+  return S.petScreens && petSeat()
+}
+
+// Питомец на плитке: спрятан, пока мышь не на этой плитке; сидит над её правым краем, ногами на рамке
+function petPerch({ Box, Svg }) {
+  const rows = S.petSize === 'small' ? 2 : 3
+  const size = rows * PX_ROW
+  const picture = keep(Svg({ source: petPerchSvg({ ...petLook(pt.pet), size }), alt: petTitle(pt.pet), width: size, height: size }))
+  return Box({ position: 'absolute', top: -rows, right: 3, display: 'none', hover: { display: 'flex' }, children: [picture] })
 }
 
 // Настройки питомца (п. 45) общие для всех сессий и лежат в $.store; события «изменилось» у него нет — читаем при
@@ -13822,8 +13860,9 @@ export function petScreen($, e, kit) {
     picture = Raster({ key: 'arcade-pet', columns: PET_COLS, rows: PET_ROWS, cells: petCells(pet, mood, pt.frame) })
     petFrames($)
   } else {
-    // Отметки еды и сердечек — комментарием: новое нажатие — новая картинка, и сердечки проигрываются снова
-    const source = petSvg({ species: pet.species, stage, mood, wear: pet.wear, pat: mood === 'happy', walk: true, size: 160, form: formOf(pet) }).replace(/<\/svg>$/, `<!--${pet.fedAt}-${pet.patAt}--></svg>`)
+    // Отметки еды и сердечек — комментарием: новое нажатие — новая картинка, и сердечки проигрываются снова. Под мышкой
+    // подпрыгивает, нажал — тянется (п. 49)
+    const source = petSvg({ species: pet.species, stage, mood, wear: pet.wear, pat: mood === 'happy', walk: true, size: 160, form: formOf(pet), grab: true }).replace(/<\/svg>$/, `<!--${pet.fedAt}-${pet.patAt}--></svg>`)
     picture = keep(Svg({ source, alt: petTitle(pet), width: 160, height: 160, isInteractive: true }))
   }
   const doing =
@@ -14939,8 +14978,9 @@ export async function drawPane($, e) {
     // Карточка: ровная ширина в клетках — плитки встают сеткой; рамка и подсветка — цветами темы, светлой и тёмной.
     // Иконка и текст прижаты к верху, лишнее обрезается рамкой, а не ложится на соседнюю плитку.
     // Блок с ключом — сам зона наведения
-    const card = (children, key, width) =>
+    const card = (children, key, width, more = {}) =>
       Box({
+        ...more,
         key: `card-${key}`,
         flexDirection: 'row',
         alignItems: 'flex-start',
@@ -14968,6 +15008,8 @@ export async function drawPane($, e) {
         const room = Math.max(60, Math.round((width - 8) * 3.6))
         const words = (t) => [...(t.children ?? t.props?.children ?? [])].join('')
         const out = []
+        // Питомец садится на плитку под мышкой (п. 49): картинка одна на весь ряд плиток
+        const perch = petPerchOn(e) ? petPerch({ Box, Svg }) : null
         for (let i = 0; i < list.length; i++) {
           const x = list[i]
           if (!x || (x.type === 'Text' && words(x) === ' ')) continue
@@ -15006,7 +15048,9 @@ export async function drawPane($, e) {
             // У игры и книги — звёздочка избранного в углу карточки
             const starred = cardKey.startsWith('arcade-game-') ? gameById(cardKey.slice(12)) : null
             const corner = starred && starred.id !== FIELD.id ? [favButton(starred)] : []
-            out.push(card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body }), ...corner], cardKey, width))
+            const tile = card([iconFor(x), Box({ flexDirection: 'column', rowGap: 'xs', flexGrow: 1, flexShrink: 1, minWidth: 0, children: body }), ...corner], cardKey, width, { flexGrow: 1 })
+            // Обёртка — всегда, с питомцем и без: плитки не ставятся заново, когда он появился или ушёл
+            out.push(Box({ key: `arcade-pet-on-${cardKey}`, flexDirection: 'column', width, ...(perch ? { hover: { scope: PET_HOVER } } : {}), children: [tile, ...(perch ? [perch] : [])] }))
           } else out.push(x)
         }
         return Box({ flexDirection: 'row', flexWrap: 'wrap', columnGap: TILE_GAP, rowGap: 'md', children: out })
@@ -15097,6 +15141,8 @@ export async function drawPane($, e) {
 
     let items
     let headerExtra = []
+    // Маленький питомец (п. 45) — прочитать до экрана: плитки сажают его на себя (п. 49)
+    if (!terminal && S.petWalk && S.petScreens && petSeat()) await petOn($, now)
     if (S.menu === 'lang') items = langScreen($, e, kit)
     else if (S.menu === 'sounds' && S.platform) {
       // Свои файлы могли положить в папку, а настройки поменять в другой сессии — перечитать (не чаще раза в 3 с)
@@ -15149,7 +15195,8 @@ export async function drawPane($, e) {
       ;({ items, headerExtra } = mainScreen($, e, kit))
       if (S.petWalk) petWake($, now)
     }
-    // Маленький питомец (п. 45): в шапке справа на экранах-списках, у правого края — когда пролистали вниз
+    // Маленький питомец (п. 45): в шапке справа, у правого края — когда пролистали вниз. Экран мог смениться по ходу
+    // рисования — тогда прочитать ещё раз (чаще раза в PET_READ_MS petOn не читает)
     let extras = {}
     if (!terminal) {
       const seat = S.petWalk && S.petScreens && petSeat()
