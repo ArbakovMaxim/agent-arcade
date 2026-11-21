@@ -323,10 +323,12 @@ function formSvg(species, form) {
 // Питомец целиком: species — вид, stage — egg / baby / adult, mood — idle / happy / eat / sleep / sad, wear — надетое,
 // pat — показать сердечки. walk — ходить по полю (на большом экране); на маленькой картинке стоит на месте и дышит.
 // form — облик взрослого (formOf в pet.js)
-export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat = false, walk = true, size = 128, form = '' }) {
+// grab — отзываться на мышь (п. 49): только для картинки с isInteractive
+export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat = false, walk = true, size = 128, form = '', grab = false }) {
   const look = LOOKS[species] ?? LOOKS.robot
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
-  if (stage === 'egg') return stepFrames(`${head}${eggSvg(look, mood)}${pat ? hearts() : ''}</svg>`)
+  const g = grab ? grabbable : (x) => x
+  if (stage === 'egg') return stepFrames(`${head}${g(eggSvg(look, mood))}${pat ? hearts() : ''}</svg>`)
   const baby = stage === 'baby'
   let body = petFigure({ species, stage, mood, wear, form })
   if (mood === 'happy') body = `<g>${loop('translate', '0 0;0 -9;0 0;0 0', 0.7, ' keyTimes="0;0.35;0.7;1"')}${body}</g>`
@@ -334,7 +336,7 @@ export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat 
   else if (walk && mood === 'idle')
     body = `<g>${loop('translate', '0 0;-12 0;-12 0;12 0;12 0;0 0', 14, ' keyTimes="0;0.2;0.3;0.7;0.8;1"')}<g>${loop('translate', '0 0;0 -1.5;0 0', 0.45)}${around(32, 0, '<animateTransform attributeName="transform" type="scale" values="1 1;-1 1;1 1" keyTimes="0;0.3;0.8" dur="14s" calcMode="discrete" repeatCount="indefinite"/>', body)}</g></g>`
   const shadow = `<ellipse cx="32" cy="59" rx="${baby ? 11 : 14}" ry="2.5" fill="#00000022"/>`
-  return stepFrames(`${head}${shadow}${body}${pat ? hearts() : ''}${mood === 'sleep' ? zzz() : ''}</svg>`)
+  return stepFrames(`${head}${shadow}${g(body)}${pat ? hearts() : ''}${mood === 'sleep' ? zzz() : ''}</svg>`)
 }
 
 // Фигура вида без рамки svg — на поле 64×64, ноги на y = 58: тело с дыханием, малыш меньше. extra — что нарисовать
@@ -433,6 +435,40 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
   const body = enter ? ENTERS[kind](fig, top) : fig
   const svg = `${head}${shadow}${body}${mood === 'sleep' ? zzz(still) : ''}</svg>`
   return still ? stillSvg(svg) : stepFrames(svg)
+}
+
+// ━━━━━━━━━━ питомец под мышкой (п. 49, часть 3) ━━━━━━━━━━
+// Плагину мышь не видна, скриптов в картинке нет: отклик на мышь — только CSS внутри картинки с isInteractive.
+// Навёл — подпрыгивает два раза и затихает; нажал — тянется вверх, будто его оттянули; отпустил — пружинит обратно.
+// Обёртка .grab без своего transform: SMIL движет то, что внутри, CSS — саму обёртку, они не спорят
+const GRAB_CSS =
+  '<style>.grab{cursor:grab;transform-box:fill-box;transform-origin:50% 100%;transition:transform .35s cubic-bezier(.3,1.8,.5,1)}.grab:hover{animation:hop .45s ease-out 2}.grab:active{animation:none;cursor:grabbing;transform:scale(.8,1.3);transition-duration:.12s}@keyframes hop{50%{transform:translateY(-5px)}}</style>'
+export const grabbable = (inner) => `${GRAB_CSS}<g class="grab">${inner}</g>`
+
+// Маленький питомец, неподвижный и довольный: на плитке под мышкой и под мышкой в углу. Без входа и без петель —
+// спрятанная до наведения картинка ничего не стоит
+function petPose({ species, stage, wear, form }) {
+  const egg = stage === 'egg' || !LOOKS[species]
+  const fig = egg ? eggShell(LOOKS[species] ?? { egg: ['#f1e4d3', '#c9a77c'] }, 'idle') : petFigure({ species, stage, mood: 'happy', wear, form })
+  const rx = egg ? 13 : stage === 'baby' ? 11 : 14
+  return { shadow: `<ellipse cx="32" cy="59" rx="${rx}" ry="2.5" fill="#00000022"/>`, fig: stillSvg(fig) }
+}
+
+// На плитке (п. 49): навёл мышь на плитку — питомец из угла уже стоит на её верхнем крае. Рамка на 2 единицы выше
+// поля: ноги — у нижнего края картинки, на рамке плитки. Один короткий прыжок-приземление, без повторов
+export function petPerchSvg({ species, stage = 'baby', wear = [], form = '', size = 48 }) {
+  const { shadow, fig } = petPose({ species, stage, wear, form })
+  const land = '<animateTransform attributeName="transform" type="translate" values="0 -10;0 0;0 -3;0 0" keyTimes="0;0.5;0.75;1" dur="0.4s" fill="freeze"/>'
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -2 64 64" width="${size}" height="${size}">${shadow}<g>${land}${fig}</g></svg>`
+}
+
+// В углу под мышкой (п. 49): картинка поверх маленького питомца, шире его на pad пикселей по бокам и выше на top —
+// есть куда подпрыгнуть и вытянуться. Питомец в ней стоит ровно там же, где под ней; width и height — вся картинка
+export function petGrabSvg({ species, stage = 'baby', wear = [], form = '', size = 48, pad = 0, top = 0, width = size, height = size }) {
+  const { shadow, fig } = petPose({ species, stage, wear, form })
+  const k = 64 / size
+  const box = [-pad * k, -top * k, width * k, height * k].map(num).join(' ')
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box}" width="${width}" height="${height}">${shadow}${grabbable(fig)}</svg>`
 }
 
 // ━━━━━━━━━━ полоса на главном экране ━━━━━━━━━━
@@ -1164,7 +1200,7 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * show)}" height="${Math.round(H * show)}">${decor.length ? decorSvg(decor, W, ground, xh) : ''}`
   const placed = (x, inner) => `<g transform="translate(${r1(x - 32 * K)} ${r1(ground - 58 * K)}) scale(${K})">${inner}</g>`
   const look = LOOKS[species]
-  if (!look || stage === 'egg') return done(`${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle', still))}</svg>`)
+  if (!look || stage === 'egg') return done(`${head}${placed(xh, grabbable(eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle', still)))}</svg>`)
 
   const mood = { idle: 'idle', wait: 'sad', sleep: 'sleep', hungry: 'sad', sad: 'sad' }[reaction] ?? 'happy'
   const intro = { done: 2.1, treat: 3, happy: 2.1 }[reaction] ?? 0
@@ -1209,7 +1245,8 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const fig = sc.spin ? around(32, 34, track('rotate', sc.spin(), c.o), drawn) : drawn
   const posed = `<g transform="translate(32 58)">${T('scale', p.poses, `<g transform="translate(-32 -58)">${fig}</g>`, c.o)}</g>`
   const jumps = reaction === 'done' || reaction === 'happy' ? '<animateTransform attributeName="transform" type="translate" values="0 0;0 -11;0 0;0 -11;0 0;0 -11;0 0" dur="2.1s"/>' : ''
-  const sized = `<g transform="translate(${r1(-32 * K)} ${r1(-58 * K)}) scale(${K})">${posed}</g>`
+  // Навёл мышь — подпрыгивает, нажал — тянется (п. 49): полоса — картинка с isInteractive
+  const sized = `<g transform="translate(${r1(-32 * K)} ${r1(-58 * K)}) scale(${K})">${grabbable(posed)}</g>`
   const faced = T('scale', p.faces.map(([t, f]) => [t, `${f} 1`]), jumps ? `<g>${jumps}${sized}</g>` : sized, { ...c.o, discrete: true })
   const pet = T('translate', p.moves.map(([t, x, y]) => [t, `${r1(x)} ${r1(ground + y)}`]), faced, c.o)
   const shadow = T('translate', p.moves.map(([t, x]) => [t, `${r1(x)} ${ground + 1}`]), `<ellipse rx="${r1((stage === 'baby' ? 11 : 14) * K)}" ry="2.2" fill="#00000022"/>`, c.o)
