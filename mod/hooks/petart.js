@@ -172,6 +172,58 @@ const plain = (list) => list.map((s) => shapeSvg(s)).join('')
 const around = (x, y, anim, inner) => `<g transform="translate(${x} ${y})"><g>${anim}<g transform="translate(${-x} ${-y})">${inner}</g></g></g>`
 const loop = (type, values, dur, extra = '') => `<animateTransform attributeName="transform" type="${type}" values="${values}" dur="${dur}s" repeatCount="indefinite"${extra}/>`
 
+// ━━━━━━━━━━ кадры вместо плавности (п. 48) ━━━━━━━━━━
+// Бесконечную SMIL-петлю с конечной длительностью Chromium пересчитывает и перерисовывает каждый кадр экрана, 60 раз
+// в секунду: гуляющий питомец стоил в Desktop ~85 % одного ядра. Здесь каждая такая петля становится цепочкой
+// неподвижных кадров на общей сетке STEP секунд. У кадра dur="indefinite" — значение во времени не меняется, и Chromium
+// просыпается только на границах кадров, не чаще 1 / STEP раз в секунду. Круг повторяет якорь <set> (begin="…;id.end"),
+// кадры отсчитываются от его начала. Длина круга и начало округляются до сетки, чтобы все петли будили картинку
+// в одни и те же моменты. Разовые анимации (вход, прыжки, сердечки) остаются плавными: они идут секунду-две и затихают.
+// 0,2 с — 5 кадров в секунду: в стенде Chromium полоса стоила 52 % ядра, с кадрами по 0,125 с — 9,5 %, по 0,2 с — 4,5 %
+const STEP = 0.2
+const ANIM = /<(animateTransform|animate)\b([^>]*?)\/>/g
+const SMIL_ATTR = /([a-zA-Z]+)="([^"]*)"/g
+const sec = (t) => String(Math.round(t * 1000) / 1000)
+export function stepFrames(svg, step = STEP) {
+  const anchors = new Map()
+  const out = svg.replace(ANIM, (whole, tag, body) => {
+    const a = {}
+    for (const [, k, v] of body.matchAll(SMIL_ATTR)) a[k] = v
+    if (a.repeatCount !== 'indefinite' || !a.values || !/^\d+(\.\d+)?s$/.test(a.dur ?? '') || !/^(\d+(\.\d+)?s)?$/.test(a.begin ?? '')) return whole
+    const discrete = a.calcMode === 'discrete'
+    const vals = a.values.split(';').map((s) => s.trim().split(/[\s,]+/).map(Number))
+    const n = vals.length
+    const keys = a.keyTimes ? a.keyTimes.split(';').map(Number) : vals.map((_, i) => (discrete ? i / n : n > 1 ? i / (n - 1) : 0))
+    if (keys.length !== n || [...keys, ...vals.flat()].some((v) => !Number.isFinite(v))) return whole
+    // Значение в доле круга p: как у SMIL — ступенькой при discrete, иначе по прямой между соседними ключами
+    const at = (p) => {
+      let i = 0
+      while (i + 1 < n && keys[i + 1] <= p) i++
+      if (discrete || i + 1 >= n) return vals[i]
+      const f = (p - keys[i]) / (keys[i + 1] - keys[i] || 1)
+      return vals[i].map((v, j) => v + ((vals[i + 1][j] ?? v) - v) * f)
+    }
+    const steps = Math.max(2, Math.round(parseFloat(a.dur) / step))
+    const begin = Math.round((parseFloat(a.begin ?? '0') || 0) / step) * step
+    const key = `${sec(begin)}|${steps}`
+    if (!anchors.has(key)) anchors.set(key, { id: `k${anchors.size}`, begin, period: steps * step })
+    const { id } = anchors.get(key)
+    const frames = []
+    for (let s = 0; s < steps; s++) {
+      const v = at(s / steps).map(num).join(' ')
+      if (!frames.length || frames.at(-1).v !== v) frames.push({ t: s * step, v })
+    }
+    const head = `<${tag} attributeName="${a.attributeName}"${a.type ? ` type="${a.type}"` : ''}${a.additive ? ` additive="${a.additive}"` : ''} dur="indefinite"`
+    if (frames.length === 1) return `${head} values="${frames[0].v}" begin="${id}.begin"/>`
+    const from = (t) => (t ? `${id}.begin+${sec(t)}s` : `${id}.begin`)
+    return frames.map((f, i) => `${head} values="${f.v}" begin="${from(f.t)}" end="${i + 1 < frames.length ? from(frames[i + 1].t) : `${id}.end`}"/>`).join('')
+  })
+  if (!anchors.size) return out
+  const sets = [...anchors.values()].map(({ id, begin, period }) => `<set id="${id}" attributeName="visibility" to="visible" begin="${sec(begin)}s;${id}.end" dur="${sec(period)}s"/>`).join('')
+  // Якоря — в пустой группе: <set> меняет только её
+  return out.replace(/^(<svg\b[^>]*>)/, `$1<g>${sets}</g>`)
+}
+
 // Глаза по настроению: open — открыты и моргают, shut — сон (дуги), sad — полуприкрыты, happy — дуги-улыбки, look — вверх
 function eyesSvg(look, mood, baby) {
   const e = look.eyes
@@ -268,7 +320,7 @@ function formSvg(species, form) {
 export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat = false, walk = true, size = 128, form = '' }) {
   const look = LOOKS[species] ?? LOOKS.robot
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
-  if (stage === 'egg') return `${head}${eggSvg(look, mood)}${pat ? hearts() : ''}</svg>`
+  if (stage === 'egg') return stepFrames(`${head}${eggSvg(look, mood)}${pat ? hearts() : ''}</svg>`)
   const baby = stage === 'baby'
   let body = petFigure({ species, stage, mood, wear, form })
   if (mood === 'happy') body = `<g>${loop('translate', '0 0;0 -9;0 0;0 0', 0.7, ' keyTimes="0;0.35;0.7;1"')}${body}</g>`
@@ -276,7 +328,7 @@ export function petSvg({ species, stage = 'baby', mood = 'idle', wear = [], pat 
   else if (walk && mood === 'idle')
     body = `<g>${loop('translate', '0 0;-12 0;-12 0;12 0;12 0;0 0', 14, ' keyTimes="0;0.2;0.3;0.7;0.8;1"')}<g>${loop('translate', '0 0;0 -1.5;0 0', 0.45)}${around(32, 0, '<animateTransform attributeName="transform" type="scale" values="1 1;-1 1;1 1" keyTimes="0;0.3;0.8" dur="14s" calcMode="discrete" repeatCount="indefinite"/>', body)}</g></g>`
   const shadow = `<ellipse cx="32" cy="59" rx="${baby ? 11 : 14}" ry="2.5" fill="#00000022"/>`
-  return `${head}${shadow}${body}${pat ? hearts() : ''}${mood === 'sleep' ? zzz() : ''}</svg>`
+  return stepFrames(`${head}${shadow}${body}${pat ? hearts() : ''}${mood === 'sleep' ? zzz() : ''}</svg>`)
 }
 
 // Фигура вида без рамки svg — на поле 64×64, ноги на y = 58: тело с дыханием, малыш меньше. extra — что нарисовать
@@ -288,14 +340,16 @@ function petFigure({ species, stage = 'baby', mood = 'idle', wear = [], extra = 
   const baby = stage === 'baby'
   const adult = baby ? { back: [], top: [], front: [] } : look.adult
   const flap = mood === 'happy' ? 0.35 : mood === 'sad' || mood === 'sleep' ? 0 : 1.6
-  // Частые взмахи — позже обычных в документе: пока идут, они главнее; кончились — снова обычные
+  // Частые взмахи — на входе, обычные начинаются, когда частые кончились
   const beats = Math.max(1, Math.round(rush / RUSH_BEAT))
   const wings = look.wings
     ? look.wings
         .map((w, i) => {
           const [x, y] = w[0] === 'e' ? [w[1], w[2] - w[4] * 0.6] : [w[1][0], w[1][1]]
           const fast = rush ? `<animateTransform attributeName="transform" type="rotate" values="${i ? '0;-26;0' : '0;26;0'}" dur="${RUSH_BEAT}s" repeatCount="${beats}"/>` : ''
-          return flap || rush ? around(x, y, (flap ? loop('rotate', i ? '0;-14;0' : '0;14;0', flap) : '') + fast, outline([w])) : outline([w])
+          // Обычные взмахи начинаются после частых: кадры петли (stepFrames) начинаются позже и иначе перебили бы их
+          const after = rush ? ` begin="${sec(beats * RUSH_BEAT)}s"` : ''
+          return flap || rush ? around(x, y, (flap ? loop('rotate', i ? '0;-14;0' : '0;14;0', flap, after) : '') + fast, outline([w])) : outline([w])
         })
         .join('')
     : ''
@@ -371,7 +425,7 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
   const rx = egg ? 13 : stage === 'baby' ? 11 : 14
   const shadow = `<ellipse cx="32" cy="59" rx="${rx}" ry="2.5" fill="#00000022">${enter ? `<animate attributeName="rx" values="2;${rx}" dur="${ENTER_S}s" fill="freeze"/>` : ''}</ellipse>`
   const body = enter ? ENTERS[kind](fig, top) : fig
-  return `${head}${shadow}${body}${mood === 'sleep' ? zzz() : ''}</svg>`
+  return stepFrames(`${head}${shadow}${body}${mood === 'sleep' ? zzz() : ''}</svg>`)
 }
 
 // ━━━━━━━━━━ полоса на главном экране ━━━━━━━━━━
@@ -1101,7 +1155,7 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * show)}" height="${Math.round(H * show)}">${decor.length ? decorSvg(decor, W, ground, xh) : ''}`
   const placed = (x, inner) => `<g transform="translate(${r1(x - 32 * K)} ${r1(ground - 58 * K)}) scale(${K})">${inner}</g>`
   const look = LOOKS[species]
-  if (!look || stage === 'egg') return `${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle'))}</svg>`
+  if (!look || stage === 'egg') return stepFrames(`${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle'))}</svg>`)
 
   const mood = { idle: 'idle', wait: 'sad', sleep: 'sleep', hungry: 'sad', sad: 'sad' }[reaction] ?? 'happy'
   const intro = { done: 2.1, treat: 3, happy: 2.1 }[reaction] ?? 0
@@ -1150,7 +1204,7 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const faced = T('scale', p.faces.map(([t, f]) => [t, `${f} 1`]), jumps ? `<g>${jumps}${sized}</g>` : sized, { ...c.o, discrete: true })
   const pet = T('translate', p.moves.map(([t, x, y]) => [t, `${r1(x)} ${r1(ground + y)}`]), faced, c.o)
   const shadow = T('translate', p.moves.map(([t, x]) => [t, `${r1(x)} ${ground + 1}`]), `<ellipse rx="${r1((stage === 'baby' ? 11 : 14) * K)}" ry="2.2" fill="#00000022"/>`, c.o)
-  return `${head}${sc.under?.() ?? ''}${shadow}${pet}${sc.over?.() ?? ''}</svg>`
+  return stepFrames(`${head}${sc.under?.() ?? ''}${shadow}${pet}${sc.over?.() ?? ''}</svg>`)
 }
 
 // ━━━━━━━━━━ уголок с вещами (0.59) ━━━━━━━━━━
@@ -1181,7 +1235,7 @@ export function petCornerSvg({ items = [], species, stage = 'baby', wear = [], f
   const pet = `<ellipse cx="160" cy="105" rx="${stage === 'baby' ? 11 : 14}" ry="2.5" fill="#00000022"/><g transform="translate(128 47)">${fig}</g>${mood === 'sleep' ? `<g transform="translate(128 47)">${zzz()}</g>` : ''}`
   const front = has('ball') ? CORNER_ART.ball() : ''
   const w = Math.round(clamp(width, 160, 640))
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CW} ${CH}" width="${w}" height="${Math.round((w * CH) / CW)}">${room}${back}${floor}${pet}${front}</svg>`
+  return stepFrames(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CW} ${CH}" width="${w}" height="${Math.round((w * CH) / CW)}">${room}${back}${floor}${pet}${front}</svg>`)
 }
 
 // ━━━━━━━━━━ пиксели для терминала ━━━━━━━━━━
