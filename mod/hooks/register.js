@@ -26,7 +26,7 @@ import { LOGO_SVG } from './logo.js'
 import { cleanPath, CONSOLE_NAMES, identifyRom, MINE_MAX_BYTES, mineId, restoreMine, sha256Hex, titleFromPath } from './mine.js'
 import { Controller, createNes, frameToPng, frameToQuadrants, frameToSvg, screenSize } from './nes-screen.js'
 import { addColumn, addPage, appendText, applyNotesTool, checkStats, cleanBody, cleanTitle, COL_NAMES, columnCards, columnOf, fits, isBoard, isProjectBoard, isPrompts, latestEdits, MAX_APP, MAX_BODY, MAX_URL, mergeText, moveCard, noteLines, NOTES_TOOL, notesOrder, PROMPT_COLS, PROMPTS_COL, rebaseNotes, removeColumn, removePage, renameColumn, restoreNotes, taskLink, toggleLine, trackerTask, updateCard, updatePage } from './notes.js'
-import { cleanName, collect, CORNER, cornerOf, DONE_MS, feed, formOf, fullness, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodChangeIn, moodOf, newPet, pat, PET_KEY, petLine, petMood, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TRICKS, tricksOf, unlocked, UNLOCKS, walkReaction } from './pet.js'
+import { cleanName, collect, CORNER, cornerOf, dailyCookie, DONE_MS, feed, formOf, fullness, LINE_COOKIE_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodChangeIn, moodOf, newPet, pat, PET_KEY, petLine, petMood, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, TURNS_PER_TREAT, turnsToday, unlocked, UNLOCKS, walkReaction } from './pet.js'
 import { petBadgeSvg, petCornerSvg, petShapes, petSvg, petWalkSvg, pickScene, rasterize, SPECIES, WEAR } from './petart.js'
 import { PHONE_GAP_MS, PHONE_KEY, PHONE_POLL_MS, PHONE_PREF, PHONE_RETRY_MS, phoneDue, phoneQueues, phoneText, queueKey, queueTold } from './phone.js'
 import { avatarXaml, keepPopped, letterXaml, popupChats, popupCommand, restorePopped, soundPreviewCommand } from './popup.js'
@@ -8169,6 +8169,8 @@ export async function turnDone($, turnId, e) {
   S.status = 'done'
   S.askVisible = false
   pt.doneAt = await $.clock.now() // питомец на главном экране порадуется концу хода (п. 43)
+  // Угощение за ходы Claude (0.60, п. 47): питомец сыт и без досок. Оборванный ход и ошибка не в счёт
+  if (e?.reason === 'answer') await petTurn($).catch(modError)
   // «Пока тебя не было»: начало ответа, когда закончил и сколько файлов поменял — в отметку для «Агентов» и «Сегодня».
   // git дочитает конец хода чуть позже — число файлов уточнит changesPoll
   if (S.ag) {
@@ -13182,21 +13184,24 @@ function petSeat() {
 }
 const petTitle = (pet) => pet.name || tr(SPECIES_LABEL[pet.species], S.lang)
 
-// Перечитать питомца и журнал «Итогов дня», собрать угощения. queues — сколько очередей доски прошло до конца.
+// Перечитать питомца и журнал «Итогов дня», собрать угощения. queues — сколько очередей доски прошло до конца,
+// turns — сколько ходов Claude закончилось (0.60). Печенье дня — здесь же: первое чтение за день его и даёт.
 // Записать — только если что-то поменялось
-async function petSync($, now, queues = 0) {
+async function petSync($, now, queues = 0, turns = 0) {
   const pet = restorePet(await $.store.get(PET_KEY).catch(() => null), now)
   if (!pet) {
     pt.pet = null
     return null
   }
   const log = restoreLog(await $.store.get('daylog').catch(() => null))
-  pt.streak = streakOf(log, now)
   // Для реплик (0.59): карточки, закрытые за последний час (по одной на карточку)
   const doneAt = new Map()
   for (const x of log) if (x.kind === 'done' && x.at <= now && now - x.at < PET_LINE_HOUR) doneAt.set(x.id, Math.max(doneAt.get(x.id) ?? 0, x.at))
   pt.dones = [...doneAt.values()]
-  let next = collect(pet, log, now, queues)
+  let next = dailyCookie(collect(pet, log, now, queues), now)
+  if (turns) next = turnFed(next, now)
+  // Серия — дни с карточками и ревью из журнала и дни с ходами Claude (0.60)
+  pt.streak = streakOf(log, now, next.workDays)
   if (pt.streak > next.best) next = { ...next, best: pt.streak, bestAt: now }
   if (next !== pet) await $.store.set(PET_KEY, next)
   pt.pet = next
@@ -13221,6 +13226,13 @@ async function petQueueDone($) {
   const now = await $.clock.now()
   pt.queueAt = now // реплика «Очередь доски пройдена» (0.59)
   const pet = await petSync($, now, 1)
+  if (pet && petShown()) $.ui.invalidate('ui.render')
+}
+
+// Claude закончил ход (0.60, п. 47): счёт ходов за день — угощение каждые TURNS_PER_TREAT; питомца нет — ничего
+async function petTurn($) {
+  await pt.reading
+  const pet = await petSync($, await $.clock.now(), 0, 1)
   if (pet && petShown()) $.ui.invalidate('ui.render')
 }
 
@@ -13324,6 +13336,7 @@ function petLineEnds(now) {
   const recent = pt.dones.filter((at) => at <= now).sort((a, b) => b - a)
   if (recent.length >= 3) ends.push(recent[2] + PET_LINE_HOUR)
   if (pt.pet?.bestAt) ends.push(pt.pet.bestAt + LINE_TRICK_MS)
+  if (pt.pet?.cookieAt) ends.push(pt.pet.cookieAt + LINE_COOKIE_MS)
   return ends
 }
 
@@ -13333,6 +13346,7 @@ function petLineText(line) {
   if (line.kind === 'queue') return t('Очередь доски пройдена — держи угощения!')
   if (line.kind === 'cards') return fill(t('Карточек за час: {0} — молодец!'), [line.n])
   if (line.kind === 'trick') return fill(t('Новый трюк: {0}!'), [t(TRICK_LABEL[line.id])])
+  if (line.kind === 'cookie') return t('Печенье дня — держи угощения!')
   return t('Есть угощения — покорми меня')
 }
 // Ключ — на обёртке: у Text в Desktop своего ключа нет
@@ -13533,7 +13547,8 @@ export function petScreen($, e, kit) {
   const strong = (text) => Text(desktop ? { weight: 'semibold', children: [text] } : { bold: true, children: [text] })
   const back = Button({ key: 'arcade-back', label: '← Назад', onPress: open(S.menuFrom === 'today' ? 'today' : 'main') })
   const note = pt.note ? [Text({ key: 'arcade-pet-note', color: pt.bad ? 'error' : 'success', children: [pt.note] })] : []
-  const food = 'Угощения — за закрытые карточки, принятые ревью, зелёные проверки между карточками и очереди доски до конца.'
+  // Чем кормить (0.60): доски и ходы Claude прямо в чате, плюс печенье дня
+  const food = keep(dim(fill(t('Угощения — за закрытые карточки, принятые ревью, зелёные проверки между карточками, очереди доски до конца, каждые {0} ходов Claude (до {1} в день) и печенье дня.'), [TURNS_PER_TREAT, TURN_TREATS_DAY])))
   pt.term = terminal
 
   // ——— Питомца ещё нет: выбрать, кто это, и дать имя ———
@@ -13558,7 +13573,7 @@ export function petScreen($, e, kit) {
       back,
       gap,
       dim('Питомец растёт от работы с Claude, а не от строк кода. Не умирает, покупок нет.'),
-      dim(food),
+      food,
       section('Кто это будет'),
       wrapRow('arcade-pet-kinds', SPECIES.map(choice)),
       gap,
@@ -13613,7 +13628,7 @@ export function petScreen($, e, kit) {
   // ——— Наряды: открытые — кнопками, остальные — чем открыть ———
   const opened = unlocked(pet, pt.streak)
   const how = (u) =>
-    u.stage === 'baby' ? t('когда вылупится') : u.stage === 'adult' ? t('во взрослой форме') : u.xp ? fill(t('после {0} угощений'), [u.xp]) : fill(t('{0} дн. подряд с закрытыми карточками'), [u.streak])
+    u.stage === 'baby' ? t('когда вылупится') : u.stage === 'adult' ? t('во взрослой форме') : u.xp ? fill(t('после {0} угощений'), [u.xp]) : fill(t('{0} дн. подряд с работой'), [u.streak])
   const wearOn = UNLOCKS.filter((u) => opened.includes(u.id)).map((u) =>
     keep(Button({ key: `arcade-pet-wear-${u.id}`, label: `${pet.wear.includes(u.id) ? '✓ ' : ''}${t(WEAR[u.id].label)}`, onPress: () => petChange($, (p) => toggleWear(p, u.id, unlocked(p, pt.streak))) })),
   )
@@ -13630,7 +13645,7 @@ export function petScreen($, e, kit) {
     keep(dim(fill(t('Закрытых карточек: {0} · принятых ревью: {1} · шагов очередей доски: {2}'), [style.cards, style.reviews, style.queues]))),
   ]
 
-  // ——— Трюки (0.59): за лучшую серию дней с закрытыми карточками; в Desktop открытый можно посмотреть здесь же ———
+  // ——— Трюки (0.59): за лучшую серию рабочих дней; в Desktop открытый можно посмотреть здесь же ———
   const tricks = tricksOf(pet, pt.streak)
   if (pt.show && !tricks.includes(pt.show)) pt.show = ''
   const trickOn = TRICKS.filter((x) => tricks.includes(x.id)).map((x) =>
@@ -13647,7 +13662,7 @@ export function petScreen($, e, kit) {
           }),
         ),
   )
-  const trickOff = TRICKS.filter((x) => !tricks.includes(x.id)).map((x) => keep(dim(`${t(TRICK_LABEL[x.id])} — ${fill(t('{0} дн. подряд с закрытыми карточками'), [x.streak])}`)))
+  const trickOff = TRICKS.filter((x) => !tricks.includes(x.id)).map((x) => keep(dim(`${t(TRICK_LABEL[x.id])} — ${fill(t('{0} дн. подряд с работой'), [x.streak])}`)))
   const trickShow =
     pt.show && !terminal
       ? [
@@ -13664,7 +13679,7 @@ export function petScreen($, e, kit) {
     c.xp
       ? fill(t('после {0} угощений'), [c.xp])
       : c.streak
-        ? fill(t('{0} дн. подряд с закрытыми карточками'), [c.streak])
+        ? fill(t('{0} дн. подряд с работой'), [c.streak])
         : c.queues
           ? fill(t('после {0} шагов очередей доски'), [c.queues])
           : c.reviews
@@ -13686,11 +13701,12 @@ export function petScreen($, e, kit) {
     bar('arcade-pet-full', 'Сытость', full),
     bar('arcade-pet-mood', 'Настроение', glad),
     keep(Text({ children: [fill(t('Угощения: {0}'), [pet.treats])] })),
+    keep(dim(fill(t('Ходов Claude сегодня: {0} · угощений за них: {1} из {2}'), [turnsToday(pet, now), Math.min(TURN_TREATS_DAY, Math.floor(turnsToday(pet, now) / TURNS_PER_TREAT)), TURN_TREATS_DAY]))),
     ...(pt.streak ? [keep(dim(fill(t('Серия: {0} дн. подряд'), [pt.streak])))] : []),
     gap,
     wrapRow('arcade-pet-actions', [Button({ key: 'arcade-pet-feed', label: 'Покормить', onPress: () => petFeed($) }), Button({ key: 'arcade-pet-pat', label: 'Погладить', onPress: () => petChange($, pat) })]),
     ...note,
-    ...(pet.treats < 1 ? [dim(food)] : []),
+    ...(pet.treats < 1 ? [food] : []),
     section('Наряды'),
     ...(wearOn.length ? [wrapRow('arcade-pet-wear', wearOn)] : []),
     ...wearOff,
@@ -13700,7 +13716,7 @@ export function petScreen($, e, kit) {
     ...(trickOn.length ? [wrapRow('arcade-pet-tricks', trickOn)] : []),
     ...trickShow,
     ...trickOff,
-    dim(tricks.length ? (S.petWalk ? 'Открытые трюки питомец показывает, когда гуляет по главному экрану.' : 'Трюки видно на главном экране, когда питомец гуляет по Arcade.') : 'Трюки открываются за серию дней с закрытыми карточками и остаются навсегда.'),
+    dim(tricks.length ? (S.petWalk ? 'Открытые трюки питомец показывает, когда гуляет по главному экрану.' : 'Трюки видно на главном экране, когда питомец гуляет по Arcade.') : 'Трюки открываются за серию рабочих дней и остаются навсегда.'),
     section('Уголок'),
     room,
     ...cornerOff,

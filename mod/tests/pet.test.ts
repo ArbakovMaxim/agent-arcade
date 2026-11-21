@@ -1,9 +1,11 @@
 // Питомец (п. 41): угощения из журнала «Итогов дня», сытость и настроение по отметкам времени, наряды, экран в
 // терминале (картинка символами, кадры только пока экран открыт) и в Desktop (анимация внутри SVG), уголок на «Сегодня».
 // П. 43: гуляет полосой по главному экрану, шалит и откликается на работу; выключатель в настройках.
-// 0.59: облик взрослого по стилю работы, трюки за серии, уголок с вещами, реплики-подсказки
+// 0.59: облик взрослого по стилю работы, трюки за серии, уголок с вещами, реплики-подсказки.
+// 0.60 (п. 47): печенье дня, угощения за ходы Claude, серия по рабочим дням
 import { expect } from 'claude-code/testing'
-import { collect, CORNER, cornerOf, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, restoreCard, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, unlocked, walkReaction } from '../hooks/pet.js'
+import { collect, CORNER, cornerOf, DAILY_COOKIES, dailyCookie, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_COOKIE_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, restoreCard, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, turnsToday, unlocked, walkReaction } from '../hooks/pet.js'
+import { dayKey } from '../hooks/calendar.js'
 import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SPECIES, TRICK_SCENES } from '../hooks/petart.js'
 import { petCells } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
@@ -13,6 +15,8 @@ const T0 = new Date(2026, 10, 20, 13, 0).getTime()
 const H = 3_600_000
 const DAY = 24 * H
 const entry = (at: number, kind: string, id: string, more: any = {}) => ({ at, kind, id, title: `Карточка ${id}`, board: 'Спринт', ...more })
+// Печенье дня (0.60) за сегодня уже выдано — проверки угощений до 0.60 считают без него
+const cookied = (pet: any) => ({ ...pet, cookieDay: dayKey(T0) })
 
 // Ключ поля с номером (arcade-pet-name-N): номер растёт после каждой отправки
 async function fieldKey(ui: any, prefix: string) {
@@ -185,7 +189,7 @@ test('питомец в терминале: плитка в «Ещё», стро
   // Шарф открылся, как только вылупился; остальное — чем открыть
   expect(await ui.find({ key: 'arcade-pet-wear-scarf' })).toMatchObject({ props: { label: 'Шарф' } })
   expect(await ui.find({ type: 'Text', text: 'Кепка — после 10 угощений' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Корона — 5 дн. подряд с закрытыми карточками' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Корона — 5 дн. подряд с работой' })).toBeDefined()
   // Кадры идут, пока экран открыт
   const first = petBlits(blits).length
   await clock.advance(1_300)
@@ -208,7 +212,7 @@ test('питомец в Desktop: угощения из журнала при о�
   const born = T0 - 2 * DAY
   const pet = { ...newPet('dragon', 'Искра', born), xp: 12, treats: 0 }
   const daylog = [entry(T0 - DAY, 'done', 'y1'), entry(T0 - 60_000, 'done', 'k1'), entry(T0 - 50_000, 'accept', 'k1'), entry(T0 - 40_000, 'check', 'k2', { ok: false })]
-  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet, daylog } })
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), daylog } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -254,7 +258,7 @@ test('питомец в Desktop: угощения из журнала при о�
 
 test('питомец на «Сегодня»: уголок, когда не гуляет по главному, — что делает и угощения; оттуда — на экран и назад', HEAVY, async ($, on) => {
   const pet = { ...newPet('fox', 'Рыжик', T0 - H), xp: 3, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, daylog: [entry(T0 - 1_000, 'done', 'k1')], petWalk: false } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), daylog: [entry(T0 - 1_000, 'done', 'k1')], petWalk: false } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -285,7 +289,7 @@ test('питомец на «Сегодня»: уголок, когда не гу
 
 test('питомец по-английски: экран без русских строк', HEAVY, async ($, on) => {
   const pet = { ...newPet('drop', 'Spark', T0 - H), xp: 2, treats: 0 }
-  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, stored: { pet } })
+  const { clock } = stubs(on, { env: { ...WINDOWS, LANG: 'en_US.UTF-8' }, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -351,7 +355,7 @@ test('питомец на главном: шалость не повторяет
 
 test('питомец гуляет по главному экрану Desktop: полоса под шапкой, шалость при входе, «Питомец» — в «Ещё»', HEAVY, async ($, on) => {
   const pet = { ...newPet('dragon', 'Искра', T0 - H), xp: 5, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -387,7 +391,7 @@ test('питомец гуляет по главному экрану Desktop: п
 
 test('питомец гуляет по главному экрану Desktop: конец хода — радуется минуту, потом снова гуляет', HEAVY, async ($, on) => {
   const pet = { ...newPet('dragon', 'Искра', T0 - H), xp: 5, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -408,7 +412,7 @@ test('питомец гуляет по главному экрану Desktop: к
 test('питомец гуляет по главному экрану Desktop: ночью спит', HEAVY, async ($, on) => {
   const night = new Date(2026, 10, 20, 23, 30).getTime()
   const pet = { ...newPet('dragon', 'Искра', night - H), xp: 5, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(night)
   await start($)
   await clock.advance(200)
@@ -419,7 +423,7 @@ test('питомец гуляет по главному экрану Desktop: н
 
 test('питомец на главном: выключатель на экране питомца — полосы нет, «Питомец» в «Ещё» и уголком на «Сегодня»; включили — гуляет', HEAVY, async ($, on) => {
   const pet = { ...newPet('owl', 'Ухти', T0 - H), xp: 2, treats: 1 }
-  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -474,7 +478,7 @@ test('питомец на главном: яйцо до выбора вида �
 
 test('питомец на главном: выключен в хранилище — с запуска не гуляет', HEAVY, async ($, on) => {
   const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, petWalk: false } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), petWalk: false } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -526,7 +530,7 @@ test('маленький питомец: картинка входа своя у
 
 test('маленький питомец в шапке Desktop: доски, агенты, настройки — есть; поиск, заметки, главный и экран питомца — нет; терминал — нет', HEAVY, async ($, on) => {
   const pet = { ...newPet('fox', 'Рыжик', T0 - H), xp: 3, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -573,7 +577,7 @@ test('маленький питомец в шапке Desktop: доски, аг�
 
 test('настройки питомца на его экране: на других экранах, прокрутка, размер, сон — сохраняются и меняют подпись', HEAVY, async ($, on) => {
   const pet = { ...newPet('owl', 'Ухти', T0 - H), xp: 2, treats: 0 }
-  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -621,7 +625,7 @@ test('настройки питомца на его экране: на друг�
 
 test('питомец спускается за мной при прокрутке Desktop: у правого края на высоте прокрутки; мало пролистал или выключено — нет', HEAVY, async ($, on) => {
   const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -650,7 +654,7 @@ test('питомец спускается за мной при прокрутк�
 
 test('питомец не спускается при прокрутке, когда выключено в хранилище', HEAVY, async ($, on) => {
   const pet = { ...newPet('robot', 'Бип', T0 - H), xp: 2, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, petFollow: false } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), petFollow: false } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -666,7 +670,7 @@ test('питомец не спускается при прокрутке, ког
 test('питомец ночью не спит, когда сон выключен', HEAVY, async ($, on) => {
   const night = new Date(2026, 10, 20, 23, 30).getTime()
   const pet = { ...newPet('dragon', 'Искра', night - H), xp: 5, treats: 0 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, petNight: false } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), petNight: false } })
   await clock.set(night)
   await start($)
   await clock.advance(200)
@@ -795,7 +799,7 @@ test('питомец 0.59: трюки среди шалостей — тольк
 
 test('питомец 0.59 в Desktop: облик, трюки и уголок на его экране; трюк — посмотреть здесь же', HEAVY, async ($, on) => {
   const pet = { ...newPet('fox', 'Рыжик', T0 - 10 * DAY), xp: 40, treats: 0, best: 3, style: { cards: 2, reviews: 12, queues: 1 } }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -812,7 +816,7 @@ test('питомец 0.59 в Desktop: облик, трюки и уголок н�
   expect(await ui.find({ key: 'arcade-pet-trick-twirl' })).toMatchObject({ props: { label: 'Пируэт' } })
   expect(await ui.find({ key: 'arcade-pet-trick-leap' })).toMatchObject({ props: { label: 'Сальто' } })
   expect(await ui.find({ key: 'arcade-pet-trick-dance' })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: 'Танец — 5 дн. подряд с закрытыми карточками' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Танец — 5 дн. подряд с работой' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'Открытые трюки питомец показывает, когда гуляет по главному экрану.' })).toBeDefined()
   await ui.press({ key: 'arcade-pet-trick-leap' })
   await clock.advance(50)
@@ -836,7 +840,7 @@ test('питомец 0.59 в Desktop: облик, трюки и уголок н�
 
 test('питомец 0.59 в терминале: трюки и уголок — строками; у малыша облика ещё нет', HEAVY, async ($, on) => {
   const pet = { ...newPet('owl', 'Ухти', T0 - DAY), xp: 16, treats: 0, best: 2 }
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -846,7 +850,7 @@ test('питомец 0.59 в терминале: трюки и уголок — 
   expect(await ui.find({ type: 'Text', text: 'Ревьюер — чаще всего ты принимаешь ревью' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: 'Во взрослой форме у питомца будет облик — по тому, чем ты чаще его кормишь: карточками, ревью или очередями доски.' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: '✓ Пируэт' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Сальто — 3 дн. подряд с закрытыми карточками' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Сальто — 3 дн. подряд с работой' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'В уголке: Лежанка, Мячик' })).toBeDefined()
   expect((await ui.findAll({ type: 'Svg' })).length).toBe(0)
   await ui.press({ key: 'arcade-back' })
@@ -857,7 +861,7 @@ test('питомец 0.59 на главном Desktop: реплика под п�
   // Сыт: иначе после трёх карточек с угощениями заговорит голод
   const pet = { ...newPet('robot', 'Бип', T0 - DAY), xp: 5, treats: 0, full: 100, fullAt: T0 }
   const daylog = [entry(T0 - 50 * 60_000, 'done', 'a'), entry(T0 - 20 * 60_000, 'done', 'b'), entry(T0 - 5 * 60_000, 'done', 'c')]
-  const { clock } = stubs(on, { env: WINDOWS, stored: { pet, daylog } })
+  const { clock } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), daylog } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -878,7 +882,7 @@ test('питомец 0.59 на главном Desktop: реплика под п�
 test('питомец 0.59: серия выросла до трюка — запись о рекорде и реплика на экране питомца', HEAVY, async ($, on) => {
   const pet = { ...newPet('drop', 'Капля', T0 - 5 * DAY), xp: 8, treats: 0, best: 1, counted: T0 - 5 * DAY }
   const daylog = [entry(T0 - 2 * DAY, 'done', 'x'), entry(T0 - DAY, 'done', 'y'), entry(T0 - 60_000, 'done', 'z')]
-  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet, daylog } })
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet), daylog } })
   await clock.set(T0)
   await start($)
   await clock.advance(200)
@@ -890,5 +894,82 @@ test('питомец 0.59: серия выросла до трюка — зап�
   expect(at >= T0 && at <= T0 + 1_000).toBe(true)
   expect(await ui.find({ type: 'Text', text: 'Новый трюк: Сальто!' })).toMatchObject({ props: { color: 'success' } })
   expect(await ui.find({ key: 'arcade-pet-line' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('питомец 0.60: печенье дня — раз в день; угощение за каждые 5 ходов Claude, не больше 3 в день; серия — и по дням с ходами', () => {
+  // Старое сохранение (до 0.60): печенья, ходов и рабочих дней нет — всё с нуля, ничего не пропало
+  const old = { v: 1, species: 'owl', name: 'Ухти', born: T0 - 5 * DAY, xp: 7, treats: 4, full: 50, fullAt: T0, mood: 60, moodAt: T0, counted: T0, wear: ['scarf'], best: 2 }
+  const pet = restorePet(old, T0)!
+  expect(pet).toMatchObject({ xp: 7, treats: 4, wear: ['scarf'], best: 2, cookieDay: '', cookieAt: 0, turnDay: '', turnN: 0, workDays: [] })
+  // Первое чтение за день — печенье; второе в тот же день — ничего; назавтра — снова
+  const a = dailyCookie(pet, T0)
+  expect(a).toMatchObject({ treats: 4 + DAILY_COOKIES, cookieDay: dayKey(T0), cookieAt: T0 })
+  expect(dailyCookie(a, T0 + 5 * H)).toBe(a)
+  expect(dailyCookie(a, T0 + DAY).treats).toBe(4 + 2 * DAILY_COOKIES)
+  // Новому питомцу в день появления печенья нет: хватает первого угощения
+  const born = newPet('owl', 'Ухти', T0)
+  expect(dailyCookie(born, T0 + H)).toBe(born)
+  // Ходы Claude: каждые 5 — угощение, не больше 3 в день
+  let p: any = { ...pet, treats: 0 }
+  const got: number[] = []
+  for (let i = 1; i <= 22; i++) {
+    p = turnFed(p, T0 + i * 60_000)
+    got.push(p.treats)
+  }
+  expect([got[3], got[4], got[9], got[14], got[21]]).toEqual([0, 1, 2, TURN_TREATS_DAY, TURN_TREATS_DAY])
+  expect(turnsToday(p, T0 + H)).toBe(22)
+  expect(p.workDays).toEqual([dayKey(T0)])
+  // Назавтра счёт с нуля, день — рабочий
+  expect(turnsToday(p, T0 + DAY)).toBe(0)
+  expect(turnFed(p, T0 + DAY)).toMatchObject({ turnN: 1, treats: TURN_TREATS_DAY, workDays: [dayKey(T0), dayKey(T0 + DAY)] })
+  // Серия: дни только с ходами Claude — тоже работа
+  expect(streakOf([entry(T0, 'done', 'k')], T0, [dayKey(T0 - DAY)])).toBe(2)
+  expect(streakOf([], T0, [dayKey(T0 - 2 * DAY), dayKey(T0 - DAY), dayKey(T0)])).toBe(3)
+  expect(streakOf([], T0, [dayKey(T0 - 2 * DAY)])).toBe(0)
+  // Запись из хранилища: битые дни выброшены, повторы — один раз
+  expect(restorePet({ ...old, workDays: ['2026-11-19', 'x', 5, '2026-11-19', '2026-11-20'], turnDay: 'вчера', turnN: -3, cookieDay: 7 }, T0)).toMatchObject({ workDays: ['2026-11-19', '2026-11-20'], turnDay: '', turnN: 0, cookieDay: '' })
+  // Реплика о печенье — 10 минут, если важнее ничего нет
+  const full = { ...a, full: 100, fullAt: T0 }
+  expect(petLine({ pet: full, now: T0 + 60_000 })).toEqual({ kind: 'cookie' })
+  expect(petLine({ pet: full, now: T0 + LINE_COOKIE_MS })).toBe(null)
+  expect(petLine({ pet: full, now: T0 + 60_000, queueAt: T0 })?.kind).toBe('queue')
+})
+
+test('питомец 0.60 в Desktop: первый заход за день — печенье и реплика, второй — ничего; 5 ходов Claude — угощение', HEAVY, async ($, on) => {
+  // Сохранение до 0.60: печенья дня в нём ещё нет
+  const { cookieDay, ...pet } = { ...newPet('fox', 'Рыжик', T0 - 3 * DAY), xp: 6, treats: 0, full: 100, fullAt: T0 }
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  expect(saved.get('pet')).toMatchObject({ treats: 2, cookieDay: dayKey(T0) })
+  expect(await ui.find({ type: 'Text', text: 'Печенье дня — держи угощения!' })).toMatchObject({ props: { color: 'success' } })
+  expect(await ui.find({ type: 'Text', text: 'Ходов Claude сегодня: 0 · угощений за них: 0 из 3' })).toBeDefined()
+  // Оборванный ход не в счёт
+  await $.turn.start({ turnId: 't0', text: 'почини тесты' })
+  await $.turn.complete({ turnId: 't0', answer: '', reason: 'aborted' })
+  await clock.advance(50)
+  expect(saved.get('pet')).toMatchObject({ turnN: 0 })
+  // Пять ходов Claude прямо в чате — угощение, день рабочий
+  for (let i = 1; i <= 5; i++) {
+    await $.turn.start({ turnId: `t${i}`, text: 'почини тесты' })
+    await $.turn.complete({ turnId: `t${i}`, answer: '', reason: 'answer' })
+    await clock.advance(50)
+  }
+  expect(saved.get('pet')).toMatchObject({ treats: 3, turnN: 5, workDays: [dayKey(T0)] })
+  expect(await ui.find({ type: 'Text', text: 'Ходов Claude сегодня: 5 · угощений за них: 1 из 3' })).toBeDefined()
+  // Реплика о печенье уходит сама
+  await clock.advance(LINE_COOKIE_MS)
+  expect(await ui.find({ type: 'Text', text: 'Печенье дня — держи угощения!' })).toBeUndefined()
+  // Второй заход в тот же день — печенья нет
+  await ui.press({ key: 'arcade-back' })
+  await clock.advance(5 * 60_000)
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  expect(saved.get('pet')).toMatchObject({ treats: 3, cookieDay: dayKey(T0) })
   await ui.unmount()
 })
