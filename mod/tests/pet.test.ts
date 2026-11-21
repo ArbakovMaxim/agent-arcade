@@ -4,10 +4,11 @@
 // 0.59: облик взрослого по стилю работы, трюки за серии, уголок с вещами, реплики-подсказки.
 // 0.60 (п. 47): печенье дня, угощения за ходы Claude, серия по рабочим дням
 // 0.61 (п. 47): задания дня и недели, монетки 🪙 и лавка
+// 0.62.1 (п. 48): бесконечные петли — неподвижные кадры по 0,2 с, чтобы питомец не стоил ядра процессора
 import { expect } from 'claude-code/testing'
 import { buy, canBuy, collect, CORNER, cornerOf, DAILY_COOKIES, dailyCookie, DAY_QUEST_COINS, DAY_QUESTS, dayQuests, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_COOKIE_MS, LINE_QUEST_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, questCheck, questMark, questProgress, restoreCard, restorePet, SHOP, shopScenes, stageOf, streakOf, toggleDecor, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, turnsToday, unlocked, walkReaction, WEEK_QUEST_COINS, WEEK_QUESTS, weekKey, weekQuest } from '../hooks/pet.js'
 import { dayKey } from '../hooks/calendar.js'
-import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, TRICK_SCENES } from '../hooks/petart.js'
+import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, stepFrames, TRICK_SCENES } from '../hooks/petart.js'
 import { petCells } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
 
@@ -1148,4 +1149,47 @@ test('питомец 0.61 в Desktop: задания и монетки на ег
   await clock.advance(LINE_QUEST_MS)
   expect(await ui.find({ type: 'Text', text: 'Задание выполнено: +3 🪙' })).toBeUndefined()
   await ui.unmount()
+})
+
+// ━━━━━━━━━━ п. 48: кадры вместо плавности ━━━━━━━━━━
+
+test('питомец 0.62.1: бесконечные петли — неподвижные кадры по 0,2 с от якоря; разовые анимации остаются плавными', () => {
+  // Петля 0 → 1 → 0 за 0,8 с: четыре кадра от якоря k0, круг повторяет сам якорь
+  expect(stepFrames('<svg x="1"><g><animate attributeName="opacity" values="0;1;0" dur="0.8s" repeatCount="indefinite"/></g></svg>')).toBe(
+    '<svg x="1"><g><set id="k0" attributeName="visibility" to="visible" begin="0s;k0.end" dur="0.8s"/></g><g>' +
+      '<animate attributeName="opacity" dur="indefinite" values="0" begin="k0.begin" end="k0.begin+0.2s"/>' +
+      '<animate attributeName="opacity" dur="indefinite" values="0.5" begin="k0.begin+0.2s" end="k0.begin+0.4s"/>' +
+      '<animate attributeName="opacity" dur="indefinite" values="1" begin="k0.begin+0.4s" end="k0.begin+0.6s"/>' +
+      '<animate attributeName="opacity" dur="indefinite" values="0.5" begin="k0.begin+0.6s" end="k0.end"/></g></svg>',
+  )
+  // Разовая анимация не трогается
+  const once = '<svg><animate attributeName="opacity" values="0;1" dur="1s" fill="freeze"/></svg>'
+  expect(stepFrames(once)).toBe(once)
+  // Во всех картинках питомца: ни одной бесконечной плавной петли, кадры — на сетке 0,2 с, плавное — не дольше 5 с
+  const check = (svg: string) => {
+    expect(svg.includes('repeatCount="indefinite"')).toBe(false)
+    for (const [, t] of svg.matchAll(/begin="k\d+\.begin\+([\d.]+)s"/g)) expect(Math.abs(Number(t) * 5 - Math.round(Number(t) * 5)) < 1e-9).toBe(true)
+    for (const [, body] of svg.matchAll(/<(?:animateTransform|animate)\b([^>]*)\/>/g)) {
+      if (body.includes('dur="indefinite"')) continue
+      const dur = Number(/dur="([\d.]+)s"/.exec(body)?.[1])
+      const times = Number(/repeatCount="(\d+)"/.exec(body)?.[1] ?? 1)
+      const begin = Number(/begin="([\d.]+)s"/.exec(body)?.[1] ?? 0)
+      expect(begin + dur * times <= 5).toBe(true)
+    }
+  }
+  for (const species of SPECIES) {
+    for (const scene of [...PET_SCENES, ...TRICK_SCENES, ...SHOP_SCENES])
+      for (const reaction of ['idle', 'happy', 'sleep'])
+        for (const stage of ['egg', 'adult']) check(petWalkSvg({ species, stage, scene, reaction, width: 1400, height: 72, wear: ['cap'] }))
+    for (const stage of ['egg', 'baby', 'adult']) {
+      for (const mood of ['idle', 'happy', 'sleep', 'hungry', 'walk']) check(petSvg({ species, stage, mood, size: 160, pat: true }))
+      for (const enter of [true, false]) check(petBadgeSvg({ species, stage, enter }))
+    }
+    check(petCornerSvg({ species, stage: 'adult', items: CORNER_ITEMS, width: 320 }))
+  }
+  // Сова влетает в шапку: 8 частых взмахов по 0,2 с, обычные — с 1,6 с; без входа — сразу
+  const owl = petBadgeSvg({ species: 'owl', stage: 'adult', enter: true })
+  expect(owl).toContain('dur="0.2s" repeatCount="8"')
+  expect(owl).toContain('begin="1.6s;k1.end"')
+  expect(petBadgeSvg({ species: 'owl', stage: 'adult', enter: false })).toContain('begin="0s;k1.end"')
 })
