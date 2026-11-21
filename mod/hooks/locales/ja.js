@@ -1108,6 +1108,7 @@ export default {
   "YouTube, Twitch and TikTok": "YouTube、Twitch、TikTok",
   "Your channels and the Arcade catalog. No sign-up needed: your channels are kept only on your computer.": "自分のチャンネルと Arcade カタログ。登録は不要です。自分のチャンネルはこのコンピューターにだけ保存されます。",
   "Your last tool was cut off midway: check what it managed to do before continuing.": "最後のツールは途中で打ち切られました。続ける前に、どこまで済んだか確認してください。",
+  "Your organization’s Claude Code settings (Team or Enterprise) don’t let plugins add to the system prompt: the notes don’t reach Claude on their own. Press “Give to Claude” or ask Claude to read this page.": "組織の Claude Code 設定（Team または Enterprise）では、プラグインがシステムプロンプトに追記できません。メモは自動では Claude に届きません。「Claude に渡す」を押すか、このページを読むよう Claude に頼んでください。",
   "Your own files": "自分のファイル",
   "Your own handle": "自分のユーザー名",
   "Your own text": "自分で書いたテキスト",

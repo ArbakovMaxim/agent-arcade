@@ -250,3 +250,59 @@ test('контекст папки: без отметки в промпте ни�
   expect((await section($)).text).toContain('Page "Логин" (id cb):\n--- page start ---\nВход через GitHub.\n--- page end ---')
   await ui.unmount()
 })
+
+// п. 44: на Team и Enterprise защита Claude Code не зовёт prompt.compose плагинов — заметки до Claude не доходят
+const BLOCKED = 'Настройки Claude Code твоей организации (Team или Enterprise) не дают плагинам дополнять системный промпт: заметки сами до Claude не доходят. Нажми «Отдать Claude» или попроси Claude прочитать эту страницу.'
+const LATER = 'Новые сессии в этой папке получат текст страницы в начале.'
+
+test('контекст папки на Team: Claude ответил, а prompt.compose Arcade не звали — на странице предупреждение', async ($, on) => {
+  const agents = { sid: 'sess-t1', root: API }
+  const { clock, saved } = stubs(on, { env: ENV, agents, stored: { notes: [PAGE], ctx: bound(API) } })
+  engine(on)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await openPage(ui, 'pn')
+  expect(await shown(ui, LATER)).toBe(true)
+
+  // Оборванный ход и ответ субагента — не повод: отметки нет
+  await $.turn.complete({ turnId: 't0', reason: 'aborted', answer: '' })
+  await $.turn.complete({ turnId: 'sub-1', agentId: 'a1', reason: 'answer', answer: 'готово' })
+  expect(saved.get('ctxblocked')).toBeUndefined()
+
+  // Главный ход кончился ответом, а промпт Arcade не собирал — отметка в $.store, на странице — как есть
+  await $.turn.complete({ turnId: 't1', reason: 'answer', answer: 'Сделал.' })
+  expect(saved.get('ctxblocked')).toBe(true)
+  await clock.advance(200)
+  expect(await ui.find({ type: 'Text', text: BLOCKED })).toMatchObject({ props: { color: 'warning' } })
+  expect(await shown(ui, LATER)).toBe(false)
+  expect(await ui.find({ key: 'arcade-note-send' })).toMatchObject({ props: { label: 'Отдать Claude' } })
+
+  // Позвали prompt.compose (Pro, Max или защиту сняли) — отметку сняли, подсказка прежняя
+  expect((await section($)).text).toContain('API слушает порт 8080.')
+  expect(saved.get('ctxblocked')).toBe(false)
+  await clock.advance(200)
+  expect(await ui.find({ type: 'Text', text: BLOCKED })).toBeUndefined()
+  expect(await shown(ui, LATER)).toBe(true)
+  // Дальше ответы отметку не ставят: промпт в этой сессии уже собирали
+  await $.turn.complete({ turnId: 't2', reason: 'answer', answer: 'Ещё.' })
+  expect(saved.get('ctxblocked')).toBe(false)
+  await ui.unmount()
+})
+
+test('контекст папки на Team: отметку из прошлой сессии видно сразу; первый prompt.compose её снимает', async ($, on) => {
+  const agents = { sid: 'sess-t2', root: WEB }
+  const { clock, saved } = stubs(on, { env: ENV, agents, stored: { notes: [PAGE], ctx: bound(API), ctxblocked: true } })
+  engine(on)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await openPage(ui, 'pn')
+  expect(await ui.find({ type: 'Text', text: BLOCKED })).toMatchObject({ props: { color: 'warning' } })
+  // Раздела у web нет, но промпт собирали — плагинам он открыт
+  expect(await section($)).toBeUndefined()
+  expect(saved.get('ctxblocked')).toBe(false)
+  await clock.advance(200)
+  expect(await shown(ui, LATER)).toBe(true)
+  await ui.unmount()
+})

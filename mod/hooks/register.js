@@ -15,7 +15,7 @@ import { clipboardCommand, DETECT_ARGV, launchCommand, notifyCommand, openUrlCom
 import { addDays, addEvent, addMonths, ALL_DAY_HOUR, applyCalendarTool, between, CALENDAR_TOOL, cardDues, colorOf, COLORS, compareEvents, dayKey, DEFAULT_COLOR as CAL_COLOR, dueReminders, dueTasks, GIVE_KEY, GIVE_KINDS, giveTargets, markAlerted, markTask, MISSED_MS, monthGrid, nextReminder, parseRemind, quickParse, REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, remindAt, removeEvent, REPEATS, restoreCalendar, startOf, updateEvent, weekday } from './calendar.js'
 import { bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, SITE, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { cleanText, clock, day, describe, fill, MAX_NAME, MAX_TEXT, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
-import { approveCtx, bindCtx, CTX_KEY, CTX_MAX, CTX_SECTION, ctxDir, ctxFor, ctxKey, ctxSection, ctxText, dirName, keepSnaps, markForeign, pageDirs, restoreCtx, restoreSnaps, SNAP_KEY, unbindCtx } from './context.js'
+import { approveCtx, bindCtx, CTX_BLOCKED_KEY, CTX_KEY, CTX_MAX, CTX_SECTION, ctxDir, ctxFor, ctxKey, ctxSection, ctxText, dirName, keepSnaps, markForeign, pageDirs, restoreCtx, restoreSnaps, SNAP_KEY, unbindCtx } from './context.js'
 import { addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from './daylog.js'
 import { adoptBoard, applySync, cardId, colId, detachBoard, freshBase, MAX_MEMBERS, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from './desks.js'
 import { find, FIND_LIMIT, MIN_QUERY, restoreFavorites, toggleIn } from './find.js'
@@ -5174,8 +5174,9 @@ export function deskPerson(id, base) {
 // Заметки проекта из блокнота (п. 38, ./context.js). Страница, отмеченная «Контекст для папки», идёт Claude разделом
 // системного промпта в начале каждой новой сессии этой папки. dir — папка этой сессии (у worktree — папка репозитория),
 // map — привязки из $.store (общие для сессий этого компьютера), snap — раздел этой сессии: снят один раз, при первой
-// сборке промпта, и посреди сессии не меняется; sid — чьей сессии снимок (после /clear id новый — и снимок новый)
-S.ctx = { dir: '', name: '', map: { dirs: {} }, json: '', sid: '', snap: null, building: null }
+// сборке промпта, и посреди сессии не меняется; sid — чьей сессии снимок (после /clear id новый — и снимок новый).
+// composed — prompt.compose Arcade в этой сессии уже звали; blocked — отметка из $.store: Claude отвечал, а его не звали
+S.ctx = { dir: '', name: '', map: { dirs: {} }, json: '', sid: '', snap: null, building: null, composed: false, blocked: false }
 const ctxTitle = () => (S.ctx?.snap && !S.ctx.snap.none ? S.ctx.snap.title : null)
 
 // Из session.start: папка сессии и привязки. Папки нет (нет id сессии и т. п.) — переключателя нет
@@ -5190,6 +5191,11 @@ export async function ctxStart($) {
 
 // Перечитать привязки: их меняют и другие сессии (переключатель, чужая правка общей доски)
 export async function ctxLoad($) {
+  const blocked = (await $.store.get(CTX_BLOCKED_KEY)) === true
+  if (blocked !== S.ctx.blocked) {
+    S.ctx.blocked = blocked
+    if (notesShown()) $.ui.invalidate('ui.render')
+  }
   const raw = await $.store.get(CTX_KEY)
   const json = JSON.stringify(raw ?? null)
   if (json === S.ctx.json) return false
@@ -5260,6 +5266,27 @@ async function ctxForeign($, before, done) {
   if (next !== map) await ctxSave($, next)
 }
 
+// Отметка «системный промпт закрыт от плагинов» (п. 44) — только по факту: prompt.compose Arcade позвали — снять; Claude
+// ответил, а его за всю сессию не звали — поставить. Пишем в $.store лишь при смене: отметку видят и новые сессии
+async function ctxBlockedSet($, blocked) {
+  // Сверяем с $.store, а не с памятью: отметку могла поставить или снять другая сессия
+  const was = (await $.store.get(CTX_BLOCKED_KEY)) === true
+  S.ctx.blocked = blocked
+  if (was === blocked) return
+  await $.store.set(CTX_BLOCKED_KEY, blocked)
+  if (notesShown()) $.ui.invalidate('ui.render')
+}
+// Промпт собирают на каждый запрос к модели — в $.store смотрим только при первом вызове за сессию
+export async function ctxComposed($) {
+  if (S.ctx.composed) return
+  S.ctx.composed = true
+  await ctxBlockedSet($, false)
+}
+export async function ctxTurnAnswered($, e) {
+  if (e.reason !== 'answer' || S.ctx.composed) return
+  await ctxBlockedSet($, true)
+}
+
 // Переключатель «Контекст для папки»: отметить страницу для папки этой сессии (прежняя отметка папки уходит) или снять
 export async function ctxToggle($, pageId) {
   if (!S.ctx.dir) return
@@ -5294,7 +5321,10 @@ export function ctxItems($, kit, page, parent) {
   const warn = (text) => keep(Text({ color: 'warning', wrap: 'wrap', children: [text] }))
   const items = [
     keep(Button({ key: 'arcade-note-ctx', label: `${on ? '☑' : '☐'} ${fill(tr('Контекст для папки: {0}', S.lang), [S.ctx.name])}`, onPress: () => ctxToggle($, page.id) })),
-    dim('  Новые сессии в этой папке получат текст страницы в начале. Правка — со следующей сессии или после /clear.'),
+    // Системный промпт закрыт от плагинов (п. 44): обещать, что заметки дойдут сами, нельзя — говорим как есть
+    S.ctx.blocked
+      ? warn(tr('Настройки Claude Code твоей организации (Team или Enterprise) не дают плагинам дополнять системный промпт: заметки сами до Claude не доходят. Нажми «Отдать Claude» или попроси Claude прочитать эту страницу.', S.lang))
+      : dim('  Новые сессии в этой папке получат текст страницы в начале. Правка — со следующей сессии или после /clear.'),
   ]
   if (here && !on) {
     const other = S.notes.find((p) => p.id === here.page)
@@ -14856,6 +14886,8 @@ export function register(on) {
   // Заметки проекта из блокнота (п. 38): страница, отмеченная для папки этой сессии, — разделом в конце системного
   // промпта. Раздел снят в начале сессии и не меняется до её конца или /clear: иначе сбросился бы кеш промпта
   on('prompt.compose', async ($, e, next) => {
+    // Нас позвали — значит, системный промпт плагинам открыт (п. 44): снять отметку «закрыт», если она стоит
+    await ctxComposed($).catch(modError)
     const out = await next(e)
     if (e.traits?.includes('bare')) return out
     try {
@@ -14977,6 +15009,8 @@ export function register(on) {
     try {
       // Начало ответа Claude — строкой без Markdown для «Агентов» и «Сегодня»: модель для пересказа не зовём (app/away)
       S.lastReply = replyLine(e.answer)
+      // Claude ответил, а prompt.compose Arcade за сессию не звали — заметки проекта до него не дошли (п. 44)
+      await ctxTurnAnswered($, e).catch(modError)
       // Игра ждала конца инструмента, а ход кончился сам — прерывать нечего, просим как обычно
       if (S.pendingOpen) {
         const url = S.pendingOpen

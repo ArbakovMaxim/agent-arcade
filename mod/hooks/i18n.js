@@ -1438,6 +1438,8 @@ const EXACT = {
   'Ревью карточек': 'Card reviews',
   'Контекст для папки: {0}': 'Context for folder: {0}',
   'Новые сессии в этой папке получат текст страницы в начале. Правка — со следующей сессии или после /clear.': 'New sessions in this folder get the page text at the start. Edits apply from the next session or after /clear.',
+  'Настройки Claude Code твоей организации (Team или Enterprise) не дают плагинам дополнять системный промпт: заметки сами до Claude не доходят. Нажми «Отдать Claude» или попроси Claude прочитать эту страницу.':
+    'Your organization’s Claude Code settings (Team or Enterprise) don’t let plugins add to the system prompt: the notes don’t reach Claude on their own. Press “Give to Claude” or ask Claude to read this page.',
   'Сейчас у папки другая страница: «{0}» — отметка заменит её.': 'The folder has another page now: “{0}” — marking this one replaces it.',
   'Контекст и для папок: {0}': 'Also context for folders: {0}',
   'Страница длиннее {0} знаков: в контекст пойдёт только начало.': 'The page is longer than {0} characters: only its beginning goes into the context.',
