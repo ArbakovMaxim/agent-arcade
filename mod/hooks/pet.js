@@ -25,9 +25,18 @@ export const NIGHT = [23, 7] // спит с 23:00 до 7:00 по часам ко
 const FOOD = (x) => x.kind === 'done' || x.kind === 'accept' || (x.kind === 'check' && x.ok)
 export const QUEUE_TREATS = 2 // очередь доски прошла до конца — ещё 2
 
+// Еда без досок (0.60, п. 47): кто работает с Claude прямо в чате, тоже кормит питомца.
+// Печенье 2 и до 3 за ходы — до 5 угощений в день, а сытым держат 4 (угощение +25, голод 4 в час)
+export const DAILY_COOKIES = 2 // первый заход в Arcade за день — 2 печенья: одно на компьютер, по его часам
+export const TURNS_PER_TREAT = 5 // каждые 5 законченных ходов Claude — угощение
+export const TURN_TREATS_DAY = 3 // но не больше 3 в день: ходы легко накрутить
+const WORK_DAYS = 60 // сколько рабочих дней помнить для серии
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/
+const dayOk = (d) => typeof d === 'string' && DAY_RE.test(d)
+
 const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n))
 
-// Одежда открывается уровнем или серией дней с закрытыми карточками. Покупок нет
+// Одежда открывается уровнем или серией рабочих дней. Покупок нет
 export const UNLOCKS = [
   { id: 'scarf', stage: 'baby' },
   { id: 'cap', xp: 10 },
@@ -56,6 +65,11 @@ export function newPet(species, name, now) {
     best: 0,
     bestAt: 0, // когда лучшая серия выросла — реплика о новом трюке (0.59)
     style: { cards: 0, reviews: 0, queues: 0 }, // чем кормили — от этого облик взрослого (0.59)
+    cookieDay: dayKey(now), // печенье дня (0.60): в день появления хватает первого угощения
+    cookieAt: 0,
+    turnDay: '', // ходы Claude за день (0.60): каждые TURNS_PER_TREAT — угощение
+    turnN: 0,
+    workDays: [], // дни с законченным ходом Claude — серия считает и их (0.60)
   }
 }
 
@@ -90,6 +104,12 @@ export function restorePet(raw, now) {
     best: Math.floor(num(raw.best, 0, 1000, 0)),
     bestAt: at(raw.bestAt),
     style: restoreStyle(raw.style),
+    // До 0.60 этого не было: печенье дня придёт при первом чтении, ходы и рабочие дни — с нуля
+    cookieDay: dayOk(raw.cookieDay) ? raw.cookieDay : '',
+    cookieAt: at(raw.cookieAt),
+    turnDay: dayOk(raw.turnDay) ? raw.turnDay : '',
+    turnN: Math.floor(num(raw.turnN, 0, 1e6, 0)),
+    workDays: Array.isArray(raw.workDays) ? [...new Set(raw.workDays.filter(dayOk))].sort().slice(-WORK_DAYS) : [],
   }
 }
 
@@ -125,6 +145,26 @@ export function collect(pet, log, now, queues = 0) {
   return { ...pet, treats: Math.min(TREATS_MAX, pet.treats + n), counted: Math.max(pet.counted, now), style }
 }
 
+// Печенье дня (0.60): первый раз за день, когда Arcade читает питомца, — DAILY_COOKIES угощений. День — по часам
+// компьютера, запись общая для всех сессий: второй заход и другая сессия печенья не дают
+export function dailyCookie(pet, now) {
+  const day = dayKey(now)
+  if (pet.cookieDay === day) return pet
+  return { ...pet, treats: Math.min(TREATS_MAX, pet.treats + DAILY_COOKIES), cookieDay: day, cookieAt: now }
+}
+
+// Claude закончил ход (0.60): счёт ходов за день, каждые TURNS_PER_TREAT — угощение, не больше TURN_TREATS_DAY в день.
+// День с ходом — рабочий: серия для нарядов, трюков и уголка считает и его
+export function turnFed(pet, now) {
+  const day = dayKey(now)
+  const n = Math.min(1e6, (pet.turnDay === day ? pet.turnN : 0) + 1)
+  const treat = n % TURNS_PER_TREAT === 0 && n / TURNS_PER_TREAT <= TURN_TREATS_DAY ? 1 : 0
+  const days = pet.workDays ?? []
+  const workDays = days.includes(day) ? days : [...days, day].slice(-WORK_DAYS)
+  return { ...pet, turnDay: day, turnN: n, treats: Math.min(TREATS_MAX, pet.treats + treat), workDays }
+}
+export const turnsToday = (pet, now) => (pet.turnDay === dayKey(now) ? pet.turnN : 0)
+
 // Облик взрослого (0.59) — по тому, чем кормили больше: карточки — «мастер», ревью — «ревьюер», очереди — «бегун».
 // У яйца и малыша облика нет; ровно поровну — «мастер»
 export const FORMS = ['maker', 'reviewer', 'runner']
@@ -137,7 +177,7 @@ export function formOf(pet) {
   return 'maker'
 }
 
-// Трюки (0.59): открываются лучшей серией дней с закрытыми карточками и потом остаются; питомец показывает их на полосе
+// Трюки (0.59): открываются лучшей серией рабочих дней и потом остаются; питомец показывает их на полосе
 export const TRICKS = [
   { id: 'twirl', streak: 2 },
   { id: 'leap', streak: 3 },
@@ -169,13 +209,14 @@ export function cornerOf(pet, streak) {
 
 // Реплика-подсказка (0.59): одна строка по событиям Arcade, без своих таймеров — пересчитывается при перерисовке.
 // Порядок: сессия ждёт человека 5 минут и дольше → очередь доски только что пройдена → три карточки за час →
-// новый трюк → есть угощения, а питомец голоден. Иначе молчит.
+// новый трюк → печенье дня (0.60) → есть угощения, а питомец голоден. Иначе молчит.
 // waiting — [{ name, since }] сессий, что ждут ответа; queueAt — когда очередь прошла до конца; dones — когда закрыты
 // карточки. Новый трюк — лучшая серия выросла ровно до порога трюка (pet.bestAt) не больше LINE_TRICK_MS назад:
 // прерванная серия, дошедшая до того же числа снова, нового трюка не даёт
 export const LINE_WAIT_MS = 5 * 60_000
 export const LINE_QUEUE_MS = 15 * 60_000
 export const LINE_TRICK_MS = 2 * HOUR
+export const LINE_COOKIE_MS = 10 * 60_000
 export function petLine({ pet, now, waiting = [], queueAt = 0, dones = [] }) {
   if (!pet) return null
   const long = waiting.filter((r) => r && r.since > 0 && now - r.since >= LINE_WAIT_MS).sort((a, b) => a.since - b.since)[0]
@@ -185,6 +226,7 @@ export function petLine({ pet, now, waiting = [], queueAt = 0, dones = [] }) {
   if (n >= 3) return { kind: 'cards', n }
   const trick = TRICKS.find((x) => x.streak === pet.best)
   if (trick && pet.bestAt && now >= pet.bestAt && now - pet.bestAt < LINE_TRICK_MS) return { kind: 'trick', id: trick.id }
+  if (pet.cookieAt && now >= pet.cookieAt && now - pet.cookieAt < LINE_COOKIE_MS) return { kind: 'cookie' }
   if (pet.treats > 0 && stageOf(pet) !== 'egg' && fullness(pet, now) < 25) return { kind: 'hungry' }
   return null
 }
@@ -208,9 +250,10 @@ export function pat(pet, now) {
   return { ...pet, mood: clamp(moodOf(pet, now) + PAT_MOOD), moodAt: now, patAt: now }
 }
 
-// Серия: сколько дней подряд (по сегодня или по вчера) в журнале есть закрытая карточка или принятое ревью
-export function streakOf(log, now) {
-  const days = new Set(log.filter((x) => x.kind === 'done' || x.kind === 'accept').map((x) => dayKey(x.at)))
+// Серия: сколько дней подряд (по сегодня или по вчера) была работа — закрытая карточка или принятое ревью в журнале,
+// а с 0.60 и законченный ход Claude (more — рабочие дни из питомца)
+export function streakOf(log, now, more = []) {
+  const days = new Set([...log.filter((x) => x.kind === 'done' || x.kind === 'accept').map((x) => dayKey(x.at)), ...more])
   let day = now
   if (!days.has(dayKey(day))) day -= DAY
   let n = 0
