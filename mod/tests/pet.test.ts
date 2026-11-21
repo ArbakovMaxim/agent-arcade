@@ -3,10 +3,11 @@
 // П. 43: гуляет полосой по главному экрану, шалит и откликается на работу; выключатель в настройках.
 // 0.59: облик взрослого по стилю работы, трюки за серии, уголок с вещами, реплики-подсказки.
 // 0.60 (п. 47): печенье дня, угощения за ходы Claude, серия по рабочим дням
+// 0.61 (п. 47): задания дня и недели, монетки 🪙 и лавка
 import { expect } from 'claude-code/testing'
-import { collect, CORNER, cornerOf, DAILY_COOKIES, dailyCookie, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_COOKIE_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, restoreCard, restorePet, stageOf, streakOf, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, turnsToday, unlocked, walkReaction } from '../hooks/pet.js'
+import { buy, canBuy, collect, CORNER, cornerOf, DAILY_COOKIES, dailyCookie, DAY_QUEST_COINS, DAY_QUESTS, dayQuests, DONE_MS, EAT_MS, feed, FORMS, formOf, fullness, LINE_COOKIE_MS, LINE_QUEST_MS, LINE_QUEUE_MS, LINE_TRICK_MS, LINE_WAIT_MS, moodOf, newPet, pat, PAT_MS, petCard, petLine, petMood, questCheck, questMark, questProgress, restoreCard, restorePet, SHOP, shopScenes, stageOf, streakOf, toggleDecor, toggleWear, TREAT_MS, TREATS_MAX, TRICKS, tricksOf, TURN_TREATS_DAY, turnFed, turnsToday, unlocked, walkReaction, WEEK_QUEST_COINS, WEEK_QUESTS, weekKey, weekQuest } from '../hooks/pet.js'
 import { dayKey } from '../hooks/calendar.js'
-import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SPECIES, TRICK_SCENES } from '../hooks/petart.js'
+import { CORNER_ITEMS, FORM_COLOR, PET_SCENES, petBadgeSvg, petCornerSvg, petSvg, petWalkSvg, pickScene, SHOP_SCENES, SPECIES, TRICK_SCENES } from '../hooks/petart.js'
 import { petCells } from '../hooks/register.js'
 import { HEAVY, PANE, WINDOWS, drawnTexts, go, start, stubs, test } from './kit.ts'
 
@@ -297,7 +298,7 @@ test('питомец по-английски: экран без русских �
     const ui = await $.ui.mount({ ...PANE, surface })
     if (!(await ui.find({ key: 'arcade-menu-pet' }))) await ui.press({ key: 'arcade-back' })
     expect(await ui.find({ key: 'arcade-menu-pet' })).toMatchObject({ props: { label: 'Pet' } })
-    expect(await ui.find({ key: 'arcade-pet-strip-open' })).toMatchObject({ props: { label: 'Spark · Walking around · treats: 0' } })
+    expect(await ui.find({ key: 'arcade-pet-strip-open' })).toMatchObject({ props: { label: 'Spark · Walking around · treats: 0 · 🪙 0' } })
     await ui.press({ key: 'arcade-menu-pet' })
     await clock.advance(50)
     expect(await ui.find({ key: 'arcade-pet-feed' })).toMatchObject({ props: { label: 'Feed' } })
@@ -368,7 +369,7 @@ test('питомец гуляет по главному экрану Desktop: п
   // Во всю ширину тела панели: 60 клеток без двух — по 7,5 пикселя
   expect(first[0].props).toMatchObject({ alt: 'Искра', width: 435, height: 72 })
   expect(first[0].props.source.length <= 131_072).toBe(true)
-  expect(await label()).toBe('Искра · Гуляет · угощений: 0')
+  expect(await label()).toBe('Искра · Гуляет · угощений: 0 · 🪙 0')
   // «Питомца» нет в «Работе»: свернули «Работу» — плитка на месте; свернули «Ещё» — пропала
   await ui.press({ key: 'arcade-fold-work' })
   expect(await ui.find({ key: 'arcade-menu-pet' })).toBeDefined()
@@ -397,14 +398,14 @@ test('питомец гуляет по главному экрану Desktop: к
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const label = async () => (await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label
-  expect(await label()).toBe('Искра · Гуляет · угощений: 0')
+  expect(await label()).toBe('Искра · Гуляет · угощений: 0 · 🪙 0')
   // Агент закончил ход — радуется минуту, потом одна перерисовка — снова гуляет
   await $.turn.start({ turnId: 't1', text: 'почини тесты' })
   await $.turn.complete({ turnId: 't1', answer: '', reason: 'answer' })
   await clock.advance(50)
-  expect(await label()).toBe('Искра · Радуется: агент закончил · угощений: 0')
+  expect(await label()).toBe('Искра · Радуется: агент закончил · угощений: 0 · 🪙 0')
   await clock.advance(DONE_MS + 1_000)
-  expect(await label()).toBe('Искра · Гуляет · угощений: 0')
+  expect(await label()).toBe('Искра · Гуляет · угощений: 0 · 🪙 0')
   await ui.unmount()
 })
 
@@ -417,7 +418,7 @@ test('питомец гуляет по главному экрану Desktop: н
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label).toBe('Искра · Спит · угощений: 0')
+  expect((await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label).toBe('Искра · Спит · угощений: 0 · 🪙 0')
   await ui.unmount()
 })
 
@@ -675,7 +676,7 @@ test('питомец ночью не спит, когда сон выключе�
   await start($)
   await clock.advance(200)
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect((await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label).toBe('Искра · Гуляет · угощений: 0')
+  expect((await ui.find({ key: 'arcade-pet-strip-open' }))?.props.label).toBe('Искра · Гуляет · угощений: 0 · 🪙 0')
   await ui.unmount()
 })
 
@@ -971,5 +972,180 @@ test('питомец 0.60 в Desktop: первый заход за день — 
   await ui.press({ key: 'arcade-menu-pet' })
   await clock.advance(50)
   expect(saved.get('pet')).toMatchObject({ treats: 3, cookieDay: dayKey(T0) })
+  await ui.unmount()
+})
+
+test('питомец 0.61: задания — по дате, одни и те же; монетки — раз за задание; назавтра и через неделю — новые; старое сохранение — 0 монеток', () => {
+  // Сохранение до 0.61: монеток, заданий и лавки нет — всё пустое, ничего не пропало
+  const old = { v: 1, species: 'owl', name: 'Мурка', born: T0 - 9 * DAY, xp: 12, treats: 3, full: 80, fullAt: T0, mood: 70, moodAt: T0, counted: T0, wear: ['scarf'], best: 2, cookieDay: dayKey(T0), turnDay: '', turnN: 0, workDays: [] }
+  const pet = restorePet(old, T0)!
+  expect(pet).toMatchObject({ xp: 12, treats: 3, wear: ['scarf'], best: 2, coins: 0, owned: [], decor: [], questAt: 0, questGain: 0 })
+  expect(pet.quest).toEqual({ day: '', ids: [], done: [], week: '', wid: '', wdone: false })
+  // Первое чтение — задания дня и недели, монеток пока нет
+  const a = questCheck(pet, [], T0)
+  expect(a.coins).toBe(0)
+  expect(a.quest).toMatchObject({ day: dayKey(T0), week: weekKey(T0), done: [], wdone: false })
+  expect(weekKey(T0)).toBe('2026-11-16')
+  expect(a.quest.ids.length).toBe(3)
+  expect(a.quest.ids[0]).toBe('turns')
+  // Карточка и ревью — только тем, кто уже закрывал карточки или принимал ревью; чат — только со входом
+  expect(a.quest.ids.every((id: string) => ['turns', 'pat', 'note', 'digest'].includes(id))).toBe(true)
+  for (let i = 0; i < 40; i++) {
+    const day = dayKey(T0 + i * DAY)
+    expect(dayQuests(pet, day)).toEqual(dayQuests({ ...pet }, day))
+    expect(dayQuests(pet, day).every((id: string) => DAY_QUESTS.includes(id) && id !== 'card' && id !== 'review')).toBe(true)
+    const w = weekQuest(pet, day)
+    expect(WEEK_QUESTS.includes(w) && w !== 'chat' && w !== 'queue' && w !== 'reviews').toBe(true)
+  }
+  expect(new Set(Array.from({ length: 30 }, (_, i) => dayQuests({ ...pet, style: { cards: 3, reviews: 2, queues: 0 } }, dayKey(T0 + i * DAY))).flat()).has('card')).toBe(true)
+  // Ничего не сделано — та же запись: писать в хранилище нечего
+  expect(questCheck(a, [], T0 + H)).toBe(a)
+  // 5 ходов Claude — +3 🪙 и реплика; ещё ходы — ничего сверху
+  let p: any = a
+  for (let i = 1; i <= 5; i++) p = turnFed(p, T0 + i * 60_000)
+  const b = questCheck(p, [], T0 + 5 * 60_000)
+  expect(b).toMatchObject({ coins: DAY_QUEST_COINS, questAt: T0 + 5 * 60_000, questGain: DAY_QUEST_COINS })
+  expect(b.quest.done).toEqual(['turns'])
+  expect(questCheck(b, [], T0 + H)).toBe(b)
+  expect(questCheck(turnFed(b, T0 + H), [], T0 + H).coins).toBe(DAY_QUEST_COINS)
+  const full = { ...b, full: 100, fullAt: T0, cookieAt: 0 }
+  expect(petLine({ pet: full, now: T0 + 6 * 60_000 })).toEqual({ kind: 'quest', n: DAY_QUEST_COINS })
+  expect(petLine({ pet: full, now: T0 + 5 * 60_000 + LINE_QUEST_MS })).toBe(null)
+  // Назавтра — новые задания дня, монетки остаются; неделя та же — задание недели то же
+  const c = questCheck(b, [], T0 + DAY)
+  expect(c).toMatchObject({ coins: DAY_QUEST_COINS, quest: { day: dayKey(T0 + DAY), done: [], week: weekKey(T0), wid: b.quest.wid } })
+  // В понедельник — новая неделя
+  expect(questCheck(c, [], T0 + 3 * DAY).quest).toMatchObject({ week: '2026-11-23', wdone: false })
+  // Карточка: закрыть одну — +3; перетащить ту же туда и обратно и закрыть другую — ничего сверху
+  const q = { ...a, quest: { ...a.quest, ids: ['turns', 'card', 'pat'], wid: 'reviews' } }
+  const log = [entry(T0 + 60_000, 'done', 'a')]
+  const d = questCheck(q, log, T0 + 2 * 60_000)
+  expect(d.coins).toBe(DAY_QUEST_COINS)
+  expect(questCheck(d, [...log, entry(T0 + 3 * 60_000, 'done', 'a'), entry(T0 + 4 * 60_000, 'done', 'b')], T0 + 5 * 60_000)).toBe(d)
+  // Неделя: 3 разных принятых ревью — +15; одно и то же ревью трижды — не в счёт
+  const same = [1, 2, 3].map((i) => entry(T0 + i * 60_000, 'accept', 'r'))
+  expect(questProgress('reviews', q, same, T0 + H)).toEqual({ n: 1, of: 3 })
+  const three = ['r1', 'r2', 'r3'].map((id, i) => entry(T0 - DAY + i * 60_000, 'accept', id))
+  expect(questCheck(q, three, T0 + H)).toMatchObject({ coins: WEEK_QUEST_COINS, quest: { wdone: true } })
+  // Ревью прошлой недели — не в счёт
+  expect(questProgress('reviews', q, three.map((x) => ({ ...x, at: x.at - 7 * DAY })), T0 + H).n).toBe(0)
+  // Отметки блокнота, итогов, чата, игры — раз в день; чужая отметка — мимо
+  const m = questMark(a, 'note', T0)
+  expect(m.marks.note).toBe(dayKey(T0))
+  expect(questMark(m, 'note', T0 + H)).toBe(m)
+  expect(questMark(a, 'хм', T0)).toBe(a)
+  expect(questProgress('note', m, [], T0)).toEqual({ n: 1, of: 1 })
+  expect(questProgress('note', m, [], T0 + DAY)).toEqual({ n: 0, of: 1 })
+  expect(questProgress('game', questMark(a, 'game', T0 - 2 * DAY), [], T0)).toEqual({ n: 1, of: 1 })
+  // Битые задания и отметки в хранилище — выброшены
+  expect(restorePet({ ...old, coins: -5, quest: { day: 'x', ids: ['turns', 'lines', 'pat', 'pat'], done: ['pat', 'lines'], wid: 'deploy', wdone: 'да' }, marks: { note: 7, chat: dayKey(T0) } }, T0)).toMatchObject({
+    coins: 0,
+    quest: { day: '', ids: ['turns', 'pat'], done: ['pat'], wid: '', wdone: false },
+    marks: { note: '', chat: dayKey(T0) },
+  })
+})
+
+test('питомец 0.61: лавка — печенье, когда угощения кончились; вещь покупается раз и надевается; день только в чате — не голодает', () => {
+  const born = restorePet({ ...newPet('dragon', 'Бобик', T0 - 9 * DAY), xp: 20, treats: 0 }, T0)!
+  expect(born).toMatchObject({ species: 'dragon', coins: 0, treats: 0 })
+  const pet = { ...born, coins: 40 }
+  expect(SHOP.every((x: any) => x.price > 0)).toBe(true)
+  // Печенье — только без угощений и за монетки
+  expect(canBuy(pet, 'cookie')).toBe(true)
+  const fed = buy(pet, 'cookie')
+  expect(fed).toMatchObject({ treats: 1, coins: 36 })
+  expect(canBuy(fed, 'cookie')).toBe(false)
+  expect(buy(fed, 'cookie')).toBe(fed)
+  // Наряд: монетки списаны, надет сразу, второй раз не продаётся; снять — как обычный
+  const hat = buy(pet, 'party')
+  expect(hat).toMatchObject({ coins: 25, owned: ['party'], wear: ['party'] })
+  expect(canBuy(hat, 'party')).toBe(false)
+  expect(buy(hat, 'party')).toBe(hat)
+  expect(toggleWear(hat, 'party', ['party']).wear).toEqual([])
+  // Не хватает монеток — ничего
+  expect(canBuy({ ...pet, coins: 29 }, 'house')).toBe(false)
+  expect(buy({ ...pet, coins: 29 }, 'house').coins).toBe(29)
+  expect(canBuy(pet, 'нет такого')).toBe(false)
+  // Домик — встаёт у полосы, убрать и поставить; игрушки и трюки — шалости
+  const home = buy(pet, 'house')
+  expect(home).toMatchObject({ coins: 10, owned: ['house'], decor: ['house'] })
+  expect(toggleDecor(home, 'house').decor).toEqual([])
+  expect(toggleDecor(toggleDecor(home, 'house'), 'house').decor).toEqual(['house'])
+  expect(toggleDecor(home, 'garden')).toBe(home)
+  const toys = buy(buy(pet, 'kite'), 'bounce')
+  expect(toys.coins).toBe(5)
+  expect(shopScenes(toys)).toEqual(['kite', 'bounce'])
+  expect(pickScene(0.999, '', { tricks: shopScenes(toys) })).toBe('bounce')
+  // Записанное в хранилище: лишнее из купленного и стоящего у полосы выброшено
+  expect(restorePet({ ...home, owned: ['house', 'house', 'cookie', 'x'], decor: ['house', 'garden'] }, T0)).toMatchObject({ owned: ['house'], decor: ['house'] })
+  // Полоса: домик и садик, игрушки — SVG в пределах
+  for (const scene of SHOP_SCENES) {
+    const svg = petWalkSvg({ species: 'dragon', stage: 'adult', wear: ['tophat', 'cape'], scene, decor: ['house', 'garden'], width: 1400 })
+    expect(svg.startsWith('<svg') && svg.length <= 131_072).toBe(true)
+  }
+  expect(petWalkSvg({ species: 'dragon', stage: 'adult', decor: ['house'] }) === petWalkSvg({ species: 'dragon', stage: 'adult' })).toBe(false)
+  // День только в чате: печенье дня утром, угощения за ходы Claude — кормим, как дают; до утра сыт
+  const morning = T0 - 4 * H // 09:00
+  let p: any = { ...pet, full: 60, fullAt: morning, cookieDay: '', treats: 0 }
+  p = dailyCookie(p, morning)
+  let low = 100
+  for (let m = 0; m <= 24 * 60; m += 10) {
+    const now = morning + m * 60_000
+    if (m > 0 && m <= 12 * 60 && m % 40 === 0) p = turnFed(p, now) // ход Claude раз в 40 минут до 21:00
+    while (p.treats > 0) p = feed(p, now)
+    low = Math.min(low, fullness(p, now))
+    expect(petMood(p, { now, hour: 12 }) === 'hungry').toBe(false)
+  }
+  expect(low >= 25).toBe(true)
+  // За ходы в тот же день — задание и монетки
+  expect(questCheck({ ...p, coins: 0 }, [], morning + 12 * H).coins).toBe(DAY_QUEST_COINS)
+})
+
+test('питомец 0.61 в Desktop: задания и монетки на его экране; погладил — +3 🪙; купил наряд — надет и снимается', HEAVY, async ($, on) => {
+  const pet = { ...newPet('fox', 'Рыжик', T0 - 10 * DAY), xp: 20, treats: 0, coins: 12, quest: { day: dayKey(T0), ids: ['turns', 'pat', 'note'], done: [], week: weekKey(T0), wid: 'streak', wdone: false } }
+  const { clock, saved } = stubs(on, { env: WINDOWS, stored: { pet: cookied(pet) } })
+  await clock.set(T0)
+  await start($)
+  await clock.advance(200)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await ui.press({ key: 'arcade-menu-pet' })
+  await clock.advance(50)
+  expect(await ui.find({ type: 'Text', text: 'Монетки: 12 🪙' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '○ Claude закончил ходов: 5 · 0/5 · +3 🪙' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '○ Погладить питомца · +3 🪙' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '○ Рабочих дней подряд на этой неделе: 5 · 0/5 · +15 🪙' })).toBeDefined()
+  // Дорогое — серым, на что хватает — кнопкой; печенье — пока угощений нет
+  expect(await ui.find({ key: 'arcade-pet-buy-cookie' })).toMatchObject({ props: { label: 'Печенье — 4 🪙' } })
+  expect(await ui.find({ key: 'arcade-pet-buy-party' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: 'Домик — 30 🪙' })).toBeDefined()
+  // Погладил — задание сделано: +3, реплика, строка зелёная
+  await ui.press({ key: 'arcade-pet-pat' })
+  await clock.advance(50)
+  expect(saved.get('pet')).toMatchObject({ coins: 15, questGain: 3, quest: { done: ['pat'] } })
+  expect(await ui.find({ type: 'Text', text: '✓ Погладить питомца · +3 🪙' })).toMatchObject({ props: { color: 'success' } })
+  expect(await ui.find({ type: 'Text', text: 'Задание выполнено: +3 🪙' })).toBeDefined()
+  // Гладить ещё раз — монеток не прибавится
+  await clock.advance(5_000)
+  await ui.press({ key: 'arcade-pet-pat' })
+  await clock.advance(50)
+  expect(saved.get('pet').coins).toBe(15)
+  // Колпак за 15 — куплен, надет, монеток 0
+  await ui.press({ key: 'arcade-pet-buy-party' })
+  await clock.advance(50)
+  expect(saved.get('pet')).toMatchObject({ coins: 0, owned: ['party'], wear: ['party'] })
+  expect(await ui.find({ type: 'Text', text: 'Куплено: Колпак' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: '✓ Колпак' })).toBeDefined()
+  expect(await ui.find({ key: 'arcade-pet-wear-party' })).toMatchObject({ props: { label: '✓ Колпак' } })
+  expect(await ui.find({ key: 'arcade-pet-buy-cookie' })).toBeUndefined()
+  // Снять в «Нарядах» и надеть обратно
+  await ui.press({ key: 'arcade-pet-wear-party' })
+  await clock.advance(50)
+  expect(saved.get('pet').wear).toEqual([])
+  await ui.press({ key: 'arcade-pet-wear-party' })
+  await clock.advance(50)
+  expect(saved.get('pet').wear).toEqual(['party'])
+  // Реплика уходит сама
+  await clock.advance(LINE_QUEST_MS)
+  expect(await ui.find({ type: 'Text', text: 'Задание выполнено: +3 🪙' })).toBeUndefined()
   await ui.unmount()
 })
