@@ -139,6 +139,12 @@ export const WEAR = {
   scarf: { slot: 'neck', label: 'Шарф', shapes: [['r', 18, 35, 28, 5, 2.5, '#e76f51'], ['r', 36, 37, 6, 11, 2, '#e76f51'], ['r', 36, 44, 6, 2, 0, '#f4a261']] },
   bow: { slot: 'neck', label: 'Бабочка', shapes: [['p', [26, 33, 32, 36, 26, 39], '#9b5de5'], ['p', [38, 33, 32, 36, 38, 39], '#9b5de5'], ['e', 32, 36, 1.8, 1.8, '#7b3fc4']] },
   glasses: { slot: 'face', label: 'Очки', shapes: [['e', 25, 25, 5, 4.5, 'none'], ['e', 39, 25, 5, 4.5, 'none'], ['r', 29.5, 24, 5, 1.2, 0, INK]], ring: true },
+  // Из лавки за монетки (0.61, SHOP в pet.js)
+  tophat: { slot: 'head', label: 'Цилиндр', shapes: [['r', 23, 0, 18, 14, 1.5, '#2b2d42'], ['r', 18, 12, 28, 3.5, 1.5, '#2b2d42'], ['r', 23, 9, 18, 3, 0, '#e63946']] },
+  party: { slot: 'head', label: 'Колпак', shapes: [['p', [23, 15, 32, -3, 41, 15], '#f15bb5'], ['e', 32, -3, 2.6, 2.6, '#ffd166'], ['r', 28, 7, 2, 2, 0, '#ffd166'], ['r', 34, 10, 2, 2, 0, '#ffd166']] },
+  shades: { slot: 'face', label: 'Тёмные очки', shapes: [['e', 25, 25, 5.5, 4, '#1d1d1f'], ['e', 39, 25, 5.5, 4, '#1d1d1f'], ['r', 29.5, 24, 5, 1.2, 0, INK], ['r', 22, 23, 2.5, 1, 0, '#ffffff'], ['r', 36, 23, 2.5, 1, 0, '#ffffff']] },
+  cape: { slot: 'neck', label: 'Плащ', shapes: [['p', [19, 35, 11, 54, 21, 51], '#c1121f'], ['p', [45, 35, 53, 54, 43, 51], '#c1121f'], ['r', 19, 33, 26, 4, 2, '#c1121f'], ['e', 32, 35.5, 2.2, 2.2, '#ffd166']] },
+  bandana: { slot: 'neck', label: 'Бандана', shapes: [['p', [20, 34, 44, 34, 32, 45], '#3a86ff'], ['r', 27, 36, 1.6, 1.6, 0, '#ffffff'], ['r', 35.5, 36, 1.6, 1.6, 0, '#ffffff'], ['r', 31.2, 40, 1.6, 1.6, 0, '#ffffff']] },
 }
 
 // Куда сдвинуть одежду на каждом виде: [dx, dy] для головы, шеи и лица
@@ -376,11 +382,13 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
 export const PET_SCENES = ['peek', 'star', 'ball', 'butterfly', 'hat', 'hops', 'gesture']
 // Трюки за серии (0.59): показываются среди шалостей, когда открыты (tricksOf в pet.js)
 export const TRICK_SCENES = ['twirl', 'leap', 'dance', 'confetti', 'rainbow']
+// Игрушки и трюки из лавки (0.61): воздушный змей, мыльные пузыри, прыжки мячиком, салют
+export const SHOP_SCENES = ['kite', 'bubbles', 'bounce', 'fireworks']
 
 // Какую шалость показать: r — случайное число 0..1, prev — прошлая (подряд не повторяется), hat — есть ли что-то
-// на голове (иначе ронять нечего), tricks — открытые трюки (добавляются к шалостям)
+// на голове (иначе ронять нечего), tricks — открытые трюки и купленные игрушки (добавляются к шалостям)
 export function pickScene(r, prev = '', { hat = true, tricks = [] } = {}) {
-  const list = [...PET_SCENES, ...TRICK_SCENES.filter((s) => tricks.includes(s))].filter((s) => s !== prev && (hat || s !== 'hat'))
+  const list = [...PET_SCENES, ...[...TRICK_SCENES, ...SHOP_SCENES].filter((s) => tricks.includes(s))].filter((s) => s !== prev && (hat || s !== 'hat'))
   return list[Math.min(list.length - 1, Math.max(0, Math.floor(r * list.length)))]
 }
 
@@ -889,6 +897,160 @@ const SCENES = {
       },
     }
   },
+
+  // ━━ игрушки и трюки из лавки (0.61) ━━
+  // Воздушный змей: бежит по полосе туда и обратно, змей на нитке летит позади и покачивается
+  kite(c) {
+    const [x0, x1] = [c.xs - 50, c.xs + 50]
+    let t0 = 0
+    let t1 = 0
+    return {
+      from: x0,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.4)
+        t0 = p.t
+        walk(p, x1, 2.2)
+        stay(p, 0.3)
+        walk(p, x0, 2.2)
+        t1 = p.t
+        turn(p, -1)
+        stay(p, 0.6)
+      },
+      over() {
+        const y = c.ground - 18
+        const kite =
+          `<path d="M0 0 Q-12 -8 -22 -24" fill="none" stroke="${INK}" stroke-width="0.8"/>` +
+          `<g transform="translate(-22 -32)">${loop('rotate', '-10;10;-10', 1.6)}<path d="M0 -9 L7 0 L0 11 L-7 0 Z" fill="#3e8ed0" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/><path d="M0 -9 V11 M-7 0 H7" stroke="#fff" stroke-width="0.8"/><path d="M0 11 q-3 4 0 7 q3 4 0 7" fill="none" stroke="${INK}" stroke-width="0.8"/><path d="M-2.5 16 L2.5 19 M2.5 16 L-2.5 19" stroke="#ff6b6b" stroke-width="1.6" stroke-linecap="round"/></g>`
+        const pos = [[0, `${x0} ${y}`], [t0, `${x0} ${y}`], [t0 + 2.2, `${x1} ${y}`], [t0 + 2.5, `${x1} ${y}`], [t1, `${x0} ${y}`]]
+        const flip = [[0, '1 1'], [t0 + 2.5, '-1 1'], [t1, '1 1']]
+        return O([[0, '0'], [t0, '0'], [t0 + 0.3, '1'], [t1 + 0.3, '1'], [t1 + 0.7, '0']], T('translate', pos, T('scale', flip, kite, { ...c.o, discrete: true }), c.o), c.o)
+      },
+    }
+  },
+  // Мыльные пузыри: дует — пузыри улетают вверх и лопаются, за последним подпрыгивает
+  bubbles(c) {
+    let t0 = 0
+    return {
+      from: c.xs - 20,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.3)
+        t0 = p.t
+        for (let i = 0; i < 3; i++) {
+          poseTo(p, '1.05 0.95', 0.2)
+          stay(p, 0.5)
+          poseTo(p, '1 1', 0.2)
+          stay(p, 0.4)
+        }
+        hop(p, c.xs + 6, 0, 14, 0.55)
+        stay(p, 0.6)
+      },
+      over() {
+        let out = ''
+        for (let i = 0; i < 7; i++) {
+          const r = 3 + (i % 3) * 1.5
+          const d = t0 + 0.15 + i * 0.4
+          const rise = 1.6 + (i % 3) * 0.3
+          const [x, y] = [c.xs - 8, c.ground - 30]
+          const pos = [[0, `${x} ${y}`], [d, `${x} ${y}`], [d + rise, `${r1(x + 14 + ((i * 11) % 26))} ${r1(c.ground - 52 - ((i * 7) % 12))}`]]
+          const bub = `<circle r="${r}" fill="#bde0fe66" stroke="#5fa8d3" stroke-width="0.9"/><circle cx="${r1(-r / 3)}" cy="${r1(-r / 3)}" r="${r1(r / 4)}" fill="#fff"/>`
+          out += O([[0, '0'], [d, '0'], [d + 0.1, '1'], [d + rise, '1'], [d + rise + 0.12, '0']], T('translate', pos, bub, c.o), c.o)
+        }
+        return out
+      },
+    }
+  },
+  // Батут: прыгает всё выше, приседая на сетке, и соскакивает
+  bounce(c) {
+    let ta = 0
+    let t1 = 0
+    return {
+      from: c.xs,
+      play(p) {
+        ta = p.t
+        turn(p, -1)
+        stay(p, 0.5)
+        hop(p, p.x, -4, 8, 0.4)
+        for (const h of [12, 18, 22, 14]) {
+          poseTo(p, '1.12 0.84', 0.1)
+          stay(p, 0.12)
+          poseTo(p, '1 1', 0.08)
+          hop(p, p.x, -4, h, 0.3 + h / 50)
+        }
+        t1 = p.t
+        hop(p, p.x + 30, 0, 12, 0.5)
+        stay(p, 0.5)
+      },
+      under() {
+        const [x, g] = [c.xs, c.ground]
+        const tramp = `<path d="M${x - 18} ${g} L${x - 14} ${g - 4} M${x + 18} ${g} L${x + 14} ${g - 4}" stroke="${INK}" stroke-width="1.6" stroke-linecap="round"/><ellipse cx="${x}" cy="${g - 4}" rx="18" ry="2.6" fill="#3e8ed0" stroke="${INK}" stroke-width="1.2"/>`
+        return O([[0, '0'], [ta, '0'], [ta + 0.3, '1'], [t1 + 0.6, '1'], [t1 + 1, '0']], tramp, c.o)
+      },
+    }
+  },
+  // Салют: присел и смотрит, как в небе раскрываются огни, потом подпрыгивает от радости
+  fireworks(c) {
+    let t0 = 0
+    return {
+      from: c.xs - 30,
+      play(p) {
+        turn(p, -1)
+        stay(p, 0.3)
+        poseTo(p, '1.05 0.92', 0.2)
+        t0 = p.t
+        stay(p, 3.4)
+        poseTo(p, '1 1', 0.2)
+        hop(p, p.x, 0, 12, 0.5)
+        stay(p, 0.5)
+      },
+      over() {
+        return [
+          [c.xs + 6, 20, 0, '#ff6b6b'],
+          [c.xs + 46, 14, 0.9, '#ffd166'],
+          [c.xs + 24, 10, 1.8, '#c77dff'],
+        ]
+          .map(([x, y, w, col]) => {
+            const d = t0 + w
+            const rocket = O([[0, '0'], [d, '0'], [d + 0.05, '1'], [d + 0.6, '1'], [d + 0.65, '0']], T('translate', [[0, `${x} ${c.ground - 4}`], [d, `${x} ${c.ground - 4}`], [d + 0.6, `${x} ${y}`]], `<circle r="1.6" fill="${col}"/>`, c.o), c.o)
+            let rays = ''
+            for (let i = 0; i < 8; i++) {
+              const a = (i * Math.PI) / 4
+              const [cx, cy] = [Math.cos(a), Math.sin(a)]
+              rays += `<path d="M${r1(cx * 3)} ${r1(cy * 3)} L${r1(cx * 10)} ${r1(cy * 10)}" stroke="${col}" stroke-width="1.6" stroke-linecap="round"/><circle cx="${r1(cx * 12)}" cy="${r1(cy * 12)}" r="1.1" fill="${col}"/>`
+            }
+            const burst = O([[0, '0'], [d + 0.6, '0'], [d + 0.65, '1'], [d + 1.3, '1'], [d + 1.7, '0']], T('scale', [[0, '0.1 0.1'], [d + 0.6, '0.1 0.1'], [d + 1.1, '1 1']], rays, c.o), c.o)
+            return `${rocket}<g transform="translate(${x} ${y})">${burst}</g>`
+          })
+          .join('')
+      },
+    }
+  },
+}
+
+// Домик и садик из лавки (0.61): стоят на полосе за питомцем. Домик — у места, где он живёт (xh), садик — у правого края
+function decorSvg(decor, W, g, xh) {
+  let out = ''
+  if (decor.includes('garden')) {
+    const grass = `<path d="M${W - 52} ${g + 1} q3 -7 6 0 q3 -8 6 0 q3 -6 6 0 q3 -8 6 0 q3 -7 6 0 q3 -8 6 0 q3 -6 6 0 q3 -7 6 0" fill="#6cbf4a" stroke="${INK}" stroke-width="0.8" stroke-linejoin="round"/>`
+    const flowers = [['#ff6b6b', 0], ['#ffd166', 1], ['#c77dff', 2]]
+      .map(([col, i]) => {
+        const x = W - 44 + i * 15
+        const top = g - 16 - (i % 2) * 5
+        const petals = [[-3, 0], [3, 0], [0, -3], [0, 3]].map(([dx, dy]) => `<circle cx="${x + dx}" cy="${top + dy}" r="2.6" fill="${col}"/>`).join('')
+        return `<rect x="${x - 0.6}" y="${top}" width="1.2" height="${g - top}" fill="#4f9a35"/>${petals}<circle cx="${x}" cy="${top}" r="1.8" fill="#fff3b0"/>`
+      })
+      .join('')
+    out += flowers + grass
+  }
+  if (decor.includes('house')) {
+    const x = xh
+    out +=
+      `<path d="M${x - 18} ${g} V${g - 20} L${x} ${g - 33} L${x + 18} ${g - 20} V${g} Z" fill="#e9c46a" stroke="${INK}" stroke-width="1.2" stroke-linejoin="round"/>` +
+      `<path d="M${x - 22} ${g - 17} L${x} ${g - 36} L${x + 22} ${g - 17}" fill="none" stroke="#c1121f" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>` +
+      `<path d="M${x - 7} ${g} V${g - 10} a7 7 0 0 1 14 0 V${g} Z" fill="#5a3e2b"/>`
+  }
+  return out
 }
 
 // Искорки вокруг питомца на d секунд с t0
@@ -930,12 +1092,13 @@ function dayLoop(p, c, scene) {
 // sleep — ночь; hungry — сидит у пустой миски; sad — медленно бродит. Без питомца или яйцом — качается яйцо.
 // Одинаковые входные данные — одинаковая картинка: панель не перезагружает её без нужды
 // show — во сколько раз картинка на экране меньше поля (маленький питомец, п. 45): поле то же, рисунок меньше
-export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1, form = '' }) {
+// decor — купленные домик и садик (0.61), рисуются под всем остальным
+export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1, form = '', decor = [] }) {
   const W = Math.round(clamp(width, 160, 2000))
   const H = height
   const ground = H - 6
   const xh = Math.round(clamp(W * 0.16, 40, 200))
-  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * show)}" height="${Math.round(H * show)}">`
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * show)}" height="${Math.round(H * show)}">${decor.length ? decorSvg(decor, W, ground, xh) : ''}`
   const placed = (x, inner) => `<g transform="translate(${r1(x - 32 * K)} ${r1(ground - 58 * K)}) scale(${K})">${inner}</g>`
   const look = LOOKS[species]
   if (!look || stage === 'egg') return `${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle'))}</svg>`

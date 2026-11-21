@@ -36,7 +36,7 @@ const dayOk = (d) => typeof d === 'string' && DAY_RE.test(d)
 
 const clamp = (n, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n))
 
-// Одежда открывается уровнем или серией рабочих дней. Покупок нет
+// Одежда открывается уровнем или серией рабочих дней. За деньги ничего нет: ещё вещи — в лавке за монетки из заданий (0.61)
 export const UNLOCKS = [
   { id: 'scarf', stage: 'baby' },
   { id: 'cap', xp: 10 },
@@ -70,6 +70,13 @@ export function newPet(species, name, now) {
     turnDay: '', // ходы Claude за день (0.60): каждые TURNS_PER_TREAT — угощение
     turnN: 0,
     workDays: [], // дни с законченным ходом Claude — серия считает и их (0.60)
+    coins: 0, // монетки 🪙 за задания (0.61) — только на лавку питомца
+    quest: emptyQuest(),
+    marks: emptyMarks(),
+    questAt: 0, // когда последний раз выполнено задание — реплика «+N 🪙»
+    questGain: 0,
+    owned: [], // купленное в лавке (кроме печенья)
+    decor: [], // какие купленные вещи стоят на полосе
   }
 }
 
@@ -86,6 +93,7 @@ const num = (x, lo, hi, d) => (Number.isFinite(x) ? clamp(x, lo, hi) : d)
 export function restorePet(raw, now) {
   if (!raw || typeof raw !== 'object' || !SPECIES.includes(raw.species)) return null
   const at = (x) => (Number.isFinite(x) && x > 0 && x <= now + DAY ? x : 0)
+  const owned = Array.isArray(raw.owned) ? [...new Set(raw.owned.filter((id) => SHOP_KIND[id] && SHOP_KIND[id] !== 'food'))] : []
   return {
     v: 1,
     species: raw.species,
@@ -110,6 +118,14 @@ export function restorePet(raw, now) {
     turnDay: dayOk(raw.turnDay) ? raw.turnDay : '',
     turnN: Math.floor(num(raw.turnN, 0, 1e6, 0)),
     workDays: Array.isArray(raw.workDays) ? [...new Set(raw.workDays.filter(dayOk))].sort().slice(-WORK_DAYS) : [],
+    // До 0.61 этого не было: монеток 0, задания выдадутся при первом чтении, лавка пустая
+    coins: Math.floor(num(raw.coins, 0, COINS_MAX, 0)),
+    quest: restoreQuest(raw.quest),
+    marks: restoreMarks(raw.marks),
+    questAt: at(raw.questAt),
+    questGain: Math.floor(num(raw.questGain, 0, 1000, 0)),
+    owned,
+    decor: Array.isArray(raw.decor) ? [...new Set(raw.decor.filter((id) => owned.includes(id) && SHOP_KIND[id] === 'decor'))] : [],
   }
 }
 
@@ -165,6 +181,191 @@ export function turnFed(pet, now) {
 }
 export const turnsToday = (pet, now) => (pet.turnDay === dayKey(now) ? pet.turnN : 0)
 
+// Задания (0.61, п. 47): три простых на день и одно побольше на неделю, за них — монетки 🪙 на лавку питомца.
+// Только полезное: ни строк кода, ни «N карточек» без предела — перетаскивать карточку туда-обратно бесполезно,
+// дневное задание засчитывается раз. Задания выбираются по дате, одинаково во всех сессиях, и хранятся в питомце.
+// Отметки marks — последний день, когда было действие, которого нет в журнале «Итогов дня»: блокнот, итоги, чат,
+// игра, очередь доски. Таймеров нет: проверка — при чтении питомца и после действия
+export const COINS_MAX = 9999
+export const DAY_QUEST_COINS = 3
+export const WEEK_QUEST_COINS = 15
+export const QUEST_TURNS = 5 // «Claude закончил 5 ходов»
+export const WEEK_STREAK = 5 // «5 дней подряд с работой» — внутри этой недели
+export const WEEK_REVIEWS = 3 // «3 принятых ревью»
+export const DAY_QUESTS = ['turns', 'card', 'review', 'pat', 'note', 'digest']
+export const WEEK_QUESTS = ['streak', 'queue', 'reviews', 'chat', 'game']
+const MARKS = ['note', 'digest', 'chat', 'game', 'queue']
+const emptyQuest = () => ({ day: '', ids: [], done: [], week: '', wid: '', wdone: false })
+const emptyMarks = () => Object.fromEntries(MARKS.map((k) => [k, '']))
+function restoreQuest(q) {
+  const o = q && typeof q === 'object' ? q : {}
+  const ids = Array.isArray(o.ids) ? [...new Set(o.ids.filter((x) => DAY_QUESTS.includes(x)))].slice(0, 3) : []
+  return {
+    day: dayOk(o.day) ? o.day : '',
+    ids,
+    done: Array.isArray(o.done) ? [...new Set(o.done.filter((x) => ids.includes(x)))] : [],
+    week: dayOk(o.week) ? o.week : '',
+    wid: WEEK_QUESTS.includes(o.wid) ? o.wid : '',
+    wdone: o.wdone === true,
+  }
+}
+const restoreMarks = (m) => Object.fromEntries(MARKS.map((k) => [k, m && typeof m === 'object' && dayOk(m[k]) ? m[k] : '']))
+
+// Неделя — с понедельника по часам компьютера; ключ — день понедельника
+const monday = (now) => {
+  const d = new Date(now)
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
+}
+export const weekKey = (now) => dayKey(monday(now).getTime())
+const hash = (s) => {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return h >>> 0
+}
+
+// Какие задания сегодня: «5 ходов Claude» — всегда, и два из простых. Карточка и ревью — только тем, кто уже закрывал
+// карточки или принимал ревью: задания под то, чем человек и так занят
+export function dayQuests(pet, day) {
+  const style = restoreStyle(pet.style)
+  const pool = ['pat', 'note', 'digest', ...(style.cards ? ['card'] : []), ...(style.reviews ? ['review'] : [])]
+  return ['turns', ...pool.sort((a, b) => hash(`${day}:${a}`) - hash(`${day}:${b}`)).slice(0, 2)]
+}
+// Задание недели: серия, очередь доски (кто их запускал), ревью (кто их принимал), чат (со входом) — и изредка игра:
+// игры в Arcade — последним пунктом
+export function weekQuest(pet, week, acct = false) {
+  const style = restoreStyle(pet.style)
+  const main = ['streak', ...(style.queues ? ['queue'] : []), ...(style.reviews ? ['reviews'] : []), ...(acct ? ['chat'] : [])]
+  const n = hash(`week:${week}`) % (2 * main.length + 1)
+  return n === 2 * main.length ? 'game' : main[n % main.length]
+}
+
+// Отметить действие (блокнот, итоги, чат, игра, очередь) сегодняшним днём. Уже отмечено — та же запись
+export function questMark(pet, kind, now) {
+  const day = dayKey(now)
+  if (!MARKS.includes(kind) || pet.marks?.[kind] === day) return pet
+  return { ...pet, marks: { ...restoreMarks(pet.marks), [kind]: day } }
+}
+
+const workDaysOf = (pet, log) => new Set([...log.filter((x) => x.kind === 'done' || x.kind === 'accept').map((x) => dayKey(x.at)), ...(pet.workDays ?? [])])
+// Самая длинная серия рабочих дней внутри этой недели — по сегодня
+function weekRun(pet, log, now) {
+  const days = workDaysOf(pet, log)
+  const start = monday(now)
+  const today = dayKey(now)
+  let run = 0
+  let best = 0
+  for (let i = 0; i < 7; i++) {
+    const day = dayKey(new Date(start.getFullYear(), start.getMonth(), start.getDate() + i).getTime())
+    if (day > today) break
+    run = days.has(day) ? run + 1 : 0
+    best = Math.max(best, run)
+  }
+  return best
+}
+
+// Сделано ли задание: progress — сколько из скольких (для экрана), done — да или нет
+export function questProgress(id, pet, log, now) {
+  const day = dayKey(now)
+  const week = weekKey(now)
+  const marks = restoreMarks(pet.marks)
+  const today = (kind) => log.some((x) => x.kind === kind && x.at <= now && dayKey(x.at) === day)
+  const one = (ok) => ({ n: ok ? 1 : 0, of: 1 })
+  switch (id) {
+    case 'turns':
+      return { n: Math.min(QUEST_TURNS, turnsToday(pet, now)), of: QUEST_TURNS }
+    case 'card':
+      return one(today('done'))
+    case 'review':
+      return one(today('accept'))
+    case 'pat':
+      return one(pet.patAt > 0 && dayKey(pet.patAt) === day)
+    case 'note':
+    case 'digest':
+      return one(marks[id] === day)
+    case 'streak':
+      return { n: Math.min(WEEK_STREAK, weekRun(pet, log, now)), of: WEEK_STREAK }
+    case 'reviews':
+      return { n: Math.min(WEEK_REVIEWS, new Set(log.filter((x) => x.kind === 'accept' && x.at <= now && dayKey(x.at) >= week).map((x) => x.id)).size), of: WEEK_REVIEWS }
+    case 'queue':
+    case 'chat':
+    case 'game':
+      return one(marks[id] >= week)
+    default:
+      return { n: 0, of: 1 }
+  }
+}
+
+// Выдать задания нового дня и недели, засчитать сделанные и дать монетки. Ничего не поменялось — та же запись.
+// acct — вошёл ли человек (задание «написать другу» — только со входом)
+export function questCheck(pet, log, now, { acct = false } = {}) {
+  const day = dayKey(now)
+  const week = weekKey(now)
+  let q = pet.quest ?? emptyQuest()
+  const fresh = q.day !== day || !q.ids.length
+  const freshWeek = q.week !== week || !q.wid
+  if (fresh) q = { ...q, day, ids: dayQuests(pet, day), done: [] }
+  if (freshWeek) q = { ...q, week, wid: weekQuest(pet, week, acct), wdone: false }
+  const ok = (id) => {
+    const p = questProgress(id, pet, log, now)
+    return p.n >= p.of
+  }
+  const done = q.ids.filter((id) => !q.done.includes(id) && ok(id))
+  const wdone = !q.wdone && ok(q.wid)
+  if (!done.length && !wdone) return fresh || freshWeek ? { ...pet, quest: q } : pet
+  const gain = done.length * DAY_QUEST_COINS + (wdone ? WEEK_QUEST_COINS : 0)
+  return {
+    ...pet,
+    coins: Math.min(COINS_MAX, (pet.coins ?? 0) + gain),
+    quest: { ...q, done: [...q.done, ...done], wdone: q.wdone || wdone },
+    questAt: now,
+    questGain: gain,
+  }
+}
+
+// Лавка (0.61): всё — за монетки из заданий, настоящих денег нет. Печенье — только когда угощений не осталось;
+// одежда, игрушки (шалости на полосе), домик и садик (у полосы) и трюки покупаются раз и остаются
+export const SHOP = [
+  { id: 'cookie', kind: 'food', price: 4 },
+  { id: 'party', kind: 'wear', price: 15 },
+  { id: 'shades', kind: 'wear', price: 15 },
+  { id: 'bandana', kind: 'wear', price: 15 },
+  { id: 'tophat', kind: 'wear', price: 20 },
+  { id: 'cape', kind: 'wear', price: 25 },
+  { id: 'bubbles', kind: 'toy', price: 15 },
+  { id: 'kite', kind: 'toy', price: 20 },
+  { id: 'bounce', kind: 'trick', price: 15 },
+  { id: 'fireworks', kind: 'trick', price: 25 },
+  { id: 'garden', kind: 'decor', price: 20 },
+  { id: 'house', kind: 'decor', price: 30 },
+]
+const SHOP_KIND = Object.fromEntries(SHOP.map((x) => [x.id, x.kind]))
+// Можно ли купить: хватает монеток, вещи ещё нет, печенье — только без угощений
+export function canBuy(pet, id) {
+  const item = SHOP.find((x) => x.id === id)
+  if (!item || (pet.coins ?? 0) < item.price) return false
+  return item.kind === 'food' ? pet.treats < 1 : !(pet.owned ?? []).includes(id)
+}
+// Купить: одежда сразу надевается, домик или садик сразу встаёт на полосу
+export function buy(pet, id) {
+  if (!canBuy(pet, id)) return pet
+  const item = SHOP.find((x) => x.id === id)
+  const paid = { ...pet, coins: pet.coins - item.price }
+  if (item.kind === 'food') return { ...paid, treats: 1 }
+  const next = { ...paid, owned: [...(pet.owned ?? []), id] }
+  // Уже надета (старая запись) — не снимать покупкой
+  if (item.kind === 'wear') return next.wear.includes(id) ? next : toggleWear(next, id, [id])
+  if (item.kind === 'decor') return { ...next, decor: [...(pet.decor ?? []), id] }
+  return next
+}
+// Убрать или поставить купленную вещь у полосы
+export function toggleDecor(pet, id) {
+  if (SHOP_KIND[id] !== 'decor' || !(pet.owned ?? []).includes(id)) return pet
+  const decor = pet.decor ?? []
+  return { ...pet, decor: decor.includes(id) ? decor.filter((x) => x !== id) : [...decor, id] }
+}
+// Купленные игрушки и трюки — шалости на полосе
+export const shopScenes = (pet) => (pet?.owned ?? []).filter((id) => SHOP_KIND[id] === 'toy' || SHOP_KIND[id] === 'trick')
+
 // Облик взрослого (0.59) — по тому, чем кормили больше: карточки — «мастер», ревью — «ревьюер», очереди — «бегун».
 // У яйца и малыша облика нет; ровно поровну — «мастер»
 export const FORMS = ['maker', 'reviewer', 'runner']
@@ -190,7 +391,7 @@ export const tricksOf = (pet, streak) => {
   return TRICKS.filter((x) => best >= x.streak).map((x) => x.id)
 }
 
-// Уголок с вещами (0.59): открывается угощениями (опыт), серией, очередями, ревью и взрослой формой. Покупок нет
+// Уголок с вещами (0.59): открывается угощениями (опыт), серией, очередями, ревью и взрослой формой. Не покупается
 export const CORNER = [
   { id: 'bed', xp: 3 },
   { id: 'ball', xp: 15 },
@@ -209,7 +410,7 @@ export function cornerOf(pet, streak) {
 
 // Реплика-подсказка (0.59): одна строка по событиям Arcade, без своих таймеров — пересчитывается при перерисовке.
 // Порядок: сессия ждёт человека 5 минут и дольше → очередь доски только что пройдена → три карточки за час →
-// новый трюк → печенье дня (0.60) → есть угощения, а питомец голоден. Иначе молчит.
+// новый трюк → задание выполнено (0.61) → печенье дня (0.60) → есть угощения, а питомец голоден. Иначе молчит.
 // waiting — [{ name, since }] сессий, что ждут ответа; queueAt — когда очередь прошла до конца; dones — когда закрыты
 // карточки. Новый трюк — лучшая серия выросла ровно до порога трюка (pet.bestAt) не больше LINE_TRICK_MS назад:
 // прерванная серия, дошедшая до того же числа снова, нового трюка не даёт
@@ -217,6 +418,7 @@ export const LINE_WAIT_MS = 5 * 60_000
 export const LINE_QUEUE_MS = 15 * 60_000
 export const LINE_TRICK_MS = 2 * HOUR
 export const LINE_COOKIE_MS = 10 * 60_000
+export const LINE_QUEST_MS = 10 * 60_000 // задание выполнено — «+N 🪙» (0.61)
 export function petLine({ pet, now, waiting = [], queueAt = 0, dones = [] }) {
   if (!pet) return null
   const long = waiting.filter((r) => r && r.since > 0 && now - r.since >= LINE_WAIT_MS).sort((a, b) => a.since - b.since)[0]
@@ -226,6 +428,7 @@ export function petLine({ pet, now, waiting = [], queueAt = 0, dones = [] }) {
   if (n >= 3) return { kind: 'cards', n }
   const trick = TRICKS.find((x) => x.streak === pet.best)
   if (trick && pet.bestAt && now >= pet.bestAt && now - pet.bestAt < LINE_TRICK_MS) return { kind: 'trick', id: trick.id }
+  if (pet.questAt && pet.questGain > 0 && now >= pet.questAt && now - pet.questAt < LINE_QUEST_MS) return { kind: 'quest', n: pet.questGain }
   if (pet.cookieAt && now >= pet.cookieAt && now - pet.cookieAt < LINE_COOKIE_MS) return { kind: 'cookie' }
   if (pet.treats > 0 && stageOf(pet) !== 'egg' && fullness(pet, now) < 25) return { kind: 'hungry' }
   return null
