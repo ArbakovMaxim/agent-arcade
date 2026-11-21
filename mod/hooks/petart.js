@@ -264,9 +264,11 @@ const hearts = () =>
         `<g opacity="0"><path d="${HEART}" fill="#ff5d8f" transform="translate(${x} ${y})"/><animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.7;1" begin="${d}s" dur="1.8s" repeatCount="2"/><animateTransform attributeName="transform" type="translate" values="0 6;0 -6" begin="${d}s" dur="1.8s" repeatCount="2"/></g>`,
     )
     .join('')
-// Сон: «z» всплывают
-const zzz = () =>
-  [0, 1.2].map((d) => `<text x="48" y="18" font-family="sans-serif" font-size="9" font-weight="700" fill="#8aa1c1" opacity="0">z<animate attributeName="opacity" values="0;1;0" dur="2.4s" begin="${d}s" repeatCount="indefinite"/><animateTransform attributeName="transform" type="translate" values="0 6;5 -6" dur="2.4s" begin="${d}s" repeatCount="indefinite"/></text>`).join('')
+// Сон: «z» всплывают; still — дрёма (п. 49): две «z» стоят лесенкой, без движения
+const zzz = (still = false) =>
+  still
+    ? [[47, 20, 8], [54, 12, 10]].map(([x, y, s]) => `<text x="${x}" y="${y}" font-family="sans-serif" font-size="${s}" font-weight="700" fill="#8aa1c1">z</text>`).join('')
+    : [0, 1.2].map((d) => `<text x="48" y="18" font-family="sans-serif" font-size="9" font-weight="700" fill="#8aa1c1" opacity="0">z<animate attributeName="opacity" values="0;1;0" dur="2.4s" begin="${d}s" repeatCount="indefinite"/><animateTransform attributeName="transform" type="translate" values="0 6;5 -6" dur="2.4s" begin="${d}s" repeatCount="indefinite"/></text>`).join('')
 // Еда: печенька у рта, тает
 const cookie = (look) => {
   const [x, y] = look.mouth ?? [32, 34]
@@ -282,9 +284,13 @@ function eggShell(look, mood) {
   const rock = mood === 'sleep' ? loop('rotate', '0;2;0;-2;0', 6) : loop('rotate', '0;0;-7;6;-4;0;0', 2.6, ' keyTimes="0;0.5;0.62;0.74;0.86;0.95;1"')
   return around(32, 58, rock, shell)
 }
-function eggSvg(look, mood) {
-  return `<ellipse cx="32" cy="59" rx="13" ry="2.5" fill="#00000022"/>${eggShell(look, mood)}${mood === 'sleep' ? zzz() : ''}`
+function eggSvg(look, mood, still = false) {
+  return `<ellipse cx="32" cy="59" rx="13" ry="2.5" fill="#00000022"/>${eggShell(look, mood)}${mood === 'sleep' ? zzz(still) : ''}`
 }
+
+// Неподвижная картинка (п. 49, дрёма): все движения убраны, каждая часть стоит в своём первом кадре — Chromium
+// рисует её один раз и больше не будит
+export const stillSvg = (svg) => svg.replace(/<(animateTransform|animate|set)\b[^>]*\/>/g, '')
 
 // Слой одежды на виде
 function wearSvg(species, ids) {
@@ -411,7 +417,7 @@ const ENTERS = {
 }
 
 // reaction — как у полосы (walkReaction); enter — проиграть вход; size — сторона картинки в пикселях
-export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48, form = '' }) {
+export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'idle', enter = true, size = 48, form = '', still = false }) {
   const mood = BADGE_MOOD[reaction] ?? 'idle'
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="${size}" height="${size}">`
   const egg = stage === 'egg' || !LOOKS[species]
@@ -425,7 +431,8 @@ export function petBadgeSvg({ species, stage = 'baby', wear = [], reaction = 'id
   const rx = egg ? 13 : stage === 'baby' ? 11 : 14
   const shadow = `<ellipse cx="32" cy="59" rx="${rx}" ry="2.5" fill="#00000022">${enter ? `<animate attributeName="rx" values="2;${rx}" dur="${ENTER_S}s" fill="freeze"/>` : ''}</ellipse>`
   const body = enter ? ENTERS[kind](fig, top) : fig
-  return stepFrames(`${head}${shadow}${body}${mood === 'sleep' ? zzz() : ''}</svg>`)
+  const svg = `${head}${shadow}${body}${mood === 'sleep' ? zzz(still) : ''}</svg>`
+  return still ? stillSvg(svg) : stepFrames(svg)
 }
 
 // ━━━━━━━━━━ полоса на главном экране ━━━━━━━━━━
@@ -1147,7 +1154,9 @@ function dayLoop(p, c, scene) {
 // Одинаковые входные данные — одинаковая картинка: панель не перезагружает её без нужды
 // show — во сколько раз картинка на экране меньше поля (маленький питомец, п. 45): поле то же, рисунок меньше
 // decor — купленные домик и садик (0.61), рисуются под всем остальным
-export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1, form = '', decor = [] }) {
+// still — дрёма (п. 49): та же картинка без движения
+export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek', reaction = 'idle', width = 480, height = 72, show = 1, form = '', decor = [], still = false }) {
+  const done = still ? stillSvg : stepFrames
   const W = Math.round(clamp(width, 160, 2000))
   const H = height
   const ground = H - 6
@@ -1155,7 +1164,7 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${Math.round(W * show)}" height="${Math.round(H * show)}">${decor.length ? decorSvg(decor, W, ground, xh) : ''}`
   const placed = (x, inner) => `<g transform="translate(${r1(x - 32 * K)} ${r1(ground - 58 * K)}) scale(${K})">${inner}</g>`
   const look = LOOKS[species]
-  if (!look || stage === 'egg') return stepFrames(`${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle'))}</svg>`)
+  if (!look || stage === 'egg') return done(`${head}${placed(xh, eggSvg(look ?? { egg: ['#f1e4d3', '#c9a77c'] }, reaction === 'sleep' ? 'sleep' : 'idle', still))}</svg>`)
 
   const mood = { idle: 'idle', wait: 'sad', sleep: 'sleep', hungry: 'sad', sad: 'sad' }[reaction] ?? 'happy'
   const intro = { done: 2.1, treat: 3, happy: 2.1 }[reaction] ?? 0
@@ -1172,7 +1181,7 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
     extra = around(18, 44, loop('rotate', '0;-35;0;-35;0', 1.6), `<ellipse cx="12" cy="34" rx="3.5" ry="5" fill="${paint(look.body[0])}" stroke="${INK}" stroke-width="1.2"/>`)
   } else if (reaction === 'sleep') {
     stay(p, LOOP)
-    extra = zzz()
+    extra = zzz(still)
   } else if (reaction === 'hungry') {
     // Сидит у пустой миски и поглядывает на неё
     Object.assign(p, { face: -1, pose: '1.05 0.9', faces: [[0, -1], [6, 1], [7.5, -1], [15, 1], [16.2, -1]], poses: [[0, '1.05 0.9']] })
@@ -1204,7 +1213,7 @@ export function petWalkSvg({ species, stage = 'baby', wear = [], scene = 'peek',
   const faced = T('scale', p.faces.map(([t, f]) => [t, `${f} 1`]), jumps ? `<g>${jumps}${sized}</g>` : sized, { ...c.o, discrete: true })
   const pet = T('translate', p.moves.map(([t, x, y]) => [t, `${r1(x)} ${r1(ground + y)}`]), faced, c.o)
   const shadow = T('translate', p.moves.map(([t, x]) => [t, `${r1(x)} ${ground + 1}`]), `<ellipse rx="${r1((stage === 'baby' ? 11 : 14) * K)}" ry="2.2" fill="#00000022"/>`, c.o)
-  return stepFrames(`${head}${sc.under?.() ?? ''}${shadow}${pet}${sc.over?.() ?? ''}</svg>`)
+  return done(`${head}${sc.under?.() ?? ''}${shadow}${pet}${sc.over?.() ?? ''}</svg>`)
 }
 
 // ━━━━━━━━━━ уголок с вещами (0.59) ━━━━━━━━━━
