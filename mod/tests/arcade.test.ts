@@ -2,7 +2,8 @@ import { expect } from 'claude-code/testing'
 import { encodePowerShell, launchCommand, notifyCommand, NOTIFY_SCRIPT_TEXT, parseDetection, windowBounds } from '../hooks/browsers.js'
 import { SITE, bundledCatalog, pageUrl, parseCatalog, verifyRom } from '../hooks/catalog.js'
 import { cleanPath, identifyRom, restoreMine, titleFromPath } from '../hooks/mine.js'
-import { arcadeUrl, clip, paneClosedBy, workedText } from '../hooks/register.js'
+import { arcadeUrl, clip, handlePress, paneClosedBy, workedText } from '../hooks/register.js'
+import { S } from '../hooks/app/state.js'
 import { detectLang, tr, fromEnglish, resetLocaleCache } from '../hooks/i18n.js'
 import { LOCALES } from '../hooks/locales/index.js'
 import { NES, Mappers } from '../hooks/vendor/jsnes.mjs'
@@ -4032,4 +4033,31 @@ test('twitch.js: имя канала из ссылки, свои каналы, �
   expect(liveUrl(thirty, 'c03', 'ru')).toBe(`${SITE}/live#c=${thirty.slice(0, PAGE_CHANNELS).join(',')}&i=3`)
   // Направления каталога — те же 24, что у сайта, новинки — первыми
   expect([Object.keys(TOPIC_TITLES).length, Object.keys(TOPIC_TITLES)[0], Object.keys(TOPIC_TITLES).at(-1)]).toEqual([24, 'news', 'retro'])
+})
+
+test('нажатие на перерисовке: потерянное нажатие не роняет хук, другие ошибки идут дальше, как раньше (0.65.1)', async ($, on) => {
+  stubs(on)
+  await start($)
+  // Так движок отвечает на нажатие, которое пришло после перерисовки: обработчиков старого кадра уже нет
+  const lost = async () => {
+    throw new Error('ui.press/ui.input/ui.select: no handler is held under handle 7')
+  }
+  const press = { plugin: 'arcade', element: 'arcade-x', component: 'Pane', requestId: 'arcade', surface: 'desktop' }
+  // Хуку нужны только часы: у $ самого теста их нет
+  const hook$ = { clock: { now: async () => Date.now() } }
+  expect(await handlePress(hook$, press, lost)).toEqual({ element: 'arcade-x' })
+  expect(S.events[0]).toContain('потерялось')
+  expect(await handlePress(hook$, { ...press, element: 'arcade-field', kind: 'submit', value: 'abc' }, lost)).toEqual({ element: 'arcade-field', value: 'abc' })
+  expect(S.pressing).toBe(0)
+  let thrown = ''
+  try {
+    await handlePress(hook$, press, async () => {
+      throw new Error('boom')
+    })
+  } catch (err: any) {
+    thrown = err.message
+  }
+  expect(thrown).toBe('boom')
+  expect(S.pressing).toBe(0)
+  expect(await handlePress(hook$, press, async () => ({ element: 'arcade-x' }))).toEqual({ element: 'arcade-x' })
 })

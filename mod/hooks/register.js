@@ -1109,6 +1109,13 @@ export async function handlePress($, e, next) {
   S.pressing++
   try {
     return await next(e)
+  } catch (err) {
+    // Нажатие пришло в тот миг, когда панель перерисовалась: движок уже выкинул обработчики старого кадра, и нажатие
+    // никуда не попало. Ошибки мода тут нет — пишем в свой журнал, а не в ленту (0.65.1). Остальные ошибки — как раньше
+    const text = String(err?.message ?? err)
+    if (!text.includes('no handler is held')) throw err
+    log(`нажатие пришло на перерисовке и потерялось: ${text}`)
+    return typeof e.value === 'string' ? { element: e.element, value: e.value } : { element: e.element }
   } finally {
     S.pressing = Math.max(0, S.pressing - 1)
     while (S.pressOpens.length) {
