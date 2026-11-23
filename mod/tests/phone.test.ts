@@ -90,6 +90,11 @@ test('phone.js: кого звать — ждёт разрешения дольш
   expect(phoneDue(rows, now).map((r: any) => r.sid)).toEqual(['a', 'd'])
   expect(phoneDue(rows, now, ['d']).map((r: any) => r.sid)).toEqual(['a'])
   expect(phoneDue(undefined, now)).toEqual([])
+  // «Возможно, ждёт разрешения» (режим Auto или неизвестен, п. 53) — на телефон не зовём
+  const maybe = { kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true }
+  expect(phoneDue([{ ...rows[0], ask: maybe }, { ...rows[3], ask: { ...maybe, maybe: false } }], now).map((r: any) => r.sid)).toEqual(['d'])
+  // «Возможно, ждёт — проверь» (минута без конца вызова) — уже зовём
+  expect(phoneDue([{ ...rows[0], ask: { ...maybe, check: true } }], now).map((r: any) => r.sid)).toEqual(['a'])
   // Имя: без управляющих символов, разделителей строк и знаков направления; в одну строку; не длиннее 40 знаков
   expect(phoneName('api')).toBe('api')
   expect(phoneName(`  a${ch(7)}b${ch(0x2028)}c${ch(0x202e)}d${ch(10)}${ch(9)}e${ch(0x2066)}  `)).toBe('a b c d e')
@@ -107,6 +112,11 @@ test('phone.js: кого звать — ждёт разрешения дольш
   const en = (s: string) => tr(s, 'en')
   expect(phoneText(['docs'], en)).toBe('Session “docs” is waiting for you')
   expect(phoneText(['api', 'docs'], en)).toBe('Sessions waiting for you: api, docs')
+  // Все только «возможно, ждёт — проверь» — текст не утверждает
+  expect(phoneText(['docs'], undefined, [], true)).toBe('Сессия «docs», возможно, ждёт тебя — проверь')
+  expect(phoneText(['api', 'docs'], undefined, [], true)).toBe('Возможно, ждут тебя сессии: api, docs')
+  expect(phoneText(['docs'], en, [], true)).toBe('Session “docs” may be waiting for you — check')
+  expect(phoneText([], undefined, [], true)).toBe('Сессия «Claude Code» ждёт тебя')
   // Не влезает в 140 знаков — сколько влезло и «+N»
   const many = Array.from({ length: 8 }, (_, i) => `${'s'.repeat(30)}${i}`)
   const text = phoneText(many)

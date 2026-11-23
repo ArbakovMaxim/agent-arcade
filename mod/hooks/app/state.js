@@ -12,7 +12,7 @@ export const PANE = 'arcade'
 export const PLUGIN_NAME = 'arcade'
 // Версия мода — менять вместе с version в .claude-plugin/plugin.json: уходит в отчёт об ошибке. Файл по
 // $.plugin.root не читаем по той же причине
-export const ARCADE_VERSION = '0.65.1'
+export const ARCADE_VERSION = '0.65.2'
 export const INPUT = 'arcade-input' // ключ элемента Client, который ловит клавиши над экраном игры (hooks/input.js)
 export const ASK_AFTER_MS = 10_000 // через сколько работы агента показать вопрос «сыграть?», пока его не настроили; для быстрой проверки поставь 5_000
 // Строка «сыграть?» над полем ввода: через сколько секунд работы агента, на выбор в настройках; 0 — не показывать
@@ -100,7 +100,7 @@ S.netWaiting = [] // кто ждёт в сети: [{ id, title, count }] — и�
 S.lang = 'ru' // язык интерфейса: ru или en — настройка, иначе по окружению
 S.wide = false // панель игры во всю ширину: разговор с агентом сжимается в узкую полосу
 export const unfolded = new Set() // плитки Desktop, где по «ещё» показано описание целиком: ключи карточек
-S.agentAlert = null // пока открыта игра: 'done' — агент закончил, 'permission' — ждёт разрешения, 'question' — задал вопрос; плашка поверх игры
+S.agentAlert = null // пока открыта игра: 'done' — агент закончил, 'permission' — ждёт разрешения, 'maybe' — возможно, ждёт (п. 53), 'question' — задал вопрос; плашка поверх игры
 // Что делать с игрой в панели, когда агент закончил или ждёт разрешения — отдельно для каждого сигнала
 export const SIGNAL_MODES = ['notify', 'pause', 'close']
 export const SIGNAL_LABELS = { notify: 'плашка, игра идёт', pause: 'пауза и плашка', close: 'сразу к агенту' }
