@@ -4,7 +4,7 @@
 // Каталог плагинов Anthropic разрешает передавать $ только функции, объявленной на верхнем уровне того же файла, поэтому
 // весь код, который зовёт Claude Code, — в этом файле, разделами: помощники (app/…), экраны панели (screens/…) и в конце
 // подписки на события. Состояние и значки — в hooks/app/, чистые модули без $ (каталог, переводы, ленты и т. п.) — рядом, в hooks/.
-import { AGAIN_KEY, ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERT_KEEP_MS, ALERTS_KEY, alertKey, alertText, alertWhat, keepTold, restoreAgain, restoreAlerts, seenOf } from './alerts.js'
+import { AGAIN_KEY, ALERT_GAP_MS, ALERT_GATHER_MS, ALERT_HOLD_S, ALERT_KEEP_MS, ALERTS_KEY, alertKey, alertText, alertWhat, isCheck, isMaybe, keepTold, restoreAgain, restoreAlerts, seenOf } from './alerts.js'
 import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends, parseHandle, parseInvite, parseMe, parsePoll, parsePulse, parsePushCode, parsePushSend, parsePushState, parseSettings, parseStart, parseWeb, restoreAccount, restoreStamps, suggestHandle, SYNC_KEYS, syncPlan } from './account.js'
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, pt, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
@@ -137,7 +137,7 @@ export function workedText(seconds) {
 
 export function statusText(now) {
   if (S.status === 'working') return `Агент работает ${workedText(workedSeconds(now))}`
-  if (S.status === 'permission') return S.ask?.kind === 'question' ? 'Агент задал вопрос — Esc, чтобы ответить' : 'Агент ждёт разрешения — Esc, чтобы ответить'
+  if (S.status === 'permission') return S.ask?.kind === 'question' ? 'Агент задал вопрос — Esc, чтобы ответить' : S.ask?.maybe ? 'Агент, возможно, ждёт разрешения — Esc, чтобы посмотреть' : 'Агент ждёт разрешения — Esc, чтобы ответить'
   if (S.status === 'done') return 'Агент закончил — Esc, чтобы вернуться'
   if (S.status === 'background') return `Агент работает в фоне · агентов: ${S.bg.n}`
   return 'Агент свободен'
@@ -339,6 +339,8 @@ S.turnBase = null
 const STATUS_ORDER = { permission: 0, done: 1, working: 2, background: 2, idle: 3 }
 // background — главный ход кончился, а агенты, запущенные из него, ещё работают (app/background)
 export const STATUS_LABEL = { permission: 'ждёт разрешения', done: 'закончил ход', working: 'работает', background: 'работает в фоне', idle: 'свободна' }
+// Запрос разрешения, которого Arcade наверняка не видит (ask.maybe): режим сессии — Auto или неизвестен (п. 53)
+export const MAYBE_LABEL = 'возможно, ждёт разрешения'
 // Работает сам или его агенты в фоне — одна работа: «с каких пор» не сбрасывается, когда Claude просыпается от их конца
 const busy = (status) => status === 'working' || status === 'background'
 
@@ -614,13 +616,15 @@ function notify($, all, now) {
   for (const r of all) {
     const before = was.get(r.sid)
     if (before === seenOf(r) || S.agHidden.includes(r.sid)) continue
-    const wait = r.status === 'permission'
+    // «Возможно, ждёт разрешения» — без всплывашек и уведомлений: в Auto вызов обычно разрешается сам (п. 53)
+    const wait = r.status === 'permission' && !isMaybe(r)
     const done = r.status === 'done' && before !== undefined
     if (!wait && !done) continue
     const what = alertWhat(r)
     if (alertOn(what)) S.al.pending.set(alertKey(r), { key: alertKey(r), sid: r.sid, seen: seenOf(r), name: r.name, what, at: now })
     if (r.sid === ag.sid) continue
-    if (wait && S.agNotify) $.ui.toast(fill(tr(what === 'question' ? 'Сессия «{0}» ждёт ответа на вопрос' : 'Сессия «{0}» ждёт разрешения', S.lang), [r.name]))
+    const say = what === 'question' ? 'Сессия «{0}» ждёт ответа на вопрос' : what === 'check' ? 'Сессия «{0}», возможно, ждёт разрешения — проверь' : 'Сессия «{0}» ждёт разрешения'
+    if (wait && S.agNotify) $.ui.toast(fill(tr(say, S.lang), [r.name]))
     else if (done && S.agDone) $.ui.toast(fill(tr('В сессии «{0}» Claude закончил ход', S.lang), [r.name]))
   }
 }
@@ -3861,6 +3865,8 @@ async function phoneSend($, due, queues = []) {
   const was = restoreAlerts(await $.store.get(PHONE_KEY), now)
   for (const [key, at] of Object.entries(was.told)) ph.told.set(key, at)
   const fresh = due.filter((r) => !was.told[alertKey(r)])
+  // Все, кого зовём, — только «возможно, ждёт — проверь» (п. 53): текст не утверждает
+  const maybe = fresh.length > 0 && fresh.every(isCheck)
   const ends = queues.filter((q) => !queueTold(was.told[queueKey(q)], q))
   if (!fresh.length && !ends.length) return
   // last 0 — ещё не отправляли
@@ -3884,6 +3890,7 @@ async function phoneSend($, due, queues = []) {
     fresh.map((r) => r.name),
     (s) => tr(s, S.lang),
     ends.map((q) => ({ ...q, when: q.until > now ? clockText(q.until, now) : '' })),
+    maybe,
   )
   const res = parsePushSend(await accountFetch($, 'pushsend', { method: 'POST', body: { text }, token }))
   if (!res.error || res.error === 'invalid') {
@@ -7901,23 +7908,34 @@ function rvItems($, kit, page) {
 // спрашиваем движок, как он решит ($.tool.check — только вердикт: ничего не запускает и диалога не открывает), а что
 // человек ответил, узнаём из телеметрии (tool_decision) или по концу вызова. Решений мод не принимает и не меняет:
 // своих хуков tool.check у него нет, телеметрию он отдаёт дальше как есть.
+// На Team и Enterprise телеметрии и классических хуков нет, и режим разрешений виден, только когда сессия запускает
+// субагента (agent.spawn). Пока режим — Auto или неизвестен, «спросить» — лишь «возможно, ждёт разрешения» (ask.maybe):
+// классификатор Auto обычно разрешает сам, а его решения мод не видит. О таком не уведомляем — ни системой, ни на
+// телефон, ни всплывашкой, — и игра из-за него не встаёт на паузу (п. 53). Но настоящий запрос терять нельзя: «возможно»
+// висит MAYBE_NOTIFY_MS, а вызов не кончился — зовём честно, «возможно, ждёт разрешения — проверь» (ask.check).
 // На вопрос Claude можно ответить из «Агентов» другой сессии: ответ — файл a<место>.json рядом с отметками сессий;
 // сессия, которая спросила, читает его, пока вопрос открыт, и отдаёт модели как ответ человека. Разрешения так не даются.
 
 export const ANSWER_POLL_MS = 1_000 // пока вопрос открыт, файл ответа читаем раз в столько
 // Сколько ждать, прежде чем «спросить» считать вопросом человеку: в авто-режиме сначала решает классификатор (обычно за
-// секунду-две), в остальных режимах диалог показывается сразу. Режим узнаём из телеметрии; пока не знаем — середина
+// секунду-две), в остальных режимах диалог показывается сразу. Режим узнаём из телеметрии, классических хуков или запуска
+// субагента; пока не знаем — середина
 const GRACE_AUTO_MS = 20_000
 const GRACE_UNKNOWN_MS = 3_000
 const GRACE_MS = 700
+// «Возможно, ждёт» висит столько, а вызов не кончился — всё-таки зовём: «возможно, ждёт разрешения — проверь». Долгий
+// инструмент в Auto тоже позовёт — зато настоящий запрос не потеряется
+export const MAYBE_NOTIFY_MS = 60_000
 // Вопрос Claude — не запрос разрешения: его ловит questionCall
 const NOT_ASKS = new Set(['AskUserQuestion'])
+// В этих режимах человека не спрашивают никогда: bypassPermissions разрешает всё, dontAsk отказывает в неразрешённом
+const NEVER_ASK = new Set(['bypassPermissions', 'dontAsk'])
 const QUESTION_MAX = 300 // текст вопроса в отметке — не длиннее (для показа; ответ строится по полному)
 
 // Чего ждёт Claude: { kind: 'permission', tool, what } или { kind: 'question', id, questions: [{ question, header,
 // options: [подписи], multi }] }; null — ничего
 S.ask = null
-S.permMode = '' // режим разрешений сессии — из телеметрии и классических хуков
+S.permMode = '' // режим разрешений сессии — из телеметрии, классических хуков и запуска субагента
 // id вызова → запрос: «спросить» ещё может решить классификатор
 const waiting = new Map()
 // Открытые запросы: id вызова, 'classic' (классический хук) или 'q:<id вопроса>'
@@ -7932,29 +7950,40 @@ const sent = new Set()
 
 const answerPath = (slot) => `${S.ag.dir}${S.sep}a${slot}.json`
 
+// Насколько запрос «громкий»: «возможно» — 0, «возможно — проверь» — 1, настоящий запрос и вопрос — 2
+const askRank = (a) => (a?.maybe ? (a.check ? 1 : 0) : 2)
+
 // Claude ждёт человека: статус, плашка над игрой, уведомление; вопрос ещё и останавливает очередь. Уже ждёт — только
 // новый запрос
 export async function waitForPerson($, ask) {
-  S.ask = ask
   const question = ask.kind === 'question'
   // Вопрос останавливает очередь, даже если статус «ждёт» уже стоит (например, от запроса разрешения рядом)
   if (question) queueQuestion($)
-  if (S.status === 'permission') return $.ui.invalidate('ui.render')
+  if (S.status === 'permission') {
+    // Тихий запрос не заслоняет громкий, а громкий после тихого — уведомить, как новый (п. 53)
+    const upgrade = Boolean(S.ask) && askRank(ask) > askRank(S.ask)
+    if (!S.ask || askRank(ask) >= askRank(S.ask)) S.ask = ask
+    if (!upgrade) return $.ui.invalidate('ui.render')
+  } else S.ask = ask
   S.status = 'permission'
   S.askVisible = false
   if (S.paneOpen && S.view !== 'library') {
-    S.agentAlert = question ? 'question' : 'permission'
-    if (S.onPermission === 'pause') {
+    S.agentAlert = question ? 'question' : ask.maybe ? (ask.check ? 'check' : 'maybe') : 'permission'
+    // «Возможно, ждёт» (и «проверь») игру не останавливает и окно не закрывает
+    if (!ask.maybe && S.onPermission === 'pause') {
       S.paused = true
       releaseAll()
     }
-    if (S.onPermission === 'close') await $.ui.close({ id: PANE })
+    if (!ask.maybe && S.onPermission === 'close') await $.ui.close({ id: PANE })
   }
-  log(question ? 'Claude задал вопрос' : `запрос разрешения: ${ask.tool || 'инструмент'}`)
+  log(question ? 'Claude задал вопрос' : `${ask.check ? 'возможно, запрос разрешения — минута без конца вызова' : ask.maybe ? 'возможно, запрос разрешения' : 'запрос разрешения'}: ${ask.tool || 'инструмент'}`)
+  if (ask.maybe && !ask.check) return $.ui.invalidate('ui.render')
   const now = await $.clock.now()
   // Включены уведомления о сессиях — о ней скажут они (alerts.js), второе не нужно
-  const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS && !alertsCover(question ? 'question' : 'permission')
-    ? notifyCommand(S.platform, 'Claude Code', tr(question ? 'Агент задал вопрос' : 'Агент ждёт разрешения', S.lang))
+  const what = question ? 'question' : ask.check ? 'check' : 'permission'
+  const text = { question: 'Агент задал вопрос', check: 'Агент, возможно, ждёт разрешения — проверь', permission: 'Агент ждёт разрешения' }[what]
+  const command = S.osNotify && S.windowOpenedAt && now - S.windowOpenedAt < NOTIFY_WINDOW_MS && !alertsCover(what)
+    ? notifyCommand(S.platform, 'Claude Code', tr(text, S.lang))
     : null
   if (command) {
     $.clock.after(0, async () => {
@@ -7971,7 +8000,8 @@ export async function waitForPerson($, ask) {
 // Запрос закрыт: остались другие — показываем последний, нет — Claude снова работает
 function resume($) {
   if (asks.size) {
-    S.ask = [...asks.values()].at(-1)
+    // Громкий запрос — впереди тихого; из равных — последний
+    S.ask = [...asks.values()].reduce((best, a) => (askRank(a) >= askRank(best) ? a : best))
     $.ui.invalidate('ui.render')
     return
   }
@@ -8022,7 +8052,7 @@ const CALL_KEYS = ['tool', 'tool_use_id', 'consent', 'agentId', 'requestMeta']
 export async function callSeen($, e) {
   try {
     const id = e.tool_use_id
-    if (!id || NOT_ASKS.has(e.tool) || decided.has(id)) return
+    if (!id || NOT_ASKS.has(e.tool) || decided.has(id) || NEVER_ASK.has(S.permMode)) return
     const input = { ...e }
     for (const key of CALL_KEYS) delete input[key]
     const verdict = await $.tool.check({ tool: e.tool, input })
@@ -8030,11 +8060,23 @@ export async function callSeen($, e) {
       waiting.set(id, { kind: 'permission', tool: e.tool, what: whatOf(input) })
       const grace = S.permMode === 'auto' ? GRACE_AUTO_MS : S.permMode ? GRACE_MS : GRACE_UNKNOWN_MS
       $.clock.after(grace, async () => {
-        const ask = waiting.get(id)
-        if (!ask) return
+        const seen = waiting.get(id)
+        if (!seen) return
         waiting.delete(id)
+        // Режим могли узнать, пока ждали
+        if (NEVER_ASK.has(S.permMode)) return
+        // Auto или режим неизвестен: решает классификатор, а его решение на Team не видно — только «возможно» (п. 53)
+        const ask = !S.permMode || S.permMode === 'auto' ? { ...seen, maybe: true } : seen
         asks.set(id, ask)
         await waitForPerson($, ask).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+        if (!ask.maybe) return
+        // «Возможно» висит минуту, а вызов не кончился — всё-таки зовём, но честно: «проверь»
+        $.clock.after(MAYBE_NOTIFY_MS, async () => {
+          if (asks.get(id) !== ask || NEVER_ASK.has(S.permMode)) return
+          const check = { ...ask, check: true }
+          asks.set(id, check)
+          await waitForPerson($, check).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
+        })
       })
     }
   } catch (err) {
@@ -8048,6 +8090,12 @@ export function toolDecided($, e) {
   const a = e.attributes ?? {}
   if (typeof a.permission_mode === 'string') S.permMode = a.permission_mode
   if (typeof a.tool_use_id === 'string') settle($, a.tool_use_id)
+}
+
+// Запуск субагента (agent.spawn): режим разрешений главного цикла, который наследует субагент. На Team и Enterprise —
+// единственное, откуда режим виден (п. 53)
+export function modeSeen(mode) {
+  if (typeof mode === 'string' && mode) S.permMode = mode
 }
 
 // Режим разрешений из входа классического хука (Pro и Max): он есть у каждого
@@ -8159,7 +8207,7 @@ export async function questionCall($, e, next) {
 export function askOf(r) {
   const a = r?.status === 'permission' ? r.ask : null
   if (!a || typeof a !== 'object') return null
-  if (a.kind === 'permission') return { kind: 'permission', tool: String(a.tool ?? ''), what: String(a.what ?? '') }
+  if (a.kind === 'permission') return { kind: 'permission', tool: String(a.tool ?? ''), what: String(a.what ?? ''), ...(a.maybe === true ? { maybe: true, ...(a.check === true ? { check: true } : {}) } : {}) }
   if (a.kind !== 'question' || typeof a.id !== 'string' || !Array.isArray(a.questions) || !a.questions.length) return null
   const ok = a.questions.every((q) => typeof q?.question === 'string' && Array.isArray(q.options) && q.options.length && q.options.every((x) => typeof x === 'string'))
   return ok ? { kind: 'question', id: a.id, questions: a.questions.map((q) => ({ ...q, header: String(q.header ?? ''), multi: Boolean(q.multi) })) } : null
@@ -8344,8 +8392,8 @@ export async function turnDone($, turnId, e) {
 // Arcade: экран игры в панели — Денди, Flappy или проверка клавиш.
 
 // Что с агентом, пока идёт игра: на паузе и на плашке над экраном
-const ALERT_PAUSE = { permission: 'агент ждёт разрешения', question: 'агент задал вопрос' }
-const ALERT_BAR = { permission: ' Агент ждёт разрешения ', question: ' Агент задал вопрос ' }
+const ALERT_PAUSE = { permission: 'агент ждёт разрешения', maybe: 'агент, возможно, ждёт разрешения', check: 'агент, возможно, ждёт разрешения', question: 'агент задал вопрос' }
+const ALERT_BAR = { permission: ' Агент ждёт разрешения ', maybe: ' Агент, возможно, ждёт разрешения ', check: ' Агент, возможно, ждёт разрешения — проверь ', question: ' Агент задал вопрос ' }
 
 export function gameScreen($, e, kit) {
   const { Box, Button, Image, Raster, Svg, Text, eventLines, game, header, terminal } = kit
@@ -12812,7 +12860,9 @@ export function agentsScreen($, e, kit) {
   const away = all.filter((r) => !r.me && hidden.has(r.sid))
   const strong = (text) => Text(desktop ? { weight: 'semibold', wrap: 'wrap', children: [text] } : { bold: true, children: [text] })
   const nameOf = (r) => (r.me ? `${r.name} · ${tr('эта сессия', S.lang)}` : r.name)
-  const labelOf = (r) => (askOf(r)?.kind === 'question' ? 'ждёт ответа' : STATUS_LABEL[r.status] ?? STATUS_LABEL.idle)
+  const labelOf = (r) => (askOf(r)?.kind === 'question' ? 'ждёт ответа' : askOf(r)?.maybe ? MAYBE_LABEL : STATUS_LABEL[r.status] ?? STATUS_LABEL.idle)
+  // «Возможно, ждёт разрешения» — жёлтым, как работа: наверняка не знаем (п. 53)
+  const colorOfAgent = (r) => (askOf(r)?.maybe ? 'warning' : STATUS_COLOR[r.status])
   // В фоне — и сколько там агентов: главный ход кончился, а они работают
   const labelText = (r) => (r.status === 'background' && r.bg > 0 && !askOf(r) ? fill(tr('работает в фоне · агентов: {0}', S.lang), [r.bg]) : tr(labelOf(r), S.lang))
   const stateOf = (r) => `${labelText(r)} · ${tr(agoText(now - r.since), S.lang)}`
@@ -12823,7 +12873,7 @@ export function agentsScreen($, e, kit) {
   // Заметки проекта: какая страница блокнота пришла этой сессии в начале (app/context)
   const ctxOf = (r) => (typeof r.ctx === 'string' && r.ctx ? fill(tr('Контекст из блокнота: «{0}»', S.lang), [r.ctx.slice(0, 80)]) : '')
   const status = (r) => {
-    const color = STATUS_COLOR[r.status]
+    const color = colorOfAgent(r)
     return keep(Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] }))
   }
   const wrapRow = (key, children) => Box({ key, flexDirection: 'row', flexWrap: 'wrap', columnGap: 2, rowGap: desktop ? 'sm' : 0, children })
@@ -12860,7 +12910,7 @@ export function agentsScreen($, e, kit) {
     })
   }
   const line = (r) => {
-    const color = STATUS_COLOR[r.status]
+    const color = colorOfAgent(r)
     const rest = [cardOf(r), queueOf(r), usageOf(r), ctxOf(r)].filter(Boolean).join(' · ')
     const head = keep(Text({ children: [Text({ bold: true, children: [nameOf(r)] }), ' — ', Text({ ...(color ? { color } : { dimColor: true }), children: [stateOf(r)] })] }))
     return Box({
@@ -12966,7 +13016,10 @@ export function askLines($, kit, r, prefix = 'agents') {
   const id = r.sid || 'me'
   if (ask.kind === 'permission') {
     const what = ask.what ? `${ask.tool}: ${ask.what}` : ask.tool
-    return [...(what ? [keep(dim(what))] : []), dim('Разрешение даётся только в самой сессии.')]
+    const maybe = ask.check
+      ? 'Вызов идёт дольше минуты — возможно, сессия всё-таки спрашивает: проверь.'
+      : 'Возможно, вызов уже разрешён сам (режим Auto) — тогда вопроса в сессии нет.'
+    return [...(what ? [keep(dim(what))] : []), ...(ask.maybe ? [dim(maybe)] : []), dim('Разрешение даётся только в самой сессии.')]
   }
   if (isSent(r, ask)) return [dim('Ответ отправлен — сессия получит его через секунду.')]
   const picks = picksOf(r, ask)
@@ -13165,7 +13218,7 @@ export function todayScreen($, e, kit) {
   const waiting = agentsList(now).filter((r) => (r.me || !hidden.has(r.sid)) && (r.status === 'permission' || askOf(r)))
   if (waiting.length) {
     const nameOf = (r) => (r.me ? `${r.name} · ${t('эта сессия')}` : r.name)
-    const stateOf = (r) => `${t(askOf(r)?.kind === 'question' ? 'ждёт ответа' : STATUS_LABEL.permission)} · ${t(agoText(now - r.since))}`
+    const stateOf = (r) => `${t(askOf(r)?.kind === 'question' ? 'ждёт ответа' : askOf(r)?.maybe ? MAYBE_LABEL : STATUS_LABEL.permission)} · ${t(agoText(now - r.since))}`
     const cardOf = (r) => (r.card ? (r.card.boardTitle ? fill(t('«{0}» на доске «{1}»'), [r.card.title, r.card.boardTitle]) : `«${r.card.title}»`) : '')
     const one = (r) => {
       const id = r.sid || 'me'
@@ -13518,7 +13571,8 @@ async function petBuy($, id) {
 function petNow(now) {
   const hidden = new Set(S.agHidden ?? [])
   const list = agentsList(now)
-  const rows = list.filter((r) => (r.me || !hidden.has(r.sid)) && (r.status === 'permission' || askOf(r)))
+  // «Возможно, ждёт разрешения» питомца не тревожит (п. 53)
+  const rows = list.filter((r) => (r.me || !hidden.has(r.sid)) && !isMaybe(r) && (r.status === 'permission' || askOf(r)))
   const waiting = rows.length
   // Экран рисует открытая сессия — значит, одна есть всегда
   return {
@@ -14783,7 +14837,7 @@ export async function drawPane($, e) {
 
   // Шапка: логотип (Desktop и VS Code), название, состояние агента цветом: работает (и в фоне) — жёлтый, ждёт
   // разрешения — красный, закончил — зелёный, свободен — серый. Цвета — ключи темы: читаются и на светлой, и на тёмной
-  const statusColor = S.status === 'permission' ? 'error' : S.status === 'working' || S.status === 'background' ? 'warning' : S.status === 'done' ? 'success' : 'inactive'
+  const statusColor = S.status === 'permission' ? (S.ask?.maybe ? 'warning' : 'error') : S.status === 'working' || S.status === 'background' ? 'warning' : S.status === 'done' ? 'success' : 'inactive'
   const headerOf = (extra = []) => Box({
     flexDirection: 'row',
     columnGap: 2,
@@ -15713,6 +15767,13 @@ export function register(on) {
   on('tool.call', { tool: 'mcp__arcade__calendar' }, async ($, e) => {
     const out = await calendarTool($, e)
     return out.isError ? { deny: out.text } : { result: out.text }
+  })
+
+  // Запуск субагента из главного цикла: из него узнаём режим разрешений сессии (modeSeen, п. 53). Только смотрим —
+  // запуск идёт дальше как есть
+  on('agent.spawn', async ($, e, next) => {
+    if (e.parentAgentId === undefined) modeSeen(e.permissionMode)
+    return next(e)
   })
 
   // Инструменты агента (главного цикла; свои вызовы Arcade — нет): игру, которую надо открыть, пока агент работает,

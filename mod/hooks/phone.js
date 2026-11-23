@@ -4,7 +4,7 @@
 // В тексте только имя сессии и название доски — без текста вопроса, карточек, кода и имён файлов. Отправляет одна сессия
 // на компьютере (ведущая, как у всплывающих уведомлений), не чаще раза в 5 минут; сайт сам держит те же 5 минут и 30 в
 // сутки на аккаунт.
-import { ALERT_KEEP_MS } from './alerts.js'
+import { ALERT_KEEP_MS, isMaybe } from './alerts.js'
 import { fill } from './chats.js'
 
 export const PHONE_KEY = 'phoneSent' // $.store: { by, last, told } — кто отправил последним, когда и про какие ожидания
@@ -20,10 +20,11 @@ const BOARD_MAX = 200 // ключ «queue|доска» в отправленны
 // Управляющие символы, разделители строк и знаки направления текста — сайт такой текст не примет
 const BAD = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g
 
-// Строки «Агентов», которые ждут разрешения дольше PHONE_WAIT_MS; скрытые человеком не зовём
+// Строки «Агентов», которые ждут разрешения дольше PHONE_WAIT_MS; скрытые человеком не зовём. «Возможно, ждёт» — нет,
+// а «возможно, ждёт — проверь» (п. 53) — да
 export function phoneDue(all, now, hidden = []) {
   return (all ?? []).filter(
-    (r) => r && r.status === 'permission' && Number.isFinite(r.since) && now - r.since >= PHONE_WAIT_MS && !hidden.includes(r.sid),
+    (r) => r && r.status === 'permission' && !isMaybe(r) && Number.isFinite(r.since) && now - r.since >= PHONE_WAIT_MS && !hidden.includes(r.sid),
   )
 }
 
@@ -114,10 +115,11 @@ export function phoneName(name, none = 'Claude Code') {
   return clean ? cut(clean, NAME_MAX) : none
 }
 
-// Ждущие сессии: одна — «Сессия «имя» ждёт тебя», несколько — список имён; не влезает — хвост «+N»
-function waitText(list, t) {
-  if (list.length <= 1) return cut(fill(t('Сессия «{0}» ждёт тебя'), [list[0] ?? 'Claude Code']), PHONE_TEXT_MAX)
-  const many = (shown, rest) => fill(t('Ждут тебя сессии: {0}'), [shown.join(', ') + (rest ? ` +${rest}` : '')])
+// Ждущие сессии: одна — «Сессия «имя» ждёт тебя», несколько — список имён; не влезает — хвост «+N». maybe — все только
+// «возможно, ждёт — проверь»: текст не утверждает
+function waitText(list, t, maybe) {
+  if (list.length <= 1) return cut(fill(t(maybe ? 'Сессия «{0}», возможно, ждёт тебя — проверь' : 'Сессия «{0}» ждёт тебя'), [list[0] ?? 'Claude Code']), PHONE_TEXT_MAX)
+  const many = (shown, rest) => fill(t(maybe ? 'Возможно, ждут тебя сессии: {0}' : 'Ждут тебя сессии: {0}'), [shown.join(', ') + (rest ? ` +${rest}` : '')])
   for (let n = list.length; n >= 1; n--) {
     const text = many(list.slice(0, n), list.length - n)
     if (Array.from(text).length <= PHONE_TEXT_MAX) return text
@@ -135,10 +137,10 @@ function queueLine(q, t) {
 }
 
 // Текст уведомления: ждущие сессии (names) и концы очередей (queues — { title, kind, n, why, when }) через точку; не
-// влезает — хвост «+N» из того, что не влезло
-export function phoneText(names, t = (s) => s, queues = []) {
+// влезает — хвост «+N» из того, что не влезло. maybe — все ждущие только «возможно, ждёт — проверь»
+export function phoneText(names, t = (s) => s, queues = [], maybe = false) {
   const list = [...new Set((names ?? []).map((n) => phoneName(n)))]
-  const parts = list.length || !queues.length ? [waitText(list, t)] : []
+  const parts = list.length || !queues.length ? [waitText(list, t, maybe && list.length > 0)] : []
   for (const q of queues ?? []) parts.push(queueLine(q, t))
   for (let n = parts.length; n >= 1; n--) {
     const rest = parts.length - n

@@ -15,9 +15,9 @@ import { branchOf, nextRemind, remindChoices } from '../hooks/register.js'
 import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync, boardFailure, cardId, colId, detachBoard, freshBase, parseBoard, parseBoardDone, parseBoards, planSync, restoreDesks } from '../hooks/desks.js'
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard, fileList } from '../hooks/register.js'
-import { ALERT_KEEP_MS, alertText, restoreAlerts } from '../hooks/alerts.js'
+import { ALERT_KEEP_MS, alertText, restoreAgain, restoreAlerts } from '../hooks/alerts.js'
 import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, changedPaths, lastOf, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
-import { ANSWER_POLL_MS, asksReset, callSeen, toolDecided } from '../hooks/register.js'
+import { ANSWER_POLL_MS, MAYBE_NOTIFY_MS, asksReset, callSeen, modeSeen, statusText, toolDecided } from '../hooks/register.js'
 import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test, BASH_MS } from './kit.ts'
@@ -5881,6 +5881,11 @@ test('alerts.js: текст уведомления о сессиях, что у�
   const five = ['a', 'b', 'c', 'd', 'e'].map((name) => ({ sid: name, name, what: 'permission' }))
   expect(alertText(five, ru)!.title).toBe('Ждут тебя: a, b, c +2')
   expect(alertText(five.slice(0, 2), (s: string) => tr(s, 'en'))).toEqual({ title: 'Waiting for you: a, b', text: 'a — waiting for permission; b — waiting for permission', kind: 'wait' })
+  // «Возможно, ждёт — проверь» (п. 53): одни такие — заголовок не утверждает; рядом настоящий запрос — обычный
+  expect(alertText([{ sid: 'b', name: 'docs', what: 'check' }], ru)).toEqual({ title: 'Возможно, ждёт тебя: docs', text: 'docs — возможно, ждёт разрешения — проверь', kind: 'wait' })
+  expect(alertText([{ sid: 'b', name: 'docs', what: 'check' }, { sid: 'c', name: 'web', what: 'check' }], (s: string) => tr(s, 'en'))).toEqual({ title: 'May be waiting for you: docs, web', text: 'docs — may be waiting for permission — check; web — may be waiting for permission — check', kind: 'wait' })
+  expect(alertText([{ sid: 'b', name: 'docs', what: 'check' }, { sid: 'a', name: 'api', what: 'permission' }], ru)!.title).toBe('Ждут тебя: docs, api')
+  expect(restoreAgain({ by: 'x', evs: [{ key: 'k', sid: 's', seen: 'check', name: 'docs', what: 'check' }, { key: 'k2', sid: 's', seen: 'done', name: 'docs', what: 'done' }] }).evs.map((e: any) => e.what)).toEqual(['check'])
   // Что уже объявлено: старше часа и странное — забыто; время «объявляли» из будущего — ноль
   expect(restoreAlerts({ by: 'x', last: 5, told: { k: 1, old: -ALERT_KEEP_MS, bad: 'x' } }, 10)).toEqual({ by: 'x', last: 5, told: { k: 1 } })
   expect(restoreAlerts(null, 10)).toEqual({ by: '', last: 0, told: {} })
@@ -6554,6 +6559,44 @@ test('агенты: вопрос другой сессии — ответить 
   await ui.unmount()
 })
 
+test('агенты: другая сессия «возможно, ждёт разрешения» (режим Auto или неизвестен) — без всплывашки, карточки поверх окон и звука; в «Агентах» — жёлтым и с пояснением; минута без конца вызова — «возможно, ждёт — проверь» с уведомлением; стала ждать наверняка — уведомляем (п. 53)', async ($, on) => {
+  const { clock, toasts, popups, disk, putFile } = stubs(on, { env: AG_ENV, agents: AG_ME })
+  const list: Record<string, any> = { docs: { slot: 9, sid: 'sess-b', name: 'docs', path: 'D:\\work\\docs', status: 'working' } }
+  const { marks, live, set } = alertRivals(putFile, clock, disk, list)
+  const about = () => toasts.filter((t) => t.includes('«docs»'))
+  marks()
+  await start($)
+  await live(10_000)
+  set('docs', 'permission', { ask: { kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true } })
+  await live(20_000)
+  expect(about()).toEqual([])
+  expect(popups).toEqual([])
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'arcade-menu-agents' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(await ui.find({ type: 'Text', text: /^docs — возможно, ждёт разрешения · меньше минуты$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^возможно, ждёт разрешения · меньше минуты$/ })).toMatchObject({ props: { color: 'warning' } })
+  expect(await ui.find({ type: 'Text', text: /Возможно, вызов уже разрешён сам \(режим Auto\) — тогда вопроса в сессии нет\./ })).toBeDefined()
+  await ui.unmount()
+  // Минута без конца вызова — всё-таки зовём, но текст не утверждает: «возможно, ждёт разрешения — проверь»
+  list.docs = { ...list.docs, ask: { kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true, check: true } }
+  await live(20_000)
+  expect(about()).toEqual(['Сессия «docs», возможно, ждёт разрешения — проверь'])
+  expect(popups.length).toBe(1)
+  expect(popups[0].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Возможно, ждёт тебя: docs', ARCADE_POPUP_TEXT: 'docs — возможно, ждёт разрешения — проверь' })
+  // Окно снова открывается на «Агентах»
+  const ui2 = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await clock.advance(AGENT_TICK_MS)
+  expect(await ui2.find({ type: 'Text', text: /Вызов идёт дольше минуты — возможно, сессия всё-таки спрашивает: проверь\./ })).toBeDefined()
+  await ui2.unmount()
+  // Та же сессия теперь ждёт наверняка (режим узнали) — уведомление, как о новом запросе (после паузы между карточками)
+  list.docs = { ...list.docs, ask: { kind: 'permission', tool: 'Bash', what: 'npm test' } }
+  await live(40_000)
+  expect(about()).toEqual(['Сессия «docs», возможно, ждёт разрешения — проверь', 'Сессия «docs» ждёт разрешения'])
+  expect(popups.length).toBe(2)
+  expect(popups[1].env).toMatchObject({ ARCADE_POPUP_TITLE: 'Ждёт тебя: docs', ARCADE_POPUP_TEXT: 'docs — ждёт разрешения' })
+})
+
 // Свой $ и свои часы: вердикт движка ($.tool.check) задаёт тест. Модули теста — отдельная от мода копия: состояние S здесь своё
 test('запрос разрешения без классического хука (Team): движок спросит человека о вызове Claude — через паузу «ждёт разрешения», решение из телеметрии — снова работает', async () => {
   let now = 0
@@ -6598,8 +6641,9 @@ test('запрос разрешения без классического хук
   expect(waits()).toBe(false)
   await advance(200)
   expect(waits()).toBe(true)
-  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test' })
-  expect(S.events[0]).toMatch(/запрос разрешения: Bash$/)
+  // Режим неизвестен — классификатор Auto мог разрешить сам: только «возможно, ждёт разрешения» (п. 53)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true })
+  expect(S.events[0]).toMatch(/возможно, запрос разрешения: Bash$/)
   decided('toolu_1')
   expect([S.status, S.ask, S.permMode]).toEqual(['working', null, 'default'])
   expect(S.events[0]).toMatch(/агент снова работает$/)
@@ -6623,7 +6667,7 @@ test('запрос разрешения без классического хук
   await check('toolu_11', { tool: 'Write', file_path: FILE, content: 'x', agentId: 'a2' })
   expect(asked.at(-1)).toEqual({ tool: 'Write', input: { file_path: FILE, content: 'x' } })
   await advance(20_000)
-  expect(S.ask).toEqual({ kind: 'permission', tool: 'Write', what: FILE })
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Write', what: FILE, maybe: true })
   decided('toolu_11', 'auto')
   expect([S.status, S.ask?.tool]).toEqual(['permission', 'Bash'])
   decided('toolu_10', 'auto')
@@ -6645,6 +6689,9 @@ test('запрос разрешения без классического хук
   expect(asked.length).toBe(before + 2)
   await advance(21_000)
   expect(waits()).toBe(false)
+  // Через минуту «проверь» решённым вызовам не звонит
+  await advance(MAYBE_NOTIFY_MS)
+  expect(waits()).toBe(false)
   expect(timers).toEqual([])
   // Другие события телеметрии не трогают ничего
   toolDecided($, { to: 'collector', event: 'claude_code.api_request', attributes: { permission_mode: 'plan' } })
@@ -6652,6 +6699,109 @@ test('запрос разрешения без классического хук
   asksReset()
   S.status = 'idle'
   S.permMode = ''
+})
+
+// п. 53: на Team режим разрешений виден только из запуска субагента (modeSeen). Auto или неизвестен — «возможно, ждёт»
+test('запрос разрешения в режиме Auto или неизвестном — «возможно, ждёт разрешения»: без системного уведомления; минута без конца вызова — «проверь» с уведомлением; настоящий запрос после него — с уведомлением; bypassPermissions и dontAsk — запроса нет', async () => {
+  let now = 1_000
+  const timers: { at: number; fn: () => any }[] = []
+  const runs: any[] = []
+  const asked: any[] = []
+  const $: any = {
+    clock: { now: async () => now, after: (ms: number, fn: () => any) => void timers.push({ at: now + ms, fn }) },
+    ui: { invalidate: () => {}, close: async () => {} },
+    process: { run: async (argv: any, opts: any) => void runs.push(opts?.env ?? argv) },
+    tool: {
+      check: async (q: any) => {
+        asked.push(q)
+        return { decision: 'ask' }
+      },
+    },
+  }
+  const advance = async (ms: number) => {
+    now += ms
+    for (const t of timers.filter((x) => x.at <= now).sort((a, b) => a.at - b.at)) {
+      timers.splice(timers.indexOf(t), 1)
+      await t.fn()
+    }
+  }
+  const check = (id: string) => callSeen($, { tool: 'Bash', command: 'npm test', tool_use_id: id })
+  const decided = (id: string, mode: string) =>
+    toolDecided($, { to: 'collector', event: 'claude_code.tool_decision', attributes: { tool_use_id: id, permission_mode: mode, decision: 'accept', source: 'config' } })
+  const keep = { osNotify: S.osNotify, windowOpenedAt: S.windowOpenedAt, platform: S.platform, ag: S.ag }
+  asksReset()
+  Object.assign(S, { status: 'working', permMode: '', osNotify: true, windowOpenedAt: now, platform: 'windows', ag: null })
+
+  // Режим неизвестен: через 3 с — «возможно», без системного уведомления
+  await check('toolu_m1')
+  await advance(3_100)
+  await advance(0)
+  expect([S.status, S.ask]).toEqual(['permission', { kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true }])
+  expect(statusText(now)).toBe('Агент, возможно, ждёт разрешения — Esc, чтобы посмотреть')
+  expect(runs).toEqual([])
+  // Сессия запустила субагента — режим известен: default. Настоящий запрос заслоняет «возможно» и уведомляет
+  modeSeen('default')
+  await check('toolu_m2')
+  await advance(800)
+  await advance(0)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test' })
+  expect(statusText(now)).toBe('Агент ждёт разрешения — Esc, чтобы ответить')
+  expect(runs).toEqual([{ ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент ждёт разрешения' }])
+  // Ответили на настоящий — снова виден «возможно»; на оба — работает
+  decided('toolu_m2', 'default')
+  expect([S.status, S.ask?.maybe]).toEqual(['permission', true])
+  decided('toolu_m1', 'default')
+  expect([S.status, S.ask]).toEqual(['working', null])
+
+  // Пустой режим из запуска субагента режим не сбрасывает
+  modeSeen('')
+  modeSeen(undefined)
+  expect(S.permMode).toBe('default')
+  // Auto: ждём 20 с, потом — только «возможно»
+  modeSeen('auto')
+  await check('toolu_m3')
+  await advance(20_100)
+  await advance(0)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true })
+  expect(runs.length).toBe(1)
+  // Минута без конца вызова — всё-таки зовём, но честно: «возможно, ждёт разрешения — проверь»
+  await advance(MAYBE_NOTIFY_MS)
+  await advance(0)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true, check: true })
+  expect(runs).toEqual([
+    { ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент ждёт разрешения' },
+    { ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент, возможно, ждёт разрешения — проверь' },
+  ])
+  // Новый «возможно» рядом «проверь» не заслоняет и не зовёт
+  await check('toolu_m5')
+  await advance(20_100)
+  await advance(0)
+  expect([S.ask?.check, runs.length]).toEqual([true, 2])
+  decided('toolu_m5', 'auto')
+  decided('toolu_m3', 'auto')
+  expect(S.status).toBe('working')
+
+  // bypassPermissions и dontAsk человека не спрашивают: движок даже не спрашиваем
+  const before = asked.length
+  for (const mode of ['bypassPermissions', 'dontAsk']) {
+    modeSeen(mode)
+    await check('toolu_m' + mode)
+    await advance(21_000)
+    expect(S.status).toBe('working')
+  }
+  expect(asked.length).toBe(before)
+  // Режим узнали, пока ждали: запроса нет
+  S.permMode = ''
+  await check('toolu_m4')
+  await advance(1_000)
+  modeSeen('bypassPermissions')
+  await advance(3_000)
+  // Решённым вызовам «проверь» уже не звонит
+  await advance(MAYBE_NOTIFY_MS)
+  expect([S.status, runs.length, timers]).toEqual(['working', 2, []])
+
+  asksReset()
+  Object.assign(S, { status: 'idle', permMode: '' }, keep)
 })
 
 test('в разрешении отказали — статус «ждёт разрешения» не висит до конца хода', async ($, on) => {
