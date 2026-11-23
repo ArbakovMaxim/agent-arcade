@@ -17,10 +17,17 @@ const TOLD_MAX = 200 // столько последних объявленных
 const NAMES_MAX = 3 // в заголовке — столько имён сессий, остальные — числом
 
 // Что сейчас с сессией для всплывашек и уведомлений: каждый новый вопрос — заново
-export const seenOf = (r) => (r.status === 'permission' && r.ask?.kind === 'question' ? `question:${r.ask.id}` : r.status)
+// Сессия, возможно, ждёт разрешения: Arcade наверняка не знает — режим Auto или неизвестен (п. 53). О таком не уведомляем
+const maybeAsk = (r) => r?.status === 'permission' && r.ask?.kind === 'permission' && r.ask.maybe === true
+export const isMaybe = (r) => maybeAsk(r) && r.ask.check !== true
+// «Возможно» висит дольше MAYBE_NOTIFY_MS, а вызов не кончился — всё-таки зовём, но честно: «возможно, ждёт разрешения —
+// проверь». Настоящий запрос важнее тишины: на Team в Auto Arcade не видит, ушёл ли вызов человеку
+export const isCheck = (r) => maybeAsk(r) && r.ask.check === true
+// «Возможно» и «проверь» — отдельные состояния: «возможно» стало «проверь» или настоящим запросом — уведомить заново
+export const seenOf = (r) => (r.status === 'permission' && r.ask?.kind === 'question' ? `question:${r.ask.id}` : isMaybe(r) ? 'maybe' : isCheck(r) ? 'check' : r.status)
 
-// О чём уведомлять: 'permission', 'question', 'done'
-export const alertWhat = (r) => (r.status === 'done' ? 'done' : r.ask?.kind === 'question' ? 'question' : 'permission')
+// О чём уведомлять: 'permission', 'check' (возможно, ждёт разрешения — проверь), 'question', 'done'
+export const alertWhat = (r) => (r.status === 'done' ? 'done' : r.ask?.kind === 'question' ? 'question' : isCheck(r) ? 'check' : 'permission')
 
 // Ключ события — одинаковый во всех сессиях: id сессии, состояние и с каких пор оно
 export const alertKey = (r) => `${r.sid}|${seenOf(r)}|${r.since}`
@@ -41,7 +48,7 @@ export function restoreAgain(raw) {
   const ok = raw && typeof raw === 'object' && !Array.isArray(raw)
   const evs = []
   for (const ev of ok && Array.isArray(raw.evs) ? raw.evs : []) {
-    if (!ev || typeof ev !== 'object' || (ev.what !== 'permission' && ev.what !== 'question')) continue
+    if (!ev || typeof ev !== 'object' || !['permission', 'check', 'question'].includes(ev.what)) continue
     if (!['key', 'sid', 'seen', 'name'].every((k) => typeof ev[k] === 'string' && ev[k].length <= 300)) continue
     evs.push({ key: ev.key, sid: ev.sid, seen: ev.seen, name: ev.name, what: ev.what })
   }
@@ -57,7 +64,7 @@ export function keepTold(told) {
   )
 }
 
-const WHAT_LABEL = { permission: 'ждёт разрешения', question: 'ждёт ответа', done: 'закончил ход' }
+const WHAT_LABEL = { permission: 'ждёт разрешения', check: 'возможно, ждёт разрешения — проверь', question: 'ждёт ответа', done: 'закончил ход' }
 
 // Текст уведомления о пачке событий { sid, name, what }: заголовок — кто ждёт (или кто закончил, если ждущих нет),
 // строка — каждая сессия и что с ней. kind — 'wait' или 'done': какой звук. Пусто — null. t — перевод строки
@@ -68,7 +75,11 @@ export function alertText(events, t) {
   const names = [...new Set(heads.map((e) => e.name))]
   const shown = names.length > NAMES_MAX ? `${names.slice(0, NAMES_MAX).join(', ')} +${names.length - NAMES_MAX}` : names.join(', ')
   const many = names.length > 1
-  const head = waiting.length ? (many ? 'Ждут тебя: {0}' : 'Ждёт тебя: {0}') : many ? 'Claude закончил ход в сессиях: {0}' : 'Claude закончил ход: {0}'
+  // Все ждущие — только «возможно» — и заголовок не утверждает
+  const maybe = waiting.length && waiting.every((e) => e.what === 'check')
+  const head = maybe
+    ? many ? 'Возможно, ждут тебя: {0}' : 'Возможно, ждёт тебя: {0}'
+    : waiting.length ? (many ? 'Ждут тебя: {0}' : 'Ждёт тебя: {0}') : many ? 'Claude закончил ход в сессиях: {0}' : 'Claude закончил ход: {0}'
   const order = [...waiting, ...events.filter((e) => e.what === 'done')]
   return { title: fill(t(head), [shown]), text: order.map((e) => `${e.name} — ${t(WHAT_LABEL[e.what])}`).join('; '), kind: waiting.length ? 'wait' : 'done' }
 }

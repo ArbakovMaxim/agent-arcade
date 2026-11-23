@@ -24,6 +24,7 @@ const EXACT = {
   // Шапка и статус агента
   'Агент свободен': 'Agent is idle',
   'Агент ждёт разрешения — Esc, чтобы ответить': 'Agent is waiting for permission — Esc to answer',
+  'Агент, возможно, ждёт разрешения — Esc, чтобы посмотреть': 'Agent may be waiting for permission — Esc to check',
   'Агент закончил — Esc, чтобы вернуться': 'Agent finished — Esc to go back',
   'Агент закончил — можно возвращаться': 'Agent finished — you can go back',
   'Агент ждёт разрешения': 'Agent is waiting for permission',
@@ -31,6 +32,11 @@ const EXACT = {
   ' Агент закончил · пауза ': ' Agent finished · paused ',
   ' Агент ждёт разрешения ': ' Agent is waiting for permission ',
   ' Агент ждёт разрешения · пауза ': ' Agent is waiting for permission · paused ',
+  ' Агент, возможно, ждёт разрешения ': ' Agent may be waiting for permission ',
+  ' Агент, возможно, ждёт разрешения · пауза ': ' Agent may be waiting for permission · paused ',
+  ' Агент, возможно, ждёт разрешения — проверь ': ' Agent may be waiting for permission — check ',
+  ' Агент, возможно, ждёт разрешения — проверь · пауза ': ' Agent may be waiting for permission — check · paused ',
+  'Агент, возможно, ждёт разрешения — проверь': 'Agent may be waiting for permission — check',
   'Агент задал вопрос — Esc, чтобы ответить': 'Agent asked a question — Esc to answer',
   'Агент задал вопрос': 'Agent asked a question',
   ' Агент задал вопрос ': ' Agent asked a question ',
@@ -1161,6 +1167,10 @@ const EXACT = {
   'Очередь доски можно запустить в нескольких сессиях: нажми «Очередь для Claude» на той же доске в каждой — свободная сессия возьмёт следующую карточку.': 'A board queue can run in several sessions: press “Queue for Claude” on the same board in each one, and a free session takes the next card.',
   'эта сессия': 'this session',
   'ждёт разрешения': 'waiting for permission',
+  'возможно, ждёт разрешения': 'may be waiting for permission',
+  'Возможно, вызов уже разрешён сам (режим Auto) — тогда вопроса в сессии нет.': 'The call may already be approved on its own (Auto mode) — then the session has no question.',
+  'Вызов идёт дольше минуты — возможно, сессия всё-таки спрашивает: проверь.': 'The call has been going on for over a minute — the session may be asking after all: check.',
+  'возможно, ждёт разрешения — проверь': 'may be waiting for permission — check',
   'закончил ход': 'finished the turn',
   'работает': 'working',
   'работает в фоне': 'working in the background',
@@ -1280,10 +1290,13 @@ const EXACT = {
   'Папка открыта: положи туда .wav или .mp3 и нажми «Обновить список».': 'Folder opened: put a .wav or .mp3 there and press “Refresh list”.',
   'Ждут тебя: {0}': 'Waiting for you: {0}',
   'Ждёт тебя: {0}': 'Waiting for you: {0}',
+  'Возможно, ждут тебя: {0}': 'May be waiting for you: {0}',
+  'Возможно, ждёт тебя: {0}': 'May be waiting for you: {0}',
   'Claude закончил ход в сессиях: {0}': 'Claude finished the turn in: {0}',
   'Claude закончил ход: {0}': 'Claude finished the turn: {0}',
   '  всплывашка в панели Arcade, без звука': '  a toast in the Arcade pane, no sound',
   'Сессия «{0}» ждёт разрешения': 'Session “{0}” is waiting for permission',
+  'Сессия «{0}», возможно, ждёт разрешения — проверь': 'Session “{0}” may be waiting for permission — check',
   'Сессия «{0}» ждёт ответа на вопрос': 'Session “{0}” is waiting for an answer to a question',
   'Разрешение даётся только в самой сессии.': 'Permission can only be given in that session itself.',
   'Ответить': 'Answer',
@@ -1369,6 +1382,8 @@ const EXACT = {
   'Телефонов для уведомлений Arcade больше нет — подключи телефон заново в настройках Arcade.': 'There are no phones for Arcade notifications anymore — connect a phone again in Arcade settings.',
   'Сессия «{0}» ждёт тебя': 'Session “{0}” is waiting for you',
   'Ждут тебя сессии: {0}': 'Sessions waiting for you: {0}',
+  'Сессия «{0}», возможно, ждёт тебя — проверь': 'Session “{0}” may be waiting for you — check',
+  'Возможно, ждут тебя сессии: {0}': 'Sessions that may be waiting for you: {0}',
   'Очередь на доске «{0}» закончилась': 'Queue on board “{0}” finished',
   'Очередь на доске «{0}» остановилась': 'Queue on board “{0}” stopped',
   'Очередь на доске «{0}» закончилась: карточек — {1}': 'Queue on board “{0}” finished, cards done: {1}',
@@ -1744,7 +1759,7 @@ const RULES = [
   [/^Открой во встроенном браузере: (.+)$/, (m) => `Open in the built-in browser: ${m[1]}`],
   [/^Попроси Claude открыть во встроенном браузере: (.+)$/, (m) => `Ask Claude to open this in the built-in browser: ${m[1]}`],
   [/^Не получилось открыть окно: (.+)$/, (m) => `Could not open the window: ${m[1].replace(/^код (\d+)$/, 'code $1')}`],
-  [/^Пауза: (агент ждёт разрешения|агент задал вопрос|агент закончил)\. Любая клавиша игры — играть дальше, Esc — к агенту$/,
+  [/^Пауза: (агент ждёт разрешения|агент, возможно, ждёт разрешения|агент задал вопрос|агент закончил)\. Любая клавиша игры — играть дальше, Esc — к агенту$/,
     (m) => `Paused: ${paused(m[1])}. Any game key — keep playing, Esc — back to the agent`],
   [/^Не узнаю клавишу «(.+)»\. Назначим управление под твою раскладку\.$/, (m) => `I don't recognize the key “${m[1]}”. Let's set up the controls for your layout.`],
   [/^(.*)Нажми клавишу для «(.+)» \((\d+) из (\d+)\)$/, (m) => `${tr(m[1].trim(), 'en')} Press the key for “${words(m[2])}” (${m[3]} of ${m[4]})`.trim()],
@@ -1760,7 +1775,7 @@ const RULES = [
 ]
 
 // Не словарём: фразы целиком — в шаблонах «Paused: …» (tools/i18n/templates.json), отдельно их не переводят
-const paused = (why) => (why === 'агент закончил' ? 'the agent finished' : why === 'агент задал вопрос' ? 'the agent asked a question' : 'the agent is waiting for permission')
+const paused = (why) => (why === 'агент закончил' ? 'the agent finished' : why === 'агент задал вопрос' ? 'the agent asked a question' : why === 'агент, возможно, ждёт разрешения' ? 'the agent may be waiting for permission' : 'the agent is waiting for permission')
 const EVENTS = {
   'агент начал ход': 'the agent started a turn',
   'агент закончил ход': 'the agent finished the turn',
