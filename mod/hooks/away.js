@@ -78,21 +78,29 @@ export function replyLine(text, max = REPLY_MAX) {
   return cut(joined, max)
 }
 
-// Что поменялось в начале хода — для сравнения в конце: путь → числа. null — не знаем (не git или ещё не читали)
-const sigOf = (f) => `${f.add ?? ''}|${f.del ?? ''}|${f.state ?? ''}`
+// Что поменялось в начале хода — для сравнения в конце: путь → числа строк и подпись содержимого (stamps: размер и
+// время правки — строка вместо строки в уже изменённом файле чисел не меняет). null — не знаем (не git или ещё не читали)
+const stampOf = (stamps, path) => (stamps && typeof stamps === 'object' && Object.hasOwn(stamps, path) ? String(stamps[path]) : '')
+const sigOf = (f, stamps) => `${f.add ?? ''}|${f.del ?? ''}|${f.state ?? ''}|${stampOf(stamps, f.path)}`
 export function changeBase(changes) {
   if (!changes || !Array.isArray(changes.files)) return null
-  return Object.fromEntries(changes.files.filter((f) => typeof f?.path === 'string').map((f) => [f.path, sigOf(f)]))
+  return Object.fromEntries(changes.files.filter((f) => typeof f?.path === 'string').map((f) => [f.path, sigOf(f, changes.stamps)]))
 }
-// Сколько файлов поменялось за ход: новые в списке и с другими числами строк. null — не знаем
+// Сколько файлов поменялось за ход: новые в списке, с другими числами строк или другим содержимым. null — не знаем
 export function turnFiles(base, changes) {
   if (!base || !changes || !Array.isArray(changes.files)) return null
-  return changes.files.filter((f) => typeof f?.path === 'string' && base[f.path] !== sigOf(f)).length
+  return changes.files.filter((f) => typeof f?.path === 'string' && base[f.path] !== sigOf(f, changes.stamps)).length
 }
-// Какие файлы поменялись с начала: новые в списке и с другими числами строк. Не знаем — пусто
+// Какие файлы поменялись с начала: новые в списке, с другими числами строк или другим содержимым. Не знаем — пусто
 export function changedPaths(base, changes) {
   if (!base || !changes || !Array.isArray(changes.files)) return []
-  return changes.files.filter((f) => typeof f?.path === 'string' && base[f.path] !== sigOf(f)).map((f) => f.path)
+  return changes.files.filter((f) => typeof f?.path === 'string' && base[f.path] !== sigOf(f, changes.stamps)).map((f) => f.path)
+}
+// В отметку сессии — без подписей содержимого: другим сессиям они не нужны
+export function markChanges(changes) {
+  if (!changes || typeof changes !== 'object') return null
+  const { stamps, ...rest } = changes
+  return rest
 }
 
 // Последний ход из отметки сессии. Чужая отметка — из файла (и, может, от другой версии Arcade): что на неё не похоже,

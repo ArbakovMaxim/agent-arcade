@@ -9,7 +9,7 @@ import { accountUrl, HANDLE, normalHandle, parseAvatar, parseDone, parseFriends,
 import { coverSvg, FLAGS, flagSvg, iconSvg, OFF_COLOR } from './app/icons.js'
 import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_NAME, CHAT_SHOWN, COLS, CUT_TOOL_MS, DEBUG, DEFAULT_COLOR, emptyBooks, emptyReads, FAV_LIMIT, feedCache, FIELD, finder, FLOOR_COLOR, GRAPHICS, GRAPHICS_LABEL, HIDEABLE, HOLD_TICKS_FIRST, HOLD_TICKS_REPEAT, IME_CHARS, INPUT, LAUNCH_TIMEOUT_MS, MAX_IMAGE_COLUMNS, MAX_SYMBOL_COLUMNS, nb, NO_CHATS, NO_DESKS, NO_FRIENDS, NO_MSG_MENU, NO_REPORTS, noOnline, NOTE_LINES, NOTES_TOOL_NAME, NOTIFY_AFTER_MS, NOTIFY_WINDOW_MS, PANE, PANE_COLUMNS, PANE_ROWS, PIXEL_DENIES, PLAYER_COLOR, PLUGIN_NAME, pr, pt, REMOTE_MAX_WIDTH, REMOTE_MAX_WIDTH_WIDE, restoreKeymap, ROM_CACHE_LIMIT, ROWS, rssCache, S, savedKeys, searchCache, SECTION_ICONS, SECTION_NOTES, SECTION_SWITCH, SECTIONS, SIGNAL_LABELS, SIGNAL_MODES, TICK_MS, UI_ROWS, unfolded, WIDE_COLUMNS } from './app/state.js'
 import { AVATAR_COUNT, avatarName, avatarSvg, letterColor, picSvg, validPic } from './avatars.js'
-import { addSeen, changeBase, changedPaths, lastOf, replyLine, restoreSeen, SEEN_KEY, turnFiles } from './away.js'
+import { addSeen, changeBase, changedPaths, lastOf, markChanges, replyLine, restoreSeen, SEEN_KEY, turnFiles } from './away.js'
 import { BOOK_LANGS, BOOK_SECTIONS, BOOK_SOURCES, bookLang, bookQuery, booksPath, MIN_BOOK_QUERY, parseBooks } from './books.js'
 import { clipboardCommand, DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
 import { addDays, addEvent, addMonths, ALL_DAY_HOUR, applyCalendarTool, between, CALENDAR_TOOL, cardDues, colorOf, COLORS, compareEvents, dayKey, DEFAULT_COLOR as CAL_COLOR, dueReminders, dueTasks, GIVE_KEY, GIVE_KINDS, giveTargets, markAlerted, markTask, MISSED_MS, monthGrid, nextReminder, parseRemind, quickParse, REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, remindAt, removeEvent, REPEATS, restoreCalendar, startOf, updateEvent, weekday } from './calendar.js'
@@ -399,7 +399,7 @@ function recordOf(at) {
     claim: ag.claim,
     ask: S.ask ?? null,
     usage: usageOf(),
-    changes: ag.changes ?? null,
+    changes: markChanges(ag.changes),
     look: ag.look || 0,
     last: ag.last ?? null,
     ctx: ctxTitle(),
@@ -791,7 +791,7 @@ export function agentsList(now) {
   const ag = S.ag
   if (!ag) return []
   const q = S.queue
-  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: ag.changes ?? null, last: ag.last ?? null, ctx: ctxTitle(), me: true }
+  const me = { sid: ag.sid, name: ag.name || base(ag.path), path: ag.path, status: S.status, bg: S.status === 'background' ? S.bg.n : 0, since: ag.status === S.status || (busy(ag.status) && busy(S.status)) ? ag.since : now, card: ag.card, queue: q ? { board: q.board, n: q.given.length, of: q.of ?? 0 } : null, ask: S.ask ?? null, usage: usageOf(), changes: markChanges(ag.changes), last: ag.last ?? null, ctx: ctxTitle(), me: true }
   const others = ag.on ? othersFrom(now) : []
   return [me, ...others].sort((a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9) || a.since - b.since)
 }
@@ -7273,8 +7273,9 @@ export function parseNumstat(out) {
   return map
 }
 
-// Что поменялось в папке — для отметки: { branch, ahead, top, repo, files: [{ path, add, del, state }], n, at };
-// state — 'new' (git его ещё не знает), 'bin' (двоичный) или ''; add и del — null, если чисел нет. null — не git
+// Что поменялось в папке — для отметки: { branch, ahead, top, repo, files: [{ path, add, del, state }], stamps, n, at };
+// state — 'new' (git его ещё не знает), 'bin' (двоичный) или ''; add и del — null, если чисел нет; stamps — путь →
+// «размер:время правки» (файла нет или посмотреть не дали — пусто). null — не git
 async function readChanges($, path) {
   const git = (args) => $.process.run(['git', '--no-optional-locks', '-C', path, ...args], { timeoutMs: GIT_MS })
   const where = await git(['rev-parse', '--show-toplevel', '--git-common-dir'])
@@ -7295,7 +7296,11 @@ async function readChanges($, path) {
     const state = f.xy === '??' ? 'new' : num?.bin ? 'bin' : ''
     return { path: f.path, add: num && !num.bin ? num.add : null, del: num && !num.bin ? num.del : null, state }
   })
-  return { branch: st.branch, ahead: st.ahead, top: key(top), repo: key(resolveDir(common, path)), files, n: st.files.length, at: 0 }
+  // Подпись содержимого: строка вместо строки в уже изменённом файле чисел строк не меняет, а размер или время правки —
+  // да. Файл только смотрим, не читаем
+  const stamp = (f) => $.fs.stat(`${top}/${f.path}`).then((s) => `${s.size}:${s.mtimeMs}`, () => '')
+  const stamps = Object.fromEntries(await Promise.all(files.map(async (f) => [f.path, await stamp(f)])))
+  return { branch: st.branch, ahead: st.ahead, top: key(top), repo: key(resolveDir(common, path)), files, stamps, n: st.files.length, at: 0 }
 }
 
 // Прочитать, что поменялось в папке этой сессии, — при старте и в конце хода. Поменялось — в отметку (её запишет
