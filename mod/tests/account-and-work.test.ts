@@ -16,7 +16,7 @@ import { BOARD_ID, MAX_MEMBERS as DESK_MEMBERS, MAX_OWNED, adoptBoard, applySync
 import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.js'
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard, fileList } from '../hooks/register.js'
 import { ALERT_KEEP_MS, alertText, restoreAgain, restoreAlerts } from '../hooks/alerts.js'
-import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, changedPaths, lastOf, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
+import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, changedPaths, lastOf, markChanges, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
 import { ANSWER_POLL_MS, MAYBE_NOTIFY_MS, asksReset, callSeen, modeSeen, statusText, toolDecided } from '../hooks/register.js'
 import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
@@ -8202,6 +8202,19 @@ test('пока тебя не было: строка ответа — начал�
   expect(changedPaths(base, { files: [{ path: 'a.js', add: 3, del: 0, state: '' }, { path: 'b.js', add: 2, del: 2, state: '' }, { path: 'c.txt', add: null, del: null, state: 'new' }] })).toEqual(['a.js', 'c.txt'])
   expect(changedPaths(null, { files: [] })).toEqual([])
   expect(changedPaths(base, null)).toEqual([])
+  // Строка вместо строки в уже изменённом файле: числа те же, а подпись содержимого (размер и время правки) другая
+  const two = [{ path: 'a.js', add: 1, del: 0, state: '' }, { path: 'b.js', add: 2, del: 2, state: '' }]
+  const stamped = changeBase({ files: two, stamps: { 'a.js': '10:1', 'b.js': '20:1' } })
+  expect(changedPaths(stamped, { files: two, stamps: { 'a.js': '10:1', 'b.js': '20:2' } })).toEqual(['b.js'])
+  expect(turnFiles(stamped, { files: two, stamps: { 'a.js': '10:1', 'b.js': '20:2' } })).toBe(1)
+  expect(changedPaths(stamped, { files: two, stamps: { 'a.js': '10:1', 'b.js': '20:1' } })).toEqual([])
+  // Подписи нет или она битая — по числам, как раньше; имя файла как у свойства объекта — не подпись
+  expect(changedPaths(base, { files: two, stamps: 'x' })).toEqual([])
+  const odd = [{ path: 'constructor', add: 1, del: 0, state: '' }]
+  expect(changedPaths(changeBase({ files: odd }), { files: odd, stamps: {} })).toEqual([])
+  // В отметку сессии — без подписей: другим сессиям они не нужны
+  expect(markChanges({ branch: 'main', files: two, stamps: { 'a.js': '10:1' }, n: 2, at: 5 })).toEqual({ branch: 'main', files: two, n: 2, at: 5 })
+  expect(markChanges(null)).toBeNull()
   expect(fileList(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).toBe('a, b, c, d, e +2')
   expect(fileList(['a'])).toBe('a')
 
@@ -8823,6 +8836,44 @@ test('агенты: прошла со 2-й попытки — у своей се
     props: { color: 'warning' },
   })
   await desk.unmount()
+})
+
+test('доска: Claude заменил строку в уже изменённом тесте — числа строк у git те же, а файл в списке и предупреждение о тестах есть', async ($, on) => {
+  // До попытки поменяны app.js и тест; за попытку Claude меняет в тесте строку на строку — git status и --numstat те же
+  const git = { status: '## main\0 M app.js\0 M tests/a.test.js\0', numstat: '2\t1\tapp.js\0' + '1\t1\ttests/a.test.js\0' }
+  const answer = (argv: string[]) => {
+    const cmd = argv[4]
+    if (cmd === 'rev-parse') return { exitCode: 0, stdout: 'D:/work/web\n.git\n', stderr: '' }
+    if (cmd === 'status') return { exitCode: 0, stdout: git.status, stderr: '' }
+    if (cmd === 'diff') return { exitCode: 0, stdout: git.numstat, stderr: '' }
+    return { exitCode: 1, stdout: '', stderr: 'unexpected' }
+  }
+  const s = stubs(on, { env: AG_ENV, agents: { ...AG_ME, git: answer }, submit: true })
+  s.putFile('D:/work/web/app.js', 'export const a = 2\n')
+  s.putFile('D:/work/web/tests/a.test.js', 'expect(a).toBe(2)\n')
+  await start($)
+  await s.clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const q = await triesBoard($, ui, s.saved, s.submits, s.clock)
+  await ui.press({ key: 'arcade-board-check-tries' })
+  s.checks.answer = { exitCode: 1, stdout: 'FAIL a.test.js\n' }
+  const pressed = ui.press({ key: 'arcade-board-queue' })
+  await s.clock.advance(CLAIM_MS + 100)
+  await pressed
+  await q.turn('t1', 0, () => q.done('A'))
+  expect([s.submits.length, q.col('A')]).toEqual([2, 'doing'])
+  // Claude ослабил проверку: строка вместо строки
+  s.putFile('D:/work/web/tests/a.test.js', 'expect(a).toBeDefined()\n')
+  s.checks.answer = { exitCode: 0 }
+  await q.turn('t2', 1, () => q.done('A'), true)
+  expect(q.page('A').body).toMatch(/^✓ Проверка прошла со 2-й попытки, \d\d:\d\d · поменялись файлы: tests\/a\.test\.js · среди них тесты — посмотри, не ослаблены ли они$/)
+  expect(await q.text('    среди них тесты — посмотри, не ослаблены ли они')).toMatchObject({ props: { color: 'warning' } })
+  expect((s.saved.get('daylog') as any[]).filter((x) => x.kind === 'check' && x.ok).map((x) => x.files)).toEqual([['tests/a.test.js']])
+  // В отметке сессии — файлы с числами, а подписей содержимого нет
+  const rec = ownRecord(s.disk)
+  expect(rec.changes.files.map((f: any) => f.path)).toEqual(['app.js', 'tests/a.test.js'])
+  expect(rec.changes.stamps).toBeUndefined()
+  await ui.unmount()
 })
 
 test('доска: попытки исправить кончились — очередь встаёт, как без них; новый запуск — попытки заново, прошла с 3-й попытки', async ($, on) => {
