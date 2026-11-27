@@ -123,6 +123,71 @@ export function notifyCommand(platform, title, text) {
   if (platform === 'linux') return { argv: ['notify-send', '--app-name=Claude Code', title, text], env: {} }
   return null
 }
+
+// Идёт ли уже оболочка команды Claude (п. 56): Bash и PowerShell движок запускает своими потомками, и в командной строке
+// оболочки — снимок shell-snapshots (Bash) или CLAUDE_CODE_SHELL_LAUNCHER (PowerShell). Ищем такого потомка процесса
+// движка — родителя этой проверки, — запущенного не раньше ARCADE_SHELL_AGE секунд назад; ARCADE_SHELL_NEEDLE (кусок
+// текста команды) — ещё и он в командной строке. Отвечает только «1» или «0»: командные строки наружу не выходят.
+// Метки в тексте скриптов разрезаны, чтобы сама проверка их не содержала
+const SHELL_CHECK_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+$age = [double]$env:ARCADE_SHELL_AGE
+$needle = [string]$env:ARCADE_SHELL_NEEDLE
+$all = @(Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name, CreationDate, CommandLine)
+$by = @{}
+foreach ($p in $all) { $by[[int]$p.ProcessId] = $p }
+$root = [int]$by[$PID].ParentProcessId
+for ($i = 0; $i -lt 3 -and $by.ContainsKey($root) -and $by[$root].Name -match '^(cmd|conhost|powershell|pwsh)\\.exe$'; $i++) { $root = [int]$by[$root].ParentProcessId }
+$since = (Get-Date).AddSeconds(-$age)
+$m1 = 'shell-' + 'snapshots'
+$m2 = 'CLAUDE_CODE_SHELL_' + 'LAUNCHER'
+foreach ($p in $all) {
+  $id = [int]$p.ProcessId
+  if ($id -eq $PID -or $null -eq $p.CreationDate -or $p.CreationDate -lt $since) { continue }
+  $c = [string]$p.CommandLine
+  if (-not ($c.Contains($m1) -or $c.Contains($m2))) { continue }
+  if ($needle -and -not $c.Contains($needle)) { continue }
+  $q = [int]$p.ParentProcessId
+  for ($n = 0; $n -lt 20 -and $q -ne $root -and $q -ne $PID -and $by.ContainsKey($q); $n++) { $q = [int]$by[$q].ParentProcessId }
+  if ($q -eq $root) { '1'; exit 0 }
+}
+'0'
+`
+// Mac и Linux: то же по ps — потомок родителя sh (движка), не старше ARCADE_SHELL_AGE секунд (etime — [[дд-]чч:]мм:сс)
+const SHELL_CHECK_SH = `ps -A -o pid= -o ppid= -o etime= -o command= | awk -v root="$PPID" -v self="$$" '
+function secs(t,  a, d, n, i, s) { d = 0; if (index(t, "-")) { split(t, a, "-"); d = a[1]; t = a[2] }; n = split(t, a, ":"); s = 0; for (i = 1; i <= n; i++) s = s * 60 + a[i]; return d * 86400 + s }
+{ p = $1; par[p] = $2; el[p] = secs($3); c = $0; sub(/^[ \\t]*[0-9]+[ \\t]+[0-9]+[ \\t]+[^ \\t]+[ \\t]*/, "", c); cmd[p] = c; ids[++n] = p }
+END {
+  age = ENVIRON["ARCADE_SHELL_AGE"] + 0; needle = ENVIRON["ARCADE_SHELL_NEEDLE"]
+  m1 = "shell-" "snapshots"; m2 = "CLAUDE_CODE_SHELL_" "LAUNCHER"
+  for (k = 1; k <= n; k++) {
+    p = ids[k]; c = cmd[p]
+    if (p == self || el[p] > age) continue
+    if (index(c, m1) == 0 && index(c, m2) == 0) continue
+    if (needle != "" && index(c, needle) == 0) continue
+    q = par[p]; h = 0
+    while (q != root && q != self && (q in par) && h < 20) { q = par[q]; h++ }
+    if (q == root) { print 1; exit }
+  }
+  print 0
+}'`
+export const SHELL_CHECK_TEXT = { windows: SHELL_CHECK_SCRIPT, unix: SHELL_CHECK_SH }
+
+// Команда проверки «оболочка команды уже идёт»: ageS — сколько секунд назад начался вызов (с запасом), needle — кусок
+// текста команды или ''. Платформа неизвестна — null (проверки нет — зовём, как раньше)
+export function shellCheckCommand(platform, ageS, needle) {
+  const env = { ARCADE_SHELL_AGE: String(Math.max(1, Math.ceil(ageS))), ARCADE_SHELL_NEEDLE: needle }
+  if (platform === 'windows') return { argv: powershell(SHELL_CHECK_SCRIPT), env }
+  if (platform === 'mac' || platform === 'linux') return { argv: ['sh', '-c', SHELL_CHECK_SH], env }
+  return null
+}
+
+// Кусок текста команды Bash, который виден в командной строке оболочки как есть: самое длинное слово из букв, цифр и
+// _.,:=+/- (кавычки и обратные косые движок может экранировать). Короче 4 знаков — '' (ищем только по метке)
+export function needleOf(command) {
+  const words = String(command ?? '').match(/[A-Za-z0-9_.,:=+\/-]{4,}/g) ?? []
+  return words.reduce((best, w) => (w.length > best.length ? w : best), '').slice(0, 200)
+}
 // Обычная вкладка браузера по умолчанию — для ссылки «Поддержать проект». Адрес — через переменную окружения
 // (на Windows) или отдельным аргументом: его нельзя подменить кавычками в командной строке
 export function openUrlCommand(platform, url) {
