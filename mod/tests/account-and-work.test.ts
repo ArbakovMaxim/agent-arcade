@@ -17,7 +17,8 @@ import { BOARD_POLL_MS, NOTES_CHECK_MS, NOTES_POLL_MS } from '../hooks/register.
 import { AGENT_READ_MS, AGENT_TICK_MS, CLAIM_MS, claimCard, fileList } from '../hooks/register.js'
 import { ALERT_KEEP_MS, alertText, restoreAgain, restoreAlerts } from '../hooks/alerts.js'
 import { REPLY_MAX, SEEN_MAX, addSeen, changeBase, changedPaths, lastOf, markChanges, replyLine, restoreSeen, turnFiles } from '../hooks/away.js'
-import { ANSWER_POLL_MS, MAYBE_NOTIFY_MS, asksReset, callSeen, modeSeen, statusText, toolDecided } from '../hooks/register.js'
+import { ANSWER_POLL_MS, MAYBE_NOTIFY_MS, asksReset, callRunning, callSeen, modeSeen, statusText, toolDecided } from '../hooks/register.js'
+import { SHELL_CHECK_TEXT, needleOf, powershell, shellCheckCommand } from '../hooks/browsers.js'
 import { ARCADE_VERSION, CALENDAR_TOOL_NAME, NOTES_TOOL_NAME, S } from '../hooks/app/state.js'
 import { LOG_DAYS, LOG_MAX, addLog, chatText, daySummary, noteChanges, restoreLog, summaryBody } from '../hooks/daylog.js'
 import { PANE, WINDOWS, siteCatalog, stubs, start, HEAVY, go, drawnTexts, labels, test, BASH_MS } from './kit.ts'
@@ -6706,11 +6707,18 @@ test('запрос разрешения в режиме Auto или неизве
   let now = 1_000
   const timers: { at: number; fn: () => any }[] = []
   const runs: any[] = []
+  const shells: any[] = []
   const asked: any[] = []
   const $: any = {
     clock: { now: async () => now, after: (ms: number, fn: () => any) => void timers.push({ at: now + ms, fn }) },
     ui: { invalidate: () => {}, close: async () => {} },
-    process: { run: async (argv: any, opts: any) => void runs.push(opts?.env ?? argv) },
+    // Проверка «команда уже идёт» (п. 56) — отдельно от уведомлений: здесь она команды не находит
+    process: {
+      run: async (argv: any, opts: any) =>
+        opts?.env?.ARCADE_SHELL_AGE !== undefined
+          ? (shells.push(opts.env), { exitCode: 0, stdout: '0\r\n', stderr: '' })
+          : void runs.push(opts?.env ?? argv),
+    },
     tool: {
       check: async (q: any) => {
         asked.push(q)
@@ -6772,6 +6780,7 @@ test('запрос разрешения в режиме Auto или неизве
     { ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент ждёт разрешения' },
     { ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент, возможно, ждёт разрешения — проверь' },
   ])
+  expect(shells.length).toBe(1)
   // Новый «возможно» рядом «проверь» не заслоняет и не зовёт
   await check('toolu_m5')
   await advance(20_100)
@@ -6802,6 +6811,198 @@ test('запрос разрешения в режиме Auto или неизве
 
   asksReset()
   Object.assign(S, { status: 'idle', permMode: '' }, keep)
+})
+
+// п. 56: долгая команда в Auto — не запрос разрешения. Перед «проверь» Arcade один раз смотрит, идёт ли уже её оболочка
+test('Auto, долгая команда: перед «проверь» Arcade смотрит, идёт ли уже оболочка команды — идёт: не зовём и «возможно» снимаем; не нашли, ошибка, вызов кончился, пока смотрели, не оболочка, неизвестная платформа — как раньше; плашка терминала снимает «возможно» и ожидание, но не настоящий запрос', async () => {
+  let now = 500_000
+  const timers: { at: number; fn: () => any }[] = []
+  const runs: any[] = []
+  const shells: any[] = []
+  let shell: string | Error = '1'
+  let gate = Promise.resolve()
+  let open = () => {}
+  const $: any = {
+    clock: { now: async () => now, after: (ms: number, fn: () => any) => void timers.push({ at: now + ms, fn }) },
+    ui: { invalidate: () => {}, close: async () => {} },
+    process: {
+      run: async (argv: any, opts: any) => {
+        if (opts?.env?.ARCADE_SHELL_AGE === undefined) return void runs.push(opts?.env ?? argv)
+        shells.push({ argv, ...opts })
+        await gate
+        if (shell instanceof Error) throw shell
+        return { exitCode: 0, stdout: `${shell}\r\n`, stderr: '' }
+      },
+    },
+    tool: { check: async () => ({ decision: 'ask' }) },
+  }
+  const advance = async (ms: number) => {
+    now += ms
+    for (const t of timers.filter((x) => x.at <= now).sort((a, b) => a.at - b.at)) {
+      timers.splice(timers.indexOf(t), 1)
+      await t.fn()
+    }
+  }
+  const call = (id: string, tool: string, input: any) => callSeen($, { tool, ...input, tool_use_id: id })
+  const decided = (id: string, mode: string) =>
+    toolDecided($, { to: 'collector', event: 'claude_code.tool_decision', attributes: { tool_use_id: id, permission_mode: mode, decision: 'accept', source: 'config' } })
+  // «Возможно» (Auto, 20 с), потом минута — время «проверь»
+  const toCheck = async () => {
+    await advance(20_100)
+    await advance(MAYBE_NOTIFY_MS)
+    await advance(0)
+  }
+  const CHECK = { ARCADE_TITLE: 'Claude Code', ARCADE_TEXT: 'Агент, возможно, ждёт разрешения — проверь' }
+  const keep = { osNotify: S.osNotify, windowOpenedAt: S.windowOpenedAt, platform: S.platform, ag: S.ag }
+  asksReset()
+  Object.assign(S, { status: 'working', permMode: '', osNotify: true, windowOpenedAt: now, platform: 'windows', ag: null })
+  modeSeen('auto')
+
+  // Bash в Auto: через 20 с «возможно»; через минуту команда уже идёт — не зовём, «возможно» снят
+  await call('toolu_s1', 'Bash', { command: 'npm test' })
+  await advance(20_100)
+  await advance(0)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test', maybe: true })
+  await advance(MAYBE_NOTIFY_MS)
+  await advance(0)
+  expect([S.status, S.ask, runs]).toEqual(['working', null, []])
+  // Проверка одна; ей — только сколько секунд идёт вызов (с запасом) и самое длинное слово команды
+  expect(shells.length).toBe(1)
+  expect(shells[0]).toMatchObject({ argv: powershell(SHELL_CHECK_TEXT.windows), env: { ARCADE_SHELL_AGE: '86', ARCADE_SHELL_NEEDLE: 'test' } })
+  // Вызов потом кончился — ничего не меняется
+  decided('toolu_s1', 'auto')
+  expect([S.status, S.ask, runs, timers]).toEqual(['working', null, [], []])
+
+  // Не нашли — зовём «проверь», как раньше
+  shell = '0'
+  await call('toolu_s2', 'Bash', { command: 'git push origin auto-maybe-056' })
+  await toCheck()
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'git push origin auto-maybe-056', maybe: true, check: true })
+  expect(runs).toEqual([CHECK])
+  expect(shells[1].env.ARCADE_SHELL_NEEDLE).toBe('auto-maybe-056')
+  decided('toolu_s2', 'auto')
+  expect([S.status, S.ask]).toEqual(['working', null])
+
+  // Проверка не удалась — тоже зовём
+  shell = new Error('timeout')
+  await call('toolu_s3', 'Bash', { command: 'npm run build' })
+  await toCheck()
+  expect([S.ask?.check, runs.length, shells.length]).toEqual([true, 2, 3])
+  decided('toolu_s3', 'auto')
+
+  // Вызов кончился, пока смотрели, — не зовём, даже если команду не нашли
+  shell = '0'
+  gate = new Promise<void>((r) => (open = r))
+  await call('toolu_s4', 'Bash', { command: 'npm run lint' })
+  await advance(20_100)
+  const going = advance(MAYBE_NOTIFY_MS)
+  decided('toolu_s4', 'auto')
+  open()
+  await going
+  await advance(0)
+  expect([S.status, S.ask, runs.length, shells.length]).toEqual(['working', null, 2, 4])
+  gate = Promise.resolve()
+
+  // PowerShell: текста команды в строке процесса нет — ищем только оболочку
+  shell = '1'
+  await call('toolu_s5', 'PowerShell', { command: 'Start-Sleep 600' })
+  await toCheck()
+  expect([S.status, S.ask, runs.length]).toEqual(['working', null, 2])
+  expect(shells[4].env.ARCADE_SHELL_NEEDLE).toBe('')
+
+  // Не оболочка (Write) — процессов не смотрим, зовём
+  await call('toolu_s6', 'Write', { file_path: 'notes.txt', content: 'x' })
+  await toCheck()
+  expect([S.ask?.check, runs.length, shells.length]).toEqual([true, 3, 5])
+  decided('toolu_s6', 'auto')
+  // Платформа неизвестна — проверить нечем: «проверь» (системного уведомления там нет и так)
+  S.platform = ''
+  await call('toolu_s7', 'Bash', { command: 'npm test' })
+  await toCheck()
+  expect([S.ask?.check, runs.length, shells.length]).toEqual([true, 3, 5])
+  decided('toolu_s7', 'auto')
+  S.platform = 'windows'
+
+  // Плашка терминала «ctrl+b — в фон»: вызов идёт — «возможно» снимаем, после отрисовки; «проверь» уже не будет
+  await call('toolu_s8', 'Bash', { command: 'npm test' })
+  await advance(20_100)
+  await advance(0)
+  expect(S.ask?.maybe).toBe(true)
+  callRunning($, 'toolu_s8')
+  expect(S.ask?.maybe).toBe(true)
+  await advance(0)
+  expect([S.status, S.ask]).toEqual(['working', null])
+  await advance(MAYBE_NOTIFY_MS)
+  expect([runs.length, shells.length]).toEqual([3, 5])
+  // Плашка ещё до «возможно» — ожидание снято, «возможно» не будет
+  await call('toolu_s9', 'Bash', { command: 'npm test' })
+  await advance(1_000)
+  callRunning($, 'toolu_s9')
+  await advance(0)
+  await advance(20_000)
+  expect([S.status, S.ask]).toEqual(['working', null])
+  // Настоящий запрос (режим default) плашка не снимает; чужой и пустой id — ничего
+  modeSeen('default')
+  await call('toolu_s10', 'Bash', { command: 'npm test' })
+  await advance(800)
+  await advance(0)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test' })
+  callRunning($, 'toolu_s10')
+  callRunning($, 'toolu_none')
+  callRunning($, undefined)
+  await advance(0)
+  expect(S.ask).toEqual({ kind: 'permission', tool: 'Bash', what: 'npm test' })
+  decided('toolu_s10', 'default')
+  await advance(MAYBE_NOTIFY_MS)
+  expect([S.status, S.ask, runs.length, shells.length, timers]).toEqual(['working', null, 4, 5, []])
+
+  asksReset()
+  Object.assign(S, { status: 'idle', permMode: '' }, keep)
+})
+
+test('п. 56: проверка «команда уже идёт» — в переменных только возраст вызова и самое длинное слово команды; Windows — PowerShell, macOS и Linux — sh с ps, другой платформы нет; сама себя не находит', () => {
+  expect(needleOf('npm test')).toBe('test')
+  expect(needleOf('cd /d/projects/agent-arcade-056 && git status')).toBe('/d/projects/agent-arcade-056')
+  expect(needleOf("echo 'привет, мир' > out.txt")).toBe('out.txt')
+  expect(needleOf('ls')).toBe('')
+  expect(needleOf(undefined)).toBe('')
+  expect(needleOf('a'.repeat(300))).toBe('a'.repeat(200))
+  expect(shellCheckCommand('windows', 85.1, 'test')).toEqual({ argv: powershell(SHELL_CHECK_TEXT.windows), env: { ARCADE_SHELL_AGE: '86', ARCADE_SHELL_NEEDLE: 'test' } })
+  for (const platform of ['mac', 'linux']) {
+    expect(shellCheckCommand(platform, 0.2, '')).toEqual({ argv: ['sh', '-c', SHELL_CHECK_TEXT.unix], env: { ARCADE_SHELL_AGE: '1', ARCADE_SHELL_NEEDLE: '' } })
+  }
+  expect(shellCheckCommand('', 10, 'test')).toBeNull()
+  // Метки оболочки Claude в тексте проверки разбиты — своя строка процесса проверки их не содержит
+  for (const text of Object.values(SHELL_CHECK_TEXT)) {
+    expect([text.includes('shell-snapshots'), text.includes('CLAUDE_CODE_SHELL_LAUNCHER')]).toEqual([false, false])
+  }
+})
+
+// То же через движок: в терминале под идущей командой Claude Code рисует плашку «ctrl+b — в фон» (ToolProgress)
+test('п. 56: под командой появилась плашка «ctrl+b — в фон» (терминал) — вызов идёт: «возможно, ждёт разрешения» снимается; плашку Arcade отдаёт рисовать Claude Code', async ($, on) => {
+  const { clock, toolIds } = stubs(on, { bashMs: 30_000, ask: (e: any) => e.tool === 'Bash' && !e.tool_use_id })
+  await start($)
+  await clock.advance(4_000)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  const call = $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await clock.advance(3_100)
+  expect(await ui.find({ type: 'Text', text: /ждёт разрешения/ })).toBeDefined()
+  const id = toolIds.find((x: any) => x.tool === 'Bash')?.id
+  expect(typeof id).toBe('string')
+  const pill = await $.ui.mount({
+    plugin: 'arcade',
+    component: 'ToolProgress',
+    viewport: PANE.viewport,
+    surface: 'terminal',
+    props: { tool_use_id: id, kind: 'background_hint', hint: '(ctrl+b to run in background)' },
+  })
+  expect(await pill.find({ type: 'Text', text: 'drawn by Claude Code' })).toBeDefined()
+  await clock.advance(100)
+  expect(await ui.find({ type: 'Text', text: /ждёт разрешения/ })).toBeUndefined()
+  await pill.unmount()
+  await clock.advance(30_000)
+  await call
+  await ui.unmount()
 })
 
 test('в разрешении отказали — статус «ждёт разрешения» не висит до конца хода', async ($, on) => {

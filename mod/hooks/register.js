@@ -11,7 +11,7 @@ import { ACTIONS, ARCADE_VERSION, ARROWS, ASK_AFTER_CHOICES, cal, CALENDAR_TOOL_
 import { AVATAR_COUNT, avatarName, avatarSvg, letterColor, picSvg, validPic } from './avatars.js'
 import { addSeen, changeBase, changedPaths, lastOf, markChanges, replyLine, restoreSeen, SEEN_KEY, turnFiles } from './away.js'
 import { BOOK_LANGS, BOOK_SECTIONS, BOOK_SOURCES, bookLang, bookQuery, booksPath, MIN_BOOK_QUERY, parseBooks } from './books.js'
-import { clipboardCommand, DETECT_ARGV, launchCommand, notifyCommand, openUrlCommand, parseDetection, windowBounds } from './browsers.js'
+import { clipboardCommand, DETECT_ARGV, launchCommand, needleOf, notifyCommand, openUrlCommand, parseDetection, shellCheckCommand, windowBounds } from './browsers.js'
 import { addDays, addEvent, addMonths, ALL_DAY_HOUR, applyCalendarTool, between, CALENDAR_TOOL, cardDues, colorOf, COLORS, compareEvents, dayKey, DEFAULT_COLOR as CAL_COLOR, dueReminders, dueTasks, GIVE_KEY, GIVE_KINDS, giveTargets, markAlerted, markTask, MISSED_MS, monthGrid, nextReminder, parseRemind, quickParse, REMIND_CHOICES, REMIND_CHOICES_ALL_DAY, remindAt, removeEvent, REPEATS, restoreCalendar, startOf, updateEvent, weekday } from './calendar.js'
 import { bundledRom, minePageUrl, pageUrl, parseCatalog, restoreCatalog, SITE, siteUrl, tabPageUrl, verifyRom } from './catalog.js'
 import { cleanText, clock, day, describe, fill, MAX_NAME, MAX_TEXT, oneLine, parseChat, parseChats, parseLink, parseMessages, parseSent, parseUnread, when } from './chats.js'
@@ -7918,6 +7918,10 @@ function rvItems($, kit, page) {
 // классификатор Auto обычно разрешает сам, а его решения мод не видит. О таком не уведомляем — ни системой, ни на
 // телефон, ни всплывашкой, — и игра из-за него не встаёт на паузу (п. 53). Но настоящий запрос терять нельзя: «возможно»
 // висит MAYBE_NOTIFY_MS, а вызов не кончился — зовём честно, «возможно, ждёт разрешения — проверь» (ask.check).
+// Долгая команда в Auto — не запрос (п. 56): перед «проверь» один раз смотрим, идёт ли уже оболочка этой команды (Bash и
+// PowerShell — потомки движка, см. shellCheckCommand). Идёт — Auto разрешил сам: не зовём и «возможно» снимаем. Не нашли
+// или проверить нечем — зовём, как раньше. В терминале под идущей командой ещё и плашка «ctrl+b — в фон» (ToolProgress):
+// она есть — вызов идёт, «возможно» снимаем сразу.
 // На вопрос Claude можно ответить из «Агентов» другой сессии: ответ — файл a<место>.json рядом с отметками сессий;
 // сессия, которая спросила, читает его, пока вопрос открыт, и отдаёт модели как ответ человека. Разрешения так не даются.
 
@@ -7928,11 +7932,15 @@ export const ANSWER_POLL_MS = 1_000 // пока вопрос открыт, фа�
 const GRACE_AUTO_MS = 20_000
 const GRACE_UNKNOWN_MS = 3_000
 const GRACE_MS = 700
-// «Возможно, ждёт» висит столько, а вызов не кончился — всё-таки зовём: «возможно, ждёт разрешения — проверь». Долгий
-// инструмент в Auto тоже позовёт — зато настоящий запрос не потеряется
+// «Возможно, ждёт» висит столько, а вызов не кончился — всё-таки зовём: «возможно, ждёт разрешения — проверь». Долгую
+// команду Bash и PowerShell, которая уже идёт, не зовём (п. 56); другой долгий инструмент в Auto позовёт — зато настоящий
+// запрос не потеряется
 export const MAYBE_NOTIFY_MS = 60_000
 // Вопрос Claude — не запрос разрешения: его ловит questionCall
 const NOT_ASKS = new Set(['AskUserQuestion'])
+// Инструменты, чью идущую команду видно среди процессов (п. 56)
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell'])
+const SHELL_CHECK_MS = 20_000 // проверка процессов — не дольше; не успела — зовём
 // В этих режимах человека не спрашивают никогда: bypassPermissions разрешает всё, dontAsk отказывает в неразрешённом
 const NEVER_ASK = new Set(['bypassPermissions', 'dontAsk'])
 const QUESTION_MAX = 300 // текст вопроса в отметке — не длиннее (для показа; ответ строится по полному)
@@ -8060,6 +8068,7 @@ export async function callSeen($, e) {
     if (!id || NOT_ASKS.has(e.tool) || decided.has(id) || NEVER_ASK.has(S.permMode)) return
     const input = { ...e }
     for (const key of CALL_KEYS) delete input[key]
+    const startedAt = await $.clock.now()
     const verdict = await $.tool.check({ tool: e.tool, input })
     if (verdict?.decision === 'ask' && !decided.has(id)) {
       waiting.set(id, { kind: 'permission', tool: e.tool, what: whatOf(input) })
@@ -8078,6 +8087,14 @@ export async function callSeen($, e) {
         // «Возможно» висит минуту, а вызов не кончился — всё-таки зовём, но честно: «проверь»
         $.clock.after(MAYBE_NOTIFY_MS, async () => {
           if (asks.get(id) !== ask || NEVER_ASK.has(S.permMode)) return
+          // Команда уже идёт — Auto разрешил сам, человека она не ждёт (п. 56)
+          if (SHELL_TOOLS.has(e.tool) && (await shellRunning($, e.tool, input, startedAt))) {
+            if (asks.get(id) !== ask) return
+            log(`${e.tool}: команда уже идёт — разрешена, «проверь» не нужно`)
+            settle($, id)
+            return
+          }
+          if (asks.get(id) !== ask || NEVER_ASK.has(S.permMode)) return
           const check = { ...ask, check: true }
           asks.set(id, check)
           await waitForPerson($, check).catch((err) => log(`ошибка мода: ${err?.message ?? err}`))
@@ -8087,6 +8104,30 @@ export async function callSeen($, e) {
   } catch (err) {
     log(`ошибка мода: ${err?.message ?? err}`)
   }
+}
+
+// Идёт ли уже оболочка команды вызова (п. 56): один запуск проверки процессов. Ответ — только да или нет; ошибка,
+// неизвестная платформа или время вышло — «нет» (тогда зовём «проверь», как раньше)
+async function shellRunning($, tool, input, startedAt) {
+  const age = ((await $.clock.now()) - startedAt) / 1000 + 5
+  const command = shellCheckCommand(S.platform, age, tool === 'Bash' ? needleOf(input.command) : '')
+  if (!command) return false
+  try {
+    const r = await $.process.run(command.argv, { env: command.env, timeoutMs: SHELL_CHECK_MS })
+    return r?.exitCode === 0 && String(r.stdout ?? '').trim() === '1'
+  } catch (err) {
+    log(`проверка команды не удалась: ${err?.message ?? err}`)
+    return false
+  }
+}
+
+// Терминал рисует под вызовом плашку «ctrl+b — в фон» (ToolProgress): вызов уже идёт, разрешения он не ждёт (п. 56).
+// Только снимаем «возможно» — после отрисовки, не в ней
+export function callRunning($, id) {
+  if (!id || !(waiting.has(id) || asks.get(id)?.maybe)) return
+  $.clock.after(0, () => {
+    if (waiting.has(id) || asks.get(id)?.maybe) settle($, id)
+  })
 }
 
 // Телеметрия: из решения о вызове берём только режим и id вызова
@@ -15778,6 +15819,13 @@ export function register(on) {
   // запуск идёт дальше как есть
   on('agent.spawn', async ($, e, next) => {
     if (e.parentAgentId === undefined) modeSeen(e.permissionMode)
+    return next(e)
+  })
+
+  // Плашка «ctrl+b — в фон» под вызовом (только терминал): вызов идёт — «возможно, ждёт» снимаем (п. 56). Только смотрим —
+  // рисуется как есть
+  on('ui.render', { component: 'ToolProgress', props: { kind: 'background_hint' } }, async ($, e, next) => {
+    callRunning($, e.props?.tool_use_id)
     return next(e)
   })
 

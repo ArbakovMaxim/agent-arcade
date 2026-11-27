@@ -146,6 +146,8 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   // Проверка между карточками очереди: answer — { exitCode, stdout, stderr }, функция (команда) → такой ответ, 'time' —
   // время вышло; calls — с чем запускали (команда — в ARCADE_CHECK)
   const checks = { answer: { exitCode: 0, stdout: '', stderr: '' } as any, calls: [] as any[] }
+  // Проверка «команда уже идёт» перед «проверь» (п. 56): answer — что напечатает ('1' — идёт), calls — её переменные
+  const shells = { answer: '0', calls: [] as any[] }
   const clock = mock.clock(on)
   // Тесты пишутся на русском интерфейсе: если окружение не задаёт язык, пусть он будет русским (без него теперь — английский)
   mock.env(on, 'LANG' in env || 'LC_ALL' in env || 'LC_MESSAGES' in env ? env : { ...env, LANG: 'ru_RU.UTF-8' })
@@ -155,6 +157,10 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
     if (e.argv[0] === 'git') {
       gits.push(e.argv)
       return { value: agents?.git ? agents.git(e.argv) : { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git' } }
+    }
+    if (e.init?.env?.ARCADE_SHELL_AGE !== undefined) {
+      shells.calls.push(e.init.env)
+      return { value: { exitCode: 0, stdout: `${shells.answer}\r\n`, stderr: '' } }
     }
     // Проверка между карточками: команда — в переменной ARCADE_CHECK
     if (e.init?.env?.ARCADE_CHECK !== undefined) {
@@ -277,12 +283,14 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   // приложения как { server, tool, args, consent }, browserCalls — только те, что открывают страницу
   const mcpCalls: any[] = []
   const browserCalls: any[] = []
+  const toolIds: { tool: string; id: string }[] = [] // вызовы инструментов с id, по порядку
   const submits: any[] = []
   const fills: any[] = []
   const aborts: any[] = []
   // Инструмент агента, который идёт не сразу: Bash заканчивается через пару секунд по часам теста (часы теста идут
   // медленно — игровой цикл Arcade тикает каждые 33 мс, — так что минуту тест не дождался бы)
   on('tool.call', ($: any, e: any) => {
+    if (e.tool_use_id) toolIds.push({ tool: e.tool, id: e.tool_use_id })
     // Вопрос Claude (AskUserQuestion) человек не отвечает questionMs по часам теста — потом диалог закрыт без ответа
     if (e.tool === 'AskUserQuestion' && questionMs) return clock.sleep(questionMs).then(() => ({ result: { questions: e.questions, answers: {} } }))
     if (e.tool === 'Bash') return clock.sleep(bashMs).then(() => ({ result: 'ok', text: 'ok' }))
@@ -335,7 +343,7 @@ export function stubs(on: any, { images = true, env = {}, detect = 'ok', launchE
   })
   // Что Claude Code нарисовал бы сам, когда мод отдаёт отрисовку дальше
   on('ui.render', () => ({ type: 'Text', props: {}, children: ['drawn by Claude Code'] }))
-  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, sounds, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits, checks }
+  return { saved, meanwhile, opened, opens, blits, clock, launches, toasts, fetches, requests, notifies, popups, sounds, disk, diskFile, putFile, widths, closed, mcpCalls, browserCalls, aborts, submits, fills, registered, clipboard, gits, checks, shells, toolIds }
 }
 
 export const BASH_MS = 2_000
